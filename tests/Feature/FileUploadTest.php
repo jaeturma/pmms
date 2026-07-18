@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AuditLog;
 use App\Models\FileUpload;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
@@ -75,6 +76,8 @@ test('owners can download their file', function () {
 
     $response->assertOk();
     $response->assertDownload('report.pdf');
+
+    expect(AuditLog::query()->where('action', 'file.downloaded')->count())->toBe(1);
 });
 
 test('users cannot download files they do not own', function () {

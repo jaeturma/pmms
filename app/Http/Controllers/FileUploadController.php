@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\FileUploadRequest;
 use App\Models\FileUpload;
 use App\Models\User;
+use App\Services\AuditLogger;
 use App\Services\FileUploadService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\UploadedFile;
@@ -15,7 +16,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FileUploadController extends Controller
 {
-    public function __construct(private readonly FileUploadService $uploads) {}
+    public function __construct(
+        private readonly FileUploadService $uploads,
+        private readonly AuditLogger $audit,
+    ) {}
 
     /**
      * Store an uploaded file.
@@ -41,6 +45,10 @@ class FileUploadController extends Controller
     public function download(FileUpload $upload): StreamedResponse
     {
         Gate::authorize('view', $upload);
+
+        $this->audit->record('file.downloaded', $upload, [
+            'original_name' => $upload->original_name,
+        ]);
 
         return Storage::disk($upload->disk)->download($upload->path, $upload->original_name);
     }

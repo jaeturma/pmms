@@ -1,4 +1,4 @@
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import {
     Contact,
     FileCheck,
@@ -8,6 +8,7 @@ import {
     ListChecks,
     Medal,
     School,
+    ScrollText,
     Trophy,
     UserCog,
     UsersRound,
@@ -26,6 +27,7 @@ import {
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
 import { index as athletesIndex } from '@/routes/athletes';
+import { index as auditLogsIndex } from '@/routes/audit-logs';
 import { index as delegationsIndex } from '@/routes/delegations';
 import { index as districtsIndex } from '@/routes/districts';
 import { index as eligibilityIndex } from '@/routes/eligibility';
@@ -95,7 +97,22 @@ const mainNavItems: NavItem[] = [
     },
 ];
 
+const adminNavItems: NavItem[] = [
+    {
+        title: 'Audit log',
+        href: auditLogsIndex(),
+        icon: ScrollText,
+    },
+];
+
 export function AppSidebar() {
+    const { auth } = usePage().props;
+
+    const navItems =
+        auth.user?.role === 'admin'
+            ? [...mainNavItems, ...adminNavItems]
+            : mainNavItems;
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -111,7 +128,7 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} />
+                <NavMain items={navItems} />
             </SidebarContent>
 
             <SidebarFooter>

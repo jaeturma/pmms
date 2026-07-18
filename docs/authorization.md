@@ -59,6 +59,49 @@ live in code.
 - `$user->hasRole(UserRole::Admin, UserRole::Organizer)` — variadic membership check.
 - `$user->isAdmin()`.
 
+## Authorization matrix (Phase 2, verified WP-02-11)
+
+Legend: ✓ allowed · ✗ forbidden (403) · **own** = only for delegations the officer is
+assigned to. "Managers" = admin + organizer. Conditions in parentheses are enforced by
+the named policy on top of the role check.
+
+| Module / action | Admin | Organizer | Delegation Officer | Viewer |
+|---|---|---|---|---|
+| Dashboard | ✓ | ✓ | ✓ | ✓ |
+| Districts / Schools / Sports / Events / Meets — view lists | ✓ | ✓ | ✓ | ✓ |
+| Districts / Schools / Sports / Events / Meets — create, update, archive, restore, delete | ✓ | ✓ | ✗ | ✗ |
+| Delegations — list | ✓ all | ✓ all | own only | ✓ all |
+| Delegations — register, delete (draft only) | ✓ | ✓ | ✗ | ✗ |
+| Delegations — update head contact | ✓ | ✓ | own (draft + registration open) | ✗ |
+| Delegations — submit | ✓ | ✓ | own (registration open) | ✗ |
+| Delegations — approve, return to draft | ✓ | ✓ | ✗ | ✗ |
+| Delegations — assign officers | ✓ | ✓ | ✗ | ✗ |
+| Athletes — list, profile, photo | ✓ all | ✓ all | own only | ✗ |
+| Athletes — register, update, delete | ✓ | ✓ | own (delegation draft + registration open) | ✗ |
+| Personnel — list, photo | ✓ all | ✓ all | own only | ✗ |
+| Personnel — register, update, sync sports, delete | ✓ | ✓ | own (delegation draft + registration open) | ✗ |
+| Entries — list | ✓ all | ✓ all | own only | ✗ |
+| Entries — submit | ✓ | ✓ | own (registration open; delegation need not be draft) | ✗ |
+| Entries — confirm | ✓ | ✓ | ✗ | ✗ |
+| Entries — withdraw | ✓ | ✓ | own submitted (registration open) | ✗ |
+| Entries — delete (withdrawn only) | ✓ | ✓ | own (registration open) | ✗ |
+| Eligibility — list, view document | ✓ all | ✓ all | own only | ✗ |
+| Eligibility — upload / delete document | ✓ | ✓ | own (registration open) | ✗ |
+| Eligibility — approve, return | ✓ | ✓ | ✗ | ✗ |
+| File uploads — download, delete | uploader only | uploader only | uploader only | uploader only |
+| Reports — delegation roster (page + CSV) | ✓ | ✓ | own only | ✗ |
+| Reports — event entry list (page + CSV) | ✓ all rows | ✓ all rows | own rows only | ✗ |
+| Reports — school participation (page + CSV) | ✓ | ✓ | ✓ | ✓ |
+| Audit log viewer | ✓ | ✗ | ✗ | ✗ |
+
+Enforcement lives in two layers: the `role:admin,organizer` route middleware group in
+`routes/web.php` (registry/catalog/meet writes, delegation register/delete) and the
+per-model policies in `app/Policies/` (everything scoped to delegations or minors).
+The audit viewer uses the `can:administer` route middleware.
+
+`tests/Feature/AuthorizationMatrixTest.php` sweeps every forbidden role × action
+combination above; per-module tests cover the allowed paths and window conditions.
+
 ## Testing pattern
 
 See `tests/Feature/AuthorizationTest.php`: gate matrix as a Pest dataset, middleware
