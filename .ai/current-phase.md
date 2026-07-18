@@ -1,7 +1,12 @@
 # Current Phase
-Phase 2 — Meet Setup & Registration: PLANNED 2026-07-18, pending owner approval.
+Phase 2 — Meet Setup & Registration: IN PROGRESS (plan approved and pushed 2026-07-18).
 Plan: docs/phases/phase-02-meet-setup-and-registration/ (README + WP-02-01..13).
-Execution has NOT started — begin only on owner instruction, one work package at a time.
+Execute one work package at a time on owner instruction.
+
+## Phase 2 Work Package Log
+- WP-02-01 Roles & Permissions Foundation — done 2026-07-18 (UserRole enum + users.role,
+  gates administer/manage-meet-data, role middleware, Inertia 403 page, AdminUserSeeder,
+  docs/authorization.md; Pest 69/69, full gate green; role migration applied on pmmsdb)
 
 ## Phase 1 — Engineering Foundation (complete)
 Execute one work package at a time.
