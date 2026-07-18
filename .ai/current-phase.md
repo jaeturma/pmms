@@ -35,6 +35,13 @@ Execute one work package at a time on owner instruction.
   searchable+paginated registry (LRN/birthdate only on audited show page),
   delegation-delete guard, docs/athletes.md; Pest 179/179, full gate green;
   migration applied on pmmsdb)
+- WP-02-07 Coach & Official Registry — done 2026-07-18 (personnel table (explicit
+  $table, Eloquent would pluralize wrong) + personnel_sport pivot, PersonnelRole enum
+  with coaches() rule, athlete-style PersonnelPolicy scoping, sport assignment for
+  coaching roles only (cleared on demotion), photo lifecycle via FileUploadService,
+  searchable+paginated page with edit dialog (_method put spoof for uploads),
+  delegation-delete guard extended, docs/personnel.md; Pest 196/196, full gate green;
+  migrations applied on pmmsdb)
 
 ## Phase 1 — Engineering Foundation (complete)
 Execute one work package at a time.

@@ -7,6 +7,7 @@ use App\Http\Controllers\DistrictController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\FileUploadController;
 use App\Http\Controllers\MeetController;
+use App\Http\Controllers\PersonnelController;
 use App\Http\Controllers\SchoolController;
 use App\Http\Controllers\SportController;
 use Illuminate\Support\Facades\Route;
@@ -39,6 +40,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('athletes', [AthleteController::class, 'store'])->name('athletes.store');
     Route::put('athletes/{athlete}', [AthleteController::class, 'update'])->name('athletes.update');
     Route::delete('athletes/{athlete}', [AthleteController::class, 'destroy'])->name('athletes.destroy');
+
+    Route::get('personnel', [PersonnelController::class, 'index'])->name('personnel.index');
+    Route::get('personnel/{personnel}/photo', [PersonnelController::class, 'photo'])->name('personnel.photo');
+    Route::post('personnel', [PersonnelController::class, 'store'])->name('personnel.store');
+    Route::put('personnel/{personnel}', [PersonnelController::class, 'update'])->name('personnel.update');
+    Route::put('personnel/{personnel}/sports', [PersonnelController::class, 'syncSports'])->name('personnel.sports');
+    Route::delete('personnel/{personnel}', [PersonnelController::class, 'destroy'])->name('personnel.destroy');
 
     Route::middleware('role:admin,organizer')->group(function () {
         Route::post('districts', [DistrictController::class, 'store'])->name('districts.store');

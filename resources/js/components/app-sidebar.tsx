@@ -7,6 +7,7 @@ import {
     Medal,
     School,
     Trophy,
+    UserCog,
     UsersRound,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
@@ -27,6 +28,7 @@ import { index as delegationsIndex } from '@/routes/delegations';
 import { index as districtsIndex } from '@/routes/districts';
 import { index as eventsIndex } from '@/routes/events';
 import { index as meetsIndex } from '@/routes/meets';
+import { index as personnelIndex } from '@/routes/personnel';
 import { index as schoolsIndex } from '@/routes/schools';
 import { index as sportsIndex } from '@/routes/sports';
 import type { NavItem } from '@/types';
@@ -71,6 +73,11 @@ const mainNavItems: NavItem[] = [
         title: 'Athletes',
         href: athletesIndex(),
         icon: Contact,
+    },
+    {
+        title: 'Personnel',
+        href: personnelIndex(),
+        icon: UserCog,
     },
 ];
 

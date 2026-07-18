@@ -73,6 +73,14 @@ class Delegation extends Model
         return $this->hasMany(Athlete::class);
     }
 
+    /**
+     * @return HasMany<Personnel, $this>
+     */
+    public function personnel(): HasMany
+    {
+        return $this->hasMany(Personnel::class);
+    }
+
     public function hasOfficer(User $user): bool
     {
         return $this->officers()->whereKey($user->getKey())->exists();

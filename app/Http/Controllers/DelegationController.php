@@ -244,10 +244,10 @@ class DelegationController extends Controller
     {
         Gate::authorize('delete', $delegation);
 
-        if ($delegation->athletes()->exists()) {
+        if ($delegation->athletes()->exists() || $delegation->personnel()->exists()) {
             Inertia::flash('toast', [
                 'type' => 'error',
-                'message' => __('This delegation has registered athletes. Remove them first.'),
+                'message' => __('This delegation has registered athletes or personnel. Remove them first.'),
             ]);
 
             return back();
