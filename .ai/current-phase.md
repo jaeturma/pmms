@@ -1,5 +1,9 @@
 # Current Phase
-Phase 1 — Engineering Foundation
+Phase 2 — Meet Setup & Registration: PLANNED 2026-07-18, pending owner approval.
+Plan: docs/phases/phase-02-meet-setup-and-registration/ (README + WP-02-01..13).
+Execution has NOT started — begin only on owner instruction, one work package at a time.
+
+## Phase 1 — Engineering Foundation (complete)
 Execute one work package at a time.
 
 ## Work Package Log
