@@ -1,7 +1,9 @@
 # Current Phase
-Phase 2 — Meet Setup & Registration: IN PROGRESS (plan approved and pushed 2026-07-18).
-Plan: docs/phases/phase-02-meet-setup-and-registration/ (README + WP-02-01..13).
-Execute one work package at a time on owner instruction.
+Phase 2 — Meet Setup & Registration: COMPLETE (pending owner review) — 2026-07-18.
+Review: docs/phases/phase-02-meet-setup-and-registration/phase-2-compliance-review.md
+(COMPLIANT; full gate green: Pint+PHPStan+Pest 317/317, ESLint+Prettier+tsc+build).
+WP-02-01..09 committed; WP-02-10..13 uncommitted in the working tree awaiting owner
+commit instruction. Next: Phase 3 planning on owner instruction — not started.
 
 ## Phase 2 Work Package Log
 - WP-02-01 Roles & Permissions Foundation — done 2026-07-18 (UserRole enum + users.role,
@@ -59,6 +61,32 @@ Execute one work package at a time on owner instruction.
   entries page flags (not blocks) unapproved eligibility, status-filterable queue with
   pending-first sort, docs/eligibility.md; Pest 225/225, full gate green;
   migrations applied on pmmsdb)
+- WP-02-10 Registration Views & Search — done 2026-07-18 (SearchesAndPaginates trait
+  (LIKE over plain or relation.column, 15/page, withQueryString) across all 9 registry
+  controllers incl. entries, SearchBar + PaginationControls shared components on all
+  list pages, dashboard stats real counts (6 StatCards), tests updated to paginator
+  shape + new search/pagination/count tests, component-library.md updated;
+  Pest 230/230, full gate green)
+- WP-02-11 Audit & Authorization Integration Review — done 2026-07-18 (authorization
+  matrix documented in docs/authorization.md and swept by AuthorizationMatrixTest —
+  69 forbidden role×action cases all 403; audit gap closed: file.downloaded on upload
+  downloads; admin-only audit viewer at /audit-logs (can:administer, search + action
+  filter on shared components, sidebar item for admins); photo serving documented as
+  deliberately unaudited; audit-trail.md event catalog completed; Pest 307/307,
+  full gate green)
+- WP-02-12 Rosters & Printable Lists — done 2026-07-18 (ReportController: delegation
+  roster (DelegationPolicy::viewRoster — managers + assigned officers), per-event
+  entry list (officer-scoped, withdrawn excluded), school participation summary
+  (aggregates, all roles, meet filter); print via @media print CSS hiding app chrome
+  (no PDF lib); CSV via fputcsv streams, all three audited report.*_exported;
+  ReportActions shared component; linked from delegations/entries/schools pages;
+  School hasManyThrough counts; docs/reports.md; Pest 317/317, full gate green)
+- WP-02-13 Phase 2 Compliance Review — done 2026-07-18 (COMPLIANT; DatabaseSeeder
+  fake Test User env-gated (only remediation), migrations 22/22 Ran on MySQL pmmsdb,
+  all 3 visual checkpoints demonstrable at http://pmms.app, zero dependencies added
+  all phase; report in docs/phases/phase-02-meet-setup-and-registration/
+  phase-2-compliance-review.md; full gate green: Pint+PHPStan+Pest 317/317 (1,183
+  assertions), ESLint+Prettier+tsc+build)
 
 ## Phase 1 — Engineering Foundation (complete)
 Execute one work package at a time.

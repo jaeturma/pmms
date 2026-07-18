@@ -19,9 +19,13 @@ class DatabaseSeeder extends Seeder
         $this->call(SampleRegistrySeeder::class);
         $this->call(SportsCatalogSeeder::class);
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        $hasTestUser = User::query()->where('email', 'test@example.com')->exists();
+
+        if (! $hasTestUser && app()->environment(['local', 'testing'])) {
+            User::factory()->create([
+                'name' => 'Test User',
+                'email' => 'test@example.com',
+            ]);
+        }
     }
 }
