@@ -7,6 +7,10 @@ Execute one work package at a time on owner instruction.
 - WP-02-01 Roles & Permissions Foundation — done 2026-07-18 (UserRole enum + users.role,
   gates administer/manage-meet-data, role middleware, Inertia 403 page, AdminUserSeeder,
   docs/authorization.md; Pest 69/69, full gate green; role migration applied on pmmsdb)
+- WP-02-02 Organization & School Registry — done 2026-07-18 (districts+schools tables,
+  models/factories, CRUD+archive/restore controllers with audit, role-gated routes,
+  registry pages + sidebar nav, SampleRegistrySeeder local-only, docs/registry.md;
+  Pest 93/93, full gate green; migrations applied on pmmsdb)
 
 ## Phase 1 — Engineering Foundation (complete)
 Execute one work package at a time.

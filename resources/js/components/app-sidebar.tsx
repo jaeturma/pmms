@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { LayoutGrid } from 'lucide-react';
+import { Landmark, LayoutGrid, School } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -13,6 +13,8 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
+import { index as districtsIndex } from '@/routes/districts';
+import { index as schoolsIndex } from '@/routes/schools';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
@@ -20,6 +22,16 @@ const mainNavItems: NavItem[] = [
         title: 'Dashboard',
         href: dashboard(),
         icon: LayoutGrid,
+    },
+    {
+        title: 'Districts',
+        href: districtsIndex(),
+        icon: Landmark,
+    },
+    {
+        title: 'Schools',
+        href: schoolsIndex(),
+        icon: School,
     },
 ];
 
