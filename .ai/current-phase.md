@@ -51,6 +51,14 @@ Execute one work package at a time on owner instruction.
   submitted→confirmed|withdrawn flow, withdrawn deletable to free the slot; filterable
   entries page with dependent athlete→event selects; docs/entries.md; Pest 211/211,
   full gate green; migration applied on pmmsdb) — Visual Checkpoint 2 achieved
+- WP-02-09 Eligibility Documents & Manual Review — done 2026-07-18
+  (eligibility_documents via FileUploadService (pdf/jpg/png ≤10MB, typed) +
+  eligibility_reviews unique per athlete+meet (pending→approved|returned; approved
+  terminal), upload creates/reopens review (resubmission clears decision), return
+  requires remarks, decisions manager-only + human-only, every document view audited,
+  entries page flags (not blocks) unapproved eligibility, status-filterable queue with
+  pending-first sort, docs/eligibility.md; Pest 225/225, full gate green;
+  migrations applied on pmmsdb)
 
 ## Phase 1 — Engineering Foundation (complete)
 Execute one work package at a time.

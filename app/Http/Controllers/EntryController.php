@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\EligibilityStatus;
 use App\Enums\EntryStatus;
 use App\Enums\MeetStatus;
 use App\Enums\UserRole;
@@ -40,6 +41,7 @@ class EntryController extends Controller
         $query = Entry::query()
             ->with([
                 'athlete:id,first_name,last_name,sex,birthdate,grade_level',
+                'athlete.eligibilityReview:id,athlete_id,status',
                 'event.sport:id,name',
                 'delegation.school:id,name',
                 'delegation.meet:id,name',
@@ -98,6 +100,7 @@ class EntryController extends Controller
                     'meet' => $entry->delegation->meet->name,
                     'status' => $entry->status->value,
                     'status_label' => $entry->status->label(),
+                    'eligibility_approved' => $entry->athlete->eligibilityReview?->status === EligibilityStatus::Approved,
                     'can_confirm' => $entry->status === EntryStatus::Submitted
                         && $user->can('confirm', $entry),
                     'can_withdraw' => $entry->status !== EntryStatus::Withdrawn

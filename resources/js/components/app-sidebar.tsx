@@ -1,6 +1,7 @@
 import { Link } from '@inertiajs/react';
 import {
     Contact,
+    FileCheck,
     Flag,
     Landmark,
     LayoutGrid,
@@ -27,6 +28,7 @@ import { dashboard } from '@/routes';
 import { index as athletesIndex } from '@/routes/athletes';
 import { index as delegationsIndex } from '@/routes/delegations';
 import { index as districtsIndex } from '@/routes/districts';
+import { index as eligibilityIndex } from '@/routes/eligibility';
 import { index as entriesIndex } from '@/routes/entries';
 import { index as eventsIndex } from '@/routes/events';
 import { index as meetsIndex } from '@/routes/meets';
@@ -85,6 +87,11 @@ const mainNavItems: NavItem[] = [
         title: 'Entries',
         href: entriesIndex(),
         icon: ListChecks,
+    },
+    {
+        title: 'Eligibility',
+        href: eligibilityIndex(),
+        icon: FileCheck,
     },
 ];
 

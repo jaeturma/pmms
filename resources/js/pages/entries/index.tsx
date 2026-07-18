@@ -47,6 +47,7 @@ type EntryRow = {
     meet: string;
     status: string;
     status_label: string;
+    eligibility_approved: boolean;
     can_confirm: boolean;
     can_withdraw: boolean;
     can_delete: boolean;
@@ -352,7 +353,14 @@ export default function Entries({
                                     {entries.data.map((entry) => (
                                         <TableRow key={entry.id}>
                                             <TableCell className="font-medium">
-                                                {entry.athlete}
+                                                <span className="flex items-center gap-2">
+                                                    {entry.athlete}
+                                                    {!entry.eligibility_approved && (
+                                                        <Badge variant="outline">
+                                                            Eligibility pending
+                                                        </Badge>
+                                                    )}
+                                                </span>
                                             </TableCell>
                                             <TableCell>{entry.event}</TableCell>
                                             <TableCell>

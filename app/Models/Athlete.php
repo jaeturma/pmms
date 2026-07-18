@@ -9,6 +9,8 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -76,5 +78,24 @@ class Athlete extends Model
     public function ageDivision(): AgeDivision
     {
         return $this->grade_level <= 6 ? AgeDivision::Elementary : AgeDivision::Secondary;
+    }
+
+    /**
+     * One review per athlete (an athlete belongs to exactly one meet via
+     * its delegation).
+     *
+     * @return HasOne<EligibilityReview, $this>
+     */
+    public function eligibilityReview(): HasOne
+    {
+        return $this->hasOne(EligibilityReview::class);
+    }
+
+    /**
+     * @return HasMany<EligibilityDocument, $this>
+     */
+    public function eligibilityDocuments(): HasMany
+    {
+        return $this->hasMany(EligibilityDocument::class);
     }
 }

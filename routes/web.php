@@ -4,6 +4,7 @@ use App\Http\Controllers\AthleteController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DelegationController;
 use App\Http\Controllers\DistrictController;
+use App\Http\Controllers\EligibilityController;
 use App\Http\Controllers\EntryController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\FileUploadController;
@@ -54,6 +55,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('entries/{entry}/confirm', [EntryController::class, 'confirm'])->name('entries.confirm');
     Route::patch('entries/{entry}/withdraw', [EntryController::class, 'withdraw'])->name('entries.withdraw');
     Route::delete('entries/{entry}', [EntryController::class, 'destroy'])->name('entries.destroy');
+
+    Route::get('eligibility', [EligibilityController::class, 'index'])->name('eligibility.index');
+    Route::post('eligibility/documents', [EligibilityController::class, 'storeDocument'])->name('eligibility.documents.store');
+    Route::get('eligibility/documents/{document}', [EligibilityController::class, 'downloadDocument'])->name('eligibility.documents.download');
+    Route::delete('eligibility/documents/{document}', [EligibilityController::class, 'destroyDocument'])->name('eligibility.documents.destroy');
+    Route::patch('eligibility/reviews/{review}/approve', [EligibilityController::class, 'approve'])->name('eligibility.approve');
+    Route::patch('eligibility/reviews/{review}/return', [EligibilityController::class, 'returnReview'])->name('eligibility.return');
 
     Route::middleware('role:admin,organizer')->group(function () {
         Route::post('districts', [DistrictController::class, 'store'])->name('districts.store');
