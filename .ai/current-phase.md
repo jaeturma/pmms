@@ -1,9 +1,16 @@
 # Current Phase
-Phase 2 — Meet Setup & Registration: COMPLETE (pending owner review) — 2026-07-18.
+Phase 3 — Provincial Meet Operations: PLANNED 2026-07-18 — pending owner approval.
+Plan: docs/phases/phase-03-provincial-meet-operations/ (README + WP-03-01..11).
+Eleven WPs: venues → scheduling → accreditation/IDs → matches → results encoding &
+validation → medal tally → protests/incidents → reports → ops dashboard → audit/authz
+review → compliance review. The pre-Phase-2 Phase 3 draft (13 boilerplate WPs, six of
+which duplicated Phase 2 registration modules) was replaced by this plan.
+Execute one work package at a time on owner instruction.
+
+## Phase 2 — Meet Setup & Registration (complete)
+COMPLETE 2026-07-18, all 13 WPs committed per-WP and pushed (main @ 8c76e2d).
 Review: docs/phases/phase-02-meet-setup-and-registration/phase-2-compliance-review.md
 (COMPLIANT; full gate green: Pint+PHPStan+Pest 317/317, ESLint+Prettier+tsc+build).
-WP-02-01..09 committed; WP-02-10..13 uncommitted in the working tree awaiting owner
-commit instruction. Next: Phase 3 planning on owner instruction — not started.
 
 ## Phase 2 Work Package Log
 - WP-02-01 Roles & Permissions Foundation — done 2026-07-18 (UserRole enum + users.role,
