@@ -4,6 +4,8 @@ import type { LucideIcon } from 'lucide-react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { StatCard } from '@/components/stat-card';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Table,
     TableBody,
@@ -27,7 +29,19 @@ type ActivityEntry = {
     created_at_human: string | null;
 };
 
+type CurrentMeet = {
+    name: string;
+    school_year: string;
+    status: string;
+    status_label: string;
+    starts_at: string;
+    ends_at: string;
+    venue: string | null;
+    events_count: number;
+};
+
 type Props = {
+    currentMeet: CurrentMeet | null;
     stats: Stat[];
     recentActivity: ActivityEntry[];
 };
@@ -38,7 +52,11 @@ const statIcons: Record<string, LucideIcon> = {
     activity_today: Activity,
 };
 
-export default function Dashboard({ stats, recentActivity }: Props) {
+export default function Dashboard({
+    currentMeet,
+    stats,
+    recentActivity,
+}: Props) {
     return (
         <>
             <Head title="Dashboard" />
@@ -47,6 +65,25 @@ export default function Dashboard({ stats, recentActivity }: Props) {
                     title="Dashboard"
                     description="Overview of activity across the system."
                 />
+
+                {currentMeet && (
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between gap-2">
+                            <CardTitle>{currentMeet.name}</CardTitle>
+                            <Badge>{currentMeet.status_label}</Badge>
+                        </CardHeader>
+                        <CardContent className="text-sm text-muted-foreground">
+                            <p>
+                                SY {currentMeet.school_year} ·{' '}
+                                {currentMeet.starts_at} → {currentMeet.ends_at}
+                                {currentMeet.venue &&
+                                    ` · ${currentMeet.venue}`}{' '}
+                                · {currentMeet.events_count} event
+                                {currentMeet.events_count === 1 ? '' : 's'}
+                            </p>
+                        </CardContent>
+                    </Card>
+                )}
 
                 <div className="grid auto-rows-min gap-4 md:grid-cols-3">
                     {stats.map((stat) => (

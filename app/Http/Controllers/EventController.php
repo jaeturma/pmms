@@ -99,13 +99,19 @@ class EventController extends Controller
     }
 
     /**
-     * Delete an event.
-     *
-     * The meet-setup work package must block deletion once a meet references
-     * the event (archive instead), mirroring sports.
+     * Delete an event that no meet references.
      */
     public function destroy(Event $event): RedirectResponse
     {
+        if ($event->meets()->exists()) {
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => __('This event is part of a meet. Archive it instead.'),
+            ]);
+
+            return back();
+        }
+
         $event->delete();
 
         $this->audit->record('event.deleted', $event, ['name' => $event->name]);

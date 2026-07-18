@@ -4,6 +4,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DistrictController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\FileUploadController;
+use App\Http\Controllers\MeetController;
 use App\Http\Controllers\SchoolController;
 use App\Http\Controllers\SportController;
 use Illuminate\Support\Facades\Route;
@@ -21,6 +22,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('schools', [SchoolController::class, 'index'])->name('schools.index');
     Route::get('sports', [SportController::class, 'index'])->name('sports.index');
     Route::get('events', [EventController::class, 'index'])->name('events.index');
+    Route::get('meets', [MeetController::class, 'index'])->name('meets.index');
 
     Route::middleware('role:admin,organizer')->group(function () {
         Route::post('districts', [DistrictController::class, 'store'])->name('districts.store');
@@ -46,6 +48,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('events/{event}/archive', [EventController::class, 'archive'])->name('events.archive');
         Route::patch('events/{event}/restore', [EventController::class, 'restore'])->name('events.restore');
         Route::delete('events/{event}', [EventController::class, 'destroy'])->name('events.destroy');
+
+        Route::post('meets', [MeetController::class, 'store'])->name('meets.store');
+        Route::put('meets/{meet}', [MeetController::class, 'update'])->name('meets.update');
+        Route::patch('meets/{meet}/status', [MeetController::class, 'updateStatus'])->name('meets.status');
+        Route::put('meets/{meet}/events', [MeetController::class, 'syncEvents'])->name('meets.events');
+        Route::delete('meets/{meet}', [MeetController::class, 'destroy'])->name('meets.destroy');
     });
 });
 

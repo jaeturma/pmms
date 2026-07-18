@@ -16,6 +16,12 @@ Execute one work package at a time on owner instruction.
   archive controllers with audit, catalog pages + sidebar nav, SportsCatalogSeeder
   (14 sports + 16 athletics events, real reference config), docs/sports-catalog.md;
   Pest 118/118, full gate green; migrations applied + catalog seeded on pmmsdb)
+- WP-02-04 Meet Setup & Lifecycle — done 2026-07-18 (meets table + meet_events pivot,
+  MeetStatus enum as single source of truth for guarded transitions (with closed→reopen
+  exception), status/events/delete endpoints with audit, meets page with transition
+  ConfirmDialogs + event checklist dialog, dashboard current-meet card,
+  isRegistrationOpen() hook for WP-02-05/08, event-delete guard added,
+  docs/meets.md; Pest 137/137, full gate green; migrations applied on pmmsdb)
 
 ## Phase 1 — Engineering Foundation (complete)
 Execute one work package at a time.

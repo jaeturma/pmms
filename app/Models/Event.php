@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -58,5 +59,13 @@ class Event extends Model
     public function sport(): BelongsTo
     {
         return $this->belongsTo(Sport::class);
+    }
+
+    /**
+     * @return BelongsToMany<Meet, $this>
+     */
+    public function meets(): BelongsToMany
+    {
+        return $this->belongsToMany(Meet::class, 'meet_events')->withTimestamps();
     }
 }

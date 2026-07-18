@@ -1,5 +1,12 @@
 import { Link } from '@inertiajs/react';
-import { Landmark, LayoutGrid, Medal, School, Trophy } from 'lucide-react';
+import {
+    Flag,
+    Landmark,
+    LayoutGrid,
+    Medal,
+    School,
+    Trophy,
+} from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -15,6 +22,7 @@ import {
 import { dashboard } from '@/routes';
 import { index as districtsIndex } from '@/routes/districts';
 import { index as eventsIndex } from '@/routes/events';
+import { index as meetsIndex } from '@/routes/meets';
 import { index as schoolsIndex } from '@/routes/schools';
 import { index as sportsIndex } from '@/routes/sports';
 import type { NavItem } from '@/types';
@@ -44,6 +52,11 @@ const mainNavItems: NavItem[] = [
         title: 'Events',
         href: eventsIndex(),
         icon: Medal,
+    },
+    {
+        title: 'Meets',
+        href: meetsIndex(),
+        icon: Flag,
     },
 ];
 

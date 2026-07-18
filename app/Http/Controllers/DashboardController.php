@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\MeetStatus;
 use App\Models\AuditLog;
 use App\Models\FileUpload;
+use App\Models\Meet;
 use App\Models\User;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -15,7 +17,23 @@ class DashboardController extends Controller
      */
     public function index(): Response
     {
+        $currentMeet = Meet::query()
+            ->where('status', '!=', MeetStatus::Completed->value)
+            ->withCount('events')
+            ->orderByDesc('starts_at')
+            ->first();
+
         return Inertia::render('dashboard', [
+            'currentMeet' => $currentMeet === null ? null : [
+                'name' => $currentMeet->name,
+                'school_year' => $currentMeet->school_year,
+                'status' => $currentMeet->status->value,
+                'status_label' => $currentMeet->status->label(),
+                'starts_at' => $currentMeet->starts_at->toDateString(),
+                'ends_at' => $currentMeet->ends_at->toDateString(),
+                'venue' => $currentMeet->venue,
+                'events_count' => $currentMeet->events_count,
+            ],
             'stats' => [
                 [
                     'key' => 'users',
