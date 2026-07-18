@@ -6,6 +6,7 @@ import {
     Medal,
     School,
     Trophy,
+    UsersRound,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
@@ -20,6 +21,7 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
+import { index as delegationsIndex } from '@/routes/delegations';
 import { index as districtsIndex } from '@/routes/districts';
 import { index as eventsIndex } from '@/routes/events';
 import { index as meetsIndex } from '@/routes/meets';
@@ -57,6 +59,11 @@ const mainNavItems: NavItem[] = [
         title: 'Meets',
         href: meetsIndex(),
         icon: Flag,
+    },
+    {
+        title: 'Delegations',
+        href: delegationsIndex(),
+        icon: UsersRound,
     },
 ];
 

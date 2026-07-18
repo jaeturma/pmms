@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DelegationController;
 use App\Http\Controllers\DistrictController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\FileUploadController;
@@ -23,6 +24,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('sports', [SportController::class, 'index'])->name('sports.index');
     Route::get('events', [EventController::class, 'index'])->name('events.index');
     Route::get('meets', [MeetController::class, 'index'])->name('meets.index');
+
+    Route::get('delegations', [DelegationController::class, 'index'])->name('delegations.index');
+    Route::put('delegations/{delegation}', [DelegationController::class, 'update'])->name('delegations.update');
+    Route::patch('delegations/{delegation}/submit', [DelegationController::class, 'submit'])->name('delegations.submit');
+    Route::patch('delegations/{delegation}/approve', [DelegationController::class, 'approve'])->name('delegations.approve');
+    Route::patch('delegations/{delegation}/return', [DelegationController::class, 'returnToDraft'])->name('delegations.return');
+    Route::put('delegations/{delegation}/officers', [DelegationController::class, 'syncOfficers'])->name('delegations.officers');
 
     Route::middleware('role:admin,organizer')->group(function () {
         Route::post('districts', [DistrictController::class, 'store'])->name('districts.store');
@@ -54,6 +62,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('meets/{meet}/status', [MeetController::class, 'updateStatus'])->name('meets.status');
         Route::put('meets/{meet}/events', [MeetController::class, 'syncEvents'])->name('meets.events');
         Route::delete('meets/{meet}', [MeetController::class, 'destroy'])->name('meets.destroy');
+
+        Route::post('delegations', [DelegationController::class, 'store'])->name('delegations.store');
+        Route::delete('delegations/{delegation}', [DelegationController::class, 'destroy'])->name('delegations.destroy');
     });
 });
 

@@ -90,13 +90,19 @@ class SchoolController extends Controller
     }
 
     /**
-     * Delete a school.
-     *
-     * Later work packages must block deletion once delegations or athletes
-     * reference the school (archive instead), mirroring districts.
+     * Delete a school that no delegation references.
      */
     public function destroy(School $school): RedirectResponse
     {
+        if ($school->delegations()->exists()) {
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => __('This school has delegations. Archive it instead.'),
+            ]);
+
+            return back();
+        }
+
         $school->delete();
 
         $this->audit->record('school.deleted', $school, ['name' => $school->name]);

@@ -22,6 +22,12 @@ Execute one work package at a time on owner instruction.
   ConfirmDialogs + event checklist dialog, dashboard current-meet card,
   isRegistrationOpen() hook for WP-02-05/08, event-delete guard added,
   docs/meets.md; Pest 137/137, full gate green; migrations applied on pmmsdb)
+- WP-02-05 Delegation Registration — done 2026-07-18 (delegations table unique per
+  school+meet + delegation_user pivot, DelegationPolicy (first per-record scoping:
+  officers manage only their own, window-enforced via isRegistrationOpen), draft→
+  submitted→approved flow with return, officer assignment role-validated, per-row can_*
+  flags drive the UI, school-delete guard fulfilled, docs/delegations.md;
+  Pest 158/158, full gate green; migrations applied on pmmsdb)
 
 ## Phase 1 — Engineering Foundation (complete)
 Execute one work package at a time.

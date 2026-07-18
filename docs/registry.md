@@ -16,8 +16,8 @@ Records are **archived** (active flag), not deleted, once referenced:
 
 - Districts with schools cannot be deleted — the destroy action refuses and suggests
   archiving. Empty districts may be hard-deleted.
-- Schools are currently hard-deletable; the work package that first references schools
-  (delegations, WP-02-05) must add the same referenced-guard.
+- Schools with delegations cannot be deleted (guard added in WP-02-05) — archive them
+  instead; empty schools may be hard-deleted.
 - Archived districts disappear from the school form's district options; archived records
   stay visible in the registries with an "Archived" badge.
 
