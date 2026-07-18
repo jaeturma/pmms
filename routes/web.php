@@ -4,6 +4,7 @@ use App\Http\Controllers\AthleteController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DelegationController;
 use App\Http\Controllers\DistrictController;
+use App\Http\Controllers\EntryController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\FileUploadController;
 use App\Http\Controllers\MeetController;
@@ -47,6 +48,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('personnel/{personnel}', [PersonnelController::class, 'update'])->name('personnel.update');
     Route::put('personnel/{personnel}/sports', [PersonnelController::class, 'syncSports'])->name('personnel.sports');
     Route::delete('personnel/{personnel}', [PersonnelController::class, 'destroy'])->name('personnel.destroy');
+
+    Route::get('entries', [EntryController::class, 'index'])->name('entries.index');
+    Route::post('entries', [EntryController::class, 'store'])->name('entries.store');
+    Route::patch('entries/{entry}/confirm', [EntryController::class, 'confirm'])->name('entries.confirm');
+    Route::patch('entries/{entry}/withdraw', [EntryController::class, 'withdraw'])->name('entries.withdraw');
+    Route::delete('entries/{entry}', [EntryController::class, 'destroy'])->name('entries.destroy');
 
     Route::middleware('role:admin,organizer')->group(function () {
         Route::post('districts', [DistrictController::class, 'store'])->name('districts.store');

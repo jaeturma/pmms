@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AgeDivision;
 use App\Enums\Sex;
 use Database\Factories\AthleteFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -67,5 +68,13 @@ class Athlete extends Model
     public function age(): int
     {
         return (int) $this->birthdate->age;
+    }
+
+    /**
+     * Grade-derived age division: grades 1–6 elementary, 7–12 secondary.
+     */
+    public function ageDivision(): AgeDivision
+    {
+        return $this->grade_level <= 6 ? AgeDivision::Elementary : AgeDivision::Secondary;
     }
 }

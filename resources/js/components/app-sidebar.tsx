@@ -4,6 +4,7 @@ import {
     Flag,
     Landmark,
     LayoutGrid,
+    ListChecks,
     Medal,
     School,
     Trophy,
@@ -26,6 +27,7 @@ import { dashboard } from '@/routes';
 import { index as athletesIndex } from '@/routes/athletes';
 import { index as delegationsIndex } from '@/routes/delegations';
 import { index as districtsIndex } from '@/routes/districts';
+import { index as entriesIndex } from '@/routes/entries';
 import { index as eventsIndex } from '@/routes/events';
 import { index as meetsIndex } from '@/routes/meets';
 import { index as personnelIndex } from '@/routes/personnel';
@@ -78,6 +80,11 @@ const mainNavItems: NavItem[] = [
         title: 'Personnel',
         href: personnelIndex(),
         icon: UserCog,
+    },
+    {
+        title: 'Entries',
+        href: entriesIndex(),
+        icon: ListChecks,
     },
 ];
 

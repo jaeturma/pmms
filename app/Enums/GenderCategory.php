@@ -16,4 +16,13 @@ enum GenderCategory: string
             self::Mixed => 'Mixed',
         };
     }
+
+    public function accepts(Sex $sex): bool
+    {
+        return match ($this) {
+            self::Mixed => true,
+            self::Boys => $sex === Sex::Male,
+            self::Girls => $sex === Sex::Female,
+        };
+    }
 }

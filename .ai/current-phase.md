@@ -42,6 +42,15 @@ Execute one work package at a time on owner instruction.
   searchable+paginated page with edit dialog (_method put spoof for uploads),
   delegation-delete guard extended, docs/personnel.md; Pest 196/196, full gate green;
   migrations applied on pmmsdb)
+- WP-02-08 Event Entry Submission — done 2026-07-18 (entries table unique per
+  athlete+event, delegation always derived server-side from the athlete, full rule set:
+  event-in-meet, sex/gender match (GenderCategory::accepts), grade-derived age division
+  (Athlete::ageDivision, grades 1-6/7-12 — age-based cutoffs deferred as policy), no
+  duplicates, cap counts non-withdrawn only, officer window enforcement (managers
+  bypass; delegation draft NOT required — rosters freeze, entries don't);
+  submitted→confirmed|withdrawn flow, withdrawn deletable to free the slot; filterable
+  entries page with dependent athlete→event selects; docs/entries.md; Pest 211/211,
+  full gate green; migration applied on pmmsdb) — Visual Checkpoint 2 achieved
 
 ## Phase 1 — Engineering Foundation (complete)
 Execute one work package at a time.
