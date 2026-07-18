@@ -1,5 +1,12 @@
 import { Head } from '@inertiajs/react';
-import { Activity, FileText, Users } from 'lucide-react';
+import {
+    Activity,
+    Contact,
+    ListChecks,
+    School,
+    Users,
+    UsersRound,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
@@ -47,8 +54,11 @@ type Props = {
 };
 
 const statIcons: Record<string, LucideIcon> = {
+    schools: School,
+    delegations: UsersRound,
+    athletes: Contact,
+    entries: ListChecks,
     users: Users,
-    uploads: FileText,
     activity_today: Activity,
 };
 

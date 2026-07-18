@@ -306,3 +306,20 @@ test('the entry list can be filtered by event and delegation', function () {
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('entries.data', 1));
 });
+
+test('the entry list can be searched by athlete name', function () {
+    [, $delegation, $athlete, $event] = entrySetup();
+    $athlete->update(['first_name' => 'Zenaida', 'last_name' => 'Cordero']);
+    $target = Entry::factory()->create([
+        'athlete_id' => $athlete->id,
+        'event_id' => $event->id,
+        'delegation_id' => $delegation->id,
+    ]);
+    Entry::factory()->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get('/entries?search=Cordero')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('entries.data', 1)
+            ->where('entries.data.0.id', $target->id));
+});

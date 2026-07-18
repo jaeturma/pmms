@@ -15,6 +15,7 @@ use Illuminate\Support\Carbon;
  * @property bool $active
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property-read int|null $schools_count
  */
 #[Fillable(['name'])]
 class District extends Model

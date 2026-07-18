@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\DelegationStatus;
 use App\Enums\MeetStatus;
 use App\Enums\UserRole;
+use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\DelegationStoreRequest;
 use App\Http\Requests\DelegationUpdateRequest;
 use App\Models\Delegation;
@@ -21,6 +22,8 @@ use Inertia\Response;
 
 class DelegationController extends Controller
 {
+    use SearchesAndPaginates;
+
     public function __construct(private readonly AuditLogger $audit) {}
 
     /**
@@ -32,6 +35,8 @@ class DelegationController extends Controller
         /** @var User $user */
         $user = $request->user();
 
+        $search = $this->searchTerm($request);
+
         $query = Delegation::query()
             ->with(['school:id,name', 'meet:id,name', 'officers:id,name'])
             ->orderByDesc('id');
@@ -40,9 +45,12 @@ class DelegationController extends Controller
             $query->whereHas('officers', fn ($officers) => $officers->whereKey($user->getKey()));
         }
 
+        $this->applySearch($query, $search, ['head_name', 'school.name', 'meet.name']);
+
         return Inertia::render('delegations/index', [
-            'delegations' => $query->get()
-                ->map(fn (Delegation $delegation): array => [
+            'filters' => ['search' => $search],
+            'delegations' => $query->paginate($this->registryPageSize)->withQueryString()
+                ->through(fn (Delegation $delegation): array => [
                     'id' => $delegation->id,
                     'school' => $delegation->school->name,
                     'meet' => $delegation->meet->name,
@@ -55,6 +63,7 @@ class DelegationController extends Controller
                         'id' => $officer->id,
                         'name' => $officer->name,
                     ])->values(),
+                    'can_view_roster' => $user->can('viewRoster', $delegation),
                     'can_update' => $user->can('update', $delegation),
                     'can_submit' => $user->can('submit', $delegation)
                         && $delegation->status === DelegationStatus::Draft,
@@ -62,8 +71,7 @@ class DelegationController extends Controller
                         && $delegation->status === DelegationStatus::Submitted,
                     'can_delete' => $user->can('delete', $delegation),
                     'can_assign' => $user->can('assignOfficers', $delegation),
-                ])
-                ->values(),
+                ]),
             'meetOptions' => Meet::query()
                 ->where('status', MeetStatus::RegistrationOpen->value)
                 ->orderByDesc('starts_at')

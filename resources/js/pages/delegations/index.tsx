@@ -1,11 +1,14 @@
-import { Head, router, useForm } from '@inertiajs/react';
-import { Plus, UsersRound } from 'lucide-react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Plus, Printer, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
+import { PaginationControls } from '@/components/pagination-controls';
+import type { Paginated } from '@/components/pagination-controls';
+import { SearchBar } from '@/components/search-bar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -43,6 +46,7 @@ import {
     submit,
     update,
 } from '@/routes/delegations';
+import { roster } from '@/routes/reports';
 
 type Officer = {
     id: number;
@@ -59,6 +63,7 @@ type Delegation = {
     status: string;
     status_label: string;
     officers: Officer[];
+    can_view_roster: boolean;
     can_update: boolean;
     can_submit: boolean;
     can_approve: boolean;
@@ -78,7 +83,8 @@ type OfficerOption = {
 };
 
 type Props = {
-    delegations: Delegation[];
+    delegations: Paginated<Delegation>;
+    filters: { search: string };
     meetOptions: Option[];
     schoolOptions: Option[];
     officerOptions: OfficerOption[];
@@ -403,6 +409,7 @@ function OfficersDialog({
 
 export default function Delegations({
     delegations,
+    filters,
     meetOptions,
     schoolOptions,
     officerOptions,
@@ -429,7 +436,13 @@ export default function Delegations({
                     }
                 />
 
-                {delegations.length === 0 ? (
+                <SearchBar
+                    initial={filters.search}
+                    placeholder="Search delegations"
+                    url={index().url}
+                />
+
+                {delegations.data.length === 0 ? (
                     <EmptyState
                         icon={UsersRound}
                         title="No delegations yet"
@@ -458,7 +471,7 @@ export default function Delegations({
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {delegations.map((delegation) => (
+                                {delegations.data.map((delegation) => (
                                     <TableRow key={delegation.id}>
                                         <TableCell className="font-medium">
                                             {delegation.school}
@@ -490,6 +503,22 @@ export default function Delegations({
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-2">
+                                                {delegation.can_view_roster && (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        asChild
+                                                    >
+                                                        <Link
+                                                            href={roster(
+                                                                delegation.id,
+                                                            )}
+                                                        >
+                                                            <Printer />
+                                                            Roster
+                                                        </Link>
+                                                    </Button>
+                                                )}
                                                 {delegation.can_update && (
                                                     <Button
                                                         variant="outline"
@@ -622,6 +651,13 @@ export default function Delegations({
                         </Table>
                     </div>
                 )}
+
+                <PaginationControls
+                    page={delegations}
+                    url={index().url}
+                    label="delegations"
+                    params={filters.search ? { search: filters.search } : {}}
+                />
             </div>
 
             <CreateDelegationDialog

@@ -3,9 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Enums\MeetStatus;
+use App\Models\Athlete;
 use App\Models\AuditLog;
-use App\Models\FileUpload;
+use App\Models\Delegation;
+use App\Models\Entry;
 use App\Models\Meet;
+use App\Models\School;
 use App\Models\User;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -36,14 +39,29 @@ class DashboardController extends Controller
             ],
             'stats' => [
                 [
+                    'key' => 'schools',
+                    'label' => 'Schools',
+                    'value' => School::query()->count(),
+                ],
+                [
+                    'key' => 'delegations',
+                    'label' => 'Delegations',
+                    'value' => Delegation::query()->count(),
+                ],
+                [
+                    'key' => 'athletes',
+                    'label' => 'Athletes',
+                    'value' => Athlete::query()->count(),
+                ],
+                [
+                    'key' => 'entries',
+                    'label' => 'Entries',
+                    'value' => Entry::query()->count(),
+                ],
+                [
                     'key' => 'users',
                     'label' => 'Users',
                     'value' => User::query()->count(),
-                ],
-                [
-                    'key' => 'uploads',
-                    'label' => 'Uploaded Files',
-                    'value' => FileUpload::query()->count(),
                 ],
                 [
                     'key' => 'activity_today',

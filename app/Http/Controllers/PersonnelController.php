@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\UserRole;
+use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\PersonnelRequest;
 use App\Models\Delegation;
 use App\Models\Personnel;
@@ -22,6 +23,8 @@ use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class PersonnelController extends Controller
 {
+    use SearchesAndPaginates;
+
     public function __construct(
         private readonly AuditLogger $audit,
         private readonly FileUploadService $uploads,
@@ -37,7 +40,7 @@ class PersonnelController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $search = trim((string) $request->query('search', ''));
+        $search = $this->searchTerm($request);
 
         $query = Personnel::query()
             ->with(['delegation.school:id,name', 'delegation.meet:id,name', 'sports:id,name'])
@@ -51,12 +54,7 @@ class PersonnelController extends Controller
             );
         }
 
-        if ($search !== '') {
-            $query->where(function ($q) use ($search) {
-                $q->where('first_name', 'like', "%{$search}%")
-                    ->orWhere('last_name', 'like', "%{$search}%");
-            });
-        }
+        $this->applySearch($query, $search, ['first_name', 'last_name']);
 
         $delegations = Delegation::query()->with(['school:id,name', 'meet:id,name']);
 
@@ -68,7 +66,7 @@ class PersonnelController extends Controller
         }
 
         return Inertia::render('personnel/index', [
-            'personnel' => $query->paginate(15)->withQueryString()
+            'personnel' => $query->paginate($this->registryPageSize)->withQueryString()
                 ->through(fn (Personnel $person): array => [
                     'id' => $person->id,
                     'first_name' => $person->first_name,

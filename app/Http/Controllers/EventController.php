@@ -2,38 +2,50 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\EventRequest;
 use App\Models\Event;
 use App\Models\Sport;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class EventController extends Controller
 {
+    use SearchesAndPaginates;
+
     public function __construct(private readonly AuditLogger $audit) {}
 
     /**
-     * List all events.
+     * Searchable, paginated events catalog.
      */
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $search = $this->searchTerm($request);
+
+        $query = Event::query()
+            ->with('sport:id,name')
+            ->orderBy('name');
+
+        $this->applySearch($query, $search, ['name', 'sport.name']);
+
         return Inertia::render('catalog/events', [
-            'events' => Event::query()
-                ->with('sport:id,name')
-                ->orderBy('name')
-                ->get([
-                    'id',
-                    'sport_id',
-                    'name',
-                    'gender',
-                    'age_division',
-                    'is_team_event',
-                    'max_entries_per_delegation',
-                    'active',
+            'events' => $query->paginate($this->registryPageSize)->withQueryString()
+                ->through(fn (Event $event): array => [
+                    'id' => $event->id,
+                    'sport_id' => $event->sport_id,
+                    'name' => $event->name,
+                    'gender' => $event->gender->value,
+                    'age_division' => $event->age_division->value,
+                    'is_team_event' => $event->is_team_event,
+                    'max_entries_per_delegation' => $event->max_entries_per_delegation,
+                    'active' => $event->active,
+                    'sport' => ['id' => $event->sport->id, 'name' => $event->sport->name],
                 ]),
+            'filters' => ['search' => $search],
             'sports' => Sport::query()
                 ->where('active', true)
                 ->orderBy('name')

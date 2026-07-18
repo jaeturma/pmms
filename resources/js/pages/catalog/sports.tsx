@@ -6,6 +6,9 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
+import { PaginationControls } from '@/components/pagination-controls';
+import type { Paginated } from '@/components/pagination-controls';
+import { SearchBar } from '@/components/search-bar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -42,7 +45,8 @@ type Sport = {
 };
 
 type Props = {
-    sports: Sport[];
+    sports: Paginated<Sport>;
+    filters: { search: string };
     canManage: boolean;
 };
 
@@ -107,7 +111,7 @@ function SportFormDialog({
     );
 }
 
-export default function Sports({ sports, canManage }: Props) {
+export default function Sports({ sports, filters, canManage }: Props) {
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<Sport | null>(null);
 
@@ -138,7 +142,13 @@ export default function Sports({ sports, canManage }: Props) {
                     }
                 />
 
-                {sports.length === 0 ? (
+                <SearchBar
+                    initial={filters.search}
+                    placeholder="Search sports"
+                    url={index().url}
+                />
+
+                {sports.data.length === 0 ? (
                     <EmptyState
                         icon={Trophy}
                         title="No sports yet"
@@ -150,7 +160,7 @@ export default function Sports({ sports, canManage }: Props) {
                         }
                     />
                 ) : (
-                    <div className="rounded-xl border">
+                    <div className="overflow-x-auto rounded-xl border">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -165,7 +175,7 @@ export default function Sports({ sports, canManage }: Props) {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {sports.map((sport) => (
+                                {sports.data.map((sport) => (
                                     <TableRow key={sport.id}>
                                         <TableCell className="font-medium">
                                             {sport.name}
@@ -276,6 +286,13 @@ export default function Sports({ sports, canManage }: Props) {
                         </Table>
                     </div>
                 )}
+
+                <PaginationControls
+                    page={sports}
+                    url={index().url}
+                    label="sports"
+                    params={filters.search ? { search: filters.search } : {}}
+                />
             </div>
 
             <SportFormDialog

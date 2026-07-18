@@ -31,9 +31,64 @@ test('the school registry renders with schools and district options', function (
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('registry/schools')
-            ->has('schools', 1)
+            ->has('schools.data', 1)
             ->has('districts', 1)
             ->where('canManage', false));
+});
+
+test('the school registry can be searched by name, code, and district', function () {
+    $north = District::factory()->create(['name' => 'North Cluster']);
+    $south = District::factory()->create(['name' => 'South Cluster']);
+    School::factory()->create([
+        'district_id' => $north->id,
+        'name' => 'Mabini Elementary School',
+        'school_id_code' => '111111',
+    ]);
+    School::factory()->create([
+        'district_id' => $south->id,
+        'name' => 'Rizal High School',
+        'school_id_code' => '222222',
+    ]);
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->get('/schools?search=Mabini')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('schools.data', 1)
+            ->where('schools.data.0.name', 'Mabini Elementary School'));
+
+    $this->actingAs($admin)
+        ->get('/schools?search=222222')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('schools.data', 1)
+            ->where('schools.data.0.name', 'Rizal High School'));
+
+    $this->actingAs($admin)
+        ->get('/schools?search=North Cluster')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('schools.data', 1)
+            ->where('schools.data.0.name', 'Mabini Elementary School'));
+});
+
+test('the school registry paginates fifteen rows per page', function () {
+    School::factory()->count(20)->create();
+
+    $viewer = User::factory()->create();
+
+    $this->actingAs($viewer)
+        ->get('/schools')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('schools.data', 15)
+            ->where('schools.total', 20)
+            ->where('schools.current_page', 1)
+            ->where('schools.last_page', 2));
+
+    $this->actingAs($viewer)
+        ->get('/schools?page=2')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('schools.data', 5)
+            ->where('schools.current_page', 2));
 });
 
 test('organizers can create schools', function () {

@@ -1,11 +1,14 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { Plus, Search, UserCog } from 'lucide-react';
+import { Plus, UserCog } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
+import { PaginationControls } from '@/components/pagination-controls';
+import type { Paginated } from '@/components/pagination-controls';
+import { SearchBar } from '@/components/search-bar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -58,13 +61,6 @@ type PersonnelRow = {
     photo_url: string | null;
     can_update: boolean;
     can_delete: boolean;
-};
-
-type Paginated<T> = {
-    data: T[];
-    current_page: number;
-    last_page: number;
-    total: number;
 };
 
 type Props = {
@@ -360,7 +356,6 @@ export default function PersonnelPage({
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<PersonnelRow | null>(null);
     const [assigning, setAssigning] = useState<PersonnelRow | null>(null);
-    const [search, setSearch] = useState(filters.search);
 
     const openCreate = () => {
         setEditing(null);
@@ -370,23 +365,6 @@ export default function PersonnelPage({
     const openEdit = (person: PersonnelRow) => {
         setEditing(person);
         setFormOpen(true);
-    };
-
-    const runSearch = (e: FormEvent) => {
-        e.preventDefault();
-        router.get(
-            index().url,
-            { search },
-            { preserveState: true, preserveScroll: true },
-        );
-    };
-
-    const goToPage = (page: number) => {
-        router.get(
-            index().url,
-            { search: filters.search, page },
-            { preserveState: true, preserveScroll: true },
-        );
     };
 
     return (
@@ -406,18 +384,11 @@ export default function PersonnelPage({
                     }
                 />
 
-                <form onSubmit={runSearch} className="flex max-w-sm gap-2">
-                    <Input
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Search name"
-                        aria-label="Search personnel"
-                    />
-                    <Button type="submit" variant="outline">
-                        <Search />
-                        Search
-                    </Button>
-                </form>
+                <SearchBar
+                    initial={filters.search}
+                    placeholder="Search personnel"
+                    url={index().url}
+                />
 
                 {personnel.data.length === 0 ? (
                     <EmptyState
@@ -530,40 +501,14 @@ export default function PersonnelPage({
                             </Table>
                         </div>
 
-                        {personnel.last_page > 1 && (
-                            <div className="flex items-center justify-between">
-                                <p className="text-sm text-muted-foreground">
-                                    Page {personnel.current_page} of{' '}
-                                    {personnel.last_page} ({personnel.total}{' '}
-                                    personnel)
-                                </p>
-                                <div className="flex gap-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={personnel.current_page === 1}
-                                        onClick={() =>
-                                            goToPage(personnel.current_page - 1)
-                                        }
-                                    >
-                                        Previous
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={
-                                            personnel.current_page ===
-                                            personnel.last_page
-                                        }
-                                        onClick={() =>
-                                            goToPage(personnel.current_page + 1)
-                                        }
-                                    >
-                                        Next
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
+                        <PaginationControls
+                            page={personnel}
+                            url={index().url}
+                            label="personnel"
+                            params={
+                                filters.search ? { search: filters.search } : {}
+                            }
+                        />
                     </>
                 )}
             </div>

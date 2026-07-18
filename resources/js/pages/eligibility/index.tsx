@@ -6,6 +6,8 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
+import { PaginationControls } from '@/components/pagination-controls';
+import type { Paginated } from '@/components/pagination-controls';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -58,13 +60,6 @@ type ReviewRow = {
     decided_at: string | null;
     documents: DocumentRow[];
     can_decide: boolean;
-};
-
-type Paginated<T> = {
-    data: T[];
-    current_page: number;
-    last_page: number;
-    total: number;
 };
 
 type Props = {
@@ -301,17 +296,6 @@ export default function Eligibility({
         });
     };
 
-    const goToPage = (page: number) => {
-        router.get(
-            index().url,
-            {
-                ...(filters.status ? { status: filters.status } : {}),
-                page,
-            },
-            { preserveState: true, preserveScroll: true },
-        );
-    };
-
     return (
         <>
             <Head title="Eligibility" />
@@ -486,40 +470,14 @@ export default function Eligibility({
                             </Table>
                         </div>
 
-                        {reviews.last_page > 1 && (
-                            <div className="flex items-center justify-between">
-                                <p className="text-sm text-muted-foreground">
-                                    Page {reviews.current_page} of{' '}
-                                    {reviews.last_page} ({reviews.total}{' '}
-                                    records)
-                                </p>
-                                <div className="flex gap-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={reviews.current_page === 1}
-                                        onClick={() =>
-                                            goToPage(reviews.current_page - 1)
-                                        }
-                                    >
-                                        Previous
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={
-                                            reviews.current_page ===
-                                            reviews.last_page
-                                        }
-                                        onClick={() =>
-                                            goToPage(reviews.current_page + 1)
-                                        }
-                                    >
-                                        Next
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
+                        <PaginationControls
+                            page={reviews}
+                            url={index().url}
+                            label="records"
+                            params={
+                                filters.status ? { status: filters.status } : {}
+                            }
+                        />
                     </>
                 )}
             </div>

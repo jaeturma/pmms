@@ -2,28 +2,44 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\SportRequest;
 use App\Models\Sport;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class SportController extends Controller
 {
+    use SearchesAndPaginates;
+
     public function __construct(private readonly AuditLogger $audit) {}
 
     /**
-     * List all sports.
+     * Searchable, paginated sports catalog.
      */
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $search = $this->searchTerm($request);
+
+        $query = Sport::query()
+            ->withCount('events')
+            ->orderBy('name');
+
+        $this->applySearch($query, $search, ['name']);
+
         return Inertia::render('catalog/sports', [
-            'sports' => Sport::query()
-                ->withCount('events')
-                ->orderBy('name')
-                ->get(['id', 'name', 'active']),
+            'sports' => $query->paginate($this->registryPageSize)->withQueryString()
+                ->through(fn (Sport $sport): array => [
+                    'id' => $sport->id,
+                    'name' => $sport->name,
+                    'active' => $sport->active,
+                    'events_count' => $sport->events_count,
+                ]),
+            'filters' => ['search' => $search],
             'canManage' => Gate::allows('manage-meet-data'),
         ]);
     }

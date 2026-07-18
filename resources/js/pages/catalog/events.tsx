@@ -6,6 +6,9 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
+import { PaginationControls } from '@/components/pagination-controls';
+import type { Paginated } from '@/components/pagination-controls';
+import { SearchBar } from '@/components/search-bar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -60,7 +63,8 @@ type SportOption = {
 };
 
 type Props = {
-    events: MeetEvent[];
+    events: Paginated<MeetEvent>;
+    filters: { search: string };
     sports: SportOption[];
     canManage: boolean;
 };
@@ -255,7 +259,7 @@ function EventFormDialog({
     );
 }
 
-export default function Events({ events, sports, canManage }: Props) {
+export default function Events({ events, filters, sports, canManage }: Props) {
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<MeetEvent | null>(null);
 
@@ -286,7 +290,13 @@ export default function Events({ events, sports, canManage }: Props) {
                     }
                 />
 
-                {events.length === 0 ? (
+                <SearchBar
+                    initial={filters.search}
+                    placeholder="Search events"
+                    url={index().url}
+                />
+
+                {events.data.length === 0 ? (
                     <EmptyState
                         icon={Medal}
                         title="No events yet"
@@ -317,7 +327,7 @@ export default function Events({ events, sports, canManage }: Props) {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {events.map((event) => (
+                                {events.data.map((event) => (
                                     <TableRow key={event.id}>
                                         <TableCell className="font-medium">
                                             {event.name}
@@ -442,6 +452,13 @@ export default function Events({ events, sports, canManage }: Props) {
                         </Table>
                     </div>
                 )}
+
+                <PaginationControls
+                    page={events}
+                    url={index().url}
+                    label="events"
+                    params={filters.search ? { search: filters.search } : {}}
+                />
             </div>
 
             <EventFormDialog

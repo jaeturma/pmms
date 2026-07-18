@@ -6,6 +6,9 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
+import { PaginationControls } from '@/components/pagination-controls';
+import type { Paginated } from '@/components/pagination-controls';
+import { SearchBar } from '@/components/search-bar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -42,7 +45,8 @@ type District = {
 };
 
 type Props = {
-    districts: District[];
+    districts: Paginated<District>;
+    filters: { search: string };
     canManage: boolean;
 };
 
@@ -107,7 +111,7 @@ function DistrictFormDialog({
     );
 }
 
-export default function Districts({ districts, canManage }: Props) {
+export default function Districts({ districts, filters, canManage }: Props) {
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<District | null>(null);
 
@@ -138,7 +142,13 @@ export default function Districts({ districts, canManage }: Props) {
                     }
                 />
 
-                {districts.length === 0 ? (
+                <SearchBar
+                    initial={filters.search}
+                    placeholder="Search districts"
+                    url={index().url}
+                />
+
+                {districts.data.length === 0 ? (
                     <EmptyState
                         icon={Landmark}
                         title="No districts yet"
@@ -152,7 +162,7 @@ export default function Districts({ districts, canManage }: Props) {
                         }
                     />
                 ) : (
-                    <div className="rounded-xl border">
+                    <div className="overflow-x-auto rounded-xl border">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -167,7 +177,7 @@ export default function Districts({ districts, canManage }: Props) {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {districts.map((district) => (
+                                {districts.data.map((district) => (
                                     <TableRow key={district.id}>
                                         <TableCell className="font-medium">
                                             {district.name}
@@ -278,6 +288,13 @@ export default function Districts({ districts, canManage }: Props) {
                         </Table>
                     </div>
                 )}
+
+                <PaginationControls
+                    page={districts}
+                    url={index().url}
+                    label="districts"
+                    params={filters.search ? { search: filters.search } : {}}
+                />
             </div>
 
             <DistrictFormDialog

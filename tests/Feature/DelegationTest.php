@@ -30,15 +30,38 @@ test('managers see all delegations while officers see only their own', function 
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('delegations/index')
-            ->has('delegations', 2)
+            ->has('delegations.data', 2)
             ->where('canManage', true));
 
     $this->actingAs($officer)
         ->get('/delegations')
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('delegations', 1)
-            ->where('delegations.0.id', $mine->id)
+            ->has('delegations.data', 1)
+            ->where('delegations.data.0.id', $mine->id)
             ->where('canManage', false));
+});
+
+test('the delegation list can be searched by head and school name', function () {
+    $school = School::factory()->create(['name' => 'Bagong Silang Integrated School']);
+    $target = Delegation::factory()->create([
+        'school_id' => $school->id,
+        'head_name' => 'Corazon Villareal',
+    ]);
+    Delegation::factory()->create(['head_name' => 'Benigno Santos']);
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->get('/delegations?search=Villareal')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('delegations.data', 1)
+            ->where('delegations.data.0.id', $target->id));
+
+    $this->actingAs($admin)
+        ->get('/delegations?search=Bagong Silang')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('delegations.data', 1)
+            ->where('delegations.data.0.id', $target->id));
 });
 
 test('organizers can register a delegation for an open meet', function () {

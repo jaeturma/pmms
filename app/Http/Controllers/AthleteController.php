@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\UserRole;
+use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\AthleteRequest;
 use App\Models\Athlete;
 use App\Models\Delegation;
@@ -20,6 +21,8 @@ use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class AthleteController extends Controller
 {
+    use SearchesAndPaginates;
+
     public function __construct(
         private readonly AuditLogger $audit,
         private readonly FileUploadService $uploads,
@@ -36,7 +39,7 @@ class AthleteController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $search = trim((string) $request->query('search', ''));
+        $search = $this->searchTerm($request);
 
         $query = Athlete::query()
             ->with(['delegation.school:id,name', 'delegation.meet:id,name'])
@@ -50,13 +53,7 @@ class AthleteController extends Controller
             );
         }
 
-        if ($search !== '') {
-            $query->where(function ($q) use ($search) {
-                $q->where('first_name', 'like', "%{$search}%")
-                    ->orWhere('last_name', 'like', "%{$search}%")
-                    ->orWhere('lrn', 'like', "%{$search}%");
-            });
-        }
+        $this->applySearch($query, $search, ['first_name', 'last_name', 'lrn']);
 
         $delegations = Delegation::query()
             ->with(['school:id,name', 'meet:id,name']);
@@ -69,7 +66,7 @@ class AthleteController extends Controller
         }
 
         return Inertia::render('athletes/index', [
-            'athletes' => $query->paginate(15)->withQueryString()
+            'athletes' => $query->paginate($this->registryPageSize)->withQueryString()
                 ->through(fn (Athlete $athlete): array => [
                     'id' => $athlete->id,
                     'name' => $athlete->fullName(),

@@ -6,6 +6,7 @@ use App\Enums\EligibilityStatus;
 use App\Enums\EntryStatus;
 use App\Enums\MeetStatus;
 use App\Enums\UserRole;
+use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Models\Athlete;
 use App\Models\Delegation;
 use App\Models\Entry;
@@ -23,10 +24,12 @@ use Inertia\Response;
 
 class EntryController extends Controller
 {
+    use SearchesAndPaginates;
+
     public function __construct(private readonly AuditLogger $audit) {}
 
     /**
-     * Entry list filterable by event and delegation, officer-scoped.
+     * Searchable entry list filterable by event and delegation, officer-scoped.
      */
     public function index(Request $request): Response
     {
@@ -35,6 +38,7 @@ class EntryController extends Controller
         /** @var User $user */
         $user = $request->user();
 
+        $search = $this->searchTerm($request);
         $eventId = $request->integer('event_id');
         $delegationId = $request->integer('delegation_id');
 
@@ -63,6 +67,8 @@ class EntryController extends Controller
             $query->where('delegation_id', $delegationId);
         }
 
+        $this->applySearch($query, $search, ['athlete.first_name', 'athlete.last_name']);
+
         $delegationScope = Delegation::query()->with(['school:id,name', 'meet:id,name']);
 
         if ($user->role === UserRole::DelegationOfficer) {
@@ -85,7 +91,7 @@ class EntryController extends Controller
             ->orderBy('last_name');
 
         return Inertia::render('entries/index', [
-            'entries' => $query->paginate(15)->withQueryString()
+            'entries' => $query->paginate($this->registryPageSize)->withQueryString()
                 ->through(fn (Entry $entry): array => [
                     'id' => $entry->id,
                     'athlete' => $entry->athlete->fullName(),
@@ -108,6 +114,7 @@ class EntryController extends Controller
                     'can_delete' => $user->can('delete', $entry),
                 ]),
             'filters' => [
+                'search' => $search,
                 'event_id' => $eventId > 0 ? $eventId : null,
                 'delegation_id' => $delegationId > 0 ? $delegationId : null,
             ],

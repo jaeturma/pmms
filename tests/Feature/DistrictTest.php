@@ -18,7 +18,7 @@ test('the district registry renders with the manage flag per role', function () 
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('registry/districts')
-            ->has('districts', 1)
+            ->has('districts.data', 1)
             ->where('canManage', false));
 
     $this->actingAs(User::factory()->admin()->create())

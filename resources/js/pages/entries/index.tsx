@@ -1,11 +1,14 @@
-import { Head, router, useForm } from '@inertiajs/react';
-import { ListChecks, Plus } from 'lucide-react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
+import { ListChecks, Plus, Printer } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
+import { PaginationControls } from '@/components/pagination-controls';
+import type { Paginated } from '@/components/pagination-controls';
+import { SearchBar } from '@/components/search-bar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -38,6 +41,7 @@ import {
     store,
     withdraw,
 } from '@/routes/entries';
+import { eventEntries } from '@/routes/reports';
 
 type EntryRow = {
     id: number;
@@ -51,13 +55,6 @@ type EntryRow = {
     can_confirm: boolean;
     can_withdraw: boolean;
     can_delete: boolean;
-};
-
-type Paginated<T> = {
-    data: T[];
-    current_page: number;
-    last_page: number;
-    total: number;
 };
 
 type FilterOption = {
@@ -79,7 +76,11 @@ type EventOption = {
 
 type Props = {
     entries: Paginated<EntryRow>;
-    filters: { event_id: number | null; delegation_id: number | null };
+    filters: {
+        search: string;
+        event_id: number | null;
+        delegation_id: number | null;
+    };
     eventFilterOptions: FilterOption[];
     delegationFilterOptions: FilterOption[];
     athleteOptions: AthleteOption[];
@@ -238,26 +239,26 @@ export default function Entries({
             params.delegation_id = delegationId;
         }
 
+        if (filters.search) {
+            params.search = filters.search;
+        }
+
         router.get(index().url, params, {
             preserveState: true,
             preserveScroll: true,
         });
     };
 
-    const goToPage = (page: number) => {
-        router.get(
-            index().url,
-            {
-                ...(filters.event_id
-                    ? { event_id: String(filters.event_id) }
-                    : {}),
-                ...(filters.delegation_id
-                    ? { delegation_id: String(filters.delegation_id) }
-                    : {}),
-                page,
-            },
-            { preserveState: true, preserveScroll: true },
-        );
+    const selectParams = {
+        ...(filters.event_id ? { event_id: String(filters.event_id) } : {}),
+        ...(filters.delegation_id
+            ? { delegation_id: String(filters.delegation_id) }
+            : {}),
+    };
+
+    const filterParams = {
+        ...selectParams,
+        ...(filters.search ? { search: filters.search } : {}),
     };
 
     return (
@@ -268,16 +269,32 @@ export default function Entries({
                     title="Entries"
                     description="Event entries per delegation and event."
                     actions={
-                        athleteOptions.length > 0 && (
-                            <Button onClick={() => setSubmitOpen(true)}>
-                                <Plus />
-                                Submit entry
-                            </Button>
-                        )
+                        <>
+                            {filters.event_id && (
+                                <Button variant="outline" asChild>
+                                    <Link href={eventEntries(filters.event_id)}>
+                                        <Printer />
+                                        Event list
+                                    </Link>
+                                </Button>
+                            )}
+                            {athleteOptions.length > 0 && (
+                                <Button onClick={() => setSubmitOpen(true)}>
+                                    <Plus />
+                                    Submit entry
+                                </Button>
+                            )}
+                        </>
                     }
                 />
 
                 <div className="flex flex-wrap gap-2">
+                    <SearchBar
+                        initial={filters.search}
+                        placeholder="Search by athlete name"
+                        url={index().url}
+                        extraParams={selectParams}
+                    />
                     <Select
                         value={String(filters.event_id ?? 'all')}
                         onValueChange={(value) =>
@@ -462,40 +479,12 @@ export default function Entries({
                             </Table>
                         </div>
 
-                        {entries.last_page > 1 && (
-                            <div className="flex items-center justify-between">
-                                <p className="text-sm text-muted-foreground">
-                                    Page {entries.current_page} of{' '}
-                                    {entries.last_page} ({entries.total}{' '}
-                                    entries)
-                                </p>
-                                <div className="flex gap-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={entries.current_page === 1}
-                                        onClick={() =>
-                                            goToPage(entries.current_page - 1)
-                                        }
-                                    >
-                                        Previous
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={
-                                            entries.current_page ===
-                                            entries.last_page
-                                        }
-                                        onClick={() =>
-                                            goToPage(entries.current_page + 1)
-                                        }
-                                    >
-                                        Next
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
+                        <PaginationControls
+                            page={entries}
+                            url={index().url}
+                            label="entries"
+                            params={filterParams}
+                        />
                     </>
                 )}
             </div>

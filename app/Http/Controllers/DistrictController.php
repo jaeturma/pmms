@@ -2,28 +2,44 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\DistrictRequest;
 use App\Models\District;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class DistrictController extends Controller
 {
+    use SearchesAndPaginates;
+
     public function __construct(private readonly AuditLogger $audit) {}
 
     /**
-     * List all districts.
+     * Searchable, paginated district registry.
      */
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $search = $this->searchTerm($request);
+
+        $query = District::query()
+            ->withCount('schools')
+            ->orderBy('name');
+
+        $this->applySearch($query, $search, ['name']);
+
         return Inertia::render('registry/districts', [
-            'districts' => District::query()
-                ->withCount('schools')
-                ->orderBy('name')
-                ->get(['id', 'name', 'active']),
+            'districts' => $query->paginate($this->registryPageSize)->withQueryString()
+                ->through(fn (District $district): array => [
+                    'id' => $district->id,
+                    'name' => $district->name,
+                    'active' => $district->active,
+                    'schools_count' => $district->schools_count,
+                ]),
+            'filters' => ['search' => $search],
             'canManage' => Gate::allows('manage-meet-data'),
         ]);
     }

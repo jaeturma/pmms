@@ -18,7 +18,7 @@ test('the sports catalog renders with the manage flag per role', function () {
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('catalog/sports')
-            ->has('sports', 1)
+            ->has('sports.data', 1)
             ->where('canManage', false));
 
     $this->actingAs(User::factory()->organizer()->create())

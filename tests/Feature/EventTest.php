@@ -34,7 +34,7 @@ test('the events catalog renders with events and sport options', function () {
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('catalog/events')
-            ->has('events', 1)
+            ->has('events.data', 1)
             ->has('sports', 1)
             ->where('canManage', false));
 });

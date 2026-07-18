@@ -1,11 +1,14 @@
-import { Head, router, useForm } from '@inertiajs/react';
-import { Plus, School as SchoolIcon } from 'lucide-react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
+import { BarChart3, Plus, School as SchoolIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
+import { PaginationControls } from '@/components/pagination-controls';
+import type { Paginated } from '@/components/pagination-controls';
+import { SearchBar } from '@/components/search-bar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -32,6 +35,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { participation } from '@/routes/reports';
 import {
     archive,
     destroy,
@@ -58,7 +62,8 @@ type DistrictOption = {
 };
 
 type Props = {
-    schools: School[];
+    schools: Paginated<School>;
+    filters: { search: string };
     districts: DistrictOption[];
     canManage: boolean;
 };
@@ -202,7 +207,12 @@ function SchoolFormDialog({
     );
 }
 
-export default function Schools({ schools, districts, canManage }: Props) {
+export default function Schools({
+    schools,
+    filters,
+    districts,
+    canManage,
+}: Props) {
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<School | null>(null);
 
@@ -224,16 +234,30 @@ export default function Schools({ schools, districts, canManage }: Props) {
                     title="Schools"
                     description="Schools registered under the division's districts."
                     actions={
-                        canManage && (
-                            <Button onClick={openCreate}>
-                                <Plus />
-                                Add school
+                        <>
+                            <Button variant="outline" asChild>
+                                <Link href={participation()}>
+                                    <BarChart3 />
+                                    Participation
+                                </Link>
                             </Button>
-                        )
+                            {canManage && (
+                                <Button onClick={openCreate}>
+                                    <Plus />
+                                    Add school
+                                </Button>
+                            )}
+                        </>
                     }
                 />
 
-                {schools.length === 0 ? (
+                <SearchBar
+                    initial={filters.search}
+                    placeholder="Search schools"
+                    url={index().url}
+                />
+
+                {schools.data.length === 0 ? (
                     <EmptyState
                         icon={SchoolIcon}
                         title="No schools yet"
@@ -245,7 +269,7 @@ export default function Schools({ schools, districts, canManage }: Props) {
                         }
                     />
                 ) : (
-                    <div className="rounded-xl border">
+                    <div className="overflow-x-auto rounded-xl border">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -262,7 +286,7 @@ export default function Schools({ schools, districts, canManage }: Props) {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {schools.map((school) => (
+                                {schools.data.map((school) => (
                                     <TableRow key={school.id}>
                                         <TableCell className="font-medium">
                                             {school.name}
@@ -377,6 +401,13 @@ export default function Schools({ schools, districts, canManage }: Props) {
                         </Table>
                     </div>
                 )}
+
+                <PaginationControls
+                    page={schools}
+                    url={index().url}
+                    label="schools"
+                    params={filters.search ? { search: filters.search } : {}}
+                />
             </div>
 
             <SchoolFormDialog

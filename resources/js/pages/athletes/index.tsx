@@ -1,11 +1,14 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { Contact, Plus, Search } from 'lucide-react';
+import { Contact, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
+import { PaginationControls } from '@/components/pagination-controls';
+import type { Paginated } from '@/components/pagination-controls';
+import { SearchBar } from '@/components/search-bar';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -43,13 +46,6 @@ type AthleteRow = {
     meet: string;
     can_update: boolean;
     can_delete: boolean;
-};
-
-type Paginated<T> = {
-    data: T[];
-    current_page: number;
-    last_page: number;
-    total: number;
 };
 
 type DelegationOption = {
@@ -285,24 +281,6 @@ export default function Athletes({
     delegationOptions,
 }: Props) {
     const [createOpen, setCreateOpen] = useState(false);
-    const [search, setSearch] = useState(filters.search);
-
-    const runSearch = (e: FormEvent) => {
-        e.preventDefault();
-        router.get(
-            index().url,
-            { search },
-            { preserveState: true, preserveScroll: true },
-        );
-    };
-
-    const goToPage = (page: number) => {
-        router.get(
-            index().url,
-            { search: filters.search, page },
-            { preserveState: true, preserveScroll: true },
-        );
-    };
 
     return (
         <>
@@ -321,18 +299,11 @@ export default function Athletes({
                     }
                 />
 
-                <form onSubmit={runSearch} className="flex max-w-sm gap-2">
-                    <Input
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Search name or LRN"
-                        aria-label="Search athletes"
-                    />
-                    <Button type="submit" variant="outline">
-                        <Search />
-                        Search
-                    </Button>
-                </form>
+                <SearchBar
+                    initial={filters.search}
+                    placeholder="Search name or LRN"
+                    url={index().url}
+                />
 
                 {athletes.data.length === 0 ? (
                     <EmptyState
@@ -430,40 +401,14 @@ export default function Athletes({
                             </Table>
                         </div>
 
-                        {athletes.last_page > 1 && (
-                            <div className="flex items-center justify-between">
-                                <p className="text-sm text-muted-foreground">
-                                    Page {athletes.current_page} of{' '}
-                                    {athletes.last_page} ({athletes.total}{' '}
-                                    athletes)
-                                </p>
-                                <div className="flex gap-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={athletes.current_page === 1}
-                                        onClick={() =>
-                                            goToPage(athletes.current_page - 1)
-                                        }
-                                    >
-                                        Previous
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={
-                                            athletes.current_page ===
-                                            athletes.last_page
-                                        }
-                                        onClick={() =>
-                                            goToPage(athletes.current_page + 1)
-                                        }
-                                    >
-                                        Next
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
+                        <PaginationControls
+                            page={athletes}
+                            url={index().url}
+                            label="athletes"
+                            params={
+                                filters.search ? { search: filters.search } : {}
+                            }
+                        />
                     </>
                 )}
             </div>
