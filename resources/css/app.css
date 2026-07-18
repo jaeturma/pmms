@@ -141,3 +141,30 @@
         @apply bg-background text-foreground;
     }
 }
+
+/*
+ * Print support for report pages (WP-02-12): hide the app chrome so only
+ * the page content prints, flatten the inset main panel, and force a light
+ * background regardless of theme.
+ */
+@media print {
+    [data-slot='sidebar'],
+    [data-slot='sidebar-inset'] > header {
+        display: none !important;
+    }
+
+    [data-slot='sidebar-wrapper'],
+    [data-slot='sidebar-inset'] {
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        min-height: 0 !important;
+    }
+
+    html,
+    body {
+        background: white !important;
+    }
+}

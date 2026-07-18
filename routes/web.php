@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AthleteController;
+use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DelegationController;
 use App\Http\Controllers\DistrictController;
@@ -10,6 +11,7 @@ use App\Http\Controllers\EventController;
 use App\Http\Controllers\FileUploadController;
 use App\Http\Controllers\MeetController;
 use App\Http\Controllers\PersonnelController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SchoolController;
 use App\Http\Controllers\SportController;
 use Illuminate\Support\Facades\Route;
@@ -62,6 +64,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('eligibility/documents/{document}', [EligibilityController::class, 'destroyDocument'])->name('eligibility.documents.destroy');
     Route::patch('eligibility/reviews/{review}/approve', [EligibilityController::class, 'approve'])->name('eligibility.approve');
     Route::patch('eligibility/reviews/{review}/return', [EligibilityController::class, 'returnReview'])->name('eligibility.return');
+
+    Route::get('reports/participation', [ReportController::class, 'participation'])->name('reports.participation');
+    Route::get('reports/participation/download', [ReportController::class, 'downloadParticipation'])->name('reports.participation.download');
+    Route::get('reports/delegations/{delegation}/roster', [ReportController::class, 'delegationRoster'])->name('reports.roster');
+    Route::get('reports/delegations/{delegation}/roster/download', [ReportController::class, 'downloadDelegationRoster'])->name('reports.roster.download');
+    Route::get('reports/events/{event}/entries', [ReportController::class, 'eventEntries'])->name('reports.event-entries');
+    Route::get('reports/events/{event}/entries/download', [ReportController::class, 'downloadEventEntries'])->name('reports.event-entries.download');
+
+    Route::get('audit-logs', [AuditLogController::class, 'index'])
+        ->middleware('can:administer')
+        ->name('audit-logs.index');
 
     Route::middleware('role:admin,organizer')->group(function () {
         Route::post('districts', [DistrictController::class, 'store'])->name('districts.store');

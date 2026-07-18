@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Support\Carbon;
 
 /**
@@ -21,6 +22,10 @@ use Illuminate\Support\Carbon;
  * @property bool $active
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property-read int|null $delegations_count
+ * @property-read int|null $athletes_count
+ * @property-read int|null $personnel_count
+ * @property-read int|null $entries_count
  */
 #[Fillable(['district_id', 'name', 'school_id_code', 'level', 'address'])]
 class School extends Model
@@ -55,5 +60,29 @@ class School extends Model
     public function delegations(): HasMany
     {
         return $this->hasMany(Delegation::class);
+    }
+
+    /**
+     * @return HasManyThrough<Athlete, Delegation, $this>
+     */
+    public function athletes(): HasManyThrough
+    {
+        return $this->hasManyThrough(Athlete::class, Delegation::class);
+    }
+
+    /**
+     * @return HasManyThrough<Personnel, Delegation, $this>
+     */
+    public function personnel(): HasManyThrough
+    {
+        return $this->hasManyThrough(Personnel::class, Delegation::class);
+    }
+
+    /**
+     * @return HasManyThrough<Entry, Delegation, $this>
+     */
+    public function entries(): HasManyThrough
+    {
+        return $this->hasManyThrough(Entry::class, Delegation::class);
     }
 }

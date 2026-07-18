@@ -19,6 +19,16 @@ class DelegationPolicy
     }
 
     /**
+     * The roster (athletes + personnel) carries minor data — managers and
+     * assigned officers only, never viewers.
+     */
+    public function viewRoster(User $user, Delegation $delegation): bool
+    {
+        return $user->hasRole(UserRole::Admin, UserRole::Organizer)
+            || $delegation->hasOfficer($user);
+    }
+
+    /**
      * Managers may always edit; an assigned officer only while the
      * delegation is a draft and the meet's registration window is open.
      */
