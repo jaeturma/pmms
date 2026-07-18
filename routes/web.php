@@ -2,8 +2,10 @@
 
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DistrictController;
+use App\Http\Controllers\EventController;
 use App\Http\Controllers\FileUploadController;
 use App\Http\Controllers\SchoolController;
+use App\Http\Controllers\SportController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -17,6 +19,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('districts', [DistrictController::class, 'index'])->name('districts.index');
     Route::get('schools', [SchoolController::class, 'index'])->name('schools.index');
+    Route::get('sports', [SportController::class, 'index'])->name('sports.index');
+    Route::get('events', [EventController::class, 'index'])->name('events.index');
 
     Route::middleware('role:admin,organizer')->group(function () {
         Route::post('districts', [DistrictController::class, 'store'])->name('districts.store');
@@ -30,6 +34,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('schools/{school}/archive', [SchoolController::class, 'archive'])->name('schools.archive');
         Route::patch('schools/{school}/restore', [SchoolController::class, 'restore'])->name('schools.restore');
         Route::delete('schools/{school}', [SchoolController::class, 'destroy'])->name('schools.destroy');
+
+        Route::post('sports', [SportController::class, 'store'])->name('sports.store');
+        Route::put('sports/{sport}', [SportController::class, 'update'])->name('sports.update');
+        Route::patch('sports/{sport}/archive', [SportController::class, 'archive'])->name('sports.archive');
+        Route::patch('sports/{sport}/restore', [SportController::class, 'restore'])->name('sports.restore');
+        Route::delete('sports/{sport}', [SportController::class, 'destroy'])->name('sports.destroy');
+
+        Route::post('events', [EventController::class, 'store'])->name('events.store');
+        Route::put('events/{event}', [EventController::class, 'update'])->name('events.update');
+        Route::patch('events/{event}/archive', [EventController::class, 'archive'])->name('events.archive');
+        Route::patch('events/{event}/restore', [EventController::class, 'restore'])->name('events.restore');
+        Route::delete('events/{event}', [EventController::class, 'destroy'])->name('events.destroy');
     });
 });
 

@@ -11,6 +11,11 @@ Execute one work package at a time on owner instruction.
   models/factories, CRUD+archive/restore controllers with audit, role-gated routes,
   registry pages + sidebar nav, SampleRegistrySeeder local-only, docs/registry.md;
   Pest 93/93, full gate green; migrations applied on pmmsdb)
+- WP-02-03 Sports & Events Catalog — done 2026-07-18 (sports+events tables with
+  gender/age-division/team/entry-cap config, GenderCategory+AgeDivision enums, CRUD+
+  archive controllers with audit, catalog pages + sidebar nav, SportsCatalogSeeder
+  (14 sports + 16 athletics events, real reference config), docs/sports-catalog.md;
+  Pest 118/118, full gate green; migrations applied + catalog seeded on pmmsdb)
 
 ## Phase 1 — Engineering Foundation (complete)
 Execute one work package at a time.
