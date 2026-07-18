@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AthleteController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DelegationController;
 use App\Http\Controllers\DistrictController;
@@ -31,6 +32,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('delegations/{delegation}/approve', [DelegationController::class, 'approve'])->name('delegations.approve');
     Route::patch('delegations/{delegation}/return', [DelegationController::class, 'returnToDraft'])->name('delegations.return');
     Route::put('delegations/{delegation}/officers', [DelegationController::class, 'syncOfficers'])->name('delegations.officers');
+
+    Route::get('athletes', [AthleteController::class, 'index'])->name('athletes.index');
+    Route::get('athletes/{athlete}', [AthleteController::class, 'show'])->name('athletes.show');
+    Route::get('athletes/{athlete}/photo', [AthleteController::class, 'photo'])->name('athletes.photo');
+    Route::post('athletes', [AthleteController::class, 'store'])->name('athletes.store');
+    Route::put('athletes/{athlete}', [AthleteController::class, 'update'])->name('athletes.update');
+    Route::delete('athletes/{athlete}', [AthleteController::class, 'destroy'])->name('athletes.destroy');
 
     Route::middleware('role:admin,organizer')->group(function () {
         Route::post('districts', [DistrictController::class, 'store'])->name('districts.store');

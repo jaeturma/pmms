@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -64,8 +65,26 @@ class Delegation extends Model
         return $this->belongsToMany(User::class, 'delegation_user')->withTimestamps();
     }
 
+    /**
+     * @return HasMany<Athlete, $this>
+     */
+    public function athletes(): HasMany
+    {
+        return $this->hasMany(Athlete::class);
+    }
+
     public function hasOfficer(User $user): bool
     {
         return $this->officers()->whereKey($user->getKey())->exists();
+    }
+
+    /**
+     * Officers may edit the delegation (and its roster) only while it is a
+     * draft and the meet's registration window is open.
+     */
+    public function isEditableByOfficers(): bool
+    {
+        return $this->status === DelegationStatus::Draft
+            && $this->meet->isRegistrationOpen();
     }
 }

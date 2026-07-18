@@ -1,5 +1,6 @@
 import { Link } from '@inertiajs/react';
 import {
+    Contact,
     Flag,
     Landmark,
     LayoutGrid,
@@ -21,6 +22,7 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
+import { index as athletesIndex } from '@/routes/athletes';
 import { index as delegationsIndex } from '@/routes/delegations';
 import { index as districtsIndex } from '@/routes/districts';
 import { index as eventsIndex } from '@/routes/events';
@@ -64,6 +66,11 @@ const mainNavItems: NavItem[] = [
         title: 'Delegations',
         href: delegationsIndex(),
         icon: UsersRound,
+    },
+    {
+        title: 'Athletes',
+        href: athletesIndex(),
+        icon: Contact,
     },
 ];
 

@@ -28,6 +28,13 @@ Execute one work package at a time on owner instruction.
   submitted→approved flow with return, officer assignment role-validated, per-row can_*
   flags drive the UI, school-delete guard fulfilled, docs/delegations.md;
   Pest 158/158, full gate green; migrations applied on pmmsdb)
+- WP-02-06 Athlete Registry — done 2026-07-18 (athletes table minor-safe minimal fields
+  + optional photo via FileUploadService, AthletePolicy: viewers excluded entirely,
+  officers scoped to own editable delegation, every profile view audited
+  (athlete.viewed), photo served by athlete-visibility not upload ownership, first
+  searchable+paginated registry (LRN/birthdate only on audited show page),
+  delegation-delete guard, docs/athletes.md; Pest 179/179, full gate green;
+  migration applied on pmmsdb)
 
 ## Phase 1 — Engineering Foundation (complete)
 Execute one work package at a time.
