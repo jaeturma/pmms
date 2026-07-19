@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -59,5 +61,21 @@ class Entry extends Model
     public function event(): BelongsTo
     {
         return $this->belongsTo(Event::class);
+    }
+
+    /**
+     * @return BelongsToMany<EventMatch, $this>
+     */
+    public function matches(): BelongsToMany
+    {
+        return $this->belongsToMany(EventMatch::class, 'match_entries', 'entry_id', 'match_id')->withTimestamps();
+    }
+
+    /**
+     * @return HasMany<ResultPlacement, $this>
+     */
+    public function placements(): HasMany
+    {
+        return $this->hasMany(ResultPlacement::class);
     }
 }

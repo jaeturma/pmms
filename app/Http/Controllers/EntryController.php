@@ -304,6 +304,24 @@ class EntryController extends Controller
     {
         Gate::authorize('delete', $entry);
 
+        if ($entry->matches()->exists()) {
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => __('This entry took part in a match and cannot be deleted.'),
+            ]);
+
+            return back();
+        }
+
+        if ($entry->placements()->exists()) {
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => __('This entry has recorded results and cannot be deleted.'),
+            ]);
+
+            return back();
+        }
+
         $context = [
             'athlete' => $entry->athlete->fullName(),
             'event' => $entry->event->name,
