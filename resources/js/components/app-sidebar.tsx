@@ -1,15 +1,22 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
+    Award,
+    CalendarDays,
     Contact,
+    Crown,
     FileCheck,
     Flag,
+    Gavel,
     Landmark,
     LayoutGrid,
     ListChecks,
+    MapPin,
     Medal,
     School,
     ScrollText,
+    Swords,
     Trophy,
+    TriangleAlert,
     UserCog,
     UsersRound,
 } from 'lucide-react';
@@ -33,10 +40,17 @@ import { index as districtsIndex } from '@/routes/districts';
 import { index as eligibilityIndex } from '@/routes/eligibility';
 import { index as entriesIndex } from '@/routes/entries';
 import { index as eventsIndex } from '@/routes/events';
+import { index as incidentsIndex } from '@/routes/incidents';
+import { index as matchesIndex } from '@/routes/matches';
 import { index as meetsIndex } from '@/routes/meets';
 import { index as personnelIndex } from '@/routes/personnel';
+import { index as protestsIndex } from '@/routes/protests';
+import { index as resultsIndex } from '@/routes/results';
+import { index as scheduleIndex } from '@/routes/schedule';
 import { index as schoolsIndex } from '@/routes/schools';
 import { index as sportsIndex } from '@/routes/sports';
+import { index as tallyIndex } from '@/routes/tally';
+import { index as venuesIndex } from '@/routes/venues';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
@@ -71,6 +85,36 @@ const mainNavItems: NavItem[] = [
         icon: Flag,
     },
     {
+        title: 'Venues',
+        href: venuesIndex(),
+        icon: MapPin,
+    },
+    {
+        title: 'Schedule',
+        href: scheduleIndex(),
+        icon: CalendarDays,
+    },
+    {
+        title: 'Matches',
+        href: matchesIndex(),
+        icon: Swords,
+    },
+    {
+        title: 'Results',
+        href: resultsIndex(),
+        icon: Award,
+    },
+    {
+        title: 'Medal tally',
+        href: tallyIndex(),
+        icon: Crown,
+    },
+    {
+        title: 'Protests',
+        href: protestsIndex(),
+        icon: Gavel,
+    },
+    {
         title: 'Delegations',
         href: delegationsIndex(),
         icon: UsersRound,
@@ -97,6 +141,14 @@ const mainNavItems: NavItem[] = [
     },
 ];
 
+const managerNavItems: NavItem[] = [
+    {
+        title: 'Incidents',
+        href: incidentsIndex(),
+        icon: TriangleAlert,
+    },
+];
+
 const adminNavItems: NavItem[] = [
     {
         title: 'Audit log',
@@ -108,10 +160,13 @@ const adminNavItems: NavItem[] = [
 export function AppSidebar() {
     const { auth } = usePage().props;
 
-    const navItems =
-        auth.user?.role === 'admin'
-            ? [...mainNavItems, ...adminNavItems]
-            : mainNavItems;
+    const role = auth.user?.role;
+
+    const navItems = [
+        ...mainNavItems,
+        ...(role === 'admin' || role === 'organizer' ? managerNavItems : []),
+        ...(role === 'admin' ? adminNavItems : []),
+    ];
 
     return (
         <Sidebar collapsible="icon" variant="inset">
