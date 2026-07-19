@@ -8,11 +8,16 @@ use App\Models\Athlete;
 use App\Models\Delegation;
 use App\Models\Entry;
 use App\Models\Event;
+use App\Models\EventResult;
+use App\Models\EventSchedule;
 use App\Models\Meet;
 use App\Models\Personnel;
+use App\Models\ResultPlacement;
 use App\Models\School;
+use App\Models\Sport;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\MedalTallyService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -150,6 +155,234 @@ class ReportController extends Controller
         }
 
         return $this->csv('school-participation.csv', $rows);
+    }
+
+    /**
+     * Official result sheet for one validated event result — validated
+     * results are official meet outcomes, readable by all roles.
+     */
+    public function resultSheet(EventResult $result): Response
+    {
+        abort_unless($result->isValidated(), 404);
+
+        return Inertia::render('reports/result-sheet', [
+            ...$this->resultSheetData($result),
+            'generatedAt' => now()->toDayDateTimeString(),
+        ]);
+    }
+
+    /**
+     * CSV of the official result sheet, audited.
+     */
+    public function downloadResultSheet(EventResult $result): StreamedResponse
+    {
+        abort_unless($result->isValidated(), 404);
+
+        $data = $this->resultSheetData($result);
+
+        $this->audit->record('report.result_sheet_exported', $result, [
+            'meet' => $data['result']['meet'],
+            'event' => $data['result']['event'],
+        ]);
+
+        $rows = [['Rank', 'Athlete', 'School', 'Mark', 'Tie']];
+
+        foreach ($data['placements'] as $placement) {
+            $rows[] = [
+                $placement['rank'], $placement['athlete'], $placement['school'],
+                $placement['mark'], $placement['is_tie'] ? 'Yes' : '',
+            ];
+        }
+
+        return $this->csv("result-sheet-{$result->id}.csv", $rows);
+    }
+
+    /**
+     * Printable medal tally per school and district — validated results
+     * only, readable by all roles.
+     */
+    public function tallyReport(Request $request, MedalTallyService $tally): Response
+    {
+        $meetId = $request->integer('meet_id');
+        $sportId = $request->integer('sport_id');
+
+        $standings = $tally->standings($meetId > 0 ? $meetId : null, $sportId > 0 ? $sportId : null);
+
+        return Inertia::render('reports/medal-tally', [
+            'schools' => $standings['schools'],
+            'districts' => $standings['districts'],
+            'meet' => $meetId > 0 ? Meet::query()->find($meetId)?->name : null,
+            'sport' => $sportId > 0 ? Sport::query()->find($sportId)?->name : null,
+            'filters' => [
+                'meet_id' => $meetId > 0 ? $meetId : null,
+                'sport_id' => $sportId > 0 ? $sportId : null,
+            ],
+            'generatedAt' => now()->toDayDateTimeString(),
+        ]);
+    }
+
+    /**
+     * CSV of the medal tally, audited.
+     */
+    public function downloadTallyReport(Request $request, MedalTallyService $tally): StreamedResponse
+    {
+        $meetId = $request->integer('meet_id');
+        $sportId = $request->integer('sport_id');
+
+        $standings = $tally->standings($meetId > 0 ? $meetId : null, $sportId > 0 ? $sportId : null);
+
+        $this->audit->record('report.tally_exported', null, [
+            'meet' => $meetId > 0 ? Meet::query()->find($meetId)?->name : 'all meets',
+            'sport' => $sportId > 0 ? Sport::query()->find($sportId)?->name : 'all sports',
+        ]);
+
+        $rows = [['Type', 'Position', 'Name', 'District', 'Gold', 'Silver', 'Bronze', 'Total']];
+
+        foreach ($standings['schools'] as $row) {
+            $rows[] = [
+                'School', $row['position'], $row['school'], $row['district'],
+                $row['gold'], $row['silver'], $row['bronze'], $row['total'],
+            ];
+        }
+
+        foreach ($standings['districts'] as $row) {
+            $rows[] = [
+                'District', $row['position'], $row['district'], '',
+                $row['gold'], $row['silver'], $row['bronze'], $row['total'],
+            ];
+        }
+
+        return $this->csv('medal-tally.csv', $rows);
+    }
+
+    /**
+     * Daily schedule sheet: one day's slots grouped by venue, all roles.
+     */
+    public function scheduleSheet(Request $request): Response
+    {
+        $date = $this->sheetDate($request);
+
+        return Inertia::render('reports/schedule-sheet', [
+            'date' => $date,
+            'venues' => $this->scheduleSheetVenues($date),
+            'generatedAt' => now()->toDayDateTimeString(),
+        ]);
+    }
+
+    /**
+     * CSV of the daily schedule sheet, audited.
+     */
+    public function downloadScheduleSheet(Request $request): StreamedResponse
+    {
+        $date = $this->sheetDate($request);
+        $venues = $this->scheduleSheetVenues($date);
+
+        $this->audit->record('report.schedule_exported', null, [
+            'date' => $date,
+            'venues' => count($venues),
+        ]);
+
+        $rows = [['Venue', 'Start', 'End', 'Event', 'Meet', 'Note']];
+
+        foreach ($venues as $venue) {
+            foreach ($venue['slots'] as $slot) {
+                $rows[] = [
+                    $venue['venue'], $slot['starts_at'], $slot['ends_at'],
+                    $slot['event'], $slot['meet'], $slot['note'],
+                ];
+            }
+        }
+
+        return $this->csv("schedule-{$date}.csv", $rows);
+    }
+
+    /**
+     * @return array{result: array<string, mixed>, placements: array<int, array<string, mixed>>}
+     */
+    private function resultSheetData(EventResult $result): array
+    {
+        $result->load([
+            'meet:id,name,school_year',
+            'event.sport:id,name',
+            'encodedBy:id,name',
+            'validatedBy:id,name',
+            'placements.entry.athlete:id,first_name,last_name',
+            'placements.entry.delegation.school:id,name',
+        ]);
+
+        return [
+            'result' => [
+                'id' => $result->id,
+                'meet' => $result->meet->name,
+                'school_year' => $result->meet->school_year,
+                'event' => sprintf(
+                    '%s — %s (%s, %s)',
+                    $result->event->sport->name,
+                    $result->event->name,
+                    $result->event->gender->label(),
+                    $result->event->age_division->label(),
+                ),
+                'encoded_by' => $result->encodedBy?->name,
+                'validated_by' => $result->validatedBy?->name,
+                'validated_at' => $result->validated_at?->toDayDateTimeString(),
+            ],
+            'placements' => $result->placements
+                ->sortBy([['rank', 'asc']])
+                ->map(fn (ResultPlacement $placement): array => [
+                    'rank' => $placement->rank,
+                    'athlete' => $placement->entry->athlete->fullName(),
+                    'school' => $placement->entry->delegation->school->name,
+                    'mark' => $placement->mark,
+                    'is_tie' => $placement->is_tie,
+                ])
+                ->values()
+                ->all(),
+        ];
+    }
+
+    private function sheetDate(Request $request): string
+    {
+        $date = $request->string('date')->toString();
+
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) === 1
+            ? $date
+            : now()->toDateString();
+    }
+
+    /**
+     * @return array<int, array{venue: string, slots: array<int, array<string, mixed>>}>
+     */
+    private function scheduleSheetVenues(string $date): array
+    {
+        return EventSchedule::query()
+            ->whereDate('scheduled_date', $date)
+            ->with(['venue:id,name', 'meet:id,name', 'event.sport:id,name'])
+            ->orderBy('starts_at')
+            ->get()
+            ->groupBy(fn (EventSchedule $slot): string => $slot->venue->name)
+            ->sortKeys()
+            ->map(fn ($slots, string $venue): array => [
+                'venue' => $venue,
+                'slots' => $slots
+                    ->map(fn (EventSchedule $slot): array => [
+                        'id' => $slot->id,
+                        'starts_at' => substr($slot->starts_at, 0, 5),
+                        'ends_at' => substr($slot->ends_at, 0, 5),
+                        'event' => sprintf(
+                            '%s — %s (%s, %s)',
+                            $slot->event->sport->name,
+                            $slot->event->name,
+                            $slot->event->gender->label(),
+                            $slot->event->age_division->label(),
+                        ),
+                        'meet' => $slot->meet->name,
+                        'note' => $slot->note,
+                    ])
+                    ->values()
+                    ->all(),
+            ])
+            ->values()
+            ->all();
     }
 
     /**
