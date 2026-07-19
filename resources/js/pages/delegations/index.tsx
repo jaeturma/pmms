@@ -1,5 +1,5 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { Plus, Printer, UsersRound } from 'lucide-react';
+import { IdCard, Plus, Printer, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -36,6 +36,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { index as accreditationIndex } from '@/routes/accreditation';
 import {
     approve,
     destroy,
@@ -516,6 +517,22 @@ export default function Delegations({
                                                         >
                                                             <Printer />
                                                             Roster
+                                                        </Link>
+                                                    </Button>
+                                                )}
+                                                {delegation.can_view_roster && (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        asChild
+                                                    >
+                                                        <Link
+                                                            href={accreditationIndex(
+                                                                delegation.id,
+                                                            )}
+                                                        >
+                                                            <IdCard />
+                                                            IDs
                                                         </Link>
                                                     </Button>
                                                 )}

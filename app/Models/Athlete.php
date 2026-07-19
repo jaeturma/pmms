@@ -98,4 +98,12 @@ class Athlete extends Model
     {
         return $this->hasMany(EligibilityDocument::class);
     }
+
+    /**
+     * @return HasOne<Accreditation, $this>
+     */
+    public function accreditation(): HasOne
+    {
+        return $this->hasOne(Accreditation::class);
+    }
 }
