@@ -1,7 +1,19 @@
 # Current Phase
-Phase 3 — Provincial Meet Operations: COMPLETE 2026-07-19. All 11 WPs executed one
-at a time on owner instruction, then committed per-WP on main (owner authorized
-2026-07-19; NOT pushed — push only on instruction). Review: docs/phases/phase-03-provincial-meet-operations/
+Phase 4 — Responsive Public Portal: PLANNED 2026-07-19 — pending owner approval.
+Plan: docs/phases/phase-04-responsive-public-portal/ (README + WP-04-01..07).
+Seven WPs: portal foundation & publication controls → public schedule/venues →
+public results (validated only) → public medal tally → announcements →
+accessibility/mobile review → compliance review. Replaces the stale pre-Phase-2
+draft (11 boilerplate WPs on a municipality-delegation model that was never
+built, plus public athlete profiles the product scope explicitly defers).
+Grounded in product-scope §9: published schedules, validated results, medal
+tally, announcements — nothing else public; publication is an explicit audited
+manager decision; athlete identity on the portal is name+school+placement only.
+Execute one work package at a time on owner instruction.
+
+## Phase 3 — Provincial Meet Operations (complete)
+COMPLETE 2026-07-19. All 11 WPs executed one at a time on owner instruction,
+then committed per-WP on main and pushed (9918b3a..a73b657). Review: docs/phases/phase-03-provincial-meet-operations/
 phase-3-compliance-review.md (COMPLIANT, no findings above Low; full gate green:
 Pint+PHPStan+Pest 496/496 (2,080 assertions), ESLint+Prettier+tsc+build; 28
 migrations Ran on MySQL pmmsdb; all 3 visual checkpoints demonstrable at
