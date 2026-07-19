@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\AuditLog;
+use App\Models\EventResult;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 
@@ -65,6 +66,21 @@ test('the audit log can be filtered to a single action', function () {
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('logs.data', 2)
             ->where('filters.action', 'athlete.viewed'));
+});
+
+test('phase 3 action families surface in the viewer and its filter', function () {
+    $result = EventResult::factory()->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/results/{$result->id}/validate")
+        ->assertRedirect();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get('/audit-logs?action=result.validated')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('logs.data', 1)
+            ->where('logs.data.0.action', 'result.validated')
+            ->where('actionOptions.0', 'result.validated'));
 });
 
 test('forbidden audit access renders the permission denied page', function () {

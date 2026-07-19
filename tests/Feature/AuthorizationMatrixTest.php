@@ -1,16 +1,23 @@
 <?php
 
+use App\Models\Accreditation;
 use App\Models\Athlete;
 use App\Models\Delegation;
 use App\Models\District;
 use App\Models\EligibilityReview;
 use App\Models\Entry;
 use App\Models\Event;
+use App\Models\EventMatch;
+use App\Models\EventResult;
+use App\Models\EventSchedule;
+use App\Models\Incident;
 use App\Models\Meet;
 use App\Models\Personnel;
+use App\Models\Protest;
 use App\Models\School;
 use App\Models\Sport;
 use App\Models\User;
+use App\Models\Venue;
 use Inertia\Testing\AssertableInertia;
 
 /**
@@ -54,6 +61,14 @@ test('meet-data management is denied to viewers and delegation officers', functi
         'event archive' => fn (): array => ['patch', '/events/'.Event::factory()->create()->id.'/archive'],
         'event restore' => fn (): array => ['patch', '/events/'.Event::factory()->create()->id.'/restore'],
         'event delete' => fn (): array => ['delete', '/events/'.Event::factory()->create()->id],
+        'venue create' => fn (): array => ['post', '/venues'],
+        'venue update' => fn (): array => ['put', '/venues/'.Venue::factory()->create()->id],
+        'venue archive' => fn (): array => ['patch', '/venues/'.Venue::factory()->create()->id.'/archive'],
+        'venue restore' => fn (): array => ['patch', '/venues/'.Venue::factory()->archived()->create()->id.'/restore'],
+        'venue delete' => fn (): array => ['delete', '/venues/'.Venue::factory()->create()->id],
+        'schedule create' => fn (): array => ['post', '/schedule'],
+        'schedule update' => fn (): array => ['put', '/schedule/'.EventSchedule::factory()->create()->id],
+        'schedule delete' => fn (): array => ['delete', '/schedule/'.EventSchedule::factory()->create()->id],
         'meet create' => fn (): array => ['post', '/meets'],
         'meet update' => fn (): array => ['put', '/meets/'.Meet::factory()->create()->id],
         'meet status' => fn (): array => ['patch', '/meets/'.Meet::factory()->create()->id.'/status'],
@@ -61,6 +76,29 @@ test('meet-data management is denied to viewers and delegation officers', functi
         'meet delete' => fn (): array => ['delete', '/meets/'.Meet::factory()->create()->id],
         'delegation create' => fn (): array => ['post', '/delegations'],
         'delegation delete' => fn (): array => ['delete', '/delegations/'.Delegation::factory()->create()->id],
+        'accreditation grant' => fn (): array => ['post', '/accreditations'],
+        'accreditation revoke' => fn (): array => ['delete', '/accreditations/'.Accreditation::factory()->create()->id],
+        'accreditation view (unassigned)' => fn (): array => ['get', '/delegations/'.Delegation::factory()->approved()->create()->id.'/accreditation'],
+        'accreditation batch cards (unassigned)' => fn (): array => ['get', '/delegations/'.Delegation::factory()->approved()->create()->id.'/accreditation/cards'],
+        'accreditation card (unassigned)' => fn (): array => ['get', '/accreditations/'.Accreditation::factory()->create()->id.'/card'],
+        'match create' => fn (): array => ['post', '/matches'],
+        'match update' => fn (): array => ['put', '/matches/'.EventMatch::factory()->create()->id],
+        'match participants' => fn (): array => ['put', '/matches/'.EventMatch::factory()->create()->id.'/participants'],
+        'match status' => fn (): array => ['patch', '/matches/'.EventMatch::factory()->create()->id.'/status'],
+        'match delete' => fn (): array => ['delete', '/matches/'.EventMatch::factory()->create()->id],
+        'result encode' => fn (): array => ['post', '/results'],
+        'result update' => fn (): array => ['put', '/results/'.EventResult::factory()->create()->id],
+        'result validate' => fn (): array => ['patch', '/results/'.EventResult::factory()->create()->id.'/validate'],
+        'result correct' => fn (): array => ['patch', '/results/'.EventResult::factory()->validated()->create()->id.'/correct'],
+        'result delete' => fn (): array => ['delete', '/results/'.EventResult::factory()->create()->id],
+        'protest review' => fn (): array => ['patch', '/protests/'.Protest::factory()->create()->id.'/review'],
+        'protest decide' => fn (): array => ['patch', '/protests/'.Protest::factory()->underReview()->create()->id.'/decide'],
+        'incident list' => fn (): array => ['get', '/incidents'],
+        'incident create' => fn (): array => ['post', '/incidents'],
+        'incident update' => fn (): array => ['put', '/incidents/'.Incident::factory()->create()->id],
+        'incident resolve' => fn (): array => ['patch', '/incidents/'.Incident::factory()->create()->id.'/resolve'],
+        'incident reopen' => fn (): array => ['patch', '/incidents/'.Incident::factory()->resolved()->create()->id.'/reopen'],
+        'incident delete' => fn (): array => ['delete', '/incidents/'.Incident::factory()->create()->id],
     ]);
 
 test('viewers cannot reach minor-related data', function (string $uri) {

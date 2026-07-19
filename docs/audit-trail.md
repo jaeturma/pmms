@@ -32,19 +32,37 @@ The current authenticated user, IP, and user agent are captured automatically; p
 | `entry.submitted` / `confirmed` / `withdrawn` / `deleted` | `EntryController` |
 | `eligibility.document_uploaded` / `document_viewed` / `document_deleted` / `resubmitted` / `approved` / `returned` | `EligibilityController` |
 | `report.roster_exported` / `event_entries_exported` / `participation_exported` (sensitive CSV exports) | `ReportController` |
+| `venue.created` / `updated` / `archived` / `restored` / `deleted` | `VenueController` (WP-03-01) |
+| `schedule.created` / `updated` / `deleted` | `ScheduleController` (WP-03-02) |
+| `accreditation.granted` / `revoked` (decisions) · `card_viewed` / `cards_viewed` (sensitive reads) | `AccreditationController` (WP-03-03) |
+| `match.created` / `updated` / `status_changed` (from/to) / `participants_updated` / `deleted` | `MatchController` (WP-03-04) |
+| `result.encoded` (placement snapshot; `revision: true` on re-encode) / `validated` / `corrected` (**reason required** + `superseded_placements`) / `deleted` | `ResultController` (WP-03-05) |
+| `protest.filed` / `under_review` / `upheld` / `dismissed` (decision remarks in context) | `ProtestController` (WP-03-07) |
+| `incident.reported` / `updated` / `resolved` / `reopened` / `deleted` | `IncidentController` (WP-03-07) |
+| `report.result_sheet_exported` / `tally_exported` / `schedule_exported` (CSV exports) | `ReportController` (WP-03-08) |
 
-Deliberately not audited: athlete/personnel photo serving (`/athletes/{id}/photo`,
-`/personnel/{id}/photo`) — photos render inline on pages whose access is already
-audited (`athlete.viewed`) or scoped by policy, and per-image entries would only add
-noise. Read access to lists is likewise not audited; sensitive reads are the athlete
-profile and eligibility documents.
+Deliberately not audited (accepted deviations, reviewed WP-02-11 and WP-03-10):
+
+- Athlete/personnel photo serving (`/athletes/{id}/photo`, `/personnel/{id}/photo`)
+  — photos render inline on pages whose access is already audited
+  (`athlete.viewed`) or scoped by policy; per-image entries would only add noise.
+- Read access to lists and non-sensitive pages: venue/schedule/match/result/protest/
+  incident lists, the medal tally, the accreditation per-delegation view (mirrors
+  the unaudited roster page), and report *pages*. Sensitive reads that ARE audited:
+  the athlete profile, eligibility documents, ID card views, and every CSV export.
+- Result validation records the validator on the row itself (`validated_by`/`at`)
+  in addition to the `result.validated` audit entry — deliberate duplication so the
+  official sheet carries the identity without an audit join.
 
 ## Audit viewer (WP-02-11)
 
 Admins (only) can browse the trail at `/audit-logs` — sidebar item "Audit log". The
 page is built on the shared registry pattern: `SearchBar` (matches action and user
 name), an action filter, and `PaginationControls`, newest entries first.
-`AuditLogController` is guarded by the `can:administer` route middleware.
+`AuditLogController` is guarded by the `can:administer` route middleware. The action
+filter is built from the distinct actions present in the table, so new action
+families (the Phase 3 `venue.*`…`incident.*` events) appear automatically —
+verified by test in WP-03-10.
 
 ## Conventions
 

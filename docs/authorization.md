@@ -59,7 +59,7 @@ live in code.
 - `$user->hasRole(UserRole::Admin, UserRole::Organizer)` — variadic membership check.
 - `$user->isAdmin()`.
 
-## Authorization matrix (Phase 2, verified WP-02-11)
+## Authorization matrix (Phase 2 verified WP-02-11; Phase 3 verified WP-03-10)
 
 Legend: ✓ allowed · ✗ forbidden (403) · **own** = only for delegations the officer is
 assigned to. "Managers" = admin + organizer. Conditions in parentheses are enforced by
@@ -68,8 +68,10 @@ the named policy on top of the role check.
 | Module / action | Admin | Organizer | Delegation Officer | Viewer |
 |---|---|---|---|---|
 | Dashboard | ✓ | ✓ | ✓ | ✓ |
-| Districts / Schools / Sports / Events / Meets — view lists | ✓ | ✓ | ✓ | ✓ |
-| Districts / Schools / Sports / Events / Meets — create, update, archive, restore, delete | ✓ | ✓ | ✗ | ✗ |
+| Districts / Schools / Sports / Events / Meets / Venues — view lists | ✓ | ✓ | ✓ | ✓ |
+| Districts / Schools / Sports / Events / Meets / Venues — create, update, archive, restore, delete | ✓ | ✓ | ✗ | ✗ |
+| Schedule — view | ✓ | ✓ | ✓ | ✓ |
+| Schedule — create, update, delete slots (meet registration-closed or active) | ✓ | ✓ | ✗ | ✗ |
 | Delegations — list | ✓ all | ✓ all | own only | ✓ all |
 | Delegations — register, delete (draft only) | ✓ | ✓ | ✗ | ✗ |
 | Delegations — update head contact | ✓ | ✓ | own (draft + registration open) | ✗ |
@@ -85,19 +87,36 @@ the named policy on top of the role check.
 | Entries — confirm | ✓ | ✓ | ✗ | ✗ |
 | Entries — withdraw | ✓ | ✓ | own submitted (registration open) | ✗ |
 | Entries — delete (withdrawn only) | ✓ | ✓ | own (registration open) | ✗ |
+| Matches — list | ✓ all | ✓ all | own delegation's only | ✗ |
+| Matches — create, update, participants, status, delete | ✓ | ✓ | ✗ | ✗ |
+| Results — validated results | ✓ | ✓ | ✓ | ✓ |
+| Results — encoded (unvalidated) results | ✓ | ✓ | ✗ | ✗ |
+| Results — encode, update, validate, correct, delete | ✓ | ✓ | ✗ | ✗ |
+| Medal tally | ✓ | ✓ | ✓ | ✓ |
+| Protests — list | ✓ all | ✓ all | own delegation's only | ✗ |
+| Protests — file | ✓ any delegation | ✓ any delegation | own delegation only | ✗ |
+| Protests — review, decide | ✓ | ✓ | ✗ | ✗ |
+| Incidents — list, log, update, resolve, reopen, delete | ✓ | ✓ | ✗ | ✗ |
 | Eligibility — list, view document | ✓ all | ✓ all | own only | ✗ |
 | Eligibility — upload / delete document | ✓ | ✓ | own (registration open) | ✗ |
 | Eligibility — approve, return | ✓ | ✓ | ✗ | ✗ |
+| Accreditation — per-delegation view, ID cards (single + batch) | ✓ all | ✓ all | own only | ✗ |
+| Accreditation — grant, revoke | ✓ | ✓ | ✗ | ✗ |
 | File uploads — download, delete | uploader only | uploader only | uploader only | uploader only |
 | Reports — delegation roster (page + CSV) | ✓ | ✓ | own only | ✗ |
 | Reports — event entry list (page + CSV) | ✓ all rows | ✓ all rows | own rows only | ✗ |
 | Reports — school participation (page + CSV) | ✓ | ✓ | ✓ | ✓ |
+| Reports — official result sheet (page + CSV; validated results only, 404 otherwise) | ✓ | ✓ | ✓ | ✓ |
+| Reports — medal tally (page + CSV) | ✓ | ✓ | ✓ | ✓ |
+| Reports — daily schedule sheet (page + CSV) | ✓ | ✓ | ✓ | ✓ |
 | Audit log viewer | ✓ | ✗ | ✗ | ✗ |
 
 Enforcement lives in two layers: the `role:admin,organizer` route middleware group in
-`routes/web.php` (registry/catalog/meet writes, delegation register/delete) and the
-per-model policies in `app/Policies/` (everything scoped to delegations or minors).
-The audit viewer uses the `can:administer` route middleware.
+`routes/web.php` (registry/catalog/meet writes, delegation register/delete, and all
+Phase 3 operations mutations — schedule, matches, results, protest decisions,
+incidents, accreditation grant/revoke) and the per-model policies in `app/Policies/`
+(everything scoped to delegations or minors, plus `ProtestPolicy` for filing and
+list access). The audit viewer uses the `can:administer` route middleware.
 
 `tests/Feature/AuthorizationMatrixTest.php` sweeps every forbidden role × action
 combination above; per-module tests cover the allowed paths and window conditions.
