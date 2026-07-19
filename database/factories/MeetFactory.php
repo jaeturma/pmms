@@ -39,6 +39,26 @@ class MeetFactory extends Factory
     }
 
     /**
+     * Indicate that registration is closed.
+     */
+    public function registrationClosed(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => MeetStatus::RegistrationClosed,
+        ]);
+    }
+
+    /**
+     * Indicate that the meet is active (operations window).
+     */
+    public function active(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => MeetStatus::Active,
+        ]);
+    }
+
+    /**
      * Indicate that the meet is completed.
      */
     public function completed(): static
