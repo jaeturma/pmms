@@ -68,6 +68,7 @@ the named policy on top of the role check.
 | Module / action | Admin | Organizer | Delegation Officer | Viewer |
 |---|---|---|---|---|
 | Dashboard | ✓ | ✓ | ✓ | ✓ |
+| Management dashboard (cross-meet oversight, Phase 5; page + printable report + CSV) | ✓ | ✓ | ✗ | ✗ |
 | Districts / Schools / Sports / Events / Meets / Venues — view lists | ✓ | ✓ | ✓ | ✓ |
 | Districts / Schools / Sports / Events / Meets / Venues — create, update, archive, restore, delete | ✓ | ✓ | ✗ | ✗ |
 | Meets — publish / unpublish to public portal (non-draft only) | ✓ | ✓ | ✗ | ✗ |

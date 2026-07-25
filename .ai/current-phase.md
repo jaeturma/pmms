@@ -2,28 +2,23 @@
 Division Type & Municipality-Based Delegations — COMPLETE 2026-07-25, all 7 WPs
 executed one at a time on owner instruction. Phase 4 — Responsive Public
 Portal is ALSO complete as of 2026-07-25 (see "Phase 4" section below).
-Both committed 2026-07-25 (15 commits, Phase-4-original-numbering +
-Division WP1-7 + refinement + realignment/WP-04-11; see git log), not
-pushed. Nothing is currently active; next step is Phase 5 planning on
-instruction, then owner push decision whenever ready.
+Committed 2026-07-25 (17 commits total across Division + Phase 4 + the
+Phase 3/4/5 doc-scaffolding cleanup below; see git log) and pushed by
+owner 2026-07-25. Nothing is currently active; Phase 5 has a real plan as
+of 2026-07-25 (see "Phase 5" section below), pending owner approval to
+start execution.
 
-**Do not start Phase 5/6/7 from `docs/phases/phase-05-executive-
-management-dashboards/`, `phase-06-reports-uat-deployment-turnover/`, or
-`phase-07-post-deployment-support/` as-is.** Checked 2026-07-25: these are
-unreviewed generic template scaffolding (same origin as the Phase 3/4
-mixups reconciled above and in `.ai/current-phase.md`'s Phase 4 section),
-never written for or checked against this codebase. Confirmed concrete
-errors: Phase 5's dashboards are written for DepEd job-title roles
-("Schools Division Superintendent" etc.) that don't exist in
-`App\Enums\UserRole` (real roles: Admin/Organizer/Delegation Officer/
-Viewer); Phase 5 and 6 both assume "medal tally is delegation-based"/
-"municipality as the official delegation", which collides with the
-Division initiative's actual model (individual attribution is by each
-athlete's/personnel's own school, not the delegation). See each
-directory's own README.md status note for detail. A real Phase 5 plan
-needs to be written for this codebase from scratch, the way Phase 4's
-real 7-WP plan was (git history `a7bde91`) — not adapted from this
-scaffolding.
+**Do not start Phase 6/7 from `docs/phases/phase-06-reports-uat-
+deployment-turnover/` or `phase-07-post-deployment-support/` as-is.**
+Checked 2026-07-25: same unreviewed generic-template scaffolding that
+Phase 5's directory had (see "Phase 5" section below for how that got
+fixed) — never written for or checked against this codebase. Phase 6 in
+particular still carries the "municipality as the official delegation"
+assumption (WP-06-01) that collides with the Division initiative's real
+model. See each directory's own README.md status note. Write a real plan
+for these the same way Phase 4's and Phase 5's were (git history `a7bde91`
+and the Phase 5 planning commit) when they're actually next — not adapted
+from this scaffolding.
 Real deployment requirement (not part of the numbered Phase 2-4 plan above):
 the division can be City (schools/districts compete) or Province
 (municipalities compete, pooling multiple schools' athletes under one
@@ -320,6 +315,197 @@ Pint+PHPStan+ESLint+Prettier+tsc+build; not committed/pushed.
   Pint+PHPStan+ESLint+Prettier+tsc+build; not committed/pushed) — purely
   additive, no registration-flow changes yet; municipal delegation
   registration itself is WP2.
+
+# Phase 5 — Executive and Management Dashboards
+COMPLETE 2026-07-25, all 8 WPs executed one at a time on owner instruction.
+Review: docs/phases/phase-05-executive-management-dashboards/
+phase-5-compliance-review.md (COMPLIANT; full gate green: Pint+PHPStan+
+Pest 590/590 (2,919 assertions), ESLint+Prettier+tsc+build; 33 migrations
+Ran on MySQL pmmsdb, zero new this phase — every widget is read-side over
+existing tables; app HTTP 200 at http://pmms.app). Plan:
+docs/phases/phase-05-executive-management-dashboards/ (README + DESIGN-NOTES +
+CHECKLIST + WP-05-01..08), written fresh for this codebase after the
+unreviewed generic-template draft that previously occupied this directory
+was found to invent nonexistent DepEd job-title roles and a wrong
+"medal tally is delegation-based" assumption (flagged in a prior commit,
+superseded by this real plan). Scope, per owner instruction 2026-07-25:
+cross-meet/historical oversight (participation & registration trends,
+operations progress & risk, delegation/school performance history, venue
+utilization, reports/export) for Admin and Organizer only — the same two
+roles Phase 3's `manage-meet-data` gate already treats as managers; Phase 3's
+single-Active-meet operations block is left untouched, Phase 5 adds the
+across-meets layer on top. Eight WPs: management dashboard foundation →
+participation & registration trends → operations progress & risk →
+delegation & school performance history → venue utilization → reports &
+export → accessibility/mobile review → Phase 5 review and acceptance.
+Execute one work package at a time on owner instruction.
+
+## Phase 5 Work Package Log
+- WP-05-01 Management Dashboard Foundation — done 2026-07-25
+  (`ManagementDashboardController::index()` + `/management` route
+  (`management.index`), gated `can:manage-meet-data` (Admin/Organizer only,
+  same gate Phase 3's operational queues already use — Delegation Officer
+  and Viewer get 403); page shell (`management/index.tsx`, sidebar nav item
+  "Management" in `managerNavItems`) with a school-year filter and a table
+  of meets in scope — the placeholder proving the filter works end-to-end,
+  per plan (real trend widgets are WP-05-02 onward); private
+  `meetsInScope(?string $schoolYear)` is the one query every later Phase 5
+  WP's aggregate will start from, not duplicated per widget. New
+  docs/management-dashboard.md (cross-references docs/dashboard.md,
+  explicit about the delegation-vs-school distinction every later widget
+  must respect); docs/authorization.md +1 matrix row; docs/dashboard.md
+  cross-reference note distinguishing it from the existing single-meet
+  `/dashboard`. Pest 575/575 (7 new tests in ManagementDashboardTest: guest
+  redirect, Delegation-Officer/Viewer forbidden, Admin/Organizer allowed,
+  school-year filter narrows scope correctly, empty state), full gate
+  green: Pint+PHPStan+ESLint+Prettier+tsc+build; not committed/pushed) —
+  next: WP-05-02 Participation & Registration Trends.
+- WP-05-02 Participation & Registration Trends — done 2026-07-25
+  (`ManagementDashboardController::participation(Collection $meets)` (private)
+  adds a `participation` prop: per-meet `delegations` (draft/submitted/
+  approved/total, the registering unit, grouped from `App\Enums\
+  DelegationStatus`) kept strictly separate from `athletes`/`personnel`/
+  `entries` (individuals, via `whereHas('delegation', ...)` — deliberately
+  not scoped by school_id, since this WP counts totals, not per-school
+  breakdowns; that's WP-05-04), plus `totals` summed across meets in scope;
+  page renders two separate tables ("Delegations by status", "Participation")
+  plus four `StatCard`s, keeping the delegation-vs-individual distinction
+  visually explicit per DESIGN-NOTES rather than one merged table.
+  docs/management-dashboard.md extended. Pest 577/577 (2 new tests: counts
+  correct per meet/status and in aggregate; a second meet's delegations/
+  individuals never leak into another meet's row, proven with two meets at
+  distinct starts_at so row order is deterministic), full gate green:
+  Pint+PHPStan+ESLint+Prettier+tsc+build; not committed/pushed) — next:
+  WP-05-03 Operations Progress & Risk.
+- WP-05-03 Operations Progress & Risk — done 2026-07-25
+  (`ManagementDashboardController::operationsProgress(Collection $meets)`
+  (private) adds an `operations` prop: per-meet results encoded/validated
+  (`App\Enums\ResultStatus`), eligibility pending/approved/returned
+  (`EligibilityStatus`), protests filed/under_review/upheld/dismissed
+  (`ProtestStatus`, reached via `whereHas('delegation', ...)` since Protest
+  has no direct meet_id), incidents open/resolved (`IncidentStatus`) — all
+  reused enums, nothing recomputed; plus one explicit `is_stalled` flag
+  (Active meet + an encoded result older than `STALLED_RESULT_HOURS` = 24,
+  a class constant — a plain age check, not a predictive score). Page adds
+  an "Operations progress & risk" table linking Encoded→/results and
+  Incidents open→/incidents pre-filtered by meet_id (both controllers
+  already support it); Eligibility/Protests link to their plain index
+  pages since neither controller supports a meet_id filter and adding one
+  was correctly left out of this WP's scope. docs/management-dashboard.md
+  extended. Pest 579/579 (2 new tests: all four status breakdowns correct
+  per meet; stalled flag true only for an Active meet with an old encoded
+  result — false for a non-Active meet with the same old result and false
+  for an Active meet with a recent one), full gate green:
+  Pint+PHPStan+ESLint+Prettier+tsc+build; not committed/pushed) — next:
+  WP-05-04 Delegation & School Performance History.
+- WP-05-04 Delegation & School Performance History — done 2026-07-25
+  (`ManagementDashboardController::performanceHistory(Collection $meets,
+  MedalTallyService $tally)` (private) adds a `performance` prop: calls
+  `MedalTallyService::standings($meetId)` once per meet in scope and sums
+  gold/silver/bronze/total across meets — tally derivation itself never
+  reimplemented; `districts` (official aggregate) and `schools` (reference,
+  keyed by "{school}|{district}" to avoid cross-district name collisions,
+  never school name alone) both re-sorted with a new `orderedStandings()`
+  (private) using the same gold→silver→bronze→name convention as
+  `MedalTallyService::ordered()`, applied to the across-meets totals. Page
+  renders district history first (default Heading weight, "the official
+  verdict") with school history below demoted to small variant +
+  "Reference only," mirroring the district-first convention from the
+  Post-Division refinement — this WP extends that convention across meets,
+  doesn't invent a new one; each row links to its registry entry
+  (districts/schools ?search=). docs/management-dashboard.md extended.
+  Pest 581/581 (2 new tests: the same school's medals correctly aggregate
+  across two different meets in both the district and school rows;
+  district/school ordering follows the gold→silver→bronze→name convention),
+  full gate green: Pint+PHPStan+ESLint+Prettier+tsc+build; not
+  committed/pushed) — next: WP-05-05 Venue Utilization.
+- WP-05-05 Venue Utilization — done 2026-07-25
+  (`ManagementDashboardController::venueUtilization(Collection $meets)`
+  (private) adds a `venues` prop: per venue, `slots` (count), `hours`
+  (`abs(diffInMinutes(ends_at, starts_at))` summed /60, rounded to 1
+  decimal — fixed a real sign bug during this WP: this Carbon version's
+  `diffInMinutes` returns a signed value depending on caller/argument
+  order, wrapped in `abs()`), `meets`/`events` (distinct counts) — all
+  derived from `EventSchedule`, no new tables; only venues with at least
+  one slot in scope are returned. Page adds a "Venue utilization" table,
+  each row linking to `/venues?search=...`. docs/management-dashboard.md
+  extended. Pest 584/584 (3 new tests: slots/hours/meets/events correct
+  across two meets at one venue — including the corrected sign; the
+  school-year filter narrows venues to meets in scope; empty state when
+  nothing is scheduled), full gate green:
+  Pint+PHPStan+ESLint+Prettier+tsc+build; not committed/pushed) — next:
+  WP-05-06 Management Reports & Export.
+- WP-05-06 Management Reports & Export — done 2026-07-25 (two new routes,
+  both `can:manage-meet-data`, both accepting the same `school_year`
+  filter as `/management`: `/reports/management` — printable page
+  (`reports/management`, same print CSS pattern as every existing report,
+  no PDF lib), sharing its data with the interactive dashboard via new
+  private `widgetData(Collection $meets, MedalTallyService $tally)`
+  (extracted from `index()` so dashboard/report/CSV can never disagree);
+  `/reports/management/download` — streamed CSV, audited
+  `report.management_exported`, via a new private `csv()` helper
+  mirroring ReportController's (duplicated, not extracted to a shared
+  trait — not worth a new abstraction for 12 lines). CSV is six
+  independent blocks (one per widget, own header row, blank-line
+  separator) since the widgets have unrelated shapes, unlike the tally
+  report's single shared header. Interactive page links "Printable
+  report" from PageHeader, carrying the school_year filter through.
+  Real pitfall hit and fixed: `php artisan wayfinder:generate` without
+  `--with-form` regenerated every route helper without the `.form()`
+  variant, breaking unrelated pre-existing auth/settings pages that
+  depend on it (vite.config.ts's wayfinder plugin normally generates
+  with `formVariants: true`) — caught immediately by `tsc`, fixed by
+  re-running with `--with-form`; documented to prefer `npm run build`
+  going forward. docs/management-dashboard.md, docs/audit-trail.md
+  (+1 row) extended. Pest 590/590 (6 new tests: forbidden roles on both
+  new routes, report renders the same widget data as the dashboard for
+  the same filter, CSV download audited and carries all six section
+  headers), full gate green: Pint+PHPStan+ESLint+Prettier+tsc+build; not
+  committed/pushed) — next: WP-05-07 Accessibility & Mobile Review.
+- WP-05-07 Accessibility & Mobile Review — done 2026-07-25 (swept
+  management/index.tsx and reports/management.tsx against the WP-04-06
+  checklist; real gaps found and fixed: StatCard's icon (shared component,
+  also used by the main /dashboard) and ReportActions's Download/Print
+  icons (shared, every report page) had no aria-hidden, fixed at the
+  component so every consumer benefits, not just Phase 5; local decorative
+  icons (Printable-report link's Printer, Stalled badge's TriangleAlert)
+  same fix; four bare-number links in the operations table (e.g. a lone
+  "3" linking into /results) got descriptive aria-labels since a
+  screen-reader user tabbing through links in isolation would otherwise
+  hear only the number; reports/management.tsx had no empty state and
+  would have rendered seven empty tables with zero meets in scope, fixed
+  to match the interactive dashboard and every other report. Verified
+  already sound: heading order (h1 via PageHeader, h2 per section, no
+  skipped levels), every table already overflow-x-auto, school-year Select
+  already aria-labeled, StatCard grid already collapses to one column on
+  phones. No backend/behavioral changes — pure presentation, so no new
+  Pest tests, consistent with how the Post-Division tally-reorder change
+  was handled; Pest 590/590 (unchanged), full gate green:
+  Pint+PHPStan+ESLint+Prettier+tsc+build; not committed/pushed) — next:
+  WP-05-08 Phase 5 Review and Acceptance.
+- WP-05-08 Phase 5 Review and Acceptance — done 2026-07-25 (COMPLIANT, no
+  remediation needed — full report docs/phases/phase-05-executive-
+  management-dashboards/phase-5-compliance-review.md. Re-verified the
+  phase's own core rule with no violations found: every widget keeps
+  delegations (registering unit) and individuals (own school, via
+  MedalTallyService's already-independently-verified school_id
+  attribution) in structurally separate response keys and visually
+  distinct tables, never conflated. Re-verified authorization: all three
+  routes (/management, /reports/management, /reports/management/download)
+  gated can:manage-meet-data, docs/authorization.md matrix row updated to
+  cover page+report+CSV explicitly, no new public exposure (all inside the
+  auth,verified middleware group), no minor-athlete data anywhere — every
+  Phase 5 prop is an aggregate count or sum. Zero schema changes across
+  the whole phase — confirmed 33/33 migrations still Ran, nothing new.
+  docs/phases/phase-05-executive-management-dashboards/README.md marked
+  COMPLETE. Pest 590/590, full gate green:
+  Pint+PHPStan+ESLint+Prettier+tsc+build; app HTTP 200 at http://pmms.app;
+  not committed/pushed) — this closes Phase 5. Next: owner review of the
+  compliance report + commit decision for the Phase 5 tree; Phase 6
+  planning not begun (docs/phases/phase-06-reports-uat-deployment-
+  turnover/ is still unreviewed generic scaffolding per the note above —
+  needs a real plan written for this codebase before any WP-06 work, the
+  same way Phase 4's and Phase 5's real plans were).
 
 # Phase 4 — COMPLETE 2026-07-25 (tracking realigned 2026-07-25 — see note below)
 Phase 4 — Responsive Public Portal: tracked against

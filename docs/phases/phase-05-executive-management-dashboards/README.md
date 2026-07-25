@@ -1,86 +1,97 @@
 # Phase 5 — Executive and Management Dashboards
 
-**Status: NOT STARTED — this directory is unreviewed generic template
-scaffolding, not a reviewed plan.** It was generated the same way the
-Phase 3 and Phase 4 directories were before those got reconciled against
-shipped code (see their own README.md status notes and
-`.ai/current-phase.md`) — except Phase 5 has no shipped code to reconcile
-against yet, so nobody has checked this content. Two concrete inaccuracies
-confirmed 2026-07-25, do not build against them without fixing first:
-
-1. **Wrong role model.** WP-05-02 through WP-05-07 assume roles ("Schools
-   Division Superintendent", "Assistant SDS", "Education Program
-   Supervisor", "Sports Coordinator", "Secretariat", "Tournament Manager",
-   "Committee Head") that do not exist anywhere in this codebase. The real
-   roles are `App\Enums\UserRole`: Admin, Organizer, Delegation Officer,
-   Viewer (`docs/authorization.md`). Any real Phase 5 plan needs to map
-   dashboard needs onto these four roles, not invent new ones.
-2. **"Municipality delegations... official Provincial Meet summaries" /
-   "medal tally is delegation-based"-style assumptions** (see
-   WP-05-01/08/09 and others) collide with the Division initiative
-   (`docs/division.md`, `docs/medal-tally.md`): a delegation is a school
-   OR a municipality depending on division type, but every individual
-   (athlete, personnel, entry, result, medal) is attributed to their own
-   **school**, never the delegation — that distinction took 7 dedicated
-   work packages to get right and cost a real production-shaped bug in
-   the original Phase 4 draft (`docs/phases/phase-04-responsive-public-
-   portal/README.md`). A Phase 5 dashboard built on "aggregate by
-   delegation" alone would reintroduce it.
-
-Treat this directory as a rough idea list, not a spec, until it's
-actually reviewed and rewritten for this codebase — the same way Phase 4's
-real plan (git history `a7bde91`) was written specifically for this
-project rather than reused from a template.
+**Status:** COMPLETE 2026-07-25 — all 8 WPs executed, WP-05-08 review COMPLIANT
+(`phase-5-compliance-review.md`). Replaces the unreviewed generic-template draft that occupied this directory
+before (see git history for this commit — the old content and its "why this
+was wrong" note are preserved there): that draft invented DepEd job-title
+roles (`Schools Division Superintendent`, `Committee Head`, etc.) that don't
+exist in this codebase, and assumed "medal tally is delegation-based" /
+"municipality as the official delegation," which collides with the Division
+initiative's real model.
 
 ## Goal
 
-Provide clear, role-based dashboards for DepEd Division Office managers and meet coordinators.
+Give Admin and Organizer — the two roles Phase 3's dashboard already treats as
+"managers" (`Gate::manage-meet-data`) — a view **across meets and school
+years**, not just the one currently-Active meet Phase 3's operations block
+covers. Phase 3 answers "what does today look like for the meet that's
+running right now"; Phase 5 answers "how is the program doing over time":
+participation trends, registration/validation throughput, delegation and
+school performance history, venue utilization.
 
-## Main Users
+## Grounding
 
-- Schools Division Superintendent
-- Assistant Schools Division Superintendent
-- Education Program Supervisors
-- Sports Coordinator
-- Secretariat
-- Tournament Managers
-- Committee Heads
+- Real roles: `App\Enums\UserRole` — Admin, Organizer, Delegation Officer,
+  Viewer (`docs/authorization.md`). Phase 5 dashboards are Admin/Organizer
+  only, gated by the existing `manage-meet-data` gate (same gate that already
+  scopes Phase 3's operational queues) — no new roles.
+- Phase 3 baseline to reuse, not duplicate: `DashboardController`'s
+  `operations` block (`docs/dashboard.md`) already covers the single Active
+  meet in real time; Phase 5 does not re-show that data, it adds the
+  cross-meet layer on top.
+- Division initiative (`docs/division.md`, `docs/medal-tally.md`): every
+  individual (athlete, personnel, entry, result, medal) is attributed to
+  their own **school**; a delegation is a school (City) or a municipality
+  (Province) depending on division type. Any Phase 5 aggregate that groups
+  "by delegation" must say explicitly whether it means the registering unit
+  or the individual's home school — the same distinction that took 7 work
+  packages to get right internally.
+- `MedalTallyService::standings()` is reused per-meet and aggregated across
+  meets for the performance-history WP — not reimplemented.
+- No `Committee` entity exists in this codebase (protests/incidents are the
+  closest real concepts); no committee-specific dashboard is in scope.
 
-## Dashboard Focus
+## Principles
 
-- Participation
-- Registration progress
-- Validation progress
-- Event progress
-- Results completion
-- Medal tally
-- Delegation and school performance
-- Committee status
-- Venue usage
-- Pending issues
-- Basic operational risks
+- Read-side only — no new mutable state beyond what operations already
+  produce. Phase 5 adds queries and pages, not new source-of-truth tables
+  (aggregates may be cached/materialized later if performance requires it,
+  not before there's a real reason).
+- Admin/Organizer only, reusing `manage-meet-data` — Delegation Officer and
+  Viewer keep exactly what Phase 3 already gives them; nothing in Phase 5
+  changes their access.
+- MySQL remains the source of truth; every trend is computed from the same
+  tables operations write, never a separate reporting store.
+- Minors stay protected: cross-meet views aggregate (counts, trends,
+  standings) — they do not add new athlete-level detail views beyond what
+  already exists in the athlete registry.
+- One work package at a time; nothing committed or pushed without owner
+  instruction, matching every phase before this one.
 
 ## Work Packages
 
-- [WP-05-01 — Dashboard Data and Access Foundation](WP-05-01-dashboard-data-and-access-foundation.md)
-- [WP-05-02 — Schools Division Superintendent Dashboard](WP-05-02-schools-division-superintendent-dashboard.md)
-- [WP-05-03 — Assistant Schools Division Superintendent Dashboard](WP-05-03-assistant-schools-division-superintendent-dashboard.md)
-- [WP-05-04 — Education Program Supervisor and Sports Coordinator Dashboard](WP-05-04-education-program-supervisor-and-sports-coordinator-dashboard.md)
-- [WP-05-05 — Secretariat Dashboard](WP-05-05-secretariat-dashboard.md)
-- [WP-05-06 — Tournament Manager Dashboard](WP-05-06-tournament-manager-dashboard.md)
-- [WP-05-07 — Committee Head Dashboard](WP-05-07-committee-head-dashboard.md)
-- [WP-05-08 — Delegation and School Performance Dashboard](WP-05-08-delegation-and-school-performance-dashboard.md)
-- [WP-05-09 — Meet Progress and Operational Risk Dashboard](WP-05-09-meet-progress-and-operational-risk-dashboard.md)
-- [WP-05-10 — Dashboard Reports and Export](WP-05-10-dashboard-reports-and-export.md)
-- [WP-05-11 — Dashboard Accessibility and Mobile Review](WP-05-11-dashboard-accessibility-and-mobile-review.md)
-- [WP-05-12 — Phase 5 Review and Acceptance](WP-05-12-phase-5-review-and-acceptance.md)
+| WP | Title |
+|---|---|
+| WP-05-01 | Management Dashboard Foundation |
+| WP-05-02 | Participation & Registration Trends |
+| WP-05-03 | Operations Progress & Risk |
+| WP-05-04 | Delegation & School Performance History |
+| WP-05-05 | Venue Utilization |
+| WP-05-06 | Management Reports & Export |
+| WP-05-07 | Accessibility & Mobile Review |
+| WP-05-08 | Phase 5 Review and Acceptance |
 
-## Execution Rules
+Sequence is strict: each WP assumes its predecessors.
 
-1. Run one work package at a time.
-2. Inspect the repository first.
-3. Use only validated data.
-4. Keep dashboards simple and role-based.
-5. Run tests and quality checks.
-6. Create a completion report.
-7. Do not commit or push unless explicitly instructed.
+## Visual Checkpoints
+
+1. **After WP-05-02:** an Admin/Organizer opens the new management view and
+   sees participation and registration progress trending across multiple
+   meets, not just the currently-Active one.
+2. **After WP-05-05:** the full cross-meet picture — operations risk,
+   delegation/school performance history, venue utilization — is visible in
+   one place.
+3. **After WP-05-07:** the management dashboards are demonstrable on a phone.
+
+## Exclusions (deferred or out of scope)
+
+New roles or role-specific dashboards beyond Admin/Organizer; any `Committee`
+entity; public-facing cross-meet analytics (product scope already defers this
+for the portal, see `docs/public-portal.md`); predictive/AI features; anything
+requiring a new mutable data store distinct from existing tables; Flutter.
+
+## Completion
+
+Phase 5 completes via WP-05-08 (full quality gate + compliance review),
+mirroring WP-03-11/WP-04-11. The review report goes to this directory; the WP
+log lives in `.ai/current-phase.md`.
