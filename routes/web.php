@@ -13,6 +13,7 @@ use App\Http\Controllers\EntryController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\FileUploadController;
 use App\Http\Controllers\IncidentController;
+use App\Http\Controllers\ManagementDashboardController;
 use App\Http\Controllers\MatchController;
 use App\Http\Controllers\MeetController;
 use App\Http\Controllers\PersonnelController;
@@ -117,6 +118,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('audit-logs', [AuditLogController::class, 'index'])
         ->middleware('can:administer')
         ->name('audit-logs.index');
+
+    Route::get('management', [ManagementDashboardController::class, 'index'])
+        ->middleware('can:manage-meet-data')
+        ->name('management.index');
+    Route::get('reports/management', [ManagementDashboardController::class, 'report'])
+        ->middleware('can:manage-meet-data')
+        ->name('reports.management');
+    Route::get('reports/management/download', [ManagementDashboardController::class, 'downloadReport'])
+        ->middleware('can:manage-meet-data')
+        ->name('reports.management.download');
 
     Route::get('division', [DivisionController::class, 'edit'])
         ->middleware('can:administer')
