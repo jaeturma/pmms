@@ -43,6 +43,7 @@ class ProtestController extends Controller
         $query = Protest::query()
             ->with([
                 'delegation.school:id,name',
+                'delegation.district:id,name',
                 'delegation.meet:id,name',
                 'result.event.sport:id,name',
                 'match.event.sport:id,name',
@@ -62,7 +63,7 @@ class ProtestController extends Controller
             $query->where('status', $status);
         }
 
-        $delegationScope = Delegation::query()->with(['school:id,name', 'meet:id,name']);
+        $delegationScope = Delegation::query()->with(['school:id,name', 'district:id,name', 'meet:id,name']);
 
         if ($user->role === UserRole::DelegationOfficer) {
             $delegationScope->whereHas(
@@ -75,7 +76,7 @@ class ProtestController extends Controller
             'protests' => $query->paginate($this->registryPageSize)->withQueryString()
                 ->through(fn (Protest $protest): array => [
                     'id' => $protest->id,
-                    'delegation' => "{$protest->delegation->school->name} — {$protest->delegation->meet->name}",
+                    'delegation' => "{$protest->delegation->registrantName()} — {$protest->delegation->meet->name}",
                     'target' => $this->targetLabel($protest),
                     'grounds' => $protest->grounds,
                     'status' => $protest->status->value,
@@ -106,7 +107,7 @@ class ProtestController extends Controller
                 ->map(fn (Delegation $delegation): array => [
                     'id' => $delegation->id,
                     'meet_id' => $delegation->meet_id,
-                    'label' => "{$delegation->school->name} — {$delegation->meet->name}",
+                    'label' => "{$delegation->registrantName()} — {$delegation->meet->name}",
                 ])
                 ->sortBy('label')
                 ->values(),
@@ -298,10 +299,10 @@ class ProtestController extends Controller
      */
     private function context(Protest $protest): array
     {
-        $protest->loadMissing(['delegation.school:id,name', 'delegation.meet:id,name']);
+        $protest->loadMissing(['delegation.school:id,name', 'delegation.district:id,name', 'delegation.meet:id,name']);
 
         return [
-            'school' => $protest->delegation->school->name,
+            'registrant' => $protest->delegation->registrantName(),
             'meet' => $protest->delegation->meet->name,
             'target' => $this->targetLabel($protest),
         ];

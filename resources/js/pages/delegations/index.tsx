@@ -1,4 +1,4 @@
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { IdCard, Plus, Printer, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
@@ -56,7 +56,7 @@ type Officer = {
 
 type Delegation = {
     id: number;
-    school: string;
+    registrant: string;
     meet: string;
     head_name: string;
     head_phone: string | null;
@@ -88,6 +88,7 @@ type Props = {
     filters: { search: string };
     meetOptions: Option[];
     schoolOptions: Option[];
+    districtOptions: Option[];
     officerOptions: OfficerOption[];
     canManage: boolean;
 };
@@ -101,21 +102,32 @@ const statusVariants: Record<string, 'default' | 'secondary' | 'outline'> = {
 function CreateDelegationDialog({
     meetOptions,
     schoolOptions,
+    districtOptions,
+    isProvince,
+    areaLabel,
     open,
     onOpenChange,
 }: {
     meetOptions: Option[];
     schoolOptions: Option[];
+    districtOptions: Option[];
+    isProvince: boolean;
+    areaLabel: string;
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
     const { data, setData, post, processing, errors, reset } = useForm({
         meet_id: '',
         school_id: '',
+        district_id: '',
         head_name: '',
         head_phone: '',
         head_email: '',
     });
+
+    const registrantOptions = isProvince ? districtOptions : schoolOptions;
+    const registrantField = isProvince ? 'district_id' : 'school_id';
+    const registrantError = isProvince ? errors.district_id : errors.school_id;
 
     const submitForm = (e: FormEvent) => {
         e.preventDefault();
@@ -166,28 +178,32 @@ function CreateDelegationDialog({
                             <InputError message={errors.meet_id} />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="delegation-school">School</Label>
+                            <Label htmlFor="delegation-registrant">
+                                {areaLabel}
+                            </Label>
                             <Select
-                                value={data.school_id}
+                                value={data[registrantField]}
                                 onValueChange={(value) =>
-                                    setData('school_id', value)
+                                    setData(registrantField, value)
                                 }
                             >
-                                <SelectTrigger id="delegation-school">
-                                    <SelectValue placeholder="Select a school" />
+                                <SelectTrigger id="delegation-registrant">
+                                    <SelectValue
+                                        placeholder={`Select a ${areaLabel.toLowerCase()}`}
+                                    />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {schoolOptions.map((school) => (
+                                    {registrantOptions.map((option) => (
                                         <SelectItem
-                                            key={school.id}
-                                            value={String(school.id)}
+                                            key={option.id}
+                                            value={String(option.id)}
                                         >
-                                            {school.name}
+                                            {option.name}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
-                            <InputError message={errors.school_id} />
+                            <InputError message={registrantError} />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="delegation-head">
@@ -270,7 +286,7 @@ function EditDelegationDialog({
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle>
-                        {delegation.school} — head of delegation
+                        {delegation.registrant} — head of delegation
                     </DialogTitle>
                 </DialogHeader>
                 <form onSubmit={submitForm} className="space-y-4">
@@ -361,7 +377,9 @@ function OfficersDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Officers for {delegation.school}</DialogTitle>
+                    <DialogTitle>
+                        Officers for {delegation.registrant}
+                    </DialogTitle>
                 </DialogHeader>
                 {officerOptions.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
@@ -413,9 +431,14 @@ export default function Delegations({
     filters,
     meetOptions,
     schoolOptions,
+    districtOptions,
     officerOptions,
     canManage,
 }: Props) {
+    const { division } = usePage().props;
+    const isProvince = division.type === 'province';
+    const registrantLabel = isProvince ? division.areaLabel : 'School';
+
     const [createOpen, setCreateOpen] = useState(false);
     const [editing, setEditing] = useState<Delegation | null>(null);
     const [assigning, setAssigning] = useState<Delegation | null>(null);
@@ -426,7 +449,7 @@ export default function Delegations({
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
                     title="Delegations"
-                    description="School delegations registered per meet."
+                    description={`${registrantLabel} delegations registered per meet.`}
                     actions={
                         canManage && (
                             <Button onClick={() => setCreateOpen(true)}>
@@ -447,7 +470,7 @@ export default function Delegations({
                     <EmptyState
                         icon={UsersRound}
                         title="No delegations yet"
-                        description="Registered school delegations will appear here."
+                        description={`Registered ${registrantLabel.toLowerCase()} delegations will appear here.`}
                         action={
                             canManage && (
                                 <Button onClick={() => setCreateOpen(true)}>
@@ -461,7 +484,7 @@ export default function Delegations({
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>School</TableHead>
+                                    <TableHead>{registrantLabel}</TableHead>
                                     <TableHead>Meet</TableHead>
                                     <TableHead>Head</TableHead>
                                     <TableHead>Officers</TableHead>
@@ -475,7 +498,7 @@ export default function Delegations({
                                 {delegations.data.map((delegation) => (
                                     <TableRow key={delegation.id}>
                                         <TableCell className="font-medium">
-                                            {delegation.school}
+                                            {delegation.registrant}
                                         </TableCell>
                                         <TableCell>{delegation.meet}</TableCell>
                                         <TableCell>
@@ -680,6 +703,9 @@ export default function Delegations({
             <CreateDelegationDialog
                 meetOptions={meetOptions}
                 schoolOptions={schoolOptions}
+                districtOptions={districtOptions}
+                isProvince={isProvince}
+                areaLabel={registrantLabel}
                 open={createOpen}
                 onOpenChange={setCreateOpen}
             />

@@ -1,8 +1,11 @@
 <?php
 
 use App\Enums\DelegationStatus;
+use App\Enums\DivisionType;
 use App\Models\AuditLog;
 use App\Models\Delegation;
+use App\Models\District;
+use App\Models\Division;
 use App\Models\Meet;
 use App\Models\School;
 use App\Models\User;
@@ -64,7 +67,8 @@ test('the delegation list can be searched by head and school name', function () 
             ->where('delegations.data.0.id', $target->id));
 });
 
-test('organizers can register a delegation for an open meet', function () {
+test('organizers can register a delegation for an open meet (City: by school)', function () {
+    Division::factory()->city()->create();
     $meet = Meet::factory()->registrationOpen()->create();
     $school = School::factory()->create();
 
@@ -81,13 +85,67 @@ test('organizers can register a delegation for an open meet', function () {
     $this->assertDatabaseHas('delegations', [
         'meet_id' => $meet->id,
         'school_id' => $school->id,
+        'district_id' => null,
         'status' => DelegationStatus::Draft->value,
     ]);
 
     expect(AuditLog::query()->where('action', 'delegation.created')->exists())->toBeTrue();
 });
 
+test('organizers can register a delegation for an open meet (Province: by municipality)', function () {
+    // Division::current() defaults to Province, so this is the deployment default.
+    $meet = Meet::factory()->registrationOpen()->create();
+    $district = District::factory()->create();
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->post('/delegations', [
+            'meet_id' => $meet->id,
+            'district_id' => $district->id,
+            'head_name' => 'Juan Dela Cruz',
+            'head_phone' => '09171234567',
+            'head_email' => 'head@example.com',
+        ])
+        ->assertRedirect();
+
+    $this->assertDatabaseHas('delegations', [
+        'meet_id' => $meet->id,
+        'district_id' => $district->id,
+        'school_id' => null,
+        'status' => DelegationStatus::Draft->value,
+    ]);
+
+    expect(AuditLog::query()->where('action', 'delegation.created')->exists())->toBeTrue();
+});
+
+test('school_id is prohibited when the division is Province, and district_id when City', function () {
+    $meet = Meet::factory()->registrationOpen()->create();
+    $school = School::factory()->create();
+    $district = District::factory()->create();
+    $admin = User::factory()->admin()->create();
+
+    // Default division is Province: school_id is rejected.
+    $this->actingAs($admin)
+        ->post('/delegations', [
+            'meet_id' => $meet->id,
+            'school_id' => $school->id,
+            'head_name' => 'Juan Dela Cruz',
+        ])
+        ->assertSessionHasErrors('school_id');
+
+    Division::current()->update(['type' => DivisionType::City]);
+
+    // Now City: district_id is rejected.
+    $this->actingAs($admin)
+        ->post('/delegations', [
+            'meet_id' => $meet->id,
+            'district_id' => $district->id,
+            'head_name' => 'Juan Dela Cruz',
+        ])
+        ->assertSessionHasErrors('district_id');
+});
+
 test('registration is blocked when the meet is not open', function () {
+    Division::factory()->city()->create();
     $meet = Meet::factory()->create();
     $school = School::factory()->create();
 
@@ -103,6 +161,7 @@ test('registration is blocked when the meet is not open', function () {
 });
 
 test('a school can have only one delegation per meet', function () {
+    Division::factory()->city()->create();
     $existing = Delegation::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())
@@ -112,6 +171,21 @@ test('a school can have only one delegation per meet', function () {
             'head_name' => 'Juan Dela Cruz',
         ])
         ->assertSessionHasErrors('school_id');
+});
+
+test('a municipality can have only one delegation per meet', function () {
+    // Default division is Province.
+    $district = District::factory()->create();
+    $meet = Meet::factory()->registrationOpen()->create();
+    $existing = Delegation::factory()->create(['school_id' => null, 'district_id' => $district->id, 'meet_id' => $meet->id]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/delegations', [
+            'meet_id' => $existing->meet_id,
+            'district_id' => $existing->district_id,
+            'head_name' => 'Juan Dela Cruz',
+        ])
+        ->assertSessionHasErrors('district_id');
 });
 
 test('officers and viewers cannot register delegations', function (User $user) {
@@ -265,4 +339,18 @@ test('schools with delegations cannot be deleted', function () {
         ->assertRedirect();
 
     $this->assertDatabaseHas('schools', ['id' => $delegation->school_id]);
+});
+
+test('registrantName and registrantType reflect whichever of school or district is set', function () {
+    $school = School::factory()->create(['name' => 'Bagong Silang Integrated School']);
+    $schoolDelegation = Delegation::factory()->create(['school_id' => $school->id, 'district_id' => null]);
+
+    expect($schoolDelegation->registrantName())->toBe('Bagong Silang Integrated School')
+        ->and($schoolDelegation->registrantType())->toBe('school');
+
+    $district = District::factory()->create(['name' => 'Maco']);
+    $districtDelegation = Delegation::factory()->create(['school_id' => null, 'district_id' => $district->id]);
+
+    expect($districtDelegation->registrantName())->toBe('Maco')
+        ->and($districtDelegation->registrantType())->toBe('district');
 });

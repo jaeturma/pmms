@@ -20,7 +20,7 @@ type Card = {
 type Props = {
     delegation: {
         id: number;
-        school: string;
+        registrant: string;
         meet: string;
         school_year: string;
     };
@@ -44,11 +44,11 @@ export default function AccreditationCards({
 }: Props) {
     return (
         <>
-            <Head title={`ID cards — ${delegation.school}`} />
+            <Head title={`ID cards — ${delegation.registrant}`} />
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
                     title="ID cards"
-                    description={`${delegation.school} — ${delegation.meet} (${delegation.school_year})`}
+                    description={`${delegation.registrant} — ${delegation.meet} (${delegation.school_year})`}
                     actions={
                         <div className="flex gap-2 print:hidden">
                             <Button variant="outline" asChild>

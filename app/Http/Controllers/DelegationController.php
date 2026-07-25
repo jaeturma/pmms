@@ -3,12 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DelegationStatus;
+use App\Enums\DivisionType;
 use App\Enums\MeetStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\DelegationStoreRequest;
 use App\Http\Requests\DelegationUpdateRequest;
 use App\Models\Delegation;
+use App\Models\District;
+use App\Models\Division;
 use App\Models\Meet;
 use App\Models\School;
 use App\Models\User;
@@ -38,21 +41,23 @@ class DelegationController extends Controller
         $search = $this->searchTerm($request);
 
         $query = Delegation::query()
-            ->with(['school:id,name', 'meet:id,name', 'officers:id,name'])
+            ->with(['school:id,name', 'district:id,name', 'meet:id,name', 'officers:id,name'])
             ->orderByDesc('id');
 
         if ($user->role === UserRole::DelegationOfficer) {
             $query->whereHas('officers', fn ($officers) => $officers->whereKey($user->getKey()));
         }
 
-        $this->applySearch($query, $search, ['head_name', 'school.name', 'meet.name']);
+        $this->applySearch($query, $search, ['head_name', 'school.name', 'district.name', 'meet.name']);
+
+        $division = Division::current();
 
         return Inertia::render('delegations/index', [
             'filters' => ['search' => $search],
             'delegations' => $query->paginate($this->registryPageSize)->withQueryString()
                 ->through(fn (Delegation $delegation): array => [
                     'id' => $delegation->id,
-                    'school' => $delegation->school->name,
+                    'registrant' => $delegation->registrantName(),
                     'meet' => $delegation->meet->name,
                     'head_name' => $delegation->head_name,
                     'head_phone' => $delegation->head_phone,
@@ -76,10 +81,18 @@ class DelegationController extends Controller
                 ->where('status', MeetStatus::RegistrationOpen->value)
                 ->orderByDesc('starts_at')
                 ->get(['id', 'name']),
-            'schoolOptions' => School::query()
-                ->where('active', true)
-                ->orderBy('name')
-                ->get(['id', 'name']),
+            'schoolOptions' => $division->type === DivisionType::City
+                ? School::query()
+                    ->where('active', true)
+                    ->orderBy('name')
+                    ->get(['id', 'name'])
+                : [],
+            'districtOptions' => $division->type === DivisionType::Province
+                ? District::query()
+                    ->where('active', true)
+                    ->orderBy('name')
+                    ->get(['id', 'name'])
+                : [],
             'officerOptions' => User::query()
                 ->where('role', UserRole::DelegationOfficer->value)
                 ->orderBy('name')
@@ -107,7 +120,7 @@ class DelegationController extends Controller
         $delegation = Delegation::create($request->validated());
 
         $this->audit->record('delegation.created', $delegation, [
-            'school' => $delegation->school->name,
+            'registrant' => $delegation->registrantName(),
             'meet' => $meet->name,
         ]);
 
@@ -126,7 +139,7 @@ class DelegationController extends Controller
         $delegation->update($request->validated());
 
         $this->audit->record('delegation.updated', $delegation, [
-            'school' => $delegation->school->name,
+            'registrant' => $delegation->registrantName(),
         ]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Delegation updated.')]);
@@ -153,7 +166,7 @@ class DelegationController extends Controller
         $delegation->forceFill(['status' => DelegationStatus::Submitted])->save();
 
         $this->audit->record('delegation.submitted', $delegation, [
-            'school' => $delegation->school->name,
+            'registrant' => $delegation->registrantName(),
         ]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Delegation submitted.')]);
@@ -180,7 +193,7 @@ class DelegationController extends Controller
         $delegation->forceFill(['status' => DelegationStatus::Approved])->save();
 
         $this->audit->record('delegation.approved', $delegation, [
-            'school' => $delegation->school->name,
+            'registrant' => $delegation->registrantName(),
         ]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Delegation approved.')]);
@@ -207,7 +220,7 @@ class DelegationController extends Controller
         $delegation->forceFill(['status' => DelegationStatus::Draft])->save();
 
         $this->audit->record('delegation.returned', $delegation, [
-            'school' => $delegation->school->name,
+            'registrant' => $delegation->registrantName(),
         ]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Delegation returned to draft.')]);
@@ -236,7 +249,7 @@ class DelegationController extends Controller
         $delegation->officers()->sync($userIds);
 
         $this->audit->record('delegation.officers_updated', $delegation, [
-            'school' => $delegation->school->name,
+            'registrant' => $delegation->registrantName(),
             'officer_count' => count($userIds),
         ]);
 
@@ -261,11 +274,11 @@ class DelegationController extends Controller
             return back();
         }
 
-        $school = $delegation->school->name;
+        $registrant = $delegation->registrantName();
 
         $delegation->delete();
 
-        $this->audit->record('delegation.deleted', $delegation, ['school' => $school]);
+        $this->audit->record('delegation.deleted', $delegation, ['registrant' => $registrant]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Delegation deleted.')]);
 

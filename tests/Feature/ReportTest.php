@@ -38,7 +38,7 @@ test('the delegation roster lists athletes and personnel', function () {
             ->component('reports/delegation-roster')
             ->has('athletes', 2)
             ->has('personnel', 1)
-            ->where('delegation.school', $delegation->school->name));
+            ->where('delegation.registrant', $delegation->school->name));
 });
 
 test('roster access is limited to managers and assigned officers', function () {

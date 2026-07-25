@@ -43,7 +43,7 @@ type PersonnelRow = {
 type Props = {
     delegation: {
         id: number;
-        school: string;
+        registrant: string;
         meet: string;
         school_year: string;
         status_label: string;
@@ -118,11 +118,11 @@ export default function AccreditationIndex({
 }: Props) {
     return (
         <>
-            <Head title={`Accreditation — ${delegation.school}`} />
+            <Head title={`Accreditation — ${delegation.registrant}`} />
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
                     title="Accreditation"
-                    description={`${delegation.school} — ${delegation.meet} (${delegation.school_year})`}
+                    description={`${delegation.registrant} — ${delegation.meet} (${delegation.school_year})`}
                     actions={
                         accreditedCount > 0 && (
                             <Button variant="outline" asChild>

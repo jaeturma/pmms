@@ -37,7 +37,7 @@ type PersonnelRow = {
 type Props = {
     delegation: {
         id: number;
-        school: string;
+        registrant: string;
         meet: string;
         school_year: string;
         head_name: string;
@@ -56,11 +56,11 @@ export default function DelegationRoster({
 }: Props) {
     return (
         <>
-            <Head title={`Roster — ${delegation.school}`} />
+            <Head title={`Roster — ${delegation.registrant}`} />
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
                     title="Delegation roster"
-                    description={`${delegation.school} — ${delegation.meet} (${delegation.school_year})`}
+                    description={`${delegation.registrant} — ${delegation.meet} (${delegation.school_year})`}
                     actions={
                         <ReportActions
                             downloadUrl={download(delegation.id).url}
