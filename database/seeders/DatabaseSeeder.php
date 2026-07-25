@@ -16,8 +16,10 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call(AdminUserSeeder::class);
+        $this->call(DivisionRegistrySeeder::class);
         $this->call(SampleRegistrySeeder::class);
         $this->call(SportsCatalogSeeder::class);
+        $this->call(SampleProvinceDemoSeeder::class);
 
         $hasTestUser = User::query()->where('email', 'test@example.com')->exists();
 
