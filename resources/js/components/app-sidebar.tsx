@@ -1,6 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
     Award,
+    BarChart3,
     CalendarDays,
     Contact,
     Crown,
@@ -45,6 +46,7 @@ import { index as eligibilityIndex } from '@/routes/eligibility';
 import { index as entriesIndex } from '@/routes/entries';
 import { index as eventsIndex } from '@/routes/events';
 import { index as incidentsIndex } from '@/routes/incidents';
+import { index as managementIndex } from '@/routes/management';
 import { index as matchesIndex } from '@/routes/matches';
 import { index as meetsIndex } from '@/routes/meets';
 import { index as personnelIndex } from '@/routes/personnel';
@@ -146,6 +148,11 @@ const mainNavItems: NavItem[] = [
 ];
 
 const managerNavItems: NavItem[] = [
+    {
+        title: 'Management',
+        href: managementIndex(),
+        icon: BarChart3,
+    },
     {
         title: 'Incidents',
         href: incidentsIndex(),

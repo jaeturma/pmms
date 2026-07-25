@@ -1,6 +1,6 @@
 # PMMS Dashboard Framework
 
-Foundation for the management dashboard (WP-01-12). Later modules add widgets by extending the controller's data and the page's grid — no structural rework needed.
+Foundation for the main `/dashboard` page (WP-01-12). Later modules add widgets by extending the controller's data and the page's grid — no structural rework needed. This page is single-meet/real-time (today's schedule, the one Active meet's operations); for cross-meet/historical oversight see the separate `/management` page, `docs/management-dashboard.md` (Phase 5).
 
 ## Backend
 
