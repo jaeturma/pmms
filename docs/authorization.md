@@ -59,7 +59,7 @@ live in code.
 - `$user->hasRole(UserRole::Admin, UserRole::Organizer)` — variadic membership check.
 - `$user->isAdmin()`.
 
-## Authorization matrix (Phase 2 verified WP-02-11; Phase 3 verified WP-03-10)
+## Authorization matrix (Phase 2 verified WP-02-11; Phase 3 verified WP-03-10; Division initiative verified WP7)
 
 Legend: ✓ allowed · ✗ forbidden (403) · **own** = only for delegations the officer is
 assigned to. "Managers" = admin + organizer. Conditions in parentheses are enforced by
@@ -70,6 +70,8 @@ the named policy on top of the role check.
 | Dashboard | ✓ | ✓ | ✓ | ✓ |
 | Districts / Schools / Sports / Events / Meets / Venues — view lists | ✓ | ✓ | ✓ | ✓ |
 | Districts / Schools / Sports / Events / Meets / Venues — create, update, archive, restore, delete | ✓ | ✓ | ✗ | ✗ |
+| Meets — publish / unpublish to public portal (non-draft only) | ✓ | ✓ | ✗ | ✗ |
+| Public portal (`/`) | public — no authentication; published meets only | | | |
 | Schedule — view | ✓ | ✓ | ✓ | ✓ |
 | Schedule — create, update, delete slots (meet registration-closed or active) | ✓ | ✓ | ✗ | ✗ |
 | Delegations — list | ✓ all | ✓ all | own only | ✓ all |
@@ -78,9 +80,9 @@ the named policy on top of the role check.
 | Delegations — submit | ✓ | ✓ | own (registration open) | ✗ |
 | Delegations — approve, return to draft | ✓ | ✓ | ✗ | ✗ |
 | Delegations — assign officers | ✓ | ✓ | ✗ | ✗ |
-| Athletes — list, profile, photo | ✓ all | ✓ all | own only | ✗ |
+| Athletes — list, profile, photo | ✓ all | ✓ all | own delegation's whole roster¹ | ✗ |
 | Athletes — register, update, delete | ✓ | ✓ | own (delegation draft + registration open) | ✗ |
-| Personnel — list, photo | ✓ all | ✓ all | own only | ✗ |
+| Personnel — list, photo | ✓ all | ✓ all | own delegation's whole roster¹ | ✗ |
 | Personnel — register, update, sync sports, delete | ✓ | ✓ | own (delegation draft + registration open) | ✗ |
 | Entries — list | ✓ all | ✓ all | own only | ✗ |
 | Entries — submit | ✓ | ✓ | own (registration open; delegation need not be draft) | ✗ |
@@ -97,6 +99,7 @@ the named policy on top of the role check.
 | Protests — file | ✓ any delegation | ✓ any delegation | own delegation only | ✗ |
 | Protests — review, decide | ✓ | ✓ | ✗ | ✗ |
 | Incidents — list, log, update, resolve, reopen, delete | ✓ | ✓ | ✗ | ✗ |
+| Announcements — list, create, update, publish, unpublish, delete | ✓ | ✓ | ✗ | ✗ |
 | Eligibility — list, view document | ✓ all | ✓ all | own only | ✗ |
 | Eligibility — upload / delete document | ✓ | ✓ | own (registration open) | ✗ |
 | Eligibility — approve, return | ✓ | ✓ | ✗ | ✗ |
@@ -110,6 +113,7 @@ the named policy on top of the role check.
 | Reports — medal tally (page + CSV) | ✓ | ✓ | ✓ | ✓ |
 | Reports — daily schedule sheet (page + CSV) | ✓ | ✓ | ✓ | ✓ |
 | Audit log viewer | ✓ | ✗ | ✗ | ✗ |
+| Division settings — view, update | ✓ | ✗ | ✗ | ✗ |
 
 Enforcement lives in two layers: the `role:admin,organizer` route middleware group in
 `routes/web.php` (registry/catalog/meet writes, delegation register/delete, and all
@@ -120,6 +124,13 @@ list access). The audit viewer uses the `can:administer` route middleware.
 
 `tests/Feature/AuthorizationMatrixTest.php` sweeps every forbidden role × action
 combination above; per-module tests cover the allowed paths and window conditions.
+`Division`/`AuditLogViewer` admin-only rows are swept in their own dedicated test
+files rather than duplicated into the matrix sweep, matching this doc's rows.
+
+¹ Scoped by **delegation**, not by the individual's own school — under a municipal
+(Province) delegation an assigned officer sees every school pooled under it, not
+just one. Accepted/intended, reviewed WP7 — see `docs/delegations.md` "Officer
+roster scope".
 
 ## Testing pattern
 

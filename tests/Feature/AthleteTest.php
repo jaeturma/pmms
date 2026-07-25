@@ -3,8 +3,10 @@
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
+use App\Models\District;
 use App\Models\FileUpload;
 use App\Models\Meet;
+use App\Models\School;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -22,6 +24,7 @@ function validAthletePayload(Delegation $delegation): array
 {
     return [
         'delegation_id' => $delegation->id,
+        'school_id' => schoolForDelegation($delegation)->id,
         'first_name' => 'Ana',
         'last_name' => 'Reyes',
         'sex' => 'female',
@@ -58,6 +61,32 @@ test('officers see only their own athletes while managers see all', function () 
         ->get('/athletes')
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('athletes.data', 1));
+});
+
+test('an officer assigned to a municipal delegation sees the whole pooled roster', function () {
+    // Division initiative, reviewed WP7: AthletePolicy scopes officers by
+    // delegation, not by an athlete's own school_id — accepted/intended,
+    // see docs/delegations.md "Officer roster scope". Proven here: one
+    // officer, one municipal delegation, two different schools, both
+    // athletes visible.
+    $district = District::factory()->create();
+    $schoolA = School::factory()->create(['district_id' => $district->id]);
+    $schoolB = School::factory()->create(['district_id' => $district->id]);
+
+    $delegation = Delegation::factory()->create([
+        'school_id' => null,
+        'district_id' => $district->id,
+    ]);
+    $officer = athleteOfficerFor($delegation);
+
+    Athlete::factory()->create(['delegation_id' => $delegation->id, 'school_id' => $schoolA->id]);
+    Athlete::factory()->create(['delegation_id' => $delegation->id, 'school_id' => $schoolB->id]);
+    Athlete::factory()->create(); // foreign delegation, must stay invisible
+
+    $this->actingAs($officer)
+        ->get('/athletes')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('athletes.data', 2));
 });
 
 test('the registry can be searched by name and lrn', function () {

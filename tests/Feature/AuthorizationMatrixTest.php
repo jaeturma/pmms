@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Accreditation;
+use App\Models\Announcement;
 use App\Models\Athlete;
 use App\Models\Delegation;
 use App\Models\District;
@@ -74,6 +75,8 @@ test('meet-data management is denied to viewers and delegation officers', functi
         'meet status' => fn (): array => ['patch', '/meets/'.Meet::factory()->create()->id.'/status'],
         'meet events sync' => fn (): array => ['put', '/meets/'.Meet::factory()->create()->id.'/events'],
         'meet delete' => fn (): array => ['delete', '/meets/'.Meet::factory()->create()->id],
+        'meet publish' => fn (): array => ['patch', '/meets/'.Meet::factory()->active()->create()->id.'/publish'],
+        'meet unpublish' => fn (): array => ['patch', '/meets/'.Meet::factory()->active()->published()->create()->id.'/unpublish'],
         'delegation create' => fn (): array => ['post', '/delegations'],
         'delegation delete' => fn (): array => ['delete', '/delegations/'.Delegation::factory()->create()->id],
         'accreditation grant' => fn (): array => ['post', '/accreditations'],
@@ -99,6 +102,12 @@ test('meet-data management is denied to viewers and delegation officers', functi
         'incident resolve' => fn (): array => ['patch', '/incidents/'.Incident::factory()->create()->id.'/resolve'],
         'incident reopen' => fn (): array => ['patch', '/incidents/'.Incident::factory()->resolved()->create()->id.'/reopen'],
         'incident delete' => fn (): array => ['delete', '/incidents/'.Incident::factory()->create()->id],
+        'announcement list' => fn (): array => ['get', '/announcements'],
+        'announcement create' => fn (): array => ['post', '/announcements'],
+        'announcement update' => fn (): array => ['put', '/announcements/'.Announcement::factory()->create()->id],
+        'announcement publish' => fn (): array => ['patch', '/announcements/'.Announcement::factory()->create()->id.'/publish'],
+        'announcement unpublish' => fn (): array => ['patch', '/announcements/'.Announcement::factory()->published()->create()->id.'/unpublish'],
+        'announcement delete' => fn (): array => ['delete', '/announcements/'.Announcement::factory()->create()->id],
     ]);
 
 test('viewers cannot reach minor-related data', function (string $uri) {
