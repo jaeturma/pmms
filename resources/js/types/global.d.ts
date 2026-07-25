@@ -13,6 +13,11 @@ declare module '@inertiajs/core' {
             name: string;
             auth: Auth;
             sidebarOpen: boolean;
+            division: {
+                type: 'city' | 'province';
+                name: string;
+                areaLabel: string;
+            };
             [key: string]: unknown;
         };
     }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Division;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -35,6 +36,8 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $division = Division::current();
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
@@ -42,6 +45,11 @@ class HandleInertiaRequests extends Middleware
                 'user' => $request->user(),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'division' => [
+                'type' => $division->type->value,
+                'name' => $division->name,
+                'areaLabel' => $division->areaLabel(),
+            ],
         ];
     }
 }

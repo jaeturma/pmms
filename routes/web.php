@@ -1,11 +1,13 @@
 <?php
 
 use App\Http\Controllers\AccreditationController;
+use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\AthleteController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DelegationController;
 use App\Http\Controllers\DistrictController;
+use App\Http\Controllers\DivisionController;
 use App\Http\Controllers\EligibilityController;
 use App\Http\Controllers\EntryController;
 use App\Http\Controllers\EventController;
@@ -14,6 +16,7 @@ use App\Http\Controllers\IncidentController;
 use App\Http\Controllers\MatchController;
 use App\Http\Controllers\MeetController;
 use App\Http\Controllers\PersonnelController;
+use App\Http\Controllers\PortalController;
 use App\Http\Controllers\ProtestController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ResultController;
@@ -24,7 +27,19 @@ use App\Http\Controllers\TallyController;
 use App\Http\Controllers\VenueController;
 use Illuminate\Support\Facades\Route;
 
-Route::inertia('/', 'welcome')->name('home');
+// Public portal — guest routes, throttled, published data only.
+Route::middleware('throttle:60,1')->group(function () {
+    Route::get('/', [PortalController::class, 'home'])->name('home');
+    Route::get('meets/{meet}', [PortalController::class, 'meet'])
+        ->whereNumber('meet')
+        ->name('public.meet');
+    Route::get('meets/{meet}/results', [PortalController::class, 'results'])
+        ->whereNumber('meet')
+        ->name('public.results');
+    Route::get('meets/{meet}/tally', [PortalController::class, 'tally'])
+        ->whereNumber('meet')
+        ->name('public.tally');
+});
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
@@ -103,6 +118,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('can:administer')
         ->name('audit-logs.index');
 
+    Route::get('division', [DivisionController::class, 'edit'])
+        ->middleware('can:administer')
+        ->name('division.edit');
+    Route::patch('division', [DivisionController::class, 'update'])
+        ->middleware('can:administer')
+        ->name('division.update');
+
     Route::middleware('role:admin,organizer')->group(function () {
         Route::post('districts', [DistrictController::class, 'store'])->name('districts.store');
         Route::put('districts/{district}', [DistrictController::class, 'update'])->name('districts.update');
@@ -141,6 +163,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('meets', [MeetController::class, 'store'])->name('meets.store');
         Route::put('meets/{meet}', [MeetController::class, 'update'])->name('meets.update');
         Route::patch('meets/{meet}/status', [MeetController::class, 'updateStatus'])->name('meets.status');
+        Route::patch('meets/{meet}/publish', [MeetController::class, 'publish'])->name('meets.publish');
+        Route::patch('meets/{meet}/unpublish', [MeetController::class, 'unpublish'])->name('meets.unpublish');
         Route::put('meets/{meet}/events', [MeetController::class, 'syncEvents'])->name('meets.events');
         Route::delete('meets/{meet}', [MeetController::class, 'destroy'])->name('meets.destroy');
 
@@ -158,6 +182,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::patch('protests/{protest}/review', [ProtestController::class, 'review'])->name('protests.review');
         Route::patch('protests/{protest}/decide', [ProtestController::class, 'decide'])->name('protests.decide');
+
+        Route::get('announcements', [AnnouncementController::class, 'index'])->name('announcements.index');
+        Route::post('announcements', [AnnouncementController::class, 'store'])->name('announcements.store');
+        Route::put('announcements/{announcement}', [AnnouncementController::class, 'update'])->name('announcements.update');
+        Route::patch('announcements/{announcement}/publish', [AnnouncementController::class, 'publish'])->name('announcements.publish');
+        Route::patch('announcements/{announcement}/unpublish', [AnnouncementController::class, 'unpublish'])->name('announcements.unpublish');
+        Route::delete('announcements/{announcement}', [AnnouncementController::class, 'destroy'])->name('announcements.destroy');
 
         Route::get('incidents', [IncidentController::class, 'index'])->name('incidents.index');
         Route::post('incidents', [IncidentController::class, 'store'])->name('incidents.store');

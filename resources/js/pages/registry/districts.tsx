@@ -1,4 +1,4 @@
-import { Head, router, useForm } from '@inertiajs/react';
+import { Head, router, useForm, usePage } from '@inertiajs/react';
 import { Landmark, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
@@ -28,6 +28,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { pluralizeAreaLabel } from '@/lib/utils';
 import {
     archive,
     destroy,
@@ -40,6 +41,7 @@ import {
 type District = {
     id: number;
     name: string;
+    nickname: string | null;
     active: boolean;
     schools_count: number;
 };
@@ -52,15 +54,18 @@ type Props = {
 
 function DistrictFormDialog({
     district,
+    areaLabel,
     open,
     onOpenChange,
 }: {
     district: District | null;
+    areaLabel: string;
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
     const { data, setData, post, put, processing, errors, reset } = useForm({
         name: district?.name ?? '',
+        nickname: district?.nickname ?? '',
     });
 
     const submit = (e: FormEvent) => {
@@ -86,7 +91,9 @@ function DistrictFormDialog({
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle>
-                        {district ? 'Edit district' : 'Add district'}
+                        {district
+                            ? `Edit ${areaLabel.toLowerCase()}`
+                            : `Add ${areaLabel.toLowerCase()}`}
                     </DialogTitle>
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
@@ -100,9 +107,25 @@ function DistrictFormDialog({
                         />
                         <InputError message={errors.name} />
                     </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="district-nickname">
+                            Delegation nickname
+                        </Label>
+                        <Input
+                            id="district-nickname"
+                            value={data.nickname}
+                            onChange={(e) =>
+                                setData('nickname', e.target.value)
+                            }
+                            placeholder="e.g. Tigers"
+                        />
+                        <InputError message={errors.nickname} />
+                    </div>
                     <DialogFooter>
                         <Button type="submit" disabled={processing}>
-                            {district ? 'Save changes' : 'Create district'}
+                            {district
+                                ? 'Save changes'
+                                : `Create ${areaLabel.toLowerCase()}`}
                         </Button>
                     </DialogFooter>
                 </form>
@@ -112,6 +135,10 @@ function DistrictFormDialog({
 }
 
 export default function Districts({ districts, filters, canManage }: Props) {
+    const { division } = usePage().props;
+    const areaLabel = division.areaLabel;
+    const areaLabelPlural = pluralizeAreaLabel(areaLabel);
+
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<District | null>(null);
 
@@ -127,16 +154,16 @@ export default function Districts({ districts, filters, canManage }: Props) {
 
     return (
         <>
-            <Head title="Districts" />
+            <Head title={areaLabelPlural} />
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
-                    title="Districts"
-                    description="School districts of the division."
+                    title={areaLabelPlural}
+                    description={`${areaLabelPlural} of the division.`}
                     actions={
                         canManage && (
                             <Button onClick={openCreate}>
                                 <Plus />
-                                Add district
+                                Add {areaLabel.toLowerCase()}
                             </Button>
                         )
                     }
@@ -144,19 +171,19 @@ export default function Districts({ districts, filters, canManage }: Props) {
 
                 <SearchBar
                     initial={filters.search}
-                    placeholder="Search districts"
+                    placeholder={`Search ${areaLabelPlural.toLowerCase()}`}
                     url={index().url}
                 />
 
                 {districts.data.length === 0 ? (
                     <EmptyState
                         icon={Landmark}
-                        title="No districts yet"
-                        description="Districts registered for the division will appear here."
+                        title={`No ${areaLabelPlural.toLowerCase()} yet`}
+                        description={`${areaLabelPlural} registered for the division will appear here.`}
                         action={
                             canManage && (
                                 <Button onClick={openCreate}>
-                                    Add district
+                                    Add {areaLabel.toLowerCase()}
                                 </Button>
                             )
                         }
@@ -167,6 +194,7 @@ export default function Districts({ districts, filters, canManage }: Props) {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Name</TableHead>
+                                    <TableHead>Nickname</TableHead>
                                     <TableHead>Schools</TableHead>
                                     <TableHead>Status</TableHead>
                                     {canManage && (
@@ -181,6 +209,9 @@ export default function Districts({ districts, filters, canManage }: Props) {
                                     <TableRow key={district.id}>
                                         <TableCell className="font-medium">
                                             {district.name}
+                                        </TableCell>
+                                        <TableCell className="text-muted-foreground">
+                                            {district.nickname ?? '—'}
                                         </TableCell>
                                         <TableCell>
                                             {district.schools_count}
@@ -223,13 +254,13 @@ export default function Districts({ districts, filters, canManage }: Props) {
                                                         }
                                                         title={
                                                             district.active
-                                                                ? 'Archive district?'
-                                                                : 'Restore district?'
+                                                                ? `Archive ${areaLabel.toLowerCase()}?`
+                                                                : `Restore ${areaLabel.toLowerCase()}?`
                                                         }
                                                         description={
                                                             district.active
-                                                                ? 'Archived districts stay in records but are hidden from new registrations.'
-                                                                : 'The district becomes available for registrations again.'
+                                                                ? `Archived ${areaLabelPlural.toLowerCase()} stay in records but are hidden from new registrations.`
+                                                                : `The ${areaLabel.toLowerCase()} becomes available for registrations again.`
                                                         }
                                                         confirmLabel={
                                                             district.active
@@ -263,8 +294,8 @@ export default function Districts({ districts, filters, canManage }: Props) {
                                                                     Delete
                                                                 </Button>
                                                             }
-                                                            title="Delete district?"
-                                                            description="This permanently removes the district. Only districts without schools can be deleted."
+                                                            title={`Delete ${areaLabel.toLowerCase()}?`}
+                                                            description={`This permanently removes the ${areaLabel.toLowerCase()}. Only ${areaLabelPlural.toLowerCase()} without schools can be deleted.`}
                                                             confirmLabel="Delete"
                                                             destructive
                                                             onConfirm={() =>
@@ -292,7 +323,7 @@ export default function Districts({ districts, filters, canManage }: Props) {
                 <PaginationControls
                     page={districts}
                     url={index().url}
-                    label="districts"
+                    label={areaLabelPlural.toLowerCase()}
                     params={filters.search ? { search: filters.search } : {}}
                 />
             </div>
@@ -300,6 +331,7 @@ export default function Districts({ districts, filters, canManage }: Props) {
             <DistrictFormDialog
                 key={editing?.id ?? 'create'}
                 district={editing}
+                areaLabel={areaLabel}
                 open={formOpen}
                 onOpenChange={setFormOpen}
             />

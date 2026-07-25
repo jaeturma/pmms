@@ -36,6 +36,7 @@ class DistrictController extends Controller
                 ->through(fn (District $district): array => [
                     'id' => $district->id,
                     'name' => $district->name,
+                    'nickname' => $district->nickname,
                     'active' => $district->active,
                     'schools_count' => $district->schools_count,
                 ]),

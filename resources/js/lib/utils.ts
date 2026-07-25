@@ -10,3 +10,10 @@ export function cn(...inputs: ClassValue[]) {
 export function toUrl(url: NonNullable<InertiaLinkProps['href']>): string {
     return typeof url === 'string' ? url : url.url;
 }
+
+/** "District" -> "Districts", "Municipality" -> "Municipalities". */
+export function pluralizeAreaLabel(areaLabel: string): string {
+    return areaLabel.endsWith('y')
+        ? `${areaLabel.slice(0, -1)}ies`
+        : `${areaLabel}s`;
+}

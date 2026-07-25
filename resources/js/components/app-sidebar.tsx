@@ -12,6 +12,7 @@ import {
     ListChecks,
     MapPin,
     Medal,
+    Megaphone,
     School,
     ScrollText,
     Swords,
@@ -32,11 +33,14 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { pluralizeAreaLabel } from '@/lib/utils';
 import { dashboard } from '@/routes';
+import { index as announcementsIndex } from '@/routes/announcements';
 import { index as athletesIndex } from '@/routes/athletes';
 import { index as auditLogsIndex } from '@/routes/audit-logs';
 import { index as delegationsIndex } from '@/routes/delegations';
 import { index as districtsIndex } from '@/routes/districts';
+import { edit as divisionEdit } from '@/routes/division';
 import { index as eligibilityIndex } from '@/routes/eligibility';
 import { index as entriesIndex } from '@/routes/entries';
 import { index as eventsIndex } from '@/routes/events';
@@ -147,6 +151,11 @@ const managerNavItems: NavItem[] = [
         href: incidentsIndex(),
         icon: TriangleAlert,
     },
+    {
+        title: 'Announcements',
+        href: announcementsIndex(),
+        icon: Megaphone,
+    },
 ];
 
 const adminNavItems: NavItem[] = [
@@ -155,15 +164,24 @@ const adminNavItems: NavItem[] = [
         href: auditLogsIndex(),
         icon: ScrollText,
     },
+    {
+        title: 'Division settings',
+        href: divisionEdit(),
+        icon: Landmark,
+    },
 ];
 
 export function AppSidebar() {
-    const { auth } = usePage().props;
+    const { auth, division } = usePage().props;
 
     const role = auth.user?.role;
 
     const navItems = [
-        ...mainNavItems,
+        ...mainNavItems.map((item) =>
+            item.title === 'Districts'
+                ? { ...item, title: pluralizeAreaLabel(division.areaLabel) }
+                : item,
+        ),
         ...(role === 'admin' || role === 'organizer' ? managerNavItems : []),
         ...(role === 'admin' ? adminNavItems : []),
     ];

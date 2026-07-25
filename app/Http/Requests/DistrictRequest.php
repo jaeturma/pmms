@@ -25,6 +25,7 @@ class DistrictRequest extends FormRequest
                 Rule::unique('districts', 'name')
                     ->ignore($district instanceof District ? $district->id : null),
             ],
+            'nickname' => ['nullable', 'string', 'max:60'],
         ];
     }
 }

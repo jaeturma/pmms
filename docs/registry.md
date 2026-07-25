@@ -5,7 +5,10 @@ later modules (delegations, athletes) build on.
 
 ## Data model
 
-- `districts` — `name` (unique), `active`. A district has many schools.
+- `districts` — `name` (unique), optional `nickname` (a delegation nickname,
+  e.g. "Tigers"), `active`. A district has many schools. In a Province
+  division this same table is presented as "Municipality" — see
+  `docs/division.md`.
 - `schools` — `district_id` (FK, restrict on delete), `name` (unique per district),
   `school_id_code` (unique), `level` (`App\Enums\SchoolLevel`: elementary / secondary /
   integrated), optional `address`, `active`.

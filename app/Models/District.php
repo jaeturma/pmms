@@ -12,12 +12,13 @@ use Illuminate\Support\Carbon;
 /**
  * @property int $id
  * @property string $name
+ * @property string|null $nickname
  * @property bool $active
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read int|null $schools_count
  */
-#[Fillable(['name'])]
+#[Fillable(['name', 'nickname'])]
 class District extends Model
 {
     /** @use HasFactory<DistrictFactory> */
