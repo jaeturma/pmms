@@ -1,24 +1,29 @@
 # Current Phase
 Division Type & Municipality-Based Delegations — COMPLETE 2026-07-25, all 7 WPs
 executed one at a time on owner instruction. Phase 4 — Responsive Public
-Portal is ALSO complete as of 2026-07-25 (see "Phase 4" section below).
-Committed 2026-07-25 (17 commits total across Division + Phase 4 + the
-Phase 3/4/5 doc-scaffolding cleanup below; see git log) and pushed by
-owner 2026-07-25. Nothing is currently active; Phase 5 has a real plan as
-of 2026-07-25 (see "Phase 5" section below), pending owner approval to
-start execution.
+Portal and Phase 5 — Executive and Management Dashboards are ALSO complete
+(see their own sections below). Committed and pushed through Phase 5
+(main @ 01e0721 as of 2026-07-25; see git log). **Phase 7 — Live Scoring
+Enhancement is now COMPLETE (all 3 WPs, 2026-07-26)** — see its own section
+below — note the renumbering: the roadmap's original Phase 7
+(Post-Deployment Support) is renamed Phase 8 per
+`docs/howtorun/ROADMAP-UPDATE.md`; this new Phase 7 is a different feature
+(live/real-time match scoring) inserted ahead of it, owner-directed
+2026-07-25.
 
-**Do not start Phase 6/7 from `docs/phases/phase-06-reports-uat-
-deployment-turnover/` or `phase-07-post-deployment-support/` as-is.**
-Checked 2026-07-25: same unreviewed generic-template scaffolding that
-Phase 5's directory had (see "Phase 5" section below for how that got
-fixed) — never written for or checked against this codebase. Phase 6 in
-particular still carries the "municipality as the official delegation"
-assumption (WP-06-01) that collides with the Division initiative's real
-model. See each directory's own README.md status note. Write a real plan
-for these the same way Phase 4's and Phase 5's were (git history `a7bde91`
-and the Phase 5 planning commit) when they're actually next — not adapted
-from this scaffolding.
+**Do not start Phase 6 from `docs/phases/phase-06-reports-uat-
+deployment-turnover/` as-is** (owner confirmed 2026-07-25 not ready to plan
+it yet). Checked 2026-07-25: unreviewed generic-template scaffolding that
+Phase 5's directory also had (see "Phase 5" section below for how that got
+fixed) — never written for or checked against this codebase; still carries
+the "municipality as the official delegation" assumption (WP-06-01) that
+collides with the Division initiative's real model. The same problem hit
+`docs/phases/phase-07-live-scoring-enhancement/` too (invented a
+"Tournament Manager" role, falsely claimed an existing "Reverb foundation")
+— that one has now been corrected into a real plan (see "Phase 7" section).
+Write a real plan for Phase 6 the same way Phase 4's, Phase 5's, and
+Phase 7's were (git history `a7bde91`, and the Phase 5/Phase 7 planning
+commits) when it's actually next — not adapted from this scaffolding.
 Real deployment requirement (not part of the numbered Phase 2-4 plan above):
 the division can be City (schools/districts compete) or Province
 (municipalities compete, pooling multiple schools' athletes under one
@@ -315,6 +320,166 @@ Pint+PHPStan+ESLint+Prettier+tsc+build; not committed/pushed.
   Pint+PHPStan+ESLint+Prettier+tsc+build; not committed/pushed) — purely
   additive, no registration-flow changes yet; municipal delegation
   registration itself is WP2.
+
+# Phase 7 — Live Scoring Enhancement
+COMPLETE 2026-07-26, all 3 WPs executed one at a time on owner instruction.
+Review: docs/phases/phase-07-live-scoring-enhancement/
+phase-7-compliance-review.md (COMPLIANT; two Low accessibility gaps found
+and fixed during the review, no schema/authorization/architectural issues;
+full gate green: Pint+PHPStan+Pest 608/608 (3,020 assertions), ESLint+
+Prettier+tsc+build; composer audit + npm audit both clean; scoring
+migration Ran on MySQL pmmsdb; app HTTP 200 at http://pmms.app — live
+browser walkthrough not performed this session, Chrome extension was
+unavailable, so the checkpoint evidence is test-based + HTTP-200 liveness,
+same bar WP-07-01/02 used; flagged for an optional owner follow-up phone
+check, not blocking). Plan:
+docs/phases/phase-07-live-scoring-enhancement/ (README + DESIGN-NOTES +
+CHECKLIST + WP-07-01..03), written fresh for this codebase after the
+unreviewed generic-template draft that occupied this directory was found
+to invent a nonexistent "Tournament Manager" role and falsely claim an
+existing "Reverb foundation" (composer.json/package.json have no
+WebSocket dependency at all). Scope, per owner instruction 2026-07-25 (two
+rounds of scoping questions): yes to live scoring with Reverb, but
+**generic scoreboard only** (no basketball/boxing/softball-specific
+scoreboards this phase) and **internal only** (no public portal exposure
+this phase). This is the project's first new dependency after 5 phases of
+"zero dependencies added" — deliberately isolated in its own WP (WP-07-01)
+and required to work by polling alone if Reverb isn't running, so it's
+additive risk, not a hard new requirement. A live scoring session is a
+provisional/spectator layer only — it never creates or implies a validated
+result; Phase 3's result-integrity core (encode→validate→single-correction-
+path) stays completely untouched. Three WPs: live scoring foundation
+(Reverb + data model + endpoints, proven via tests with Reverb
+unconfigured) → generic live scoreboard UI (operator console + live
+display + full-screen mode, internal only) → accessibility/testing/
+acceptance. Execute one work package at a time on owner instruction.
+
+## Phase 7 Work Package Log
+- WP-07-01 Live Scoring Foundation — done 2026-07-25 (the project's first
+  new dependency after 5 phases of zero: `laravel/reverb` (composer) +
+  `laravel-echo`/`pusher-js`/`@laravel/echo-react` (npm), via `php artisan
+  install:broadcasting --reverb` (also fixed a pre-existing guzzlehttp/
+  guzzle medium-severity advisory found by `composer audit` along the way,
+  unrelated to Reverb — upgraded to 7.15.1, `composer audit` now clean).
+  `reverb:install`'s own connection self-test failed before REVERB_* env
+  vars existed (chicken-and-egg); generated them manually into `.env`
+  instead (`.env.example` deliberately left at the framework default
+  `BROADCAST_CONNECTION=log`, same convention as `DB_CONNECTION=sqlite` —
+  a fresh setup gets polling-only live scoring with zero broadcasting
+  infra required). New `scoring_sessions` (one per match, generic
+  side_a/side_b running score + period/status text, no sport-specific
+  columns) + `score_events` (append-only audit/catch-up log) tables;
+  `App\Enums\MatchStatus` deliberately NOT touched — live-session state
+  is fully decoupled from match lifecycle status. `ScoringSessionController`
+  reuses existing authorization exactly: viewing mirrors the "Matches —
+  list" rule (Admin/Organizer all, Delegation Officer own delegation's
+  matches only, Viewer forbidden), mutations reuse `role:admin,organizer`
+  (same as match create/update) — no new role invented, correcting the
+  discarded draft's "Tournament Manager." `App\Events\ScoreUpdated`
+  broadcasts on a private channel authorized with the identical rule
+  (`routes/channels.php`); every write is also readable via a plain
+  polling GET (`scoring.show`), proven by test to work correctly with
+  broadcasting on the `null` driver (phpunit.xml's test default — the
+  whole suite already proves the Reverb-absent path, no special-casing
+  needed). Ending a session never touches `EventResult`/
+  `ResultPlacement` (explicit test assertion) — Phase 3's result-integrity
+  core is completely unmodified. docs/live-scoring.md (new),
+  docs/matches.md cross-reference, docs/authorization.md (+2 rows),
+  docs/audit-trail.md (+1 row). Pest 602/602 (12 new tests in
+  ScoringSessionTest: authorization incl. delegation-scoping, full
+  lifecycle via polling only, one-active-session enforcement, scheduled-
+  only start, correction requires a reason, score floor at zero, ended
+  session immutable, EventResult untouched), full gate green:
+  Pint+PHPStan+ESLint+Prettier+tsc+build; migration Ran on MySQL pmmsdb;
+  app HTTP 200 at http://pmms.app; not committed/pushed) — next: WP-07-02
+  Generic Live Scoreboard UI.
+- WP-07-02 Generic Live Scoreboard UI — done 2026-07-25 (one page, not
+  two, for both operator console and read-only display —
+  `resources/js/pages/scoring/show.tsx`, same pattern as `matches/
+  index.tsx` unifying manager/viewer experience with conditional
+  controls; new `ScoringSessionController::board()` + `GET /matches/
+  {match}/scoreboard` (`scoring.board`, same authorization as WP-07-01's
+  polling endpoint). Start form pre-fills side labels from
+  `suggestedLabels` (match's two entries' school names, only when exactly
+  two exist — deliberately not modeling bracket/team structure for >2).
+  Active session: +1/+2/+3 quick-score + a per-side correction dialog
+  (delta + required reason), period/status form, pause/resume, End
+  ConfirmDialog (description reminds the operator the official result
+  still needs separate encoding). Full-screen mode via the browser
+  Fullscreen API on the scoreboard's own container. Live updates: always
+  polls scoring.show every 5s (the WP-07-01-promised baseline) plus
+  `useEcho` (`@laravel/echo-react`) on the private channel for
+  near-instant updates when Reverb is available — both write the same
+  local state, page behaves identically either way. Hit and fixed a real
+  React Compiler lint error twice (`react-hooks/set-state-in-effect` —
+  syncing a prop into state inside `useEffect`): switched to React's
+  documented "adjust state during render" pattern (compare against a
+  tracked last-synced value, update synchronously in the render body, not
+  in an effect) for both the main session sync and the period/status
+  form's local-edit-vs-external-update reconciliation. Refactored
+  WP-07-01's controller `present()` into `ScoringSession::toLivePayload()`
+  so the polling endpoint, the board's initial props, and the Reverb
+  broadcast payload are now provably the same shape from one source, not
+  three hand-written copies. `matches/index.tsx` gets a new always-visible
+  "Live" column (not gated behind `canManage`, unlike Actions — a
+  Delegation Officer can watch their own delegation's match). docs/
+  live-scoring.md extended. Pest 607/607 (5 new tests: guest/Viewer
+  forbidden from the board page, Delegation Officer own-match-only,
+  suggested labels only for exactly two entries, the board's session prop
+  reflects a score change made through the operator endpoints), full gate
+  green: Pint+PHPStan+ESLint+Prettier+tsc+build; app HTTP 200 at
+  http://pmms.app; not committed/pushed) — next: WP-07-03 Live Scoring
+  Accessibility, Testing & Acceptance.
+- WP-07-03 Live Scoring Accessibility, Testing & Acceptance — done
+  2026-07-26 (COMPLIANT, two Low findings fixed during review — full report
+  docs/phases/phase-07-live-scoring-enhancement/phase-7-compliance-review.md.
+  Accessibility sweep of `scoring/show.tsx` found and fixed two real gaps:
+  the bare +1/+2/+3 quick-score buttons had no accessible name naming which
+  side they scored for (added `aria-label`, e.g. "Add 1 point, Home"), and
+  the two-side control block's fixed `grid-cols-2` risked the three-button
+  row crowding/wrapping awkwardly on a narrow phone (now stacks to one
+  column below `sm:`, button rows wrap); also added `aria-live="polite"` +
+  `aria-atomic="true"` to the live score grid so a screen-reader user
+  watching the read-only display is told when the score changes, not just
+  sighted users. Verified already sound: heading order (CardTitle is a
+  styled div, same convention app-wide, not a real heading gap), decorative
+  icons already aria-hidden, empty state, all form labels. Re-confirmed the
+  phase's core rules by direct grep/git-log, not just re-reading the
+  DESIGN-NOTES: zero EventResult/ResultPlacement write references anywhere
+  in the live-scoring code (only doc-comments describing what it
+  deliberately doesn't do), MatchStatus.php has zero diff and was last
+  touched in WP-03-04 (Phase 3), authorization mirrors Matches — list
+  exactly with no loosening (re-verified against docs/authorization.md).
+  Added one new definitive test — `ResultTest`'s "a match can be finalized
+  with a result and no live scoring session was ever started (Phase 7)" —
+  proving the encode→validate flow works with zero ScoringSession rows ever
+  created, the inverse of WP-07-01's existing "ending a session never
+  touches EventResult" test, so the two systems are now proven decoupled in
+  both directions. Reviewed and documented (docs/live-scoring.md) two
+  behaviors the WP scope asked to confirm rather than newly build: Reverb
+  stopping mid-session is a non-issue because every write persists before
+  the queued ShouldBroadcast event fires and the unconditional 5-second
+  poll re-syncs any client relying on the socket (already proven by the
+  existing lifecycle test running under the null broadcast driver); and
+  concurrent-operator score races are accepted last-write-wins on the
+  running total (documented, not lock-guarded — a live session is
+  provisional by definition) while `score_events` is still appended
+  unconditionally on every request, so no audit row is ever silently
+  dropped even when the derived total races. composer audit and npm audit
+  (--omit=dev) both came back clean. Live interactive browser verification
+  (incl. a phone-width visual pass) was not performed — the Chrome browser
+  automation extension was unavailable this session — so that checkpoint's
+  evidence is test-based + an HTTP 200 liveness check, the same bar
+  WP-07-01/02 already used, not a screenshot walk; flagged in the
+  compliance review as an optional owner follow-up, not a blocker. No
+  schema changes. Pest 608/608 (1 new test), full gate green: Pint+PHPStan+
+  ESLint+Prettier+tsc+build; migration confirmed Ran on MySQL pmmsdb; app
+  HTTP 200 at http://pmms.app; not committed/pushed) — this closes Phase 7.
+  Next: owner review of the compliance report (optionally with a manual
+  phone check) + commit decision for the Phase 7 tree; then owner's choice
+  of Phase 8 — Post-Deployment Support or Phase 6 — Reports, UAT,
+  Deployment, and Turnover (still needing a real plan written for this
+  codebase before any WP-06 work).
 
 # Phase 5 — Executive and Management Dashboards
 COMPLETE 2026-07-25, all 8 WPs executed one at a time on owner instruction.

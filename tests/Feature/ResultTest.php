@@ -11,6 +11,7 @@ use App\Models\EventResult;
 use App\Models\Meet;
 use App\Models\ResultPlacement;
 use App\Models\School;
+use App\Models\ScoringSession;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 
@@ -125,6 +126,25 @@ test('managers can encode a result for an active meet', function () {
         ->and($result->encoded_by)->not->toBeNull()
         ->and($result->placements()->count())->toBe(2)
         ->and(AuditLog::query()->where('action', 'result.encoded')->exists())->toBeTrue();
+});
+
+test('a match can be finalized with a result and no live scoring session was ever started (Phase 7)', function () {
+    ['meet' => $meet, 'event' => $event, 'entries' => $entries] = resultFixture();
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->post('/results', [
+            'meet_id' => $meet->id,
+            'event_id' => $event->id,
+            'placements' => [
+                ['entry_id' => $entries[0]->id, 'rank' => 1, 'mark' => '11.2s', 'is_tie' => false],
+                ['entry_id' => $entries[1]->id, 'rank' => 2, 'mark' => null, 'is_tie' => false],
+            ],
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect(EventResult::query()->count())->toBe(1)
+        ->and(ScoringSession::query()->count())->toBe(0);
 });
 
 test('results cannot be encoded unless the meet is active', function () {
