@@ -58,3 +58,9 @@ slot, participant names with schools, and status. Managers get: match dialog wit
 dependent meet → event → slot selects, a participants dialog (checkbox list of
 that event's confirmed entries), status ConfirmDialogs (Complete / Declare
 walkover / Cancel), and delete.
+
+## Live scoring (Phase 7)
+
+Optional, provisional live scoring for a `Scheduled` match — a
+spectator/operations layer that never touches this match's own `status`
+or any result. See `docs/live-scoring.md`.

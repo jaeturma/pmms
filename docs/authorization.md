@@ -92,6 +92,8 @@ the named policy on top of the role check.
 | Entries — delete (withdrawn only) | ✓ | ✓ | own (registration open) | ✗ |
 | Matches — list | ✓ all | ✓ all | own delegation's only | ✗ |
 | Matches — create, update, participants, status, delete | ✓ | ✓ | ✗ | ✗ |
+| Live scoring — view session (Phase 7) | ✓ all | ✓ all | own delegation's matches only | ✗ |
+| Live scoring — start, score, correct, period, pause, resume, end (Phase 7) | ✓ | ✓ | ✗ | ✗ |
 | Results — validated results | ✓ | ✓ | ✓ | ✓ |
 | Results — encoded (unvalidated) results | ✓ | ✓ | ✗ | ✗ |
 | Results — encode, update, validate, correct, delete | ✓ | ✓ | ✗ | ✗ |

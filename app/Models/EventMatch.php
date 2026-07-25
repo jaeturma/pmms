@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -76,5 +77,13 @@ class EventMatch extends Model
     public function entries(): BelongsToMany
     {
         return $this->belongsToMany(Entry::class, 'match_entries', 'match_id')->withTimestamps();
+    }
+
+    /**
+     * @return HasMany<ScoringSession, $this>
+     */
+    public function scoringSessions(): HasMany
+    {
+        return $this->hasMany(ScoringSession::class, 'match_id');
     }
 }

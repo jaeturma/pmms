@@ -41,6 +41,7 @@ The current authenticated user, IP, and user agent are captured automatically; p
 | `incident.reported` / `updated` / `resolved` / `reopened` / `deleted` | `IncidentController` (WP-03-07) |
 | `report.result_sheet_exported` / `tally_exported` / `schedule_exported` (CSV exports) | `ReportController` (WP-03-08) |
 | `report.management_exported` (CSV export) | `ManagementDashboardController` (WP-05-06) |
+| `scoring.started` / `scored` / `corrected` (reason in context) / `period_changed` / `paused` / `resumed` / `ended` | `ScoringSessionController` (WP-07-01) |
 
 Deliberately not audited (accepted deviations, reviewed WP-02-11 and WP-03-10):
 
