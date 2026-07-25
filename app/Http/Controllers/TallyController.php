@@ -14,8 +14,9 @@ class TallyController extends Controller
     public function __construct(private readonly MedalTallyService $tally) {}
 
     /**
-     * Medal tally per school and district — aggregates of validated
-     * results only, readable by every authenticated role.
+     * Medal tally: official district/municipality standings plus a
+     * school-level reference table — aggregates of validated results only,
+     * readable by every authenticated role.
      */
     public function index(Request $request): Response
     {

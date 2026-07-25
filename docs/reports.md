@@ -12,7 +12,7 @@ tables, `ReportActions`).
 | Per-event entry list (withdrawn excluded) | `/reports/events/{event}/entries` | Managers all rows; officers their own delegation's rows; viewers 403 (`EntryPolicy::viewAny`) | "Event list" header action on the entries page when an event filter is active |
 | School participation summary (aggregate counts, optional meet filter) | `/reports/participation` | Every authenticated user (aggregates only, no minor data) | "Participation" header action on the schools page |
 | Official result sheet (validated results only, with validator identity and date; 404 for unvalidated) | `/reports/results/{result}` | Every authenticated user — validated results are official outcomes | "Sheet" action on each validated result card |
-| Medal tally report (school + district standings, meet/sport filters) | `/reports/tally` | Every authenticated user (aggregates of validated results) | "Printable report" header action on the tally page |
+| Medal tally report (district/municipality standings, plus school reference, meet/sport filters) | `/reports/tally` | Every authenticated user (aggregates of validated results) | "Printable report" header action on the tally page |
 | Daily schedule sheet (one day, grouped by venue; date defaults to today) | `/reports/schedule` | Every authenticated user (schedule is non-sensitive) | "Daily sheet" header action on the schedule page |
 
 ## Printing
@@ -38,3 +38,14 @@ records, withdrawn-entry exclusion, participation counts and meet filter.
 `tests/Feature/OperationsReportTest.php` — validated-only rule (result sheet 404 for
 encoded results, tally counts validated only), per-venue day grouping and time
 ordering on the schedule sheet, and export audits for all three WP-03-08 reports.
+
+**Division initiative:** the delegation roster report shows
+`Delegation::registrantName()` (School or Municipality) — the delegation's
+own identity, correctly. The per-entry "school" field on the event-entry
+list and the per-placement "school" on the result sheet are sourced from
+`athlete.school` — each entered/placed athlete's own home school. The
+school-participation summary counts a school as participating if it has its
+own delegation (City) **or** any athletes/personnel of its own under a
+municipal delegation (Province) — not gated on the school having a direct
+delegation row, which would otherwise hide every Province-deployment school.
+See `docs/delegations.md`.

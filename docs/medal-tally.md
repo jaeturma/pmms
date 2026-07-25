@@ -1,7 +1,10 @@
 # Medal Tally & Rankings
 
-WP-03-06. Medal standings per school and per district, computed **only from
-validated results** (`event_results.status = validated`), per DESIGN-NOTES.
+WP-03-06. Medal standings per district/municipality and per school, computed
+**only from validated results** (`event_results.status = validated`), per
+DESIGN-NOTES. District/municipality standings are the official verdict for a
+meet; school standings are a secondary reference showing which school each
+medal came from — there is no separate school-level "winner."
 
 ## Derivation
 
@@ -16,6 +19,18 @@ medals from the tally automatically, and re-validation restores them.
 - District standings sum their schools' medals.
 - Filters: per meet and per sport (via the placement's entry → event → sport).
 
+## Division initiative: school-level grouping
+
+Standings are grouped by `placement.entry.athlete.school_id` — the placed
+athlete's own home school — never the delegation's. This is what makes a
+municipal (Province) delegation work correctly: one delegation can pool
+athletes from several schools, and each school still gets its own row with
+its own medal count; the district/municipality rollup (unchanged mechanism —
+it sums the already-computed school rows by district name) then correctly
+totals them back into one municipality row. Under a City deployment this is
+behaviorally identical to grouping by the delegation's school, since there
+delegation and school are always 1:1. See `docs/delegations.md`.
+
 ## Authorization
 
 Aggregates only — non-sensitive. The tally page is readable by **every
@@ -23,7 +38,11 @@ authenticated role**; there are no mutations and no audit requirement.
 
 ## UI
 
-`resources/js/pages/tally/index.tsx` (sidebar "Medal tally", all roles) — school
-and district standings tables on shared components with meet and sport filters.
-The printable tally report ships with the operations reports in WP-03-08; the
-public portal is Phase 4.
+`resources/js/pages/tally/index.tsx` (sidebar "Medal tally", all roles) —
+district/municipality standings shown first as the official standings, with
+school standings below as a reference-only table (column/section labels
+follow `division.areaLabel`), with meet and sport filters. The printable
+tally report (`reports/medal-tally.tsx` + CSV — district rows before school
+rows) and the public portal (`public/tally.tsx`) and the dashboard's "Medal
+tally — top five" widget (`DashboardController::operations()`, district-based)
+share the same area-label-aware, district-first treatment.

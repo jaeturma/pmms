@@ -1,4 +1,4 @@
-import { Head } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import { Crown } from 'lucide-react';
 import { EmptyState } from '@/components/empty-state';
 import Heading from '@/components/heading';
@@ -51,6 +51,9 @@ export default function MedalTallyReport({
     filters,
     generatedAt,
 }: Props) {
+    const { division } = usePage().props;
+    const areaLabel = division.areaLabel;
+
     const query = {
         ...(filters.meet_id ? { meet_id: filters.meet_id } : {}),
         ...(filters.sport_id ? { sport_id: filters.sport_id } : {}),
@@ -72,7 +75,7 @@ export default function MedalTallyReport({
                     Generated {generatedAt}
                 </p>
 
-                {schools.length === 0 ? (
+                {districts.length === 0 ? (
                     <EmptyState
                         icon={Crown}
                         title="No medals yet"
@@ -81,7 +84,10 @@ export default function MedalTallyReport({
                 ) : (
                     <>
                         <section className="space-y-3">
-                            <Heading variant="small" title="School standings" />
+                            <Heading
+                                title={`${areaLabel} standings`}
+                                description="Overall standings for this meet."
+                            />
                             <div className="overflow-x-auto rounded-xl border">
                                 <Table>
                                     <TableHeader>
@@ -89,8 +95,7 @@ export default function MedalTallyReport({
                                             <TableHead className="w-12">
                                                 #
                                             </TableHead>
-                                            <TableHead>School</TableHead>
-                                            <TableHead>District</TableHead>
+                                            <TableHead>{areaLabel}</TableHead>
                                             <TableHead className="w-16 text-center">
                                                 Gold
                                             </TableHead>
@@ -106,15 +111,12 @@ export default function MedalTallyReport({
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {schools.map((row) => (
-                                            <TableRow key={row.school}>
+                                        {districts.map((row) => (
+                                            <TableRow key={row.district}>
                                                 <TableCell>
                                                     {row.position}
                                                 </TableCell>
                                                 <TableCell className="font-medium">
-                                                    {row.school}
-                                                </TableCell>
-                                                <TableCell>
                                                     {row.district}
                                                 </TableCell>
                                                 <TableCell className="text-center">
@@ -139,7 +141,8 @@ export default function MedalTallyReport({
                         <section className="space-y-3">
                             <Heading
                                 variant="small"
-                                title="District standings"
+                                title="School standings"
+                                description="Reference only — shows which school each medal came from."
                             />
                             <div className="overflow-x-auto rounded-xl border">
                                 <Table>
@@ -148,7 +151,8 @@ export default function MedalTallyReport({
                                             <TableHead className="w-12">
                                                 #
                                             </TableHead>
-                                            <TableHead>District</TableHead>
+                                            <TableHead>School</TableHead>
+                                            <TableHead>{areaLabel}</TableHead>
                                             <TableHead className="w-16 text-center">
                                                 Gold
                                             </TableHead>
@@ -164,12 +168,15 @@ export default function MedalTallyReport({
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {districts.map((row) => (
-                                            <TableRow key={row.district}>
+                                        {schools.map((row) => (
+                                            <TableRow key={row.school}>
                                                 <TableCell>
                                                     {row.position}
                                                 </TableCell>
                                                 <TableCell className="font-medium">
+                                                    {row.school}
+                                                </TableCell>
+                                                <TableCell>
                                                     {row.district}
                                                 </TableCell>
                                                 <TableCell className="text-center">

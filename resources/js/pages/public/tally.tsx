@@ -1,9 +1,9 @@
-import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Crown, Printer } from 'lucide-react';
+import { Head, router, usePage } from '@inertiajs/react';
+import { Crown } from 'lucide-react';
 import { EmptyState } from '@/components/empty-state';
 import Heading from '@/components/heading';
-import { PageHeader } from '@/components/page-header';
-import { Button } from '@/components/ui/button';
+import { PublicMeetNav } from '@/components/public-meet-nav';
+import { Badge } from '@/components/ui/badge';
 import {
     Select,
     SelectContent,
@@ -19,8 +19,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { tally as tallyReport } from '@/routes/reports';
-import { index } from '@/routes/tally';
+import { tally as publicTally } from '@/routes/public';
 
 type SchoolRow = {
     position: number;
@@ -44,13 +43,31 @@ type DistrictRow = {
 type Option = { id: number; label: string };
 
 type Props = {
+    meet: {
+        id: number;
+        name: string;
+        school_year: string;
+        starts_at: string;
+        ends_at: string;
+        venue: string | null;
+        status_label: string;
+    };
     schools: SchoolRow[];
     districts: DistrictRow[];
-    filters: { meet_id: number | null; sport_id: number | null };
-    meetOptions: Option[];
+    filters: { sport_id: number | null };
     sportOptions: Option[];
-    generatedAt: string;
 };
+
+function MedalHeader() {
+    return (
+        <>
+            <TableHead className="w-14 text-center">Gold</TableHead>
+            <TableHead className="w-14 text-center">Silver</TableHead>
+            <TableHead className="w-14 text-center">Bronze</TableHead>
+            <TableHead className="w-14 text-center">Total</TableHead>
+        </>
+    );
+}
 
 function MedalCells({
     row,
@@ -69,114 +86,47 @@ function MedalCells({
     );
 }
 
-function MedalHeader() {
-    return (
-        <>
-            <TableHead className="w-16 text-center">Gold</TableHead>
-            <TableHead className="w-16 text-center">Silver</TableHead>
-            <TableHead className="w-16 text-center">Bronze</TableHead>
-            <TableHead className="w-16 text-center">Total</TableHead>
-        </>
-    );
-}
-
-export default function Tally({
+export default function PublicTally({
+    meet,
     schools,
     districts,
     filters,
-    meetOptions,
     sportOptions,
-    generatedAt,
 }: Props) {
     const { division } = usePage().props;
     const areaLabel = division.areaLabel;
 
-    const applyFilters = (overrides: {
-        meet_id?: string;
-        sport_id?: string;
-    }) => {
-        const params: Record<string, string> = {};
-
-        const meetId = overrides.meet_id ?? String(filters.meet_id ?? '');
-        const sportId = overrides.sport_id ?? String(filters.sport_id ?? '');
-
-        if (meetId && meetId !== 'all') {
-            params.meet_id = meetId;
-        }
-
-        if (sportId && sportId !== 'all') {
-            params.sport_id = sportId;
-        }
-
-        router.get(index().url, params, {
-            preserveState: true,
-            preserveScroll: true,
-        });
+    const applySport = (value: string) => {
+        router.get(
+            publicTally(meet.id).url,
+            value !== 'all' ? { sport_id: value } : {},
+            { preserveState: true, preserveScroll: true },
+        );
     };
 
     return (
         <>
-            <Head title="Medal tally" />
-            <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <PageHeader
-                    title="Medal tally"
-                    description="Standings computed from validated results only."
-                    actions={
-                        <Button variant="outline" asChild>
-                            <Link
-                                href={
-                                    tallyReport({
-                                        query: {
-                                            ...(filters.meet_id
-                                                ? { meet_id: filters.meet_id }
-                                                : {}),
-                                            ...(filters.sport_id
-                                                ? {
-                                                      sport_id:
-                                                          filters.sport_id,
-                                                  }
-                                                : {}),
-                                        },
-                                    }).url
-                                }
-                            >
-                                <Printer />
-                                Printable report
-                            </Link>
-                        </Button>
-                    }
-                />
+            <Head title={`Medal tally — ${meet.name}`} />
+            <div className="flex flex-col gap-6">
+                <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <h1 className="text-2xl font-semibold tracking-tight">
+                            {meet.name}
+                        </h1>
+                        <Badge variant="secondary">{meet.status_label}</Badge>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        SY {meet.school_year} · Medal tally — computed from
+                        validated results only; ties share medals.
+                    </p>
+                </div>
 
-                <div className="flex flex-wrap gap-2">
-                    <Select
-                        value={String(filters.meet_id ?? 'all')}
-                        onValueChange={(value) =>
-                            applyFilters({ meet_id: value })
-                        }
-                    >
-                        <SelectTrigger
-                            className="w-56"
-                            aria-label="Filter by meet"
-                        >
-                            <SelectValue placeholder="All meets" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All meets</SelectItem>
-                            {meetOptions.map((option) => (
-                                <SelectItem
-                                    key={option.id}
-                                    value={String(option.id)}
-                                >
-                                    {option.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                <PublicMeetNav meetId={meet.id} active="tally" />
+
+                {sportOptions.length > 0 && (
                     <Select
                         value={String(filters.sport_id ?? 'all')}
-                        onValueChange={(value) =>
-                            applyFilters({ sport_id: value })
-                        }
+                        onValueChange={applySport}
                     >
                         <SelectTrigger
                             className="w-56"
@@ -196,12 +146,7 @@ export default function Tally({
                             ))}
                         </SelectContent>
                     </Select>
-                </div>
-
-                <p className="text-sm text-muted-foreground">
-                    Generated {generatedAt}. Ties share medals; corrections to
-                    validated results update the tally automatically.
-                </p>
+                )}
 
                 {districts.length === 0 ? (
                     <EmptyState
@@ -211,7 +156,7 @@ export default function Tally({
                     />
                 ) : (
                     <>
-                        <section className="space-y-3">
+                        <section className="flex flex-col gap-3">
                             <Heading
                                 title={`${areaLabel} standings`}
                                 description="Overall standings for this meet."
@@ -220,7 +165,7 @@ export default function Tally({
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead className="w-12">
+                                            <TableHead className="w-10">
                                                 #
                                             </TableHead>
                                             <TableHead>{areaLabel}</TableHead>
@@ -244,7 +189,7 @@ export default function Tally({
                             </div>
                         </section>
 
-                        <section className="space-y-3">
+                        <section className="flex flex-col gap-3">
                             <Heading
                                 variant="small"
                                 title="School standings"
@@ -254,7 +199,7 @@ export default function Tally({
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead className="w-12">
+                                            <TableHead className="w-10">
                                                 #
                                             </TableHead>
                                             <TableHead>School</TableHead>
@@ -287,12 +232,3 @@ export default function Tally({
         </>
     );
 }
-
-Tally.layout = {
-    breadcrumbs: [
-        {
-            title: 'Medal tally',
-            href: index(),
-        },
-    ],
-};

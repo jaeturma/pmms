@@ -20,7 +20,7 @@ Role-aware widgets for the active meet, each linking into its owning module:
 | Widget | Who sees it | Data |
 |---|---|---|
 | Today's schedule | all roles | the active meet's slots for today (time, event, venue), linked to the schedule page and daily sheet |
-| Medal tally top five | all roles | top 5 school rows from `MedalTallyService` for the active meet |
+| Medal tally top five | all roles | top 5 district/municipality rows (official standings) from `MedalTallyService` for the active meet |
 | Operational queues (StatCards) | managers only (`queues: null` otherwise) | results awaiting validation, open protests (filed + under review), open incidents, accreditation progress (accredited / registered participants) — linked to results, protests, incidents |
 | Your delegation's protests | delegation officers only | their delegations' latest 5 protests for the active meet with status |
 

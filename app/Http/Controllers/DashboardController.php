@@ -143,7 +143,7 @@ class DashboardController extends Controller
                 ])
                 ->values()
                 ->all(),
-            'tallyTop' => array_slice($tally->standings($meet->id)['schools'], 0, 5),
+            'tallyTop' => array_slice($tally->standings($meet->id)['districts'], 0, 5),
             'queues' => $canManage ? [
                 'pending_results' => EventResult::query()
                     ->where('meet_id', $meet->id)

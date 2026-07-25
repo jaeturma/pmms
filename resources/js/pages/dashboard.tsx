@@ -1,4 +1,4 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import {
     Activity,
     Award,
@@ -70,7 +70,7 @@ type TodaySlot = {
 
 type TallyRow = {
     position: number;
-    school: string;
+    district: string;
     gold: number;
     silver: number;
     bronze: number;
@@ -114,6 +114,8 @@ const statIcons: Record<string, LucideIcon> = {
 };
 
 function MeetOperations({ operations }: { operations: Operations }) {
+    const { division } = usePage().props;
+    const areaLabel = division.areaLabel;
     const { meet, todaySlots, tallyTop, queues, myProtests } = operations;
 
     return (
@@ -220,7 +222,7 @@ function MeetOperations({ operations }: { operations: Operations }) {
                                             <TableHead className="w-10">
                                                 #
                                             </TableHead>
-                                            <TableHead>School</TableHead>
+                                            <TableHead>{areaLabel}</TableHead>
                                             <TableHead className="w-10 text-center">
                                                 G
                                             </TableHead>
@@ -237,12 +239,12 @@ function MeetOperations({ operations }: { operations: Operations }) {
                                     </TableHeader>
                                     <TableBody>
                                         {tallyTop.map((row) => (
-                                            <TableRow key={row.school}>
+                                            <TableRow key={row.district}>
                                                 <TableCell>
                                                     {row.position}
                                                 </TableCell>
                                                 <TableCell className="font-medium">
-                                                    {row.school}
+                                                    {row.district}
                                                 </TableCell>
                                                 <TableCell className="text-center">
                                                     {row.gold}

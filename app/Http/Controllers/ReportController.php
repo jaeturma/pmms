@@ -6,6 +6,7 @@ use App\Enums\EntryStatus;
 use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\Delegation;
+use App\Models\Division;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\EventResult;
@@ -52,7 +53,7 @@ class ReportController extends Controller
         $data = $this->rosterData($delegation);
 
         $this->audit->record('report.roster_exported', $delegation, [
-            'school' => $delegation->school->name,
+            'registrant' => $delegation->registrantName(),
             'meet' => $delegation->meet->name,
         ]);
 
@@ -72,9 +73,9 @@ class ReportController extends Controller
             ];
         }
 
-        $school = str_replace(' ', '-', strtolower($delegation->school->name));
+        $slug = str_replace(' ', '-', strtolower($delegation->registrantName()));
 
-        return $this->csv("roster-{$school}.csv", $rows);
+        return $this->csv("roster-{$slug}.csv", $rows);
     }
 
     /**
@@ -145,7 +146,7 @@ class ReportController extends Controller
             'meet' => $meetId > 0 ? Meet::query()->find($meetId)?->name : 'all meets',
         ]);
 
-        $rows = [['School', 'District', 'Delegations', 'Athletes', 'Personnel', 'Entries']];
+        $rows = [['School', Division::current()->areaLabel(), 'Delegations', 'Athletes', 'Personnel', 'Entries']];
 
         foreach ($this->participationRows($request) as $row) {
             $rows[] = [
@@ -198,8 +199,9 @@ class ReportController extends Controller
     }
 
     /**
-     * Printable medal tally per school and district — validated results
-     * only, readable by all roles.
+     * Printable medal tally — official district/municipality standings plus
+     * a school-level reference table — validated results only, readable by
+     * all roles.
      */
     public function tallyReport(Request $request, MedalTallyService $tally): Response
     {
@@ -236,18 +238,20 @@ class ReportController extends Controller
             'sport' => $sportId > 0 ? Sport::query()->find($sportId)?->name : 'all sports',
         ]);
 
-        $rows = [['Type', 'Position', 'Name', 'District', 'Gold', 'Silver', 'Bronze', 'Total']];
+        $areaLabel = Division::current()->areaLabel();
 
-        foreach ($standings['schools'] as $row) {
+        $rows = [['Type', 'Position', 'Name', $areaLabel, 'Gold', 'Silver', 'Bronze', 'Total']];
+
+        foreach ($standings['districts'] as $row) {
             $rows[] = [
-                'School', $row['position'], $row['school'], $row['district'],
+                $areaLabel, $row['position'], $row['district'], '',
                 $row['gold'], $row['silver'], $row['bronze'], $row['total'],
             ];
         }
 
-        foreach ($standings['districts'] as $row) {
+        foreach ($standings['schools'] as $row) {
             $rows[] = [
-                'District', $row['position'], $row['district'], '',
+                'School', $row['position'], $row['school'], $row['district'],
                 $row['gold'], $row['silver'], $row['bronze'], $row['total'],
             ];
         }
@@ -306,8 +310,8 @@ class ReportController extends Controller
             'event.sport:id,name',
             'encodedBy:id,name',
             'validatedBy:id,name',
-            'placements.entry.athlete:id,first_name,last_name',
-            'placements.entry.delegation.school:id,name',
+            'placements.entry.athlete:id,first_name,last_name,school_id',
+            'placements.entry.athlete.school:id,name',
         ]);
 
         return [
@@ -331,7 +335,7 @@ class ReportController extends Controller
                 ->map(fn (ResultPlacement $placement): array => [
                     'rank' => $placement->rank,
                     'athlete' => $placement->entry->athlete->fullName(),
-                    'school' => $placement->entry->delegation->school->name,
+                    'school' => $placement->entry->athlete->school->name,
                     'mark' => $placement->mark,
                     'is_tie' => $placement->is_tie,
                 ])
@@ -392,6 +396,7 @@ class ReportController extends Controller
     {
         $delegation->load([
             'school:id,name',
+            'district:id,name',
             'meet:id,name,school_year',
             'athletes' => fn ($query) => $query->orderBy('last_name')->orderBy('first_name'),
             'personnel' => fn ($query) => $query->with('sports:id,name')->orderBy('last_name')->orderBy('first_name'),
@@ -400,7 +405,7 @@ class ReportController extends Controller
         return [
             'delegation' => [
                 'id' => $delegation->id,
-                'school' => $delegation->school->name,
+                'registrant' => $delegation->registrantName(),
                 'meet' => $delegation->meet->name,
                 'school_year' => $delegation->meet->school_year,
                 'head_name' => $delegation->head_name,
@@ -454,7 +459,10 @@ class ReportController extends Controller
         $user = $request->user();
 
         $query = $event->entries()
-            ->with(['athlete:id,first_name,last_name,sex,birthdate,grade_level', 'delegation.school:id,name'])
+            ->with([
+                'athlete:id,first_name,last_name,sex,birthdate,grade_level,school_id',
+                'athlete.school:id,name',
+            ])
             ->where('status', '!=', EntryStatus::Withdrawn->value);
 
         if ($user->role === UserRole::DelegationOfficer) {
@@ -472,7 +480,7 @@ class ReportController extends Controller
                 'sex_label' => $entry->athlete->sex->label(),
                 'age' => $entry->athlete->age(),
                 'grade_level' => $entry->athlete->grade_level,
-                'school' => $entry->delegation->school->name,
+                'school' => $entry->athlete->school->name,
                 'status_label' => $entry->status->label(),
             ])
             ->sortBy([['school', 'asc'], ['last_name', 'asc']])
@@ -487,8 +495,11 @@ class ReportController extends Controller
     {
         $meetId = $request->integer('meet_id');
 
-        $byMeet = fn (Builder $query) => $meetId > 0
-            ? $query->where('delegations.meet_id', $meetId)
+        // Athletes, personnel, and entries reach their meet through their
+        // own delegation (not a direct meet_id column), so the filter has
+        // to go through that relation rather than a plain where().
+        $byDelegationMeet = fn (Builder $query) => $meetId > 0
+            ? $query->whereHas('delegation', fn (Builder $delegation) => $delegation->where('meet_id', $meetId))
             : $query;
 
         return School::query()
@@ -497,13 +508,20 @@ class ReportController extends Controller
                 'delegations' => fn (Builder $query) => $meetId > 0
                     ? $query->where('meet_id', $meetId)
                     : $query,
-                'athletes' => $byMeet,
-                'personnel' => $byMeet,
-                'entries' => $byMeet,
+                'athletes' => $byDelegationMeet,
+                'personnel' => $byDelegationMeet,
+                'entries' => $byDelegationMeet,
             ])
             ->orderBy('name')
             ->get()
-            ->filter(fn (School $school): bool => $school->delegations_count > 0)
+            // A school participates either by registering its own
+            // delegation (City) or by having athletes/personnel of its
+            // own under a municipal delegation (Province) — checking
+            // delegations_count alone would silently hide every
+            // Province-deployment school.
+            ->filter(fn (School $school): bool => $school->delegations_count > 0
+                || $school->athletes_count > 0
+                || $school->personnel_count > 0)
             ->map(fn (School $school): array => [
                 'id' => $school->id,
                 'school' => $school->name,

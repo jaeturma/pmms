@@ -14,10 +14,12 @@ use Illuminate\Support\Collection;
 class MedalTallyService
 {
     /**
-     * School and district rows carry gold/silver/bronze/total counts plus a
+     * District rows are the official standings — school rows are grouped
+     * the same way but exist only as a reference for which school each
+     * medal came from. Both carry gold/silver/bronze/total counts plus a
      * 1-based position, in conventional medal order.
      *
-     * @return array{schools: array<int, array<string, mixed>>, districts: array<int, array<string, mixed>>}
+     * @return array{districts: array<int, array<string, mixed>>, schools: array<int, array<string, mixed>>}
      */
     public function standings(?int $meetId = null, ?int $sportId = null): array
     {
@@ -33,13 +35,17 @@ class MedalTallyService
                     fn ($event) => $event->where('sport_id', $sportId),
                 ),
             )
-            ->with('entry.delegation.school.district')
+            ->with('entry.athlete.school.district')
             ->get();
 
+        // Grouped by the placed athlete's own school — not the delegation's
+        // — so a municipal delegation's medals split correctly across the
+        // several schools it pools, and the district/municipality rollup
+        // below (unchanged) sums them back up automatically.
         $schools = $placements
-            ->groupBy(fn (ResultPlacement $placement): int => $placement->entry->delegation->school_id)
+            ->groupBy(fn (ResultPlacement $placement): int => $placement->entry->athlete->school_id)
             ->map(function (Collection $group): array {
-                $school = $group->firstOrFail()->entry->delegation->school;
+                $school = $group->firstOrFail()->entry->athlete->school;
 
                 return [
                     'school' => $school->name,
@@ -59,8 +65,8 @@ class MedalTallyService
             ]);
 
         return [
-            'schools' => $this->ordered($schools, 'school'),
             'districts' => $this->ordered($districts, 'district'),
+            'schools' => $this->ordered($schools, 'school'),
         ];
     }
 
