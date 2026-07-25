@@ -1,9 +1,29 @@
 # Current Phase
 Division Type & Municipality-Based Delegations — COMPLETE 2026-07-25, all 7 WPs
-executed one at a time on owner instruction. Not committed or pushed. Phase 4 —
-Responsive Public Portal is ALSO complete as of 2026-07-25 (see "Phase 4" section
-below) — nothing is currently active; next step is an owner commit decision for
-the uncommitted Division + Phase 4 work, then Phase 5 planning on instruction.
+executed one at a time on owner instruction. Phase 4 — Responsive Public
+Portal is ALSO complete as of 2026-07-25 (see "Phase 4" section below).
+Both committed 2026-07-25 (15 commits, Phase-4-original-numbering +
+Division WP1-7 + refinement + realignment/WP-04-11; see git log), not
+pushed. Nothing is currently active; next step is Phase 5 planning on
+instruction, then owner push decision whenever ready.
+
+**Do not start Phase 5/6/7 from `docs/phases/phase-05-executive-
+management-dashboards/`, `phase-06-reports-uat-deployment-turnover/`, or
+`phase-07-post-deployment-support/` as-is.** Checked 2026-07-25: these are
+unreviewed generic template scaffolding (same origin as the Phase 3/4
+mixups reconciled above and in `.ai/current-phase.md`'s Phase 4 section),
+never written for or checked against this codebase. Confirmed concrete
+errors: Phase 5's dashboards are written for DepEd job-title roles
+("Schools Division Superintendent" etc.) that don't exist in
+`App\Enums\UserRole` (real roles: Admin/Organizer/Delegation Officer/
+Viewer); Phase 5 and 6 both assume "medal tally is delegation-based"/
+"municipality as the official delegation", which collides with the
+Division initiative's actual model (individual attribution is by each
+athlete's/personnel's own school, not the delegation). See each
+directory's own README.md status note for detail. A real Phase 5 plan
+needs to be written for this codebase from scratch, the way Phase 4's
+real 7-WP plan was (git history `a7bde91`) — not adapted from this
+scaffolding.
 Real deployment requirement (not part of the numbered Phase 2-4 plan above):
 the division can be City (schools/districts compete) or Province
 (municipalities compete, pooling multiple schools' athletes under one
