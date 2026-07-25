@@ -1,5 +1,5 @@
-import { Head, router, useForm } from '@inertiajs/react';
-import { Plus, Swords } from 'lucide-react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Plus, Radio, Swords } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -43,6 +43,7 @@ import {
     store,
     update,
 } from '@/routes/matches';
+import { board as scoringBoard } from '@/routes/scoring';
 
 type Participant = {
     entry_id: number;
@@ -528,6 +529,7 @@ export default function Matches({
                                     <TableHead>Schedule</TableHead>
                                     <TableHead>Participants</TableHead>
                                     <TableHead>Status</TableHead>
+                                    <TableHead>Live</TableHead>
                                     {canManage && (
                                         <TableHead className="text-right">
                                             Actions
@@ -591,6 +593,23 @@ export default function Matches({
                                             >
                                                 {match.status_label}
                                             </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                asChild
+                                            >
+                                                <Link
+                                                    href={
+                                                        scoringBoard(match.id)
+                                                            .url
+                                                    }
+                                                >
+                                                    <Radio aria-hidden="true" />
+                                                    Live
+                                                </Link>
+                                            </Button>
                                         </TableCell>
                                         {canManage && (
                                             <TableCell className="text-right">

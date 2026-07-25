@@ -23,6 +23,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ResultController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\SchoolController;
+use App\Http\Controllers\ScoringSessionController;
 use App\Http\Controllers\SportController;
 use App\Http\Controllers\TallyController;
 use App\Http\Controllers\VenueController;
@@ -89,6 +90,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('entries/{entry}', [EntryController::class, 'destroy'])->name('entries.destroy');
 
     Route::get('matches', [MatchController::class, 'index'])->name('matches.index');
+    Route::get('matches/{match}/scoring-session', [ScoringSessionController::class, 'show'])->name('scoring.show');
+    Route::get('matches/{match}/scoreboard', [ScoringSessionController::class, 'board'])->name('scoring.board');
     Route::get('results', [ResultController::class, 'index'])->name('results.index');
     Route::get('tally', [TallyController::class, 'index'])->name('tally.index');
 
@@ -190,6 +193,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('matches/{match}/participants', [MatchController::class, 'syncParticipants'])->name('matches.participants');
         Route::patch('matches/{match}/status', [MatchController::class, 'updateStatus'])->name('matches.status');
         Route::delete('matches/{match}', [MatchController::class, 'destroy'])->name('matches.destroy');
+
+        Route::post('matches/{match}/scoring-sessions', [ScoringSessionController::class, 'store'])->name('scoring.start');
+        Route::patch('scoring-sessions/{session}/score', [ScoringSessionController::class, 'score'])->name('scoring.score');
+        Route::patch('scoring-sessions/{session}/period', [ScoringSessionController::class, 'period'])->name('scoring.period');
+        Route::patch('scoring-sessions/{session}/pause', [ScoringSessionController::class, 'pause'])->name('scoring.pause');
+        Route::patch('scoring-sessions/{session}/resume', [ScoringSessionController::class, 'resume'])->name('scoring.resume');
+        Route::patch('scoring-sessions/{session}/end', [ScoringSessionController::class, 'end'])->name('scoring.end');
 
         Route::patch('protests/{protest}/review', [ProtestController::class, 'review'])->name('protests.review');
         Route::patch('protests/{protest}/decide', [ProtestController::class, 'decide'])->name('protests.decide');
