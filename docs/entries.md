@@ -45,3 +45,8 @@ from server-computed `can_*` flags. Sidebar entry: Entries.
 
 Seeding, draws, heats, lane assignment (Phase 3), team-event roster composition beyond
 athlete lists, scoring, schedules.
+
+**Division initiative:** the list "school" field is sourced from
+`entry.athlete.school` — the entered athlete's own home school, decoupled
+from which delegation (school or municipality) registered them. See
+`docs/delegations.md`.

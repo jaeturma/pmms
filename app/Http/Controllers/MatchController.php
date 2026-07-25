@@ -47,8 +47,8 @@ class MatchController extends Controller
                 'meet:id,name',
                 'event.sport:id,name',
                 'schedule.venue:id,name',
-                'entries.athlete:id,first_name,last_name',
-                'entries.delegation.school:id,name',
+                'entries.athlete:id,first_name,last_name,school_id',
+                'entries.athlete.school:id,name',
             ])
             ->orderBy('event_id')
             ->orderBy('sequence')
@@ -93,7 +93,7 @@ class MatchController extends Controller
                         ->map(fn (Entry $entry): array => [
                             'entry_id' => $entry->id,
                             'name' => $entry->athlete->fullName(),
-                            'school' => $entry->delegation->school->name,
+                            'school' => $entry->athlete->school->name,
                         ])
                         ->sortBy('name')
                         ->values()
@@ -141,13 +141,17 @@ class MatchController extends Controller
                 ->values(),
             'entryOptions' => Entry::query()
                 ->where('status', EntryStatus::Confirmed->value)
-                ->with(['athlete:id,first_name,last_name', 'delegation:id,meet_id,school_id', 'delegation.school:id,name'])
+                ->with([
+                    'athlete:id,first_name,last_name,school_id',
+                    'athlete.school:id,name',
+                    'delegation:id,meet_id',
+                ])
                 ->get()
                 ->map(fn (Entry $entry): array => [
                     'id' => $entry->id,
                     'event_id' => $entry->event_id,
                     'meet_id' => $entry->delegation->meet_id,
-                    'label' => "{$entry->athlete->fullName()} — {$entry->delegation->school->name}",
+                    'label' => "{$entry->athlete->fullName()} — {$entry->athlete->school->name}",
                 ])
                 ->sortBy('label')
                 ->values(),
@@ -214,7 +218,7 @@ class MatchController extends Controller
         $entryIds = $validated['entry_ids'] ?? [];
 
         $entries = Entry::query()
-            ->with(['athlete:id,first_name,last_name', 'delegation:id,meet_id,school_id'])
+            ->with(['athlete:id,first_name,last_name,school_id', 'delegation:id,meet_id'])
             ->whereIn('id', $entryIds)
             ->get();
 
@@ -240,8 +244,14 @@ class MatchController extends Controller
 
         $match->loadMissing('event');
 
+        // Keyed on each entry's own athlete's home school — correct
+        // whether the athletes' delegation registered as a single school
+        // (City) or a municipality pooling several schools (Province):
+        // either way, two entries from the same school are still blocked,
+        // and entries from different schools under the same municipal
+        // delegation are correctly allowed.
         if ($match->event->is_team_event
-            && $entries->pluck('delegation.school_id')->duplicates()->isNotEmpty()) {
+            && $entries->pluck('athlete.school_id')->duplicates()->isNotEmpty()) {
             throw ValidationException::withMessages([
                 'entry_ids' => __('Team events allow one entry per school in a match.'),
             ]);

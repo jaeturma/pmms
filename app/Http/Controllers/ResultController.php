@@ -45,8 +45,8 @@ class ResultController extends Controller
                 'event.sport:id,name',
                 'encodedBy:id,name',
                 'validatedBy:id,name',
-                'placements.entry.athlete:id,first_name,last_name',
-                'placements.entry.delegation.school:id,name',
+                'placements.entry.athlete:id,first_name,last_name,school_id',
+                'placements.entry.athlete.school:id,name',
             ])
             ->orderByDesc('id');
 
@@ -82,7 +82,7 @@ class ResultController extends Controller
                             'entry_id' => $placement->entry_id,
                             'rank' => $placement->rank,
                             'athlete' => $placement->entry->athlete->fullName(),
-                            'school' => $placement->entry->delegation->school->name,
+                            'school' => $placement->entry->athlete->school->name,
                             'mark' => $placement->mark,
                             'is_tie' => $placement->is_tie,
                         ])
@@ -118,13 +118,17 @@ class ResultController extends Controller
             'entryOptions' => $canManage
                 ? Entry::query()
                     ->where('status', EntryStatus::Confirmed->value)
-                    ->with(['athlete:id,first_name,last_name', 'delegation:id,meet_id,school_id', 'delegation.school:id,name'])
+                    ->with([
+                        'athlete:id,first_name,last_name,school_id',
+                        'athlete.school:id,name',
+                        'delegation:id,meet_id',
+                    ])
                     ->get()
                     ->map(fn (Entry $entry): array => [
                         'id' => $entry->id,
                         'event_id' => $entry->event_id,
                         'meet_id' => $entry->delegation->meet_id,
-                        'label' => "{$entry->athlete->fullName()} — {$entry->delegation->school->name}",
+                        'label' => "{$entry->athlete->fullName()} — {$entry->athlete->school->name}",
                     ])
                     ->sortBy('label')
                     ->values()
@@ -425,13 +429,16 @@ class ResultController extends Controller
     private function placementSnapshot(EventResult $result): array
     {
         return $result->placements()
-            ->with(['entry.athlete:id,first_name,last_name', 'entry.delegation.school:id,name'])
+            ->with([
+                'entry.athlete:id,first_name,last_name,school_id',
+                'entry.athlete.school:id,name',
+            ])
             ->orderBy('rank')
             ->get()
             ->map(fn (ResultPlacement $placement): array => [
                 'rank' => $placement->rank,
                 'athlete' => $placement->entry->athlete->fullName(),
-                'school' => $placement->entry->delegation->school->name,
+                'school' => $placement->entry->athlete->school->name,
                 'mark' => $placement->mark,
                 'is_tie' => $placement->is_tie,
             ])

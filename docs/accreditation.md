@@ -47,3 +47,12 @@ school, accreditation number, and accreditation date. Cards print via the shared
 `accreditation.granted|revoked` (decisions) and
 `accreditation.card_viewed|cards_viewed` (sensitive views) via `AuditLogger`, with
 person, type, school, meet, and number in context.
+
+**Division initiative:** the delegation header on the accreditation
+view/card pages uses `Delegation::registrantName()` (School or Municipality,
+whichever applies) — the delegation's own identity. The **per-card**
+`school` field and the audit `school` context are separately sourced from
+`AccreditationController::subjectSchoolName()`, the accredited athlete's or
+personnel member's own `school_id` — so a municipal delegation's batch
+printout correctly shows each card holder's true home school, not the
+municipality. See `docs/delegations.md`.

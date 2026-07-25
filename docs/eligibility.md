@@ -48,3 +48,8 @@ pre-approval deletion, approve/return dialogs with remarks. Sidebar entry: Eligi
 ## Out of scope (per WP)
 
 Automated rules, age adjudication, medical clearance, protest workflows, OCR/AI.
+
+**Division initiative:** the review queue's "school" column and the athlete
+picker's label are sourced from `athlete.school` — the athlete's own home
+school, decoupled from which delegation (school or municipality) registered
+them. See `docs/delegations.md`.

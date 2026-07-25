@@ -4,11 +4,13 @@ use App\Enums\ResultStatus;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
+use App\Models\District;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\EventResult;
 use App\Models\Meet;
 use App\Models\ResultPlacement;
+use App\Models\School;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 
@@ -44,6 +46,34 @@ function resultFixture(int $entryCount = 2): array
 
     return ['meet' => $meet, 'event' => $event, 'entries' => $entries];
 }
+
+test('a placement shows the athlete\'s own school, not the municipal delegation\'s', function () {
+    $meet = Meet::factory()->active()->create();
+    $event = Event::factory()->create();
+    $meet->events()->attach($event);
+
+    $district = District::factory()->create();
+    $delegation = Delegation::factory()->approved()->create([
+        'meet_id' => $meet->id,
+        'school_id' => null,
+        'district_id' => $district->id,
+    ]);
+    $school = School::factory()->create(['district_id' => $district->id, 'name' => 'Nabunturan National High School']);
+    $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id, 'school_id' => $school->id]);
+    $entry = Entry::factory()->confirmed()->create([
+        'athlete_id' => $athlete->id,
+        'delegation_id' => $delegation->id,
+        'event_id' => $event->id,
+    ]);
+
+    $result = EventResult::factory()->create(['meet_id' => $meet->id, 'event_id' => $event->id]);
+    ResultPlacement::factory()->create(['event_result_id' => $result->id, 'entry_id' => $entry->id, 'rank' => 1]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get('/results')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('results.data.0.placements.0.school', 'Nabunturan National High School'));
+});
 
 test('guests are redirected from results', function () {
     $this->get('/results')->assertRedirect('/login');

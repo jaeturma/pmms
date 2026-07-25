@@ -44,10 +44,10 @@ class EntryController extends Controller
 
         $query = Entry::query()
             ->with([
-                'athlete:id,first_name,last_name,sex,birthdate,grade_level',
+                'athlete:id,first_name,last_name,sex,birthdate,grade_level,school_id',
+                'athlete.school:id,name',
                 'athlete.eligibilityReview:id,athlete_id,status',
                 'event.sport:id,name',
-                'delegation.school:id,name',
                 'delegation.meet:id,name',
             ])
             ->orderByDesc('id');
@@ -69,7 +69,7 @@ class EntryController extends Controller
 
         $this->applySearch($query, $search, ['athlete.first_name', 'athlete.last_name']);
 
-        $delegationScope = Delegation::query()->with(['school:id,name', 'meet:id,name']);
+        $delegationScope = Delegation::query()->with(['school:id,name', 'district:id,name', 'meet:id,name']);
 
         if ($user->role === UserRole::DelegationOfficer) {
             $delegationScope->whereHas(
@@ -81,7 +81,7 @@ class EntryController extends Controller
         $delegations = $delegationScope->get();
 
         $athleteScope = Athlete::query()
-            ->with(['delegation.school:id,name', 'delegation.meet:id,name'])
+            ->with(['school:id,name', 'delegation.meet:id,name'])
             ->whereIn(
                 'delegation_id',
                 $delegations
@@ -102,7 +102,7 @@ class EntryController extends Controller
                         $entry->event->gender->label(),
                         $entry->event->age_division->label(),
                     ),
-                    'school' => $entry->delegation->school->name,
+                    'school' => $entry->athlete->school->name,
                     'meet' => $entry->delegation->meet->name,
                     'status' => $entry->status->value,
                     'status_label' => $entry->status->label(),
@@ -138,7 +138,7 @@ class EntryController extends Controller
             'delegationFilterOptions' => $delegations
                 ->map(fn (Delegation $delegation): array => [
                     'id' => $delegation->id,
-                    'label' => "{$delegation->school->name} — {$delegation->meet->name}",
+                    'label' => "{$delegation->registrantName()} — {$delegation->meet->name}",
                 ])
                 ->sortBy('label')
                 ->values(),
@@ -146,7 +146,7 @@ class EntryController extends Controller
                 ->map(fn (Athlete $athlete): array => [
                     'id' => $athlete->id,
                     'meet_id' => $athlete->delegation->meet->id,
-                    'label' => "{$athlete->fullName()} — {$athlete->delegation->school->name}",
+                    'label' => "{$athlete->fullName()} — {$athlete->school->name}",
                 ])
                 ->values(),
             'eventOptionsByMeet' => Event::query()
@@ -233,7 +233,7 @@ class EntryController extends Controller
         $this->audit->record('entry.submitted', $entry, [
             'athlete' => $athlete->fullName(),
             'event' => $event->name,
-            'school' => $delegation->school->name,
+            'registrant' => $delegation->registrantName(),
         ]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Entry submitted.')]);

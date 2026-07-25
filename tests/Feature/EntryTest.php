@@ -5,9 +5,11 @@ use App\Enums\MeetStatus;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
+use App\Models\District;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\Meet;
+use App\Models\School;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 
@@ -305,6 +307,32 @@ test('the entry list can be filtered by event and delegation', function () {
         ->get("/entries?delegation_id={$other->delegation_id}")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('entries.data', 1));
+});
+
+test('the entry list shows each athlete\'s own school, not the municipal delegation\'s', function () {
+    $meet = Meet::factory()->registrationOpen()->create();
+    $district = District::factory()->create();
+    $delegation = Delegation::factory()->approved()->create([
+        'meet_id' => $meet->id,
+        'school_id' => null,
+        'district_id' => $district->id,
+    ]);
+    $school = School::factory()->create(['district_id' => $district->id, 'name' => 'Maco Central School']);
+    $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id, 'school_id' => $school->id]);
+    $event = Event::factory()->create();
+    $meet->events()->attach($event);
+
+    $entry = Entry::factory()->create([
+        'athlete_id' => $athlete->id,
+        'event_id' => $event->id,
+        'delegation_id' => $delegation->id,
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get('/entries')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('entries.data.0.id', $entry->id)
+            ->where('entries.data.0.school', 'Maco Central School'));
 });
 
 test('the entry list can be searched by athlete name', function () {

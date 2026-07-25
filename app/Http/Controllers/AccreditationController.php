@@ -32,6 +32,7 @@ class AccreditationController extends Controller
 
         $delegation->load([
             'school:id,name',
+            'district:id,name',
             'meet:id,name,school_year',
             'athletes' => fn ($query) => $query
                 ->with(['eligibilityReview:id,athlete_id,status', 'accreditation'])
@@ -46,7 +47,7 @@ class AccreditationController extends Controller
         return Inertia::render('accreditation/index', [
             'delegation' => [
                 'id' => $delegation->id,
-                'school' => $delegation->school->name,
+                'registrant' => $delegation->registrantName(),
                 'meet' => $delegation->meet->name,
                 'school_year' => $delegation->meet->school_year,
                 'status_label' => $delegation->status->label(),
@@ -181,12 +182,16 @@ class AccreditationController extends Controller
 
         $this->audit->record('accreditation.card_viewed', $accreditation, $this->context($accreditation));
 
-        $accreditation->load(['delegation.school:id,name', 'delegation.meet:id,name,school_year']);
+        $accreditation->load([
+            'delegation.school:id,name',
+            'delegation.district:id,name',
+            'delegation.meet:id,name,school_year',
+        ]);
 
         return Inertia::render('accreditation/cards', [
             'delegation' => [
                 'id' => $accreditation->delegation->id,
-                'school' => $accreditation->delegation->school->name,
+                'registrant' => $accreditation->delegation->registrantName(),
                 'meet' => $accreditation->delegation->meet->name,
                 'school_year' => $accreditation->delegation->meet->school_year,
             ],
@@ -202,7 +207,7 @@ class AccreditationController extends Controller
     {
         Gate::authorize('viewRoster', $delegation);
 
-        $delegation->load(['school:id,name', 'meet:id,name,school_year']);
+        $delegation->load(['school:id,name', 'district:id,name', 'meet:id,name,school_year']);
 
         $accreditations = Accreditation::query()
             ->where('delegation_id', $delegation->id)
@@ -212,7 +217,7 @@ class AccreditationController extends Controller
             ->values();
 
         $this->audit->record('accreditation.cards_viewed', $delegation, [
-            'school' => $delegation->school->name,
+            'registrant' => $delegation->registrantName(),
             'meet' => $delegation->meet->name,
             'cards' => $accreditations->count(),
         ]);
@@ -220,7 +225,7 @@ class AccreditationController extends Controller
         return Inertia::render('accreditation/cards', [
             'delegation' => [
                 'id' => $delegation->id,
-                'school' => $delegation->school->name,
+                'registrant' => $delegation->registrantName(),
                 'meet' => $delegation->meet->name,
                 'school_year' => $delegation->meet->school_year,
             ],
@@ -245,7 +250,7 @@ class AccreditationController extends Controller
      */
     private function cardData(Accreditation $accreditation): array
     {
-        $accreditation->loadMissing(['athlete', 'personnel', 'delegation.school:id,name']);
+        $accreditation->loadMissing(['athlete.school:id,name', 'personnel.school:id,name']);
 
         $athlete = $accreditation->athlete;
         $person = $accreditation->personnel;
@@ -258,7 +263,7 @@ class AccreditationController extends Controller
             'detail' => $athlete !== null
                 ? "Grade {$athlete->grade_level} — {$athlete->ageDivision()->label()}"
                 : null,
-            'school' => $accreditation->delegation->school->name,
+            'school' => $this->subjectSchoolName($accreditation),
             'photo_url' => match (true) {
                 $athlete !== null && $athlete->photo_upload_id !== null => route('athletes.photo', $athlete),
                 $person !== null && $person->photo_upload_id !== null => route('personnel.photo', $person),
@@ -273,14 +278,35 @@ class AccreditationController extends Controller
      */
     private function context(Accreditation $accreditation): array
     {
-        $accreditation->loadMissing(['athlete', 'personnel', 'delegation.school:id,name', 'delegation.meet:id,name']);
+        $accreditation->loadMissing([
+            'athlete.school:id,name', 'personnel.school:id,name', 'delegation.meet:id,name',
+        ]);
 
         return [
             'person' => $accreditation->subjectName(),
             'type' => $accreditation->athlete_id !== null ? 'athlete' : 'personnel',
-            'school' => $accreditation->delegation->school->name,
+            'school' => $this->subjectSchoolName($accreditation),
             'meet' => $accreditation->delegation->meet->name,
             'number' => $accreditation->number,
         ];
+    }
+
+    /**
+     * The accredited athlete's or personnel member's own home school —
+     * never the delegation's (a municipal delegation pools several
+     * schools, so it can't answer "which school is this specific card
+     * for").
+     */
+    private function subjectSchoolName(Accreditation $accreditation): string
+    {
+        if ($accreditation->athlete !== null) {
+            return $accreditation->athlete->school->name;
+        }
+
+        if ($accreditation->personnel !== null) {
+            return $accreditation->personnel->school->name;
+        }
+
+        return '';
     }
 }

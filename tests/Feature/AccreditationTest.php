@@ -4,8 +4,10 @@ use App\Models\Accreditation;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
+use App\Models\District;
 use App\Models\EligibilityReview;
 use App\Models\Personnel;
+use App\Models\School;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 
@@ -194,6 +196,23 @@ test('managers can revoke and later re-accredit with a new number', function () 
     $renewed = Accreditation::query()->where('athlete_id', $athleteId)->firstOrFail();
 
     expect($renewed->number)->not->toBe($oldNumber);
+});
+
+test('a card shows the accredited person\'s own school, not the municipal delegation\'s', function () {
+    $district = District::factory()->create();
+    $delegation = Delegation::factory()->approved()->create(['school_id' => null, 'district_id' => $district->id]);
+    $school = School::factory()->create(['district_id' => $district->id, 'name' => 'Pantukan Central School']);
+    $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id, 'school_id' => $school->id]);
+    EligibilityReview::factory()->approved()->create(['athlete_id' => $athlete->id, 'meet_id' => $delegation->meet_id]);
+    $accreditation = Accreditation::factory()->create([
+        'delegation_id' => $delegation->id,
+        'athlete_id' => $athlete->id,
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get("/accreditations/{$accreditation->id}/card")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('cards.0.school', 'Pantukan Central School'));
 });
 
 test('card views are scoped like rosters and audited', function () {

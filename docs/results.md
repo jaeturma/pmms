@@ -52,3 +52,10 @@ dialog requiring the reason, and delete for encoded results.
 `result.encoded|validated|corrected|deleted` via `AuditLogger`, with meet and
 event context; encode carries the placement snapshot, corrections carry the
 reason plus `superseded_placements`.
+
+**Division initiative:** placement "school" fields (list, snapshot, public
+results) are sourced from `placement.entry.athlete.school` — the placed
+athlete's own home school, not the delegation's. The medal tally derived
+from these results is the one remaining exception — it still excludes
+municipal-delegation placements entirely until WP5. See
+`docs/delegations.md` and `docs/medal-tally.md`.

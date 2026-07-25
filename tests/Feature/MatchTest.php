@@ -4,11 +4,13 @@ use App\Enums\MatchStatus;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
+use App\Models\District;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\EventMatch;
 use App\Models\EventSchedule;
 use App\Models\Meet;
+use App\Models\School;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 
@@ -164,6 +166,68 @@ test('team events allow only one entry per school in a match', function () {
     $delegation = Delegation::factory()->approved()->create(['meet_id' => $match->meet_id]);
     $entries = Athlete::factory()->count(2)
         ->create(['delegation_id' => $delegation->id])
+        ->map(fn (Athlete $athlete) => Entry::factory()->confirmed()->create([
+            'athlete_id' => $athlete->id,
+            'delegation_id' => $delegation->id,
+            'event_id' => $event->id,
+        ]));
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put("/matches/{$match->id}/participants", [
+            'entry_ids' => $entries->pluck('id')->all(),
+        ])
+        ->assertSessionHasErrors('entry_ids');
+
+    expect($match->entries()->count())->toBe(0);
+});
+
+test('team events allow entries from different schools under the same municipal delegation', function () {
+    $event = Event::factory()->create(['is_team_event' => true]);
+    $match = EventMatch::factory()->create(['event_id' => $event->id]);
+
+    $district = District::factory()->create();
+    $delegation = Delegation::factory()->approved()->create([
+        'meet_id' => $match->meet_id,
+        'school_id' => null,
+        'district_id' => $district->id,
+    ]);
+    $schoolA = School::factory()->create(['district_id' => $district->id]);
+    $schoolB = School::factory()->create(['district_id' => $district->id]);
+
+    $entryA = Entry::factory()->confirmed()->create([
+        'athlete_id' => Athlete::factory()->create(['delegation_id' => $delegation->id, 'school_id' => $schoolA->id])->id,
+        'delegation_id' => $delegation->id,
+        'event_id' => $event->id,
+    ]);
+    $entryB = Entry::factory()->confirmed()->create([
+        'athlete_id' => Athlete::factory()->create(['delegation_id' => $delegation->id, 'school_id' => $schoolB->id])->id,
+        'delegation_id' => $delegation->id,
+        'event_id' => $event->id,
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put("/matches/{$match->id}/participants", [
+            'entry_ids' => [$entryA->id, $entryB->id],
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect($match->entries()->count())->toBe(2);
+});
+
+test('team events still block two entries from the same school even under a municipal delegation', function () {
+    $event = Event::factory()->create(['is_team_event' => true]);
+    $match = EventMatch::factory()->create(['event_id' => $event->id]);
+
+    $district = District::factory()->create();
+    $delegation = Delegation::factory()->approved()->create([
+        'meet_id' => $match->meet_id,
+        'school_id' => null,
+        'district_id' => $district->id,
+    ]);
+    $school = School::factory()->create(['district_id' => $district->id]);
+
+    $entries = Athlete::factory()->count(2)
+        ->create(['delegation_id' => $delegation->id, 'school_id' => $school->id])
         ->map(fn (Athlete $athlete) => Entry::factory()->confirmed()->create([
             'athlete_id' => $athlete->id,
             'delegation_id' => $delegation->id,

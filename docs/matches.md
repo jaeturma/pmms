@@ -30,6 +30,13 @@ matches become the anchor for results in WP-03-05. All transitions are audited
 - Replaced via `PUT /matches/{match}/participants` (sync semantics), audited
   `match.participants_updated`.
 
+**Division initiative:** the "one entry per school" team-event rule is keyed
+on each entry's own `athlete.school_id`, not the delegation's — so it
+correctly allows several different schools' entries from the same municipal
+(Province) delegation on one team roster, while still blocking two entries
+from the *same* school regardless of division type. See
+`docs/delegations.md`.
+
 ## Authorization
 
 Mirrors entry visibility: managers see and manage everything

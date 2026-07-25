@@ -44,7 +44,7 @@ class EligibilityController extends Controller
 
         $query = EligibilityReview::query()
             ->with([
-                'athlete.delegation.school:id,name',
+                'athlete.school:id,name',
                 'athlete.delegation.meet:id,name',
                 'athlete.eligibilityDocuments.fileUpload:id,original_name',
                 'reviewer:id,name',
@@ -63,7 +63,7 @@ class EligibilityController extends Controller
             $query->where('status', $status);
         }
 
-        $delegationScope = Delegation::query()->with(['school:id,name', 'meet:id,name']);
+        $delegationScope = Delegation::query()->with(['school:id,name', 'district:id,name', 'meet:id,name']);
 
         if ($user->role === UserRole::DelegationOfficer) {
             $delegationScope->whereHas(
@@ -80,7 +80,7 @@ class EligibilityController extends Controller
                 ->through(fn (EligibilityReview $review): array => [
                     'id' => $review->id,
                     'athlete' => $review->athlete->fullName(),
-                    'school' => $review->athlete->delegation->school->name,
+                    'school' => $review->athlete->school->name,
                     'meet' => $review->athlete->delegation->meet->name,
                     'status' => $review->status->value,
                     'status_label' => $review->status->label(),
@@ -104,13 +104,13 @@ class EligibilityController extends Controller
                 'status' => EligibilityStatus::tryFrom($status)?->value,
             ],
             'athleteOptions' => Athlete::query()
-                ->with(['delegation.school:id,name'])
+                ->with('school:id,name')
                 ->whereIn('delegation_id', $uploadableDelegations->pluck('id'))
                 ->orderBy('last_name')
                 ->get()
                 ->map(fn (Athlete $athlete): array => [
                     'id' => $athlete->id,
-                    'label' => "{$athlete->fullName()} — {$athlete->delegation->school->name}",
+                    'label' => "{$athlete->fullName()} — {$athlete->school->name}",
                 ])
                 ->values(),
             'documentTypeOptions' => array_map(
