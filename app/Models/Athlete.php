@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
 /**
  * @property int $id
  * @property int $delegation_id
+ * @property int $school_id
  * @property string $first_name
  * @property string $last_name
  * @property Sex $sex
@@ -26,7 +27,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['delegation_id', 'first_name', 'last_name', 'sex', 'birthdate', 'lrn', 'grade_level'])]
+#[Fillable(['delegation_id', 'school_id', 'first_name', 'last_name', 'sex', 'birthdate', 'lrn', 'grade_level'])]
 class Athlete extends Model
 {
     /** @use HasFactory<AthleteFactory> */
@@ -52,6 +53,19 @@ class Athlete extends Model
     public function delegation(): BelongsTo
     {
         return $this->belongsTo(Delegation::class);
+    }
+
+    /**
+     * The athlete's own home school — set once at registration, decoupled
+     * from the delegation's registering unit (a municipal delegation pools
+     * several schools). Never infer "school" from the delegation for an
+     * individual; use this instead.
+     *
+     * @return BelongsTo<School, $this>
+     */
+    public function school(): BelongsTo
+    {
+        return $this->belongsTo(School::class);
     }
 
     /**

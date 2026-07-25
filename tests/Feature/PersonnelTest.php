@@ -23,6 +23,7 @@ function validPersonnelPayload(Delegation $delegation): array
 {
     return [
         'delegation_id' => $delegation->id,
+        'school_id' => schoolForDelegation($delegation)->id,
         'first_name' => 'Pedro',
         'last_name' => 'Santos',
         'role' => 'coach',

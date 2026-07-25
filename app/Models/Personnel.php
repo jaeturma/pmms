@@ -15,6 +15,7 @@ use Illuminate\Support\Carbon;
 /**
  * @property int $id
  * @property int $delegation_id
+ * @property int $school_id
  * @property string $first_name
  * @property string $last_name
  * @property PersonnelRole $role
@@ -24,7 +25,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['delegation_id', 'first_name', 'last_name', 'role', 'phone', 'email'])]
+#[Fillable(['delegation_id', 'school_id', 'first_name', 'last_name', 'role', 'phone', 'email'])]
 class Personnel extends Model
 {
     /** @use HasFactory<PersonnelFactory> */
@@ -53,6 +54,17 @@ class Personnel extends Model
     public function delegation(): BelongsTo
     {
         return $this->belongsTo(Delegation::class);
+    }
+
+    /**
+     * The person's own home school — see Athlete::school() for why this is
+     * decoupled from the delegation's registering unit.
+     *
+     * @return BelongsTo<School, $this>
+     */
+    public function school(): BelongsTo
+    {
+        return $this->belongsTo(School::class);
     }
 
     /**

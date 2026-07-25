@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\UserRole;
+use App\Http\Controllers\Concerns\BuildsSchoolOptionsByDelegation;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\AthleteRequest;
 use App\Models\Athlete;
@@ -21,6 +22,7 @@ use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class AthleteController extends Controller
 {
+    use BuildsSchoolOptionsByDelegation;
     use SearchesAndPaginates;
 
     public function __construct(
@@ -42,7 +44,7 @@ class AthleteController extends Controller
         $search = $this->searchTerm($request);
 
         $query = Athlete::query()
-            ->with(['delegation.school:id,name', 'delegation.meet:id,name'])
+            ->with(['school:id,name', 'delegation.meet:id,name'])
             ->orderBy('last_name')
             ->orderBy('first_name');
 
@@ -56,7 +58,7 @@ class AthleteController extends Controller
         $this->applySearch($query, $search, ['first_name', 'last_name', 'lrn']);
 
         $delegations = Delegation::query()
-            ->with(['school:id,name', 'meet:id,name']);
+            ->with(['school:id,name', 'district:id,name', 'meet:id,name']);
 
         if ($user->role === UserRole::DelegationOfficer) {
             $delegations->whereHas(
@@ -73,7 +75,7 @@ class AthleteController extends Controller
                     'sex_label' => $athlete->sex->label(),
                     'age' => $athlete->age(),
                     'grade_level' => $athlete->grade_level,
-                    'school' => $athlete->delegation->school->name,
+                    'school' => $athlete->school->name,
                     'meet' => $athlete->delegation->meet->name,
                     'can_update' => $user->can('update', $athlete),
                     'can_delete' => $user->can('delete', $athlete),
@@ -83,9 +85,10 @@ class AthleteController extends Controller
                 ->filter(fn (Delegation $delegation): bool => $user->can('create', [Athlete::class, $delegation]))
                 ->map(fn (Delegation $delegation): array => [
                     'id' => $delegation->id,
-                    'label' => "{$delegation->school->name} — {$delegation->meet->name}",
+                    'label' => "{$delegation->registrantName()} — {$delegation->meet->name}",
                 ])
                 ->values(),
+            'schoolOptionsByDelegation' => $this->schoolOptionsByDelegation($delegations->get()),
         ]);
     }
 
@@ -109,7 +112,7 @@ class AthleteController extends Controller
                 'age' => $athlete->age(),
                 'lrn' => $athlete->lrn,
                 'grade_level' => $athlete->grade_level,
-                'school' => $athlete->delegation->school->name,
+                'school' => $athlete->school->name,
                 'meet' => $athlete->delegation->meet->name,
                 'photo_url' => $athlete->photo_upload_id === null
                     ? null
@@ -157,7 +160,8 @@ class AthleteController extends Controller
 
         $this->audit->record('athlete.created', $athlete, [
             'name' => $athlete->fullName(),
-            'school' => $delegation->school->name,
+            'school' => $athlete->school->name,
+            'registrant' => $delegation->registrantName(),
         ]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Athlete registered.')]);

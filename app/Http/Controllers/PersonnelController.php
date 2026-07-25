@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\UserRole;
+use App\Http\Controllers\Concerns\BuildsSchoolOptionsByDelegation;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\PersonnelRequest;
 use App\Models\Delegation;
@@ -23,6 +24,7 @@ use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class PersonnelController extends Controller
 {
+    use BuildsSchoolOptionsByDelegation;
     use SearchesAndPaginates;
 
     public function __construct(
@@ -43,7 +45,7 @@ class PersonnelController extends Controller
         $search = $this->searchTerm($request);
 
         $query = Personnel::query()
-            ->with(['delegation.school:id,name', 'delegation.meet:id,name', 'sports:id,name'])
+            ->with(['school:id,name', 'delegation.meet:id,name', 'sports:id,name'])
             ->orderBy('last_name')
             ->orderBy('first_name');
 
@@ -56,7 +58,7 @@ class PersonnelController extends Controller
 
         $this->applySearch($query, $search, ['first_name', 'last_name']);
 
-        $delegations = Delegation::query()->with(['school:id,name', 'meet:id,name']);
+        $delegations = Delegation::query()->with(['school:id,name', 'district:id,name', 'meet:id,name']);
 
         if ($user->role === UserRole::DelegationOfficer) {
             $delegations->whereHas(
@@ -79,7 +81,7 @@ class PersonnelController extends Controller
                     'email' => $person->email,
                     'sports' => $person->sports->pluck('name')->all(),
                     'sport_ids' => $person->sports->pluck('id')->all(),
-                    'school' => $person->delegation->school->name,
+                    'school' => $person->school->name,
                     'meet' => $person->delegation->meet->name,
                     'photo_url' => $person->photo_upload_id === null
                         ? null
@@ -92,13 +94,14 @@ class PersonnelController extends Controller
                 ->filter(fn (Delegation $delegation): bool => $user->can('create', [Personnel::class, $delegation]))
                 ->map(fn (Delegation $delegation): array => [
                     'id' => $delegation->id,
-                    'label' => "{$delegation->school->name} — {$delegation->meet->name}",
+                    'label' => "{$delegation->registrantName()} — {$delegation->meet->name}",
                 ])
                 ->values(),
             'sportOptions' => Sport::query()
                 ->where('active', true)
                 ->orderBy('name')
                 ->get(['id', 'name']),
+            'schoolOptionsByDelegation' => $this->schoolOptionsByDelegation($delegations->get()),
         ]);
     }
 
@@ -140,7 +143,8 @@ class PersonnelController extends Controller
         $this->audit->record('personnel.created', $person, [
             'name' => $person->fullName(),
             'role' => $person->role->value,
-            'school' => $delegation->school->name,
+            'school' => $person->school->name,
+            'registrant' => $delegation->registrantName(),
         ]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Personnel registered.')]);

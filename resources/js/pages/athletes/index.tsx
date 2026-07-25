@@ -53,23 +53,32 @@ type DelegationOption = {
     label: string;
 };
 
+type SchoolOption = {
+    id: number;
+    name: string;
+};
+
 type Props = {
     athletes: Paginated<AthleteRow>;
     filters: { search: string };
     delegationOptions: DelegationOption[];
+    schoolOptionsByDelegation: Record<number, SchoolOption[]>;
 };
 
 function AthleteFormDialog({
     delegationOptions,
+    schoolOptionsByDelegation,
     open,
     onOpenChange,
 }: {
     delegationOptions: DelegationOption[];
+    schoolOptionsByDelegation: Record<number, SchoolOption[]>;
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
     const { data, setData, post, processing, errors, reset } = useForm<{
         delegation_id: string;
+        school_id: string;
         first_name: string;
         last_name: string;
         sex: string;
@@ -79,6 +88,7 @@ function AthleteFormDialog({
         photo: File | null;
     }>({
         delegation_id: '',
+        school_id: '',
         first_name: '',
         last_name: '',
         sex: '',
@@ -87,6 +97,19 @@ function AthleteFormDialog({
         grade_level: '',
         photo: null,
     });
+
+    const schoolOptions = data.delegation_id
+        ? (schoolOptionsByDelegation[Number(data.delegation_id)] ?? [])
+        : [];
+
+    const selectDelegation = (value: string) => {
+        const options = schoolOptionsByDelegation[Number(value)] ?? [];
+        setData((current) => ({
+            ...current,
+            delegation_id: value,
+            school_id: options.length === 1 ? String(options[0].id) : '',
+        }));
+    };
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -118,9 +141,7 @@ function AthleteFormDialog({
                             </Label>
                             <Select
                                 value={data.delegation_id}
-                                onValueChange={(value) =>
-                                    setData('delegation_id', value)
-                                }
+                                onValueChange={selectDelegation}
                             >
                                 <SelectTrigger id="athlete-delegation">
                                     <SelectValue placeholder="Select a delegation" />
@@ -138,6 +159,34 @@ function AthleteFormDialog({
                             </Select>
                             <InputError message={errors.delegation_id} />
                         </div>
+                        {data.delegation_id && (
+                            <div className="space-y-2">
+                                <Label htmlFor="athlete-school">
+                                    Home school
+                                </Label>
+                                <Select
+                                    value={data.school_id}
+                                    onValueChange={(value) =>
+                                        setData('school_id', value)
+                                    }
+                                >
+                                    <SelectTrigger id="athlete-school">
+                                        <SelectValue placeholder="Select a school" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {schoolOptions.map((school) => (
+                                            <SelectItem
+                                                key={school.id}
+                                                value={String(school.id)}
+                                            >
+                                                {school.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <InputError message={errors.school_id} />
+                            </div>
+                        )}
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="athlete-first">
@@ -279,6 +328,7 @@ export default function Athletes({
     athletes,
     filters,
     delegationOptions,
+    schoolOptionsByDelegation,
 }: Props) {
     const [createOpen, setCreateOpen] = useState(false);
 
@@ -415,6 +465,7 @@ export default function Athletes({
 
             <AthleteFormDialog
                 delegationOptions={delegationOptions}
+                schoolOptionsByDelegation={schoolOptionsByDelegation}
                 open={createOpen}
                 onOpenChange={setCreateOpen}
             />

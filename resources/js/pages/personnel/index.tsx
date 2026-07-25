@@ -63,11 +63,17 @@ type PersonnelRow = {
     can_delete: boolean;
 };
 
+type SchoolOption = {
+    id: number;
+    name: string;
+};
+
 type Props = {
     personnel: Paginated<PersonnelRow>;
     filters: { search: string };
     delegationOptions: Array<{ id: number; label: string }>;
     sportOptions: Array<{ id: number; name: string }>;
+    schoolOptionsByDelegation: Record<number, SchoolOption[]>;
 };
 
 const roleOptions: Array<{ value: string; label: string }> = [
@@ -79,17 +85,20 @@ const roleOptions: Array<{ value: string; label: string }> = [
 function PersonnelFormDialog({
     person,
     delegationOptions,
+    schoolOptionsByDelegation,
     open,
     onOpenChange,
 }: {
     person: PersonnelRow | null;
     delegationOptions: Array<{ id: number; label: string }>;
+    schoolOptionsByDelegation: Record<number, SchoolOption[]>;
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
     const { data, setData, post, processing, errors, reset } = useForm<{
         _method?: string;
         delegation_id: string;
+        school_id: string;
         first_name: string;
         last_name: string;
         role: string;
@@ -99,6 +108,7 @@ function PersonnelFormDialog({
     }>({
         ...(person ? { _method: 'put' } : {}),
         delegation_id: '',
+        school_id: '',
         first_name: person?.first_name ?? '',
         last_name: person?.last_name ?? '',
         role: person?.role ?? '',
@@ -106,6 +116,19 @@ function PersonnelFormDialog({
         email: person?.email ?? '',
         photo: null,
     });
+
+    const schoolOptions = data.delegation_id
+        ? (schoolOptionsByDelegation[Number(data.delegation_id)] ?? [])
+        : [];
+
+    const selectDelegation = (value: string) => {
+        const options = schoolOptionsByDelegation[Number(value)] ?? [];
+        setData((current) => ({
+            ...current,
+            delegation_id: value,
+            school_id: options.length === 1 ? String(options[0].id) : '',
+        }));
+    };
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -147,9 +170,7 @@ function PersonnelFormDialog({
                                 </Label>
                                 <Select
                                     value={data.delegation_id}
-                                    onValueChange={(value) =>
-                                        setData('delegation_id', value)
-                                    }
+                                    onValueChange={selectDelegation}
                                 >
                                     <SelectTrigger id="personnel-delegation">
                                         <SelectValue placeholder="Select a delegation" />
@@ -166,6 +187,34 @@ function PersonnelFormDialog({
                                     </SelectContent>
                                 </Select>
                                 <InputError message={errors.delegation_id} />
+                            </div>
+                        )}
+                        {!person && data.delegation_id && (
+                            <div className="space-y-2">
+                                <Label htmlFor="personnel-school">
+                                    Home school
+                                </Label>
+                                <Select
+                                    value={data.school_id}
+                                    onValueChange={(value) =>
+                                        setData('school_id', value)
+                                    }
+                                >
+                                    <SelectTrigger id="personnel-school">
+                                        <SelectValue placeholder="Select a school" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {schoolOptions.map((school) => (
+                                            <SelectItem
+                                                key={school.id}
+                                                value={String(school.id)}
+                                            >
+                                                {school.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <InputError message={errors.school_id} />
                             </div>
                         )}
                         <div className="grid grid-cols-2 gap-4">
@@ -352,6 +401,7 @@ export default function PersonnelPage({
     filters,
     delegationOptions,
     sportOptions,
+    schoolOptionsByDelegation,
 }: Props) {
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<PersonnelRow | null>(null);
@@ -517,6 +567,7 @@ export default function PersonnelPage({
                 key={editing?.id ?? 'create'}
                 person={editing}
                 delegationOptions={delegationOptions}
+                schoolOptionsByDelegation={schoolOptionsByDelegation}
                 open={formOpen}
                 onOpenChange={setFormOpen}
             />

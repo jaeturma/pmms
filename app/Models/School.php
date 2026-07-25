@@ -63,26 +63,30 @@ class School extends Model
     }
 
     /**
-     * @return HasManyThrough<Athlete, Delegation, $this>
+     * The school's own athletes — by their own home `school_id`, not by
+     * which delegation registered them (a municipal delegation pools
+     * several schools, so this is no longer reachable via Delegation).
+     *
+     * @return HasMany<Athlete, $this>
      */
-    public function athletes(): HasManyThrough
+    public function athletes(): HasMany
     {
-        return $this->hasManyThrough(Athlete::class, Delegation::class);
+        return $this->hasMany(Athlete::class);
     }
 
     /**
-     * @return HasManyThrough<Personnel, Delegation, $this>
+     * @return HasMany<Personnel, $this>
      */
-    public function personnel(): HasManyThrough
+    public function personnel(): HasMany
     {
-        return $this->hasManyThrough(Personnel::class, Delegation::class);
+        return $this->hasMany(Personnel::class);
     }
 
     /**
-     * @return HasManyThrough<Entry, Delegation, $this>
+     * @return HasManyThrough<Entry, Athlete, $this>
      */
     public function entries(): HasManyThrough
     {
-        return $this->hasManyThrough(Entry::class, Delegation::class);
+        return $this->hasManyThrough(Entry::class, Athlete::class);
     }
 }

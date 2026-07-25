@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Delegation;
+use App\Models\School;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -44,7 +46,17 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+/**
+ * A school valid for this delegation: its own school (City), or any
+ * school in its municipality (Province). Used by AthleteTest/PersonnelTest
+ * (and later WP4 fixtures) wherever a valid `school_id` payload value is
+ * needed for a given delegation.
+ */
+function schoolForDelegation(Delegation $delegation): School
 {
-    // ..
+    if ($delegation->school_id !== null) {
+        return $delegation->school;
+    }
+
+    return School::factory()->create(['district_id' => $delegation->district_id]);
 }
