@@ -1,4 +1,4 @@
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { School } from 'lucide-react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
@@ -45,6 +45,9 @@ export default function SchoolParticipation({
     meetOptions,
     generatedAt,
 }: Props) {
+    const { division } = usePage().props;
+    const areaLabel = division.areaLabel;
+
     const meetParams = filters.meet_id
         ? { meet_id: String(filters.meet_id) }
         : {};
@@ -122,7 +125,7 @@ export default function SchoolParticipation({
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>School</TableHead>
-                                    <TableHead>District</TableHead>
+                                    <TableHead>{areaLabel}</TableHead>
                                     <TableHead>Delegations</TableHead>
                                     <TableHead>Athletes</TableHead>
                                     <TableHead>Personnel</TableHead>

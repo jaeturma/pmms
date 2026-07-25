@@ -164,6 +164,58 @@ test('district standings aggregate their schools', function () {
             ->where('districts.0.total', 2));
 });
 
+test('a municipal delegation\'s medals split correctly across its own schools', function () {
+    // The definitive proof for the Division initiative rewrite: one
+    // municipal (district-rooted) delegation pooling athletes from two
+    // different schools must produce two separate school-level rows with
+    // their own correct medal counts, which still roll up into a single
+    // municipality row — never one merged "municipality" school row, and
+    // never medals mis-attributed to the wrong school.
+    $result = EventResult::factory()->validated()->create();
+
+    $district = District::factory()->create(['name' => 'Maco']);
+    $schoolA = School::factory()->create(['district_id' => $district->id, 'name' => 'Maco Central School']);
+    $schoolB = School::factory()->create(['district_id' => $district->id, 'name' => 'Maco East School']);
+
+    $delegation = Delegation::factory()->approved()->create([
+        'meet_id' => $result->meet_id,
+        'school_id' => null,
+        'district_id' => $district->id,
+    ]);
+
+    $athleteA = Athlete::factory()->create(['delegation_id' => $delegation->id, 'school_id' => $schoolA->id]);
+    $entryA = Entry::factory()->confirmed()->create([
+        'athlete_id' => $athleteA->id,
+        'delegation_id' => $delegation->id,
+        'event_id' => $result->event_id,
+    ]);
+    ResultPlacement::factory()->create(['event_result_id' => $result->id, 'entry_id' => $entryA->id, 'rank' => 1]);
+
+    $athleteB = Athlete::factory()->create(['delegation_id' => $delegation->id, 'school_id' => $schoolB->id]);
+    $entryB = Entry::factory()->confirmed()->create([
+        'athlete_id' => $athleteB->id,
+        'delegation_id' => $delegation->id,
+        'event_id' => $result->event_id,
+    ]);
+    ResultPlacement::factory()->create(['event_result_id' => $result->id, 'entry_id' => $entryB->id, 'rank' => 2]);
+
+    $this->actingAs(User::factory()->create())
+        ->get('/tally')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('schools', 2)
+            ->where('schools.0.school', 'Maco Central School')
+            ->where('schools.0.gold', 1)
+            ->where('schools.0.silver', 0)
+            ->where('schools.1.school', 'Maco East School')
+            ->where('schools.1.gold', 0)
+            ->where('schools.1.silver', 1)
+            ->has('districts', 1)
+            ->where('districts.0.district', 'Maco')
+            ->where('districts.0.gold', 1)
+            ->where('districts.0.silver', 1)
+            ->where('districts.0.total', 2));
+});
+
 test('the tally can be filtered per meet and per sport', function () {
     $resultA = EventResult::factory()->validated()->create();
     $schoolA = School::factory()->create(['name' => 'Meet A School']);
