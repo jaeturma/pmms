@@ -67,4 +67,14 @@ class MeetFactory extends Factory
             'status' => MeetStatus::Completed,
         ]);
     }
+
+    /**
+     * Indicate that the meet is published on the public portal.
+     */
+    public function published(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'is_published' => true,
+        ]);
+    }
 }

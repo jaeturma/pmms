@@ -30,8 +30,10 @@ import {
     destroy,
     events as meetEvents,
     index,
+    publish,
     status as meetStatus,
     store,
+    unpublish,
     update,
 } from '@/routes/meets';
 
@@ -49,6 +51,7 @@ type Meet = {
     venue: string | null;
     status: string;
     status_label: string;
+    is_published: boolean;
     event_ids: number[];
     allowed_transitions: Transition[];
 };
@@ -351,15 +354,22 @@ export default function Meets({ meets, eventOptions, canManage }: Props) {
                                             {meet.event_ids.length}
                                         </TableCell>
                                         <TableCell>
-                                            <Badge
-                                                variant={
-                                                    statusVariants[
-                                                        meet.status
-                                                    ] ?? 'outline'
-                                                }
-                                            >
-                                                {meet.status_label}
-                                            </Badge>
+                                            <div className="flex flex-wrap gap-1">
+                                                <Badge
+                                                    variant={
+                                                        statusVariants[
+                                                            meet.status
+                                                        ] ?? 'outline'
+                                                    }
+                                                >
+                                                    {meet.status_label}
+                                                </Badge>
+                                                {meet.is_published && (
+                                                    <Badge variant="outline">
+                                                        Public
+                                                    </Badge>
+                                                )}
+                                            </div>
                                         </TableCell>
                                         {canManage && (
                                             <TableCell className="text-right">
@@ -415,6 +425,51 @@ export default function Meets({ meets, eventOptions, canManage }: Props) {
                                                                 }
                                                             />
                                                         ),
+                                                    )}
+                                                    {meet.status !==
+                                                        'draft' && (
+                                                        <ConfirmDialog
+                                                            trigger={
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                >
+                                                                    {meet.is_published
+                                                                        ? 'Unpublish'
+                                                                        : 'Publish'}
+                                                                </Button>
+                                                            }
+                                                            title={
+                                                                meet.is_published
+                                                                    ? 'Remove from public portal?'
+                                                                    : 'Publish to public portal?'
+                                                            }
+                                                            description={
+                                                                meet.is_published
+                                                                    ? 'The meet disappears from the public portal immediately.'
+                                                                    : 'The meet, its schedule, validated results, and medal tally become publicly visible.'
+                                                            }
+                                                            confirmLabel={
+                                                                meet.is_published
+                                                                    ? 'Unpublish'
+                                                                    : 'Publish'
+                                                            }
+                                                            onConfirm={() =>
+                                                                router.patch(
+                                                                    meet.is_published
+                                                                        ? unpublish(
+                                                                              meet.id,
+                                                                          ).url
+                                                                        : publish(
+                                                                              meet.id,
+                                                                          ).url,
+                                                                    {},
+                                                                    {
+                                                                        preserveScroll: true,
+                                                                    },
+                                                                )
+                                                            }
+                                                        />
                                                     )}
                                                     {meet.status ===
                                                         'draft' && (

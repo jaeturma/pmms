@@ -28,6 +28,13 @@ reopen, because SDO deadline extensions are routine. Every transition is audited
 `$meet->isRegistrationOpen()` — the delegation (WP-02-05) and entry (WP-02-08) modules
 must consult this before accepting registrations or entries.
 
+## Public publication (WP-04-01)
+
+`is_published` (not mass assignable) controls public-portal visibility, orthogonal
+to the lifecycle status: publish/unpublish are manager-only endpoints, audited
+(`meet.published`/`meet.unpublished`), reversible, and refused for draft meets.
+Public queries go through `Meet::published()` — see `docs/public-portal.md`.
+
 ## Authorization & audit
 
 Same pattern as the registries: reads for all authenticated users; store/update/status/

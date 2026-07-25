@@ -37,6 +37,7 @@ class MeetController extends Controller
                     'venue' => $meet->venue,
                     'status' => $meet->status->value,
                     'status_label' => $meet->status->label(),
+                    'is_published' => $meet->is_published,
                     'event_ids' => $meet->events->pluck('id')->all(),
                     'allowed_transitions' => array_map(
                         fn (MeetStatus $status): array => [
@@ -151,6 +152,62 @@ class MeetController extends Controller
         ]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Meet events updated.')]);
+
+        return back();
+    }
+
+    /**
+     * Publish a meet to the public portal. Draft meets cannot be
+     * published — there is nothing official about them yet.
+     */
+    public function publish(Meet $meet): RedirectResponse
+    {
+        if ($meet->status === MeetStatus::Draft) {
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => __('Draft meets cannot be published.'),
+            ]);
+
+            return back();
+        }
+
+        if ($meet->is_published) {
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => __('This meet is already published.'),
+            ]);
+
+            return back();
+        }
+
+        $meet->forceFill(['is_published' => true])->save();
+
+        $this->audit->record('meet.published', $meet, ['name' => $meet->name]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Meet published to the public portal.')]);
+
+        return back();
+    }
+
+    /**
+     * Remove a meet from the public portal, effective immediately.
+     */
+    public function unpublish(Meet $meet): RedirectResponse
+    {
+        if (! $meet->is_published) {
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => __('This meet is not published.'),
+            ]);
+
+            return back();
+        }
+
+        $meet->forceFill(['is_published' => false])->save();
+
+        $this->audit->record('meet.unpublished', $meet, ['name' => $meet->name]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Meet removed from the public portal.')]);
 
         return back();
     }

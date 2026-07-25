@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\MeetStatus;
 use Database\Factories\MeetFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -18,6 +19,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon $ends_at
  * @property string|null $venue
  * @property MeetStatus $status
+ * @property bool $is_published
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read int|null $events_count
@@ -39,7 +41,20 @@ class Meet extends Model
             'starts_at' => 'date',
             'ends_at' => 'date',
             'status' => MeetStatus::class,
+            'is_published' => 'boolean',
         ];
+    }
+
+    /**
+     * Meets visible on the public portal. Every public route must go
+     * through this scope — nothing about an unpublished meet is public.
+     *
+     * @param  Builder<Meet>  $query
+     * @return Builder<Meet>
+     */
+    public function scopePublished($query)
+    {
+        return $query->where('is_published', true);
     }
 
     /**
