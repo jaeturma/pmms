@@ -21,7 +21,12 @@ export function StatCard({ label, value, icon: Icon, description }: Props) {
                 <CardTitle className="text-sm font-medium text-muted-foreground">
                     {label}
                 </CardTitle>
-                {Icon && <Icon className="size-4 text-muted-foreground" />}
+                {Icon && (
+                    <Icon
+                        aria-hidden="true"
+                        className="size-4 text-muted-foreground"
+                    />
+                )}
             </CardHeader>
             <CardContent>
                 <div className="text-2xl font-semibold tracking-tight">

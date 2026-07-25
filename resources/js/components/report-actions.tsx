@@ -10,12 +10,12 @@ export function ReportActions({ downloadUrl }: Props) {
         <div className="flex gap-2 print:hidden">
             <Button variant="outline" asChild>
                 <a href={downloadUrl}>
-                    <Download />
+                    <Download aria-hidden="true" />
                     Download CSV
                 </a>
             </Button>
             <Button onClick={() => window.print()}>
-                <Printer />
+                <Printer aria-hidden="true" />
                 Print
             </Button>
         </div>
