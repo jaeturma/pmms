@@ -1,15 +1,451 @@
 # Current Phase
-Phase 4 — Responsive Public Portal: PLANNED 2026-07-19 — pending owner approval.
-Plan: docs/phases/phase-04-responsive-public-portal/ (README + WP-04-01..07).
-Seven WPs: portal foundation & publication controls → public schedule/venues →
-public results (validated only) → public medal tally → announcements →
-accessibility/mobile review → compliance review. Replaces the stale pre-Phase-2
-draft (11 boilerplate WPs on a municipality-delegation model that was never
-built, plus public athlete profiles the product scope explicitly defers).
-Grounded in product-scope §9: published schedules, validated results, medal
-tally, announcements — nothing else public; publication is an explicit audited
-manager decision; athlete identity on the portal is name+school+placement only.
+Division Type & Municipality-Based Delegations — COMPLETE 2026-07-25, all 7 WPs
+executed one at a time on owner instruction. Not committed or pushed. Phase 4 —
+Responsive Public Portal is ALSO complete as of 2026-07-25 (see "Phase 4" section
+below) — nothing is currently active; next step is an owner commit decision for
+the uncommitted Division + Phase 4 work, then Phase 5 planning on instruction.
+Real deployment requirement (not part of the numbered Phase 2-4 plan above):
+the division can be City (schools/districts compete) or Province
+(municipalities compete, pooling multiple schools' athletes under one
+delegation) — this deployment defaults to Province, Davao de Oro, 11
+municipalities. District/municipality standings are the official verdict for
+a meet; school-level standings remain visible as a secondary reference below
+them (owner clarification, 2026-07-25 — see "Post-Division refinement" log
+below). Plan:
+C:\Users\DEPED\.claude\plans\wondrous-spinning-cosmos.md — 7 WPs (Division
+Setup Foundation → Municipal Delegation Registration → Athlete/Personnel
+Home-School Attribution → Entry/Match/Result/Report Re-keying → Medal Tally
+Rewrite → Sample Seeder → Compliance Review). Execute one WP at a time on
+owner instruction; nothing committed or pushed.
+
+## Post-Division refinement — 2026-07-25
+Owner clarification after the Division initiative closed: district/
+municipality standings are the meet's official verdict, not school
+standings — school rows exist only to show which school each medal came
+from, and must not read as a competing "standing." Re-ordered every medal
+tally surface district-first: `MedalTallyService::standings()` return array
+(`districts` before `schools`, docblock updated — no behavior change, both
+keys still present); internal `tally/index.tsx`, public `public/tally.tsx`,
+and the printable `reports/medal-tally.tsx` all now render the
+{areaLabel} standings section first (default `Heading` weight, "Overall
+standings for this meet") with the school table below it demoted to `small`
+variant + "Reference only — shows which school each medal came from.";
+`downloadTallyReport()`'s CSV rows follow the same district-then-school
+order. `DashboardController::operations()`'s "Medal tally — top five"
+widget switched from top-5 schools to top-5 districts/municipalities to
+match — it's a headline verdict widget, not a reference table
+(`dashboard.tsx` TallyRow field renamed `school`→`district`, header now
+{areaLabel}-aware via the shared `division` prop). No schema/data changes —
+`MedalTallyService` still computes both groupings identically; this is
+presentation-order and labeling only. docs/medal-tally.md, docs/dashboard.md,
+docs/reports.md updated; docs/public-portal.md's stale pre-WP5 "public tally
+still excludes municipal placements" note (already false since WP5) also
+corrected while in the area. Pest 568/568 (no test changes needed — existing
+assertions are prop-key-based, not order-dependent), full gate green:
+Pint+PHPStan+ESLint+Prettier+tsc+build; not committed/pushed.
+
+## Division Work Package Log
+- WP7 Compliance & Authorization Review — done 2026-07-25 (COMPLIANT, no
+  enforcement gaps found — three documentation gaps and two test-coverage
+  gaps closed. Reviewed against the plan's own checklist: (1) type-change
+  guard — already covered by WP1's `DivisionTest` (`typeIsLocked()` false→
+  true on first delegation; a submitted type change is silently ignored once
+  locked), confirmed still passing, no new test needed; (2) the "officer
+  sees whole municipal roster" consequence flagged by the design review back
+  in the planning stage — confirmed real (`AthletePolicy`/`PersonnelPolicy`
+  scope via `$record->delegation->hasOfficer($user)`, i.e. by delegation,
+  never by the individual's own `school_id`) and, per plan, now explicitly
+  documented as accepted/intended rather than left implicit: new "Officer
+  roster scope" section in docs/delegations.md (assigning an officer is
+  already a deliberate manager trust decision; the delegation, not the
+  school, is this app's authorization boundary everywhere else too — narrower
+  scoping isn't built and isn't required by this deployment), cross-referenced
+  from docs/athletes.md and docs/personnel.md, and a new footnoted matrix row
+  in docs/authorization.md ("own delegation's whole roster¹"); proven with a
+  new definitive test in AthleteTest (`an officer assigned to a municipal
+  delegation sees the whole pooled roster` — one officer, one municipal
+  delegation, two different schools, both athletes visible, a foreign
+  delegation's athlete not); (3) City's "district competes" deferral — was
+  already noted inline in docs/division.md but that section had gone stale
+  (still described WP2-WP6 as future work after they'd shipped); rewrote as
+  two sections, "Division initiative — complete (WP1–WP7)" and a dedicated
+  "Open item: City's 'district competes' option" recording the deferral
+  explicitly, per plan, rather than leaving it buried in prose. Swept
+  AuthorizationMatrixTest coverage against docs/authorization.md's matrix:
+  found `/division` (admin-only, `can:administer`, same sensitivity as the
+  audit log viewer) had a real test gap — `DivisionTest`'s admin-only test
+  checked only organizer-forbidden, not delegation-officer/viewer-forbidden,
+  unlike the equivalent AuditLogViewerTest pattern it should have matched —
+  fixed by parametrizing over all three non-admin roles for both GET and
+  PATCH; added the missing "Division settings — view, update" matrix row
+  (admin-only, mirrors the audit log viewer row) to docs/authorization.md.
+  Also fixed two stale cross-references found during the sweep: docs/
+  athletes.md still pointed at docs/delegations.md's "Known interim gap"
+  section, renamed to "Individual attribution is fully re-keyed" back in
+  WP5. No schema/behavior changes — pure review, docs, and test-coverage
+  closure; Pest 568/568 (3 new tests: 2 from parametrizing the division
+  admin-only test over 3 roles, 1 new officer-roster-scope proof), full gate
+  green: Pint+PHPStan+ESLint+Prettier+tsc+build; not committed/pushed).
+  This closes the Division initiative (WP1–WP7): a Province deployment's
+  municipal delegation pools multiple schools' athletes/personnel under one
+  registration while every module — entries, matches, results, reports, ID
+  cards, medal tally, public portal — correctly attributes each individual
+  to their own real school; City's own registration option remains a
+  documented, deliberate open item, not a silent gap.
+- WP6 Sample Seeder: Province Demonstration Data — done 2026-07-25
+  (`SampleProvinceDemoSeeder`, new — env-gated local/testing only, same
+  `"Sample "`-prefixed/idempotent convention as `SampleRegistrySeeder`, but
+  its own sibling seeder rather than an extension, since it needs the
+  richer object graph (meet→delegation→athletes→entries→result) that
+  registry-only seeding doesn't touch; registered in `DatabaseSeeder` after
+  `SportsCatalogSeeder`, since it depends on the real "100 Meter Dash"
+  Boys/Secondary event existing. Demonstrates the initiative's actual
+  payoff end-to-end: two `"Sample Municipality — X"` District rows (own
+  rows, never attached to the real 11 Davao de Oro municipalities) each
+  with their own sample schools; "Sample Municipality — Alpha"'s single
+  municipal delegation pools athletes from *two different* sample schools
+  (Alpha Central, Alpha North) — one placing gold, the other silver — while
+  "Sample Municipality — Bravo"'s delegation (one school) places bronze.
+  Verified by hand against the real `MedalTallyService`: the two Alpha
+  athletes produce two separate, correctly-attributed school rows (1 gold /
+  1 silver) that still roll up into one Alpha municipality row (1 gold, 1
+  silver) — the concrete proof, in seed data instead of a test, that a
+  province's municipal delegation and its member schools are both visible
+  at once. Two guarded-field pitfalls worked around in the seeder itself
+  (not app bugs): `Meet`'s `#[Fillable]` doesn't include `status`/
+  `is_published`, so those are set via `forceFill()` after `firstOrCreate()`
+  mirrors `MeetController`'s own transition pattern; `EventResult.encoded_at`
+  is a NOT-NULL column but not fillable, so the result row is constructed
+  bare and force-filled, mirroring `ResultController::store()`'s real
+  pattern — both `Entry`/`Delegation.status` transitions use the same
+  firstOrCreate-then-forceFill shape once already established in this
+  codebase for guarded state fields. Verified idempotent (re-ran the
+  seeder; district/school/delegation/athlete/placement counts unchanged)
+  and manually inspected via tinker (registrantName, per-athlete school,
+  and the live tally output all correct). No schema changes, no docs
+  changes (the seeder documents itself via the WP2–WP5 docs it
+  demonstrates); Pest 565/565 (no new tests — this WP is seed data, not
+  behavior), full gate green: Pint+PHPStan+ESLint+Prettier+tsc+build; ran
+  against MySQL pmmsdb; not committed/pushed) — next: WP7 Compliance &
+  Authorization Review.
+- WP5 Medal Tally Rewrite — done 2026-07-25 (`MedalTallyService::standings()`
+  re-keyed: dropped the WP2 exclusion filter and regrouped school-level
+  standings by `placement.entry.athlete.school_id` instead of
+  `entry.delegation.school_id` — the highest-risk single change in the whole
+  Division initiative, isolated in its own WP with no other feature work, per
+  plan. District/municipality rollup logic mechanically unchanged (it just
+  sums the already-computed school rows by district name), which is exactly
+  why it correctly totals a municipal delegation's per-school medals back
+  into one municipality row without needing its own rewrite. Added the two
+  "definitive proof" tests the plan called for (MedalTallyTest +
+  PublicTallyTest): one municipal delegation, two athletes at two different
+  schools, asserting two separate correctly-counted school rows that roll up
+  into a single municipality row — not one merged row, not mis-attributed
+  medals. Swapped every remaining hardcoded "District" table header/section
+  title to `division.areaLabel` across all four tally surfaces (internal
+  `tally/index.tsx`, public `public/tally.tsx`, the printable
+  `reports/medal-tally.tsx`, and its CSV export's `Type`/header column) plus
+  the school-participation report and its CSV, which used the same hardcoded
+  label; `Division::current()->areaLabel()` is the one new backend touch
+  point (`ReportController`'s two CSV exports). No schema changes — nothing
+  to migrate. docs/medal-tally.md (school-level grouping explained,
+  area-label-aware UI noted) and docs/delegations.md ("Individual attribution
+  is fully re-keyed" updated to WP5, since MedalTallyService was the last
+  holdout) updated. This closes out the Division initiative's core data-model
+  work — every module now attributes an individual to their real school, and
+  every internal/public/printable surface presents the right area label for
+  the deployment's division type; Pest 565/565 (2 new tests), full gate
+  green: Pint+PHPStan+ESLint+Prettier+tsc+build; not committed/pushed) —
+  next: WP6 Sample Seeder: Province Demonstration Data.
+- WP4 Entry/Match/Result/Report Re-keying — done 2026-07-25 (resolved every
+  remaining `TODO(WP4)` marker from WP2/WP3: EntryController (list +
+  athleteOptions label), MatchController (participants list, entryOptions
+  label, and critically `syncParticipants()`'s same-school team-event rule —
+  now keyed on `athlete.school_id` instead of `delegation.school_id`, so it
+  correctly allows several different schools' entries from one municipal
+  delegation on a team roster while still blocking two entries from the
+  *same* school), ResultController (index placements, entryOptions label,
+  `placementSnapshot()`), ReportController (`resultSheetData()`,
+  `eventEntryRows()`), PortalController (public results placements),
+  EligibilityController (review queue + athleteOptions label — this one
+  was actually mis-marked `TODO(WP3)` in WP2 but always belonged here, since
+  it reads an athlete's school via a different record); AccreditationController
+  ::cardData()/context() get a new `subjectSchoolName()` helper resolving the
+  accredited athlete's-or-personnel's own school (the per-card school gap the
+  WP2 design review flagged) — the delegation-header `registrantName()` call
+  sites (roster header, ID-card batch header, protest label, audit
+  `registrant` context) are correctly left untouched, since they describe the
+  delegation itself, not an individual. Added the explicit cross-school proof
+  tests the plan called for: two MatchTest cases (different-schools-same-
+  municipal-delegation allowed; same-school-even-under-municipal-delegation
+  still blocked) plus one each in EntryTest/ResultTest/AccreditationTest
+  confirming the displayed school is the individual's own, not the
+  municipality's. No schema changes — pure re-keying, so no new migration.
+  `MedalTallyService` is now the *only* module still working around the
+  municipal-delegation gap (excludes those placements from standings,
+  unchanged, correctly deferred to WP5). docs/delegations.md ("Known interim
+  gap" replaced with "Individual attribution is fully re-keyed"),
+  docs/accreditation.md, docs/entries.md, docs/matches.md, docs/results.md,
+  docs/reports.md, docs/public-portal.md, docs/eligibility.md, and
+  docs/medal-tally.md (cross-reference fix only, still correctly pending
+  WP5) updated; Pest 563/563 (5 new tests), full gate green:
+  Pint+PHPStan+ESLint+Prettier+tsc+build; not committed/pushed) — next: WP5
+  Medal Tally Rewrite.
+- WP3 Athlete & Personnel Home-School Attribution — done 2026-07-25
+  (`athletes.school_id`/`personnel.school_id` added — NOT NULL, restrict on
+  delete, backfilled from `delegation.school_id` where derivable (a no-op on
+  this deployment: 0 athletes/personnel/delegations existed in pmmsdb before
+  this WP); `Athlete::school()`/`Personnel::school()` relations; new required
+  "Home school" field on both registration forms, server-validated
+  (`AthleteRequest`/`PersonnelRequest::withValidator()`) to the delegation's
+  own school (City) or any active school within the delegation's municipality
+  (Province) — never a school outside where the delegation registered,
+  immutable after creation like `delegation_id`; registration dialogs narrow
+  the school picker to `schoolOptionsByDelegation[delegation_id]`
+  (auto-selected when there's exactly one option, i.e. always for City),
+  extracted into a shared `BuildsSchoolOptionsByDelegation` trait rather than
+  duplicated across both controllers; `School::athletes()`/`personnel()`
+  simplified from `hasManyThrough(Delegation)` to direct `hasMany` (a school's
+  members are no longer reachable only via a delegation that might not exist
+  for it under Province), `School::entries()` re-pointed to
+  `hasManyThrough(Athlete)`; resolved the two `TODO(WP3)` markers left in WP2
+  (Athlete/Personnel's own list+profile pages now read their real
+  `->school->name`, not the delegation's registrant) — the other TODOs
+  (Entry/Match/Result/Report/Accreditation/Portal reading an individual's
+  school via a different record) remain, correctly, WP4 scope; fixed a real
+  bug surfaced by the School relation change: `ReportController
+  ::participationRows()`'s meet filter referenced a `delegations.meet_id`
+  column that no longer exists in the athletes/personnel/entries subqueries
+  once they stopped joining through Delegation (500 error) — refiled through
+  each record's own `delegation()` relation instead; also fixed the report's
+  `delegations_count > 0` filter, which would have silently hidden every
+  school under a Province deployment (no school ever gets its own delegation
+  row there) — now shows a school if it has its own delegation OR any
+  directly-attributed athletes/personnel. Caught a factory correctness bug
+  before it shipped: the naive `'school_id' => School::factory()` default
+  created a real orphaned School row per athlete/personnel even though an
+  `afterMaking` hook immediately overwrote the FK — moved school_id
+  resolution entirely into `afterMaking` (checking `getAttributes()` for an
+  explicit override, not a nullability check, to keep PHPStan honest about
+  the NOT NULL column) so no orphan rows are created; hit the same
+  Larastan nullsafe-in-`??`-chain false positive from WP2 in two more
+  places, same explicit-`!== null` workaround. Shared test helper
+  `schoolForDelegation()` moved to `tests/Pest.php` (used by both
+  AthleteTest and PersonnelTest, avoiding a function-name collision from
+  duplicating it per-file). docs/athletes.md ("Home school" section),
+  docs/personnel.md, docs/delegations.md ("Known interim gap" narrowed to
+  WP4/WP5 scope only), docs/reports.md (participation-summary fix
+  documented) updated; Pest 558/558, full gate green:
+  Pint+PHPStan+ESLint+Prettier+tsc+build; migration applied on MySQL
+  pmmsdb; not committed/pushed) — next: WP4 Entry/Match/Result/Report
+  Re-keying.
+- WP2 Delegation Registration: Municipal Delegations — done 2026-07-25
+  (`delegations.school_id` now nullable + new nullable `district_id` (restrict
+  on delete) + separate `unique(meet_id, district_id)` alongside the existing
+  `unique(meet_id, school_id)`; `DelegationStoreRequest` is division-type-aware
+  (not a bare "exactly one of" — the field matching `Division::current()->type`
+  is required, the other `prohibited`, so a Province deployment can never
+  accidentally create a school-rooted delegation); `Delegation::registrantName()`
+  /`registrantType()` accessors are the one correct source for a delegation's
+  own identity, used across ~6 controllers (Delegation, Accreditation, Protest,
+  Report roster) for the delegation-level label; registration UI switches
+  between a School picker (City) and a Municipality picker (Province, this
+  deployment's default), sourced from `schoolOptions`/`districtOptions`.
+  Swept the wider blast radius the migration itself opened up (making
+  `school_id` nullable meant every remaining `->delegation->school->name` call
+  site — 8 more controllers: Athlete, Personnel, Eligibility, Entry, Match,
+  Result, Portal (public), plus MedalTallyService — would crash the moment a
+  real municipal delegation existed, not just the ~6 originally scoped label
+  sites): all now use `registrantName()` as a documented, TODO-marked interim
+  value for individual-attribution fields (true fix is WP3's athlete/personnel
+  `school_id` + WP4's re-keying); `MatchController::syncParticipants()`'s
+  same-school team-event rule now only checks school-rooted delegations
+  (permissive, not silently wrong, for municipal ones until WP4);
+  `MedalTallyService` excludes municipal-delegation placements from
+  school/district standings entirely rather than mis-attribute them, isolating
+  the real fix for WP5 as planned; `AccreditationController::cardData()`'s
+  per-card school field gap (flagged in the design review) got the same interim
+  treatment. Found and fixed an unrelated PHPStan false-positive (nullsafe `?->`
+  on a magic Eloquent relation property inside a `??` chain is misreported as
+  "never null" even when genuinely nullable — worked around with an explicit
+  `!== null` check, confirmed via isolated reproduction against Accreditation's
+  identical existing pattern). docs/delegations.md rewritten (registering-unit
+  section + "Known interim gap"); short interim-gap notes added to
+  athletes.md, personnel.md, entries.md, accreditation.md, results.md,
+  reports.md, matches.md, public-portal.md, division.md; Pest 558/558 (7 new/
+  updated tests in DelegationTest, 1 in ReportTest), full gate green:
+  Pint+PHPStan+ESLint+Prettier+tsc+build; migrations applied on MySQL pmmsdb;
+  not committed/pushed) — next: WP3 Athlete & Personnel Home-School Attribution.
+- WP1 Division Setup Foundation — done 2026-07-25 (`divisions` table +
+  `Division` model, singleton via `Division::current()` (Province default on
+  first access); `App\Enums\DivisionType` (City|Province) with
+  `areaLabel()` — "District" for City, "Municipality" for Province, same
+  underlying `District` model/table always, never renamed in code; type-
+  change guard `Division::typeIsLocked()` refuses once any delegation
+  exists, enforced in `DivisionRequest` (type rule omitted entirely when
+  locked, so a submitted value is silently ignored, not errored);
+  `districts.nickname` column (delegation nicknames e.g. Maco → "Tigers");
+  `division` shared on every Inertia page (`{type, name, areaLabel}`) via
+  `HandleInertiaRequests`, consumed by the districts/municipalities registry
+  page and sidebar nav label so both read "Municipality" under the Province
+  default with no hardcoded "District" left in that flow; admin-only
+  `/division` settings page (`can:administer`, mirrors the audit-log
+  gating); `division.updated` audit action; `DivisionRegistrySeeder` —
+  real, unconditional (all environments) default config: Province division
+  "Davao de Oro" + its 11 municipalities (Compostela, Laak, Mabini, Maco
+  [nickname Tigers], Maragusan, Mawab, Monkayo, Montevista, Nabunturan, New
+  Bataan, Pantukan) as District rows, idempotent via firstOrCreate — distinct
+  from the local/testing-only SampleRegistrySeeder; docs/division.md;
+  Pest 554/554 (9 new tests in DivisionTest), full gate green:
+  Pint+PHPStan+ESLint+Prettier+tsc+build; not committed/pushed) — purely
+  additive, no registration-flow changes yet; municipal delegation
+  registration itself is WP2.
+
+# Phase 4 — COMPLETE 2026-07-25 (tracking realigned 2026-07-25 — see note below)
+Phase 4 — Responsive Public Portal: tracked against
+docs/phases/phase-04-responsive-public-portal/README.md + CHECKLIST.md,
+11-WP numbering (WP-04-01..11), per owner instruction 2026-07-25 to adopt
+this as the final track. Review: docs/phases/phase-04-responsive-public-portal/
+phase-4-compliance-review.md (COMPLIANT; full gate green: Pint+PHPStan+
+Pest 568/568 (2,627 assertions), ESLint+Prettier+tsc+build; 33 migrations Ran
+on MySQL pmmsdb; app HTTP 200 at http://pmms.app). Grounded in product-scope
+§9: published schedules,
+validated results, medal tally, announcements — nothing else public;
+publication is an explicit audited manager decision; athlete identity on the
+portal is name+school+placement only.
+
+**Realignment note (2026-07-25):** this 11-WP file set was regenerated from
+the same stale pre-Phase-2 draft the original 7-WP plan (git history,
+commit `a7bde91`) already replaced once — its Core Rules sections contain
+inaccurate boilerplate (e.g. "keep municipality as the official delegation,"
+"medal tally is delegation-based" — factually wrong, see docs/delegations.md
+and docs/medal-tally.md) not written for this codebase. CHECKLIST.md already
+reconciled it against actually-shipped work: WP-04-01/02/03/04/05/10 match
+what's built (the log below, written under the old 7-WP numbering, is the
+accurate record of that work — not rewritten, just now cross-referenced to
+the new numbers via CHECKLIST.md). Per explicit owner confirmation
+2026-07-25, WP-04-06 (public delegation/school directory) and WP-04-07
+(public athlete/team profiles) stay **excluded by design** — product scope
+keeps individual athlete data, mostly minors, off the public portal beyond
+name+school+placement on a results row; owner declined to reverse that.
+WP-04-08 (downloads) and WP-04-09 (general search) stay **partial** as
+documented — owner declined to build out the missing halves. Only WP-04-11
+Phase 4 Review and Acceptance is genuinely next (same substance as the old
+plan's WP-04-07 Phase 4 Compliance Review); executed using this project's
+real conventions (`.ai/phase-review.md`, `.ai/work-package-runner.md`, the
+WP-03-11/Division-WP7 pattern), not the generic template's stale specifics.
 Execute one work package at a time on owner instruction.
+
+## Phase 4 Work Package Log
+- WP-04-11 Phase 4 Review and Acceptance — done 2026-07-25 (COMPLIANT, no
+  remediation needed — full report docs/phases/phase-04-responsive-public-portal/
+  phase-4-compliance-review.md. Confirmed the publication/privacy boundary
+  holds with prop-level evidence, not UI inspection: every public route sits
+  behind Meet::published() + throttle:60,1; results structurally filtered to
+  Validated status (a correction's reopen removes it automatically); athlete
+  props limited to name+school+placement everywhere, missing()-tested against
+  entry/status/encoded_by/validated_by/venue notes; no public route touches
+  Eligibility/Accreditation/Protest/Incident/AuditLog; drafts (meets,
+  announcements) invisible end-to-end; publication itself is an explicit
+  audited manager decision (meet.published/unpublished, announcement.
+  published/unpublished). Also folded in this session's medal-tally
+  standing-order realignment (district/municipality first as the official
+  verdict, school standings demoted to a reference table below — see
+  "Post-Division refinement" log above) as part of the same review pass, no
+  separate WP needed since it's presentation-only. Tracking realignment:
+  adopted the regenerated 11-WP numbering (docs/phases/phase-04-responsive-
+  public-portal/README.md + CHECKLIST.md) per explicit owner instruction
+  2026-07-25 as the final track; reconfirmed by the owner (not just prior
+  doc inference) that WP-04-06 (public delegation/school directory) and
+  WP-04-07 (public athlete/team profiles) stay excluded — minors' data off
+  the public portal beyond name+school+placement — and WP-04-08/09
+  (downloads, general search) stay partial. No schema/behavior changes
+  beyond the tally reorder — pure review + tracking docs; Pest 568/568, full
+  gate green: Pint+PHPStan+ESLint+Prettier+tsc+build; 33 migrations Ran on
+  MySQL pmmsdb; app HTTP 200 at http://pmms.app; not committed/pushed) — this
+  closes Phase 4. Next: owner review of the compliance report + commit
+  decision for the Phase 4 tree; Phase 5 planning not begun.
+- WP-04-06 Accessibility & Mobile Review — done 2026-07-24 (swept all four
+  portal pages + PublicLayout/PublicMeetNav/PublicAnnouncements at phone/
+  tablet/desktop widths; real gap found and fixed: unpublished/nonexistent
+  meets 404'd through Laravel's raw unstyled error page (bootstrap/app.php
+  only special-cased 403) — extended the same Inertia-render pattern to 404,
+  and made the shared error page layout/CTA guest-aware (PublicLayout +
+  "Back to portal home" for guests instead of a dead-end "Back to dashboard"
+  login bounce) with a dedicated 404 title/message; added a portal-wide meta
+  description on PublicLayout; day-selector chips on the meet page wrapped in
+  `<nav aria-label="Select day">` (previously unlabeled, unlike
+  PublicMeetNav) with aria-current on the active day/section; decorative
+  icons paired with visible text (CalendarDays/MapPin/Megaphone, shared
+  EmptyState icon) marked aria-hidden; verified sound already: heading order,
+  table horizontal-scroll containment, existing EmptyStates for every no-data
+  path, focus-visible rings, filter aria-labels; accepted deviation: sm-size
+  buttons stay 32px (matches app-wide convention, not redesigned this WP);
+  docs/public-portal.md review section; Pest 545/545 (2 new tests in
+  PublicPortalTest), full gate green: Pint+PHPStan+ESLint+Prettier+tsc+build;
+  not committed/pushed)
+- WP-04-05 Announcements — done 2026-07-19 (announcements table — the phase's
+  only new entity: optional meet_id cascade, title ≤160, plain-text body ≤2000,
+  is_published + published_at (cleared on unpublish, fresh on republish),
+  created_by nullOnDelete; Announcement::published() scope; whole internal module
+  manager-gated incl. list (registry pattern: title search, pagination, dialog
+  with General/meet select + new ui/textarea primitive matching Input styling),
+  announcement.created/updated/published/unpublished/deleted audits; public:
+  shared PublicAnnouncements component (renders nothing when empty) — portal
+  home latest 5 across meets with meet label, public meet page its own published
+  only; drafts invisible everywhere public; sidebar Announcements in
+  managerNavItems; matrix +6 rows (66 forbidden actions × 2 roles);
+  docs/announcements.md + public-portal/authorization docs; Pest 543/543 (6 new
+  tests in AnnouncementTest), full gate green; migration applied on pmmsdb)
+- WP-04-04 Public Medal Tally — done 2026-07-19 (public tally page
+  /meets/{meet}/tally (public.tally, guest+throttled, Meet::published() 404 gate);
+  MedalTallyService reused UNCHANGED — derived at read time from validated
+  results only, ties share medals, conventional ordering — so public and internal
+  tallies can never disagree and corrections ripple automatically; school +
+  district standings tables; sport filter via shared validatedSportOptions()
+  helper (extracted, reused by results page); PublicMeetNav extended Schedule ↔
+  Results ↔ Medal tally; page states validated-only + tie behavior; no new
+  tables; docs/public-portal.md updated; Pest 525/525 (4 new tests in
+  PublicTallyTest incl. encoded-excluded, other-meet-excluded, tie-sharing,
+  ordering — one test expectation fixed: at equal gold/silver more bronze ranks
+  higher), full gate green) — Phase 4 Visual Checkpoint 2 achieved (validated
+  results + live tally public; unvalidated/unpublished invisible end-to-end)
+- WP-04-03 Public Results — done 2026-07-19 (public results page
+  /meets/{meet}/results (public.results, guest+throttled, Meet::published() 404
+  gate); validated-only enforced STRUCTURALLY (query status filter) so a
+  corrected/reopened result vanishes automatically — tested end-to-end through
+  the real correction endpoint; per-event standings: rank (ties marked), athlete
+  full name, school, mark ONLY — prop privacy asserted with missing() on
+  entry/entry_id/status/encoded_by/validated_by; "Official as of" = validation
+  timestamp without validator identity; sport filter (options from the meet's
+  validated results), newest-validated first; PublicMeetNav shared component
+  links Schedule ↔ Results on the meet pages; meetSummary() helper extracted in
+  PortalController; no new tables; docs/public-portal.md updated;
+  Pest 521/521 (7 new tests in PublicResultsTest), full gate green)
+- WP-04-02 Public Schedule & Venue Guide — done 2026-07-19 (public meet page
+  /meets/{meet} (route public.meet, whereNumber, in throttled guest group)
+  resolved via Meet::published() so unpublished 404 incl. by direct URL; schedule
+  for a selected day grouped by venue (venues alphabetical, slots by start time),
+  chip day-selector defaulting to today-if-scheduled else first day, slot note
+  shown (session info — public per WP), events labeled sport—name (gender,
+  division); venue guide = distinct scheduled venues name+address ONLY (internal
+  venues.notes never serialized — missing() tested); portal home cards now link
+  to the meet page; empty "Schedule not yet available" state; no new tables;
+  docs/public-portal.md updated; Pest 514/514 (6 new tests in
+  PublicScheduleTest), full gate green) — Phase 4 Visual Checkpoint 1 achieved
+  (guest browses a published meet's schedule by day/venue on a phone)
+- WP-04-01 Public Portal Foundation & Publication Controls — done 2026-07-19
+  (meets.is_published flag (not mass assignable) + Meet::published() scope as the
+  shared public-visibility enforcement point; publish/unpublish manager endpoints
+  audited meet.published/unpublished, draft meets refused; internal meets page
+  Publish/Unpublish ConfirmDialogs + "Public" badge; PublicLayout (guest, no
+  sidebar, mobile-first header/footer) wired via app.tsx public/* switch; portal
+  home at / (PortalController, public-safe props only, replaces starter welcome
+  page — route name kept 'home' for existing auth-layout references, later portal
+  routes will be public.*) listing published meets, throttle:60,1; matrix +2 rows
+  (60 forbidden actions × 2 roles); docs/public-portal.md privacy baseline +
+  meets.md/authorization.md updates; Pest 508/508, full gate green; migration
+  applied on pmmsdb)
 
 ## Phase 3 — Provincial Meet Operations (complete)
 COMPLETE 2026-07-19. All 11 WPs executed one at a time on owner instruction,

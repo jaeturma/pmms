@@ -1,86 +1,36 @@
 # Phase 4 — Responsive Public Portal
 
-**Status:** Planned 2026-07-19 — pending owner approval. Execution has not started.
-Replaces the pre-Phase-2 draft: its eleven boilerplate WPs assumed a
-municipality-based delegation model that was never built (Division Edition
-delegations are per school), and its public delegation directory and athlete
-profile pages exceed the product scope, which explicitly defers public athlete
-profiles.
+Create a mobile-responsive public portal for approved Provincial Meet information.
 
-## Goal
-
-Give parents, schools, and the public a mobile-first, no-login window into the
-meet: published schedules, validated results, the live medal tally, and official
-announcements — nothing else. Publication is an explicit, audited manager
-decision; until a meet is published, the portal shows nothing about it. After
-Phase 4, meet-day information reaches the public from the same database the
-operations side writes to, with zero manual re-publishing of data.
-
-## Grounding
-
-- `docs/00-product/product-scope.md` §9 (Public Portal Scope): **in scope** —
-  published schedules, published results, medal tally, public
-  advisories/announcements; **deferred** — athlete profile pages, cross-meet
-  analytics, public API; **out of scope** — medical data, unvalidated/working
-  results, personally sensitive information.
-- Phase 3 DESIGN-NOTES: "Public publication belongs to Phase 4"; results affect
-  the public view only after validation.
-- Phase 3 as-built baseline to reuse: `MeetStatus`, `EventSchedule` (day/venue
-  grouping already proven in the daily sheet), validated `EventResult` +
-  `ResultPlacement`, `MedalTallyService` (derived, validated-only),
-  `AuditLogger`, the shared component library, and the print/report patterns.
-
-## Principles
-
-- Simple, presentable, responsive, maintainable, secure — no enterprise complexity.
-- **Publication is opt-in and audited**: a manager publishes a meet; unpublishing
-  is immediate; both are audit events.
-- **Validated results only, always**: the portal can never show encoded/working
-  data — server-enforced, not filtered in the UI.
-- **Minors stay protected**: public pages carry athlete name, school, and
-  placement only — never birthdate, LRN, grade, photos, or documents; public
-  controllers build their own minimal prop sets and never reuse internal ones.
-- Public routes need no authentication and use a separate public layout (no app
-  sidebar, no session-bound chrome).
-- Reuse Phase 1–3 foundations before writing anything new; MySQL remains the
-  source of truth.
-- One work package at a time; nothing committed or pushed without owner instruction.
+**Status: COMPLETE — WP-04-11 Phase 4 Review and Acceptance done 2026-07-25,
+COMPLIANT (`phase-4-compliance-review.md`). See CHECKLIST.md.** This
+directory's WP breakdown was regenerated using **the same stale
+pre-Phase-2 draft** that the real Phase 4 plan (preserved in git history,
+commit `a7bde91`) explicitly describes replacing: it assumes a
+municipality-based delegation model that doesn't exist in this codebase
+(delegations are per-school — `docs/delegations.md`), and two of its WPs
+(public delegation/school directory, public athlete/team profiles) describe
+features the product scope deliberately excludes. 6 of 11 items match
+already-shipped work one-for-one; 2 are explicitly out of scope by product
+decision, not gaps; 2 are half-done (announcements shipped, downloads
+didn't; sport filters shipped, general search was never in scope); 1
+(WP-04-11, phase review) is genuinely the next task. Do not take "municipality
+as the delegation" from these WP files as accurate — treat
+`docs/delegations.md` and `docs/public-portal.md` as the source of truth for
+the data model instead.
 
 ## Work Packages
 
-| WP | Title |
-|---|---|
-| WP-04-01 | Public Portal Foundation & Publication Controls |
-| WP-04-02 | Public Schedule & Venue Guide |
-| WP-04-03 | Public Results |
-| WP-04-04 | Public Medal Tally |
-| WP-04-05 | Announcements |
-| WP-04-06 | Accessibility & Mobile Review |
-| WP-04-07 | Phase 4 Compliance Review |
+- [WP-04-01 — Public Portal Shell and Navigation](WP-04-01-public-portal-shell-and-navigation.md)
+- [WP-04-02 — Public Meet Overview](WP-04-02-public-meet-overview.md)
+- [WP-04-03 — Public Schedule and Venue Guide](WP-04-03-public-schedule-and-venue-guide.md)
+- [WP-04-04 — Public Results](WP-04-04-public-results.md)
+- [WP-04-05 — Public Medal Tally and Rankings](WP-04-05-public-medal-tally-and-rankings.md)
+- [WP-04-06 — Public Delegation and School Directory](WP-04-06-public-delegation-and-school-directory.md)
+- [WP-04-07 — Public Athlete and Team Profiles](WP-04-07-public-athlete-and-team-profiles.md)
+- [WP-04-08 — Announcements and Downloads](WP-04-08-announcements-and-downloads.md)
+- [WP-04-09 — Public Search and Filters](WP-04-09-public-search-and-filters.md)
+- [WP-04-10 — Public Portal Accessibility and Mobile Review](WP-04-10-public-portal-accessibility-and-mobile-review.md)
+- [WP-04-11 — Phase 4 Review and Acceptance](WP-04-11-phase-4-review-and-acceptance.md)
 
-Sequence is strict: each WP assumes its predecessors. Seven WPs — the phase is
-deliberately smaller than Phases 2–3 because it is read-side over data the
-operations phases already produce.
-
-## Visual Checkpoints
-
-1. **After WP-04-02:** a visitor with no account opens http://pmms.app on a phone
-   and browses a published meet's schedule by day and venue.
-2. **After WP-04-04:** validated results and the live medal tally are publicly
-   visible; unvalidated results and unpublished meets remain invisible — the
-   publication boundary demonstrable end-to-end.
-3. **After WP-04-06:** announcements plus the accessibility/mobile polish
-   complete the public-facing demo.
-
-## Exclusions (deferred or out of scope)
-
-Public athlete/team profile pages, delegation/school directory, public search
-across entities, cross-meet analytics and history, public API/exports, QR/RFID,
-livestream or scoreboard integration, public self-registration of any kind,
-push/email notifications, offline-first PWA behavior, Flutter, AI, multi-tenancy.
-
-## Completion
-
-Phase 4 completes via WP-04-07 (full quality gate + compliance review), mirroring
-WP-03-11. The review report goes to this directory; the WP log lives in
-`.ai/current-phase.md`.
+Run one work package at a time.
