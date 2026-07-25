@@ -36,10 +36,12 @@ return Application::configure(basePath: dirname(__DIR__))
         );
 
         $exceptions->respond(function (Response $response, Throwable $e, Request $request): Response {
-            if ($response->getStatusCode() === 403 && ! $request->expectsJson()) {
-                return Inertia::render('error', ['status' => 403])
+            $status = $response->getStatusCode();
+
+            if (in_array($status, [403, 404], true) && ! $request->expectsJson()) {
+                return Inertia::render('error', ['status' => $status])
                     ->toResponse($request)
-                    ->setStatusCode(403);
+                    ->setStatusCode($status);
             }
 
             return $response;

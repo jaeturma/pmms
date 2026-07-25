@@ -12,7 +12,10 @@ export function EmptyState({ icon: Icon, title, description, action }: Props) {
     return (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed p-10 text-center">
             {Icon && (
-                <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-muted">
+                <div
+                    aria-hidden="true"
+                    className="mb-4 flex size-12 items-center justify-center rounded-full bg-muted"
+                >
                     <Icon className="size-6 text-muted-foreground" />
                 </div>
             )}

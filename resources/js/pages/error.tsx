@@ -1,8 +1,11 @@
-import { Head, Link } from '@inertiajs/react';
-import { ShieldAlert } from 'lucide-react';
+import { Head, Link, usePage } from '@inertiajs/react';
+import { Compass, ShieldAlert } from 'lucide-react';
 import { EmptyState } from '@/components/empty-state';
 import { Button } from '@/components/ui/button';
-import { dashboard } from '@/routes';
+import AppLayout from '@/layouts/app-layout';
+import PublicLayout from '@/layouts/public-layout';
+import { dashboard, home } from '@/routes';
+import type { Auth } from '@/types/auth';
 
 type Props = {
     status: number;
@@ -10,18 +13,30 @@ type Props = {
     message?: string;
 };
 
-const defaults: Record<number, { title: string; message: string }> = {
+const defaults: Record<
+    number,
+    { title: string; message: string; icon: typeof ShieldAlert }
+> = {
     403: {
         title: 'Permission denied',
         message:
             'Your account does not have permission to view this page. Contact the meet administrator if you believe this is a mistake.',
+        icon: ShieldAlert,
+    },
+    404: {
+        title: 'Page not found',
+        message:
+            "This page doesn't exist, or the meet it belongs to hasn't been published yet.",
+        icon: Compass,
     },
 };
 
 export default function ErrorPage({ status, title, message }: Props) {
+    const { auth } = usePage().props;
     const fallback = defaults[status] ?? {
         title: `Error ${status}`,
         message: 'Something went wrong. Please try again.',
+        icon: ShieldAlert,
     };
 
     return (
@@ -29,12 +44,18 @@ export default function ErrorPage({ status, title, message }: Props) {
             <Head title={title ?? fallback.title} />
             <div className="w-full max-w-md">
                 <EmptyState
-                    icon={ShieldAlert}
+                    icon={fallback.icon}
                     title={title ?? fallback.title}
                     description={message ?? fallback.message}
                     action={
                         <Button asChild>
-                            <Link href={dashboard()}>Back to dashboard</Link>
+                            {auth.user ? (
+                                <Link href={dashboard()}>
+                                    Back to dashboard
+                                </Link>
+                            ) : (
+                                <Link href={home()}>Back to portal home</Link>
+                            )}
                         </Button>
                     }
                 />
@@ -42,3 +63,6 @@ export default function ErrorPage({ status, title, message }: Props) {
         </div>
     );
 }
+
+ErrorPage.layout = (props: Props & { auth: Auth }) =>
+    props.auth?.user ? AppLayout : PublicLayout;
