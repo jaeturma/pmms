@@ -130,6 +130,9 @@ class ScoringSessionController extends Controller
         $initialSportState = match ($session->boardType()) {
             ScoreboardType::Basketball => ['fouls_a' => 0, 'fouls_b' => 0],
             ScoreboardType::Boxing => ['rounds' => []],
+            ScoreboardType::SoftballBaseball => [
+                'inning' => 1, 'half' => 'top', 'outs' => 0, 'balls' => 0, 'strikes' => 0, 'innings' => [],
+            ],
             default => null,
         };
 
@@ -377,6 +380,175 @@ class ScoringSessionController extends Controller
         return back();
     }
 
+    /**
+     * Advance the count/outs (softball/baseball scoreboard only —
+     * WP-07-06). `out`/`strike` reset the count for the next batter; a
+     * third strike is itself an out; a third out ends the half-inning
+     * (resets outs/count, flips top<->bottom, increments the inning when
+     * bottom ends). `ball` resets the count at four (a walk — this app
+     * doesn't model baserunners, so no run is auto-added). `reset_count`
+     * is a manual correction for a new batter with no walk/strikeout.
+     */
+    public function count(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->assertActive($session);
+        $this->assertSoftballBaseball($session);
+
+        $data = $request->validate([
+            'action' => ['required', Rule::in(['out', 'ball', 'strike', 'reset_count'])],
+        ]);
+
+        $state = $session->sport_state ?? $this->initialSoftballState();
+
+        $state = match ($data['action']) {
+            'out' => $this->applySoftballOut($state),
+            'ball' => $this->applySoftballBall($state),
+            'strike' => $this->applySoftballStrike($state),
+            'reset_count' => [...$state, 'balls' => 0, 'strikes' => 0],
+            default => $state,
+        };
+
+        $session->forceFill(['sport_state' => $state])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::Count,
+            'payload' => [...$data, ...$state],
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record('scoring.count_updated', $session, [...$this->context($session), ...$data]);
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Record runs scored by one side in the current inning (softball/
+     * baseball scoreboard only — WP-07-06). Adds to the per-inning
+     * breakdown in `sport_state` and to the session's running `score_a`/
+     * `score_b` in the same request, so the two can never disagree.
+     */
+    public function inningRun(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->assertActive($session);
+        $this->assertSoftballBaseball($session);
+
+        $data = $request->validate([
+            'side' => ['required', Rule::in(['a', 'b'])],
+            'runs' => ['required', 'integer', 'min:1', 'max:20'],
+        ]);
+
+        $state = $session->sport_state ?? $this->initialSoftballState();
+        $column = $data['side'] === 'a' ? 'runs_a' : 'runs_b';
+
+        $index = null;
+
+        foreach ($state['innings'] as $i => $row) {
+            if ($row['inning'] === $state['inning']) {
+                $index = $i;
+                break;
+            }
+        }
+
+        if ($index === null) {
+            $state['innings'][] = ['inning' => $state['inning'], 'runs_a' => 0, 'runs_b' => 0];
+            $index = count($state['innings']) - 1;
+        }
+
+        $state['innings'][$index][$column] += $data['runs'];
+
+        $scoreColumn = $data['side'] === 'a' ? 'score_a' : 'score_b';
+
+        $session->forceFill([
+            'sport_state' => $state,
+            $scoreColumn => $session->{$scoreColumn} + $data['runs'],
+        ])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::InningRun,
+            'payload' => ['inning' => $state['inning'], ...$data],
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record('scoring.run_scored', $session, [...$this->context($session), 'inning' => $state['inning'], ...$data]);
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * @return array{inning: int, half: string, outs: int, balls: int, strikes: int, innings: array<int, array{inning: int, runs_a: int, runs_b: int}>}
+     */
+    private function initialSoftballState(): array
+    {
+        return ['inning' => 1, 'half' => 'top', 'outs' => 0, 'balls' => 0, 'strikes' => 0, 'innings' => []];
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     * @return array<string, mixed>
+     */
+    private function applySoftballBall(array $state): array
+    {
+        $state['balls']++;
+
+        if ($state['balls'] >= 4) {
+            $state['balls'] = 0;
+            $state['strikes'] = 0;
+        }
+
+        return $state;
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     * @return array<string, mixed>
+     */
+    private function applySoftballStrike(array $state): array
+    {
+        $state['strikes']++;
+
+        return $state['strikes'] >= 3 ? $this->applySoftballOut($state) : $state;
+    }
+
+    /**
+     * An out always ends the current batter's at-bat (count resets); a
+     * third out ends the half-inning (flips top<->bottom, increments the
+     * inning once bottom ends).
+     *
+     * @param  array<string, mixed>  $state
+     * @return array<string, mixed>
+     */
+    private function applySoftballOut(array $state): array
+    {
+        $state['outs']++;
+        $state['balls'] = 0;
+        $state['strikes'] = 0;
+
+        if ($state['outs'] >= 3) {
+            $state['outs'] = 0;
+
+            if ($state['half'] === 'top') {
+                $state['half'] = 'bottom';
+            } else {
+                $state['half'] = 'top';
+                $state['inning']++;
+            }
+        }
+
+        return $state;
+    }
+
     private function assertActive(ScoringSession $session): void
     {
         if ($session->status === ScoringSessionStatus::Ended) {
@@ -397,6 +569,13 @@ class ScoringSessionController extends Controller
     {
         if ($session->boardType() !== ScoreboardType::Boxing) {
             abort(422, __('This action is only available for a boxing scoring session.'));
+        }
+    }
+
+    private function assertSoftballBaseball(ScoringSession $session): void
+    {
+        if ($session->boardType() !== ScoreboardType::SoftballBaseball) {
+            abort(422, __('This action is only available for a softball/baseball scoring session.'));
         }
     }
 

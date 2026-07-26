@@ -322,8 +322,15 @@ Pint+PHPStan+ESLint+Prettier+tsc+build; not committed/pushed.
   registration itself is WP2.
 
 # Phase 7 — Live Scoring Enhancement
-COMPLETE 2026-07-26, all 3 WPs executed one at a time on owner instruction.
-Review: docs/phases/phase-07-live-scoring-enhancement/
+Original 3-WP scope (generic scoreboard only, per owner instruction
+2026-07-25) COMPLETE 2026-07-26, all 3 WPs executed one at a time on owner
+instruction. **Reopened same day**: owner instructed sport-specific
+scoreboards after all, appended as WP-07-04 (Basketball, done) → WP-07-05
+(Boxing, done) → WP-07-06 (Softball/Baseball, done) rather than
+renumbering the shipped, committed/pushed WP-07-02 ("Generic Live
+Scoreboard UI") — see the Work Package Log below for WP-07-04/05/06. All
+three sport-specific scoreboards (the full sport-specific scope requested)
+are now built; original review: docs/phases/phase-07-live-scoring-enhancement/
 phase-7-compliance-review.md (COMPLIANT; two Low accessibility gaps found
 and fixed during the review, no schema/authorization/architectural issues;
 full gate green: Pint+PHPStan+Pest 608/608 (3,020 assertions), ESLint+
@@ -480,6 +487,156 @@ acceptance. Execute one work package at a time on owner instruction.
   of Phase 8 — Post-Deployment Support or Phase 6 — Reports, UAT,
   Deployment, and Turnover (still needing a real plan written for this
   codebase before any WP-06 work).
+- WP-07-04 Basketball Live Scoreboard — done 2026-07-26 (owner reopened
+  Phase 7 after its closure to add sport-specific scoreboards; numbered
+  WP-07-04 rather than reusing WP-07-02, since that name already means
+  "Generic Live Scoreboard UI" and is shipped/pushed. New
+  `App\Enums\ScoreboardType` (generic/basketball/boxing/softball_baseball)
+  with `forSport(?string $sportName)` — never stored, always derived from
+  the match's `event.sport.name` via `ScoringSession::boardType()`, so a
+  sport-catalog rename is reflected immediately with no backfill. New
+  nullable JSON `scoring_sessions.sport_state` column (one flexible column
+  shared by every sport-specific board this phase adds, not one column per
+  sport) — for basketball, `{fouls_a, fouls_b}` (running team fouls this
+  quarter), initialized to `{0,0}` in `store()` when the match's board type
+  is Basketball. New `App\Enums\ScoreEventType::Foul` case and
+  `PATCH scoring-sessions/{session}/foul` (`scoring.foul`) — `action` =
+  `add` (+1 to one side) or `reset` (both to 0); 422s for a non-Basketball
+  session; same `role:admin,organizer` gate as every other scoring
+  mutation, no new role. Quarter number reuses the existing generic
+  `period_label` free-text field rather than a new structured field — kept
+  deliberately simple, per project rules against designing for hypothetical
+  need; fouls reset via an explicit operator action, not auto-detected from
+  a period-label change. `scoring/show.tsx`: team-fouls row (visible to
+  every viewer, not just the operator) with a "Bonus" badge at
+  `BASKETBALL_BONUS_THRESHOLD` (5, a documented convention only — not
+  enforced elsewhere), per-side "Foul (n)" buttons and a shared "Reset
+  fouls" button in the operator controls, all gated the same as the
+  existing +1/+2/+3 buttons (`canManage && isActive`). Boxing and
+  Softball/Baseball board types exist in the enum already but have no
+  `sport_state` shape or UI yet — deferred to their own WP-07-05/06,
+  reusing this WP's column/dispatch pattern rather than adding new
+  infrastructure per sport. docs/live-scoring.md (new "Sport-specific
+  scoreboards" section + endpoint/data-model/test updates), docs/
+  audit-trail.md (+1 row: scoring.foul_recorded/fouls_reset), docs/
+  authorization.md (extended the existing Live scoring row's action list,
+  no new row — same gate). Pest 616/616 (8 new tests in
+  ScoringSessionTest: Basketball session initializes board_type/sport_state
+  correctly and a non-Basketball one doesn't, foul add/reset mutates the
+  right side and audits both actions, the foul endpoint 422s for a
+  non-Basketball session, is forbidden for non-managers, rejects a mutation
+  on an ended session, and the scoreboard page exposes board_type/
+  sport_state), full gate green: Pint+PHPStan+ESLint+Prettier+tsc+build;
+  migration Ran on MySQL pmmsdb; app HTTP 200 at http://pmms.app; not
+  committed/pushed) — next: WP-07-05 Boxing Live Scoreboard, on owner
+  instruction.
+- WP-07-05 Boxing Live Scoreboard — done 2026-07-26 (reused WP-07-04's
+  `sport_state` column and dispatch pattern with no new migration and no
+  new infrastructure — the reuse that update was designed for. Boxing
+  `sport_state` is `{rounds: [{round, score_a, score_b}, ...]}`,
+  initialized to `{rounds: []}` when a session starts for a Boxing match
+  (extended `store()`'s per-board-type init from an `if` into a `match`
+  covering both Basketball and Boxing). New `App\Enums\ScoreEventType::
+  RoundScore` case and `PATCH scoring-sessions/{session}/round`
+  (`scoring.round`) — validates `score_a`/`score_b` each `0..10` (10-point-
+  must convention, not enforced beyond the range — a meet's own judging
+  decides which side gets 10), appends `{round: count(rounds)+1, score_a,
+  score_b}` to the history, and **also** adds both deltas into the
+  session's running `score_a`/`score_b` so the main cumulative score
+  display stays correct — the round number is always derived from history
+  length, never operator-input, so rounds can't be recorded out of order or
+  duplicated under a wrong number. Deliberately no per-round edit/undo in
+  this WP (keeping it practical, no new capability invented beyond what was
+  asked): a mis-scored round is fixed the same way as any other board type,
+  through the existing generic `scoring.score` correction endpoint on the
+  running total. Round number itself (as in "Round 3") reuses the existing
+  generic `period_label` free-text field, same convention WP-07-04 used
+  for basketball's quarter — no new structured field for it. `scoring/
+  show.tsx`: a "Round-by-round" list (visible to every viewer, not just the
+  operator) and an operator-only "Record round N" dialog (two number
+  inputs, `RoundScoreDialog`, mirrors the existing `CorrectionDialog`
+  pattern) that always shows the next round number. Introduced
+  `isBasketballState`/`isBoxingState` TypeScript type guards (`sport_state`
+  is now a `BasketballState | BoxingState | null` union) plus two derived
+  `const`s (`basketballState`/`boxingState`) computed once per render,
+  replacing WP-07-04's inline `session.board_type === 'basketball'` checks
+  everywhere they touched `sport_state` — cleaner narrowing for a second
+  sport than repeating the string-literal check, and the pattern is now
+  established for WP-07-06 to extend a third time. docs/live-scoring.md
+  (Boxing moved from "deferred" to a documented board, endpoint table row,
+  test list), docs/audit-trail.md (+1 row: scoring.round_scored), docs/
+  authorization.md (extended the existing Live scoring row's action list
+  again, no new row). Pest 624/624 (8 new tests in ScoringSessionTest:
+  Boxing session initializes an empty round history and the right
+  board_type, recording rounds appends to history and sums into the
+  running total correctly across multiple rounds with correct round
+  numbers, a round score outside 0..10 is rejected, the round endpoint
+  422s for a non-Boxing session, is forbidden for non-managers, rejects a
+  mutation on an ended session, and the scoreboard page exposes
+  board_type/sport_state), full gate green: Pint+PHPStan+ESLint+Prettier+
+  tsc+build; no new migration (Ran: nothing to migrate, reused WP-07-04's
+  column); app HTTP 200 at http://pmms.app; not committed/pushed) — next:
+  WP-07-06 Softball/Baseball Live Scoreboard, on owner instruction.
+- WP-07-06 Softball/Baseball Live Scoreboard — done 2026-07-26 (closes out
+  the owner's sport-specific scoreboard request — Basketball/Boxing/
+  Softball/Baseball now built, every other sport still gets the original
+  generic board. Again reused WP-07-04's `sport_state` column and
+  per-board `store()` init with no new migration — the third sport to do
+  so, confirming that extension point holds. `App\Enums\ScoreboardType::
+  SoftballBaseball` resolves both "Softball" and "Baseball" sport names to
+  one board (proven by a parametrized test over both names). `sport_state`
+  is `{inning, half (top|bottom), outs, balls, strikes, innings: [{inning,
+  runs_a, runs_b}, ...]}`, initialized to inning 1/top/all-zero/empty
+  history. Two endpoints, since runs and the count/outs are independent
+  concerns: `scoring.count` (`out`/`ball`/`strike`/`reset_count`) encodes
+  the sport's own hard rules as cascading state transitions the same way
+  WP-07-04's bonus badge and WP-07-05's derived round number did — any out
+  (direct, or a third strike) resets the count for the next batter; a
+  *third* out additionally ends the half-inning (flips top<->bottom,
+  increments `inning` once bottom ends); a *fourth* ball resets the count
+  (a walk — no baserunner model, so no run auto-added); `reset_count` is a
+  manual new-batter correction. `scoring.inning-run` (`side` + `runs`,
+  1-20) finds-or-creates the current inning's row in `sport_state.innings`
+  by `sport_state.inning` (never operator-input) and adds to it **and** to
+  the session's running `score_a`/`score_b` in the same request, so the
+  linescore breakdown and the cumulative total can never disagree — a
+  later inning correctly starts its own row rather than merging into an
+  earlier one (explicit test). Both new controller methods needed a
+  `default => $state`/`default => $state` arm added to their `match`
+  expressions to satisfy PHPStan (`$data['action']` from `$request->
+  validate()` is typed `mixed`, so `Rule::in`-validated exhaustiveness
+  isn't visible to static analysis even though it's guaranteed at
+  runtime) — the only real friction this WP hit. `scoring/show.tsx`: an
+  inning/half/outs/count status line, a linescore-style inning list
+  (visible to everyone), an operator-only `RunDialog` per side (single
+  runs-scored input, mirrors `CorrectionDialog`'s shape) and a shared
+  Out/Ball/Strike/Reset-count button row. Same accepted trade-off as
+  boxing's rounds: the generic `score` correction endpoint is still
+  reachable and would desync the linescore from the total if used instead
+  of `inning-run`, documented rather than blocked — nothing is silently
+  lost either way since every mutation is still an unconditional
+  `score_events` row. docs/live-scoring.md (Softball/Baseball moved from
+  "deferred" to a fully documented board, two endpoint table rows, test
+  list, closing note that all three sport-specific boards reused
+  WP-07-04's extension point with zero schema changes after the first),
+  docs/audit-trail.md (+1 row: scoring.count_updated/run_scored), docs/
+  authorization.md (extended the Live scoring row's action list a third
+  time, no new row). Pest 638/638 (14 new tests in ScoringSessionTest:
+  Softball and Baseball both correctly initialize the same board type and
+  count/inning state, a run appends to the current inning and sums into
+  the total, a later inning starts its own row, three outs flips the half
+  and resets the count, the bottom half's third out advances the inning
+  number, a third strike is itself an out, a fourth ball resets the count
+  without an out, reset_count only zeroes balls/strikes, both endpoints
+  422 for a non-Softball/Baseball session, are forbidden for non-managers,
+  reject a mutation on an ended session, and the scoreboard page exposes
+  board_type/sport_state), full gate green: Pint+PHPStan+ESLint+Prettier+
+  tsc+build; no new migration (Ran: nothing to migrate); app HTTP 200 at
+  http://pmms.app; not committed/pushed) — this closes the owner's
+  sport-specific scoreboard request (WP-07-04/05/06 all done). Next: owner
+  review + commit decision for the whole Phase 7 tree (original 3 WPs plus
+  these 3 sport-specific ones, all still uncommitted), or a fourth
+  sport-specific WP if the owner wants another one.
 
 # Phase 5 — Executive and Management Dashboards
 COMPLETE 2026-07-25, all 8 WPs executed one at a time on owner instruction.

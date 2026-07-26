@@ -55,6 +55,18 @@ function boxingMatch(): EventMatch
     return EventMatch::factory()->create(['event_id' => $event->id, 'status' => MatchStatus::Scheduled]);
 }
 
+/**
+ * A scheduled match whose sport resolves to the softball/baseball
+ * scoreboard (App\Enums\ScoreboardType — WP-07-06).
+ */
+function softballMatch(string $sportName = 'Softball'): EventMatch
+{
+    $sport = Sport::factory()->create(['name' => $sportName]);
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+
+    return EventMatch::factory()->create(['event_id' => $event->id, 'status' => MatchStatus::Scheduled]);
+}
+
 test('guests are redirected from the scoring session endpoint', function () {
     $match = EventMatch::factory()->create();
 
@@ -532,4 +544,221 @@ test('the scoreboard page exposes board type and round history for a boxing matc
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('session.board_type', 'boxing')
             ->where('session.sport_state', ['rounds' => [['round' => 1, 'score_a' => 10, 'score_b' => 9]]]));
+});
+
+// WP-07-06: Softball/Baseball live scoreboard
+
+test('starting a session for a softball or baseball match initializes the count/inning state and the board type', function (string $sportName) {
+    $match = softballMatch($sportName);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Home', 'side_b_label' => 'Away'])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    expect($session->toLivePayload())->toMatchArray([
+        'board_type' => 'softball_baseball',
+        'sport_state' => ['inning' => 1, 'half' => 'top', 'outs' => 0, 'balls' => 0, 'strikes' => 0, 'innings' => []],
+    ]);
+})->with(['Softball', 'Baseball']);
+
+test('recording a run appends to the current inning and sums into the running total', function () {
+    $match = softballMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => ['inning' => 1, 'half' => 'top', 'outs' => 0, 'balls' => 0, 'strikes' => 0, 'innings' => []],
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/inning-run", ['side' => 'a', 'runs' => 2])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/inning-run", ['side' => 'b', 'runs' => 1])
+        ->assertSessionHasNoErrors();
+
+    $session->refresh();
+
+    expect($session->sport_state['innings'])->toBe([['inning' => 1, 'runs_a' => 2, 'runs_b' => 1]])
+        ->and($session->score_a)->toBe(2)
+        ->and($session->score_b)->toBe(1)
+        ->and(AuditLog::query()->where('action', 'scoring.run_scored')->count())->toBe(2);
+});
+
+test('a run recorded in a later inning starts its own row in the breakdown', function () {
+    $match = softballMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => ['inning' => 1, 'half' => 'top', 'outs' => 0, 'balls' => 0, 'strikes' => 0, 'innings' => []],
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/inning-run", ['side' => 'a', 'runs' => 1])
+        ->assertSessionHasNoErrors();
+
+    $session->forceFill(['sport_state' => [...$session->fresh()->sport_state, 'inning' => 2]])->save();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/inning-run", ['side' => 'b', 'runs' => 3])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state['innings'])->toBe([
+        ['inning' => 1, 'runs_a' => 1, 'runs_b' => 0],
+        ['inning' => 2, 'runs_a' => 0, 'runs_b' => 3],
+    ]);
+});
+
+test('three outs flips the half inning and resets the count', function () {
+    $match = softballMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => ['inning' => 1, 'half' => 'top', 'outs' => 0, 'balls' => 2, 'strikes' => 1, 'innings' => []],
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/count", ['action' => 'out'])->assertSessionHasNoErrors();
+    expect($session->fresh()->sport_state)->toMatchArray(['outs' => 1, 'half' => 'top', 'inning' => 1]);
+
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/count", ['action' => 'out'])->assertSessionHasNoErrors();
+    expect($session->fresh()->sport_state)->toMatchArray(['outs' => 2, 'half' => 'top', 'inning' => 1]);
+
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/count", ['action' => 'out'])->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toBe([
+        'inning' => 1, 'half' => 'bottom', 'outs' => 0, 'balls' => 0, 'strikes' => 0, 'innings' => [],
+    ]);
+});
+
+test('the third out of the bottom half advances the inning number', function () {
+    $match = softballMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => ['inning' => 1, 'half' => 'bottom', 'outs' => 2, 'balls' => 0, 'strikes' => 0, 'innings' => []],
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/count", ['action' => 'out'])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toBe([
+        'inning' => 2, 'half' => 'top', 'outs' => 0, 'balls' => 0, 'strikes' => 0, 'innings' => [],
+    ]);
+});
+
+test('a third strike is itself an out', function () {
+    $match = softballMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => ['inning' => 1, 'half' => 'top', 'outs' => 0, 'balls' => 1, 'strikes' => 2, 'innings' => []],
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/count", ['action' => 'strike'])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toBe([
+        'inning' => 1, 'half' => 'top', 'outs' => 1, 'balls' => 0, 'strikes' => 0, 'innings' => [],
+    ]);
+});
+
+test('a fourth ball resets the count without recording an out', function () {
+    $match = softballMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => ['inning' => 1, 'half' => 'top', 'outs' => 1, 'balls' => 3, 'strikes' => 2, 'innings' => []],
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/count", ['action' => 'ball'])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toBe([
+        'inning' => 1, 'half' => 'top', 'outs' => 1, 'balls' => 0, 'strikes' => 0, 'innings' => [],
+    ]);
+});
+
+test('reset_count only zeroes balls and strikes', function () {
+    $match = softballMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => ['inning' => 2, 'half' => 'bottom', 'outs' => 1, 'balls' => 2, 'strikes' => 1, 'innings' => []],
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/count", ['action' => 'reset_count'])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toBe([
+        'inning' => 2, 'half' => 'bottom', 'outs' => 1, 'balls' => 0, 'strikes' => 0, 'innings' => [],
+    ]);
+});
+
+test('the count and inning-run endpoints are rejected for a non-softball-baseball scoring session', function () {
+    $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
+    $session = ScoringSession::factory()->create(['match_id' => $match->id]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/count", ['action' => 'out'])
+        ->assertStatus(422);
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/inning-run", ['side' => 'a', 'runs' => 1])
+        ->assertStatus(422);
+});
+
+test('non-managers cannot advance the count or record a run', function (User $user) {
+    $match = softballMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => ['inning' => 1, 'half' => 'top', 'outs' => 0, 'balls' => 0, 'strikes' => 0, 'innings' => []],
+    ]);
+
+    $this->actingAs($user)
+        ->patch("/scoring-sessions/{$session->id}/count", ['action' => 'out'])
+        ->assertForbidden();
+
+    $this->actingAs($user)
+        ->patch("/scoring-sessions/{$session->id}/inning-run", ['side' => 'a', 'runs' => 1])
+        ->assertForbidden();
+})->with([
+    'viewer' => fn () => User::factory()->create(),
+    'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+]);
+
+test('the count and inning-run endpoints cannot be used once the session has ended', function () {
+    $match = softballMatch();
+    $session = ScoringSession::factory()->ended()->create([
+        'match_id' => $match->id,
+        'sport_state' => ['inning' => 1, 'half' => 'top', 'outs' => 0, 'balls' => 0, 'strikes' => 0, 'innings' => []],
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/count", ['action' => 'out'])
+        ->assertSessionHasErrors('status');
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/inning-run", ['side' => 'a', 'runs' => 1])
+        ->assertSessionHasErrors('status');
+});
+
+test('the scoreboard page exposes board type and inning state for a softball match', function () {
+    $match = softballMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Home', 'side_b_label' => 'Away'])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)
+        ->get("/matches/{$match->id}/scoreboard")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('session.board_type', 'softball_baseball')
+            ->where('session.sport_state.inning', 1)
+            ->where('session.sport_state.half', 'top'));
 });

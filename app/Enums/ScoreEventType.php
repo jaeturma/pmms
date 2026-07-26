@@ -13,6 +13,8 @@ enum ScoreEventType: string
     case Ended = 'ended';
     case Foul = 'foul';
     case RoundScore = 'round_score';
+    case InningRun = 'inning_run';
+    case Count = 'count';
 
     public function label(): string
     {
@@ -26,6 +28,8 @@ enum ScoreEventType: string
             self::Ended => 'Ended',
             self::Foul => 'Foul',
             self::RoundScore => 'Round score',
+            self::InningRun => 'Inning run',
+            self::Count => 'Count',
         };
     }
 }

@@ -21,8 +21,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { index as matchesIndex } from '@/routes/matches';
 import {
+    count as countRoute,
     end as endRoute,
     foul as foulRoute,
+    inningRun as inningRunRoute,
     pause as pauseRoute,
     period as periodRoute,
     resume as resumeRoute,
@@ -47,6 +49,21 @@ type BoxingState = {
     rounds: BoxingRound[];
 };
 
+type SoftballInning = {
+    inning: number;
+    runs_a: number;
+    runs_b: number;
+};
+
+type SoftballState = {
+    inning: number;
+    half: 'top' | 'bottom';
+    outs: number;
+    balls: number;
+    strikes: number;
+    innings: SoftballInning[];
+};
+
 type Session = {
     id: number;
     match_id: number;
@@ -59,7 +76,7 @@ type Session = {
     period_label: string | null;
     status_note: string | null;
     board_type: 'generic' | 'basketball' | 'boxing' | 'softball_baseball';
-    sport_state: BasketballState | BoxingState | null;
+    sport_state: BasketballState | BoxingState | SoftballState | null;
 };
 
 const BASKETBALL_BONUS_THRESHOLD = 5;
@@ -72,6 +89,12 @@ function isBasketballState(
 
 function isBoxingState(state: Session['sport_state']): state is BoxingState {
     return state !== null && 'rounds' in state;
+}
+
+function isSoftballState(
+    state: Session['sport_state'],
+): state is SoftballState {
+    return state !== null && 'innings' in state;
 }
 
 type Props = {
@@ -225,6 +248,62 @@ function RoundScoreDialog({
     );
 }
 
+function RunDialog({
+    side,
+    label,
+    onSubmit,
+}: {
+    side: 'a' | 'b';
+    label: string;
+    onSubmit: (runs: number) => void;
+}) {
+    const [open, setOpen] = useState(false);
+    const [runs, setRuns] = useState('1');
+
+    const submit = (e: FormEvent) => {
+        e.preventDefault();
+        onSubmit(Number(runs));
+        setOpen(false);
+        setRuns('1');
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                    Record run(s)
+                </Button>
+            </DialogTrigger>
+            <DialogContent>
+                <form onSubmit={submit}>
+                    <DialogHeader>
+                        <DialogTitle>Record runs — {label}</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                            <Label htmlFor={`runs-${side}`}>
+                                Runs scored this inning
+                            </Label>
+                            <Input
+                                id={`runs-${side}`}
+                                type="number"
+                                min={1}
+                                max={20}
+                                value={runs}
+                                onChange={(e) => setRuns(e.target.value)}
+                                required
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button type="submit">Save</Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 export default function ScoringBoard({
     match,
     suggestedLabels,
@@ -364,6 +443,30 @@ export default function ScoringBoard({
         );
     };
 
+    const recordRun = (side: 'a' | 'b', runs: number) => {
+        if (session === null) {
+            return;
+        }
+
+        router.patch(
+            inningRunRoute(session.id).url,
+            { side, runs },
+            { preserveScroll: true },
+        );
+    };
+
+    const recordCount = (action: 'out' | 'ball' | 'strike' | 'reset_count') => {
+        if (session === null) {
+            return;
+        }
+
+        router.patch(
+            countRoute(session.id).url,
+            { action },
+            { preserveScroll: true },
+        );
+    };
+
     const isManager = canManage;
     const isActive = session !== null && session.status !== 'ended';
     const basketballState =
@@ -372,6 +475,10 @@ export default function ScoringBoard({
             : null;
     const boxingState =
         session && isBoxingState(session.sport_state)
+            ? session.sport_state
+            : null;
+    const softballState =
+        session && isSoftballState(session.sport_state)
             ? session.sport_state
             : null;
 
@@ -569,6 +676,31 @@ export default function ScoringBoard({
                             </div>
                         )}
 
+                        {softballState && (
+                            <div className="flex flex-col items-center gap-2 text-center text-sm text-muted-foreground">
+                                <p>
+                                    Inning {softballState.inning} (
+                                    {softballState.half === 'top'
+                                        ? 'Top'
+                                        : 'Bottom'}
+                                    ) · {softballState.outs} Out
+                                    {softballState.outs === 1 ? '' : 's'} ·
+                                    Count {softballState.balls}-
+                                    {softballState.strikes}
+                                </p>
+                                {softballState.innings.length > 0 && (
+                                    <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1">
+                                        {softballState.innings.map((inn) => (
+                                            <li key={inn.inning}>
+                                                Inn {inn.inning}: {inn.runs_a}-
+                                                {inn.runs_b}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                        )}
+
                         {isManager && isActive && (
                             <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 print:hidden">
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -596,6 +728,15 @@ export default function ScoringBoard({
                                             >
                                                 Foul ({basketballState.fouls_a})
                                             </Button>
+                                        )}
+                                        {softballState && (
+                                            <RunDialog
+                                                side="a"
+                                                label={session.side_a_label}
+                                                onSubmit={(runs) =>
+                                                    recordRun('a', runs)
+                                                }
+                                            />
                                         )}
                                         <CorrectionDialog
                                             side="a"
@@ -630,6 +771,15 @@ export default function ScoringBoard({
                                                 Foul ({basketballState.fouls_b})
                                             </Button>
                                         )}
+                                        {softballState && (
+                                            <RunDialog
+                                                side="b"
+                                                label={session.side_b_label}
+                                                onSubmit={(runs) =>
+                                                    recordRun('b', runs)
+                                                }
+                                            />
+                                        )}
                                         <CorrectionDialog
                                             side="b"
                                             label={session.side_b_label}
@@ -662,6 +812,43 @@ export default function ScoringBoard({
                                             }
                                             onSubmit={recordRound}
                                         />
+                                    </div>
+                                )}
+
+                                {softballState && (
+                                    <div className="flex flex-wrap justify-center gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => recordCount('out')}
+                                        >
+                                            +1 Out
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => recordCount('ball')}
+                                        >
+                                            +1 Ball
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                recordCount('strike')
+                                            }
+                                        >
+                                            +1 Strike
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                recordCount('reset_count')
+                                            }
+                                        >
+                                            Reset count
+                                        </Button>
                                     </div>
                                 )}
 

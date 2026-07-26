@@ -1,4 +1,4 @@
-# Live Scoring (Phase 7, WP-07-01..05)
+# Live Scoring (Phase 7, WP-07-01..06)
 
 Optional, provisional live scoring for a match in progress. **Never creates,
 updates, or implies an `EventResult`/`ResultPlacement`** — the only path to
@@ -76,6 +76,8 @@ All under `App\Http\Controllers\ScoringSessionController`:
 | `PATCH /scoring-sessions/{session}/end` (`scoring.end`) | `role:admin,organizer`. Sets the session `ended`; never touches `EventResult`. |
 | `PATCH /scoring-sessions/{session}/foul` (`scoring.foul`, WP-07-04) | `role:admin,organizer`. Basketball board only — `422` for any other board type. `action` = `add` (with `side`) or `reset`; mutates `sport_state.fouls_a`/`fouls_b`. |
 | `PATCH /scoring-sessions/{session}/round` (`scoring.round`, WP-07-05) | `role:admin,organizer`. Boxing board only — `422` for any other board type. `score_a`/`score_b` (0-10 each) append a round to `sport_state.rounds` and add to the session's running `score_a`/`score_b`. |
+| `PATCH /scoring-sessions/{session}/count` (`scoring.count`, WP-07-06) | `role:admin,organizer`. Softball/Baseball board only — `422` for any other board type. `action` = `out` \| `ball` \| `strike` \| `reset_count`; advances `sport_state`'s outs/count/inning per the cascading rules below. |
+| `PATCH /scoring-sessions/{session}/inning-run` (`scoring.inning-run`, WP-07-06) | `role:admin,organizer`. Softball/Baseball board only — `422` for any other board type. `side` + `runs` (1-20) add to the current inning's row in `sport_state.innings` and to the session's running `score_a`/`score_b`. |
 
 Every mutation appends a `score_events` row, records an `AuditLogger` event
 (`scoring.started`/`scored`/`corrected`/`period_changed`/`paused`/
@@ -171,13 +173,44 @@ separate request.
   (as in "Round 3") reuses the existing generic `period_label` free-text
   field, same convention as basketball's quarter — no new structured field
   for it.
-- **Softball/Baseball**: `App\Enums\ScoreboardType::SoftballBaseball`
-  already resolves both sport names, but no dedicated `sport_state` shape
-  or UI exists yet — a session for that sport currently renders identically
-  to the generic board. Deferred to its own WP, which will extend
-  `sport_state` and the frontend's `board_type` branching the same way
-  WP-07-04/05 did, reusing the same JSON column and dispatch pattern rather
-  than adding new infrastructure per sport.
+- **Softball/Baseball** (`ScoreboardType::SoftballBaseball`, sport name
+  "Softball" or "Baseball", WP-07-06): `sport_state` is `{inning, half
+  (top|bottom), outs, balls, strikes, innings: [{inning, runs_a, runs_b},
+  ...]}`. Initialized to inning 1, top, all counters 0, empty `innings` when
+  a session starts for either sport. Two endpoints, not one, since runs and
+  the count/outs are independent concerns:
+  - `scoring.count` (`out`/`ball`/`strike`/`reset_count`) advances the count
+    via cascading rules that mirror the sport's own hard rules, the same
+    way basketball's bonus badge and boxing's derived round number encode
+    a rule rather than leave it to the operator: any out (direct, or the
+    third strike) resets the count for the next batter; a **third** out
+    additionally ends the half-inning (flips top↔bottom, and increments
+    `inning` once bottom ends); a **fourth** ball resets the count (a walk
+    — this app doesn't model baserunners, so no run is auto-added, the
+    operator uses `inning-run` if a walk forces one in); `reset_count` is a
+    manual correction for a new batter with no walk/strikeout.
+  - `scoring.inning-run` (`side` + `runs`) finds-or-creates the current
+    inning's row in `sport_state.innings` and adds to it **and** to the
+    session's running `score_a`/`score_b` in the same request, so the
+    linescore breakdown and the cumulative total can never disagree with
+    each other. The inning number for a new row always comes from
+    `sport_state.inning` (never operator-input), so a run always lands in
+    the inning the count/outs engine says is current.
+  - Both endpoints (and every prior sport-specific one) leave the generic
+    `score` correction endpoint reachable too — a run recorded through it
+    updates the total but not the innings breakdown, same accepted
+    trade-off already documented for boxing's rounds; nothing is silently
+    lost either way since every mutation is still an unconditional
+    `score_events` row.
+  - Inning label (e.g. "Inning 3") reuses the existing generic
+    `period_label` field only if the operator chooses to set it — unlike
+    basketball/boxing, the inning number is already visible from
+    `sport_state.inning`/`half`, so this field is optional here, not the
+    primary display.
+
+Boxing and Softball/Baseball both reused Basketball's JSON column and
+per-board `store()` initialization without any schema change — the
+extension point WP-07-04 was built to prove out.
 
 ## Tests
 
@@ -207,7 +240,17 @@ correctly across multiple rounds with correct round numbers, a round score
 outside `0..10` is rejected, the `scoring.round` endpoint 422s for a
 non-Boxing session, is forbidden for non-managers, rejects a mutation on an
 ended session, and the scoreboard page exposes `board_type`/`sport_state`
-for a Boxing match.
+for a Boxing match; a Softball or Baseball match's session both correctly
+initialize the same `softball_baseball` board type and count/inning state,
+recording a run appends to the current inning's row and sums into the
+running total (a later inning starts its own row rather than merging),
+three outs flips the half-inning and resets the count, the third out of a
+bottom half also advances the inning number, a third strike is itself an
+out, a fourth ball resets the count without recording an out,
+`reset_count` only zeroes balls/strikes, both endpoints 422 for a
+non-Softball/Baseball session, are forbidden for non-managers, reject a
+mutation on an ended session, and the scoreboard page exposes
+`board_type`/`sport_state` for a Softball match.
 `tests/Feature/ResultTest.php` (pre-existing, unchanged) already proves the
 Phase 3 encode→validate flow works with no live scoring session ever
 created — Phase 7 adds no coupling for it to newly depend on.

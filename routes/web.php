@@ -202,6 +202,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('scoring-sessions/{session}/end', [ScoringSessionController::class, 'end'])->name('scoring.end');
         Route::patch('scoring-sessions/{session}/foul', [ScoringSessionController::class, 'foul'])->name('scoring.foul');
         Route::patch('scoring-sessions/{session}/round', [ScoringSessionController::class, 'round'])->name('scoring.round');
+        Route::patch('scoring-sessions/{session}/count', [ScoringSessionController::class, 'count'])->name('scoring.count');
+        Route::patch('scoring-sessions/{session}/inning-run', [ScoringSessionController::class, 'inningRun'])->name('scoring.inning-run');
 
         Route::patch('protests/{protest}/review', [ProtestController::class, 'review'])->name('protests.review');
         Route::patch('protests/{protest}/decide', [ProtestController::class, 'decide'])->name('protests.decide');
