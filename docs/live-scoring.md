@@ -1,4 +1,4 @@
-# Live Scoring (Phase 7, WP-07-01..04)
+# Live Scoring (Phase 7, WP-07-01..05)
 
 Optional, provisional live scoring for a match in progress. **Never creates,
 updates, or implies an `EventResult`/`ResultPlacement`** — the only path to
@@ -75,6 +75,7 @@ All under `App\Http\Controllers\ScoringSessionController`:
 | `PATCH /scoring-sessions/{session}/pause` \| `/resume` (`scoring.pause` / `scoring.resume`) | `role:admin,organizer`. |
 | `PATCH /scoring-sessions/{session}/end` (`scoring.end`) | `role:admin,organizer`. Sets the session `ended`; never touches `EventResult`. |
 | `PATCH /scoring-sessions/{session}/foul` (`scoring.foul`, WP-07-04) | `role:admin,organizer`. Basketball board only — `422` for any other board type. `action` = `add` (with `side`) or `reset`; mutates `sport_state.fouls_a`/`fouls_b`. |
+| `PATCH /scoring-sessions/{session}/round` (`scoring.round`, WP-07-05) | `role:admin,organizer`. Boxing board only — `422` for any other board type. `score_a`/`score_b` (0-10 each) append a round to `sport_state.rounds` and add to the session's running `score_a`/`score_b`. |
 
 Every mutation appends a `score_events` row, records an `AuditLogger` event
 (`scoring.started`/`scored`/`corrected`/`period_changed`/`paused`/
@@ -152,14 +153,31 @@ separate request.
   ignore the badge). Every foul action is also a `score_events` row
   (`App\Enums\ScoreEventType::Foul`) and an `AuditLogger` event
   (`scoring.foul_recorded` / `scoring.fouls_reset`).
-- **Boxing, Softball/Baseball**: `App\Enums\ScoreboardType` already has
-  `Boxing`/`SoftballBaseball` cases and will resolve either sport name to
-  them, but no dedicated `sport_state` shape or UI exists for either yet —
-  a session for those sports currently renders identically to the generic
-  board. Deferred to their own WPs, which will extend `sport_state` and the
-  frontend's `board_type` branching the same way this WP did, reusing the
-  same JSON column and dispatch pattern rather than adding new
-  infrastructure per sport.
+- **Boxing** (`ScoreboardType::Boxing`, sport name "Boxing", WP-07-05):
+  `sport_state` is `{rounds: [{round, score_a, score_b}, ...]}` — a
+  round-by-round history, 10-point-must style (each round's two scores are
+  validated to `0..10`, not forced to include a `10` — a meet's own judging
+  convention decides that, this app doesn't enforce it). Initialized to
+  `{rounds: []}` when a session starts for a Boxing match. Recording a round
+  (`scoring.round`, `add`-only — no `reset`, unlike fouls) appends to the
+  history **and** adds both scores into the session's running `score_a`/
+  `score_b`, so the main scoreboard's cumulative total is always the sum of
+  every round judged so far; a mis-recorded round isn't edited in place —
+  the operator corrects the running total the same way as any other board
+  type, through the existing generic `scoring.score` correction endpoint
+  (`type: correction`, reason required). The round number itself isn't
+  operator-input — it's always `count(rounds) + 1`, so rounds can't be
+  recorded out of order or duplicated under a wrong number. The round
+  (as in "Round 3") reuses the existing generic `period_label` free-text
+  field, same convention as basketball's quarter — no new structured field
+  for it.
+- **Softball/Baseball**: `App\Enums\ScoreboardType::SoftballBaseball`
+  already resolves both sport names, but no dedicated `sport_state` shape
+  or UI exists yet — a session for that sport currently renders identically
+  to the generic board. Deferred to its own WP, which will extend
+  `sport_state` and the frontend's `board_type` branching the same way
+  WP-07-04/05 did, reusing the same JSON column and dispatch pattern rather
+  than adding new infrastructure per sport.
 
 ## Tests
 
@@ -182,7 +200,14 @@ correctly and a non-Basketball match's doesn't, team fouls increment the
 correct side and reset zeroes both, the `scoring.foul` endpoint 422s for a
 non-Basketball session, is forbidden for non-managers, and rejects a
 mutation once the session has ended, and the scoreboard page exposes
-`board_type`/`sport_state` for a Basketball match.
+`board_type`/`sport_state` for a Basketball match; a Boxing match's session
+initializes an empty round history and the right `board_type`, recording
+round scores appends to the history and sums into the running total
+correctly across multiple rounds with correct round numbers, a round score
+outside `0..10` is rejected, the `scoring.round` endpoint 422s for a
+non-Boxing session, is forbidden for non-managers, rejects a mutation on an
+ended session, and the scoreboard page exposes `board_type`/`sport_state`
+for a Boxing match.
 `tests/Feature/ResultTest.php` (pre-existing, unchanged) already proves the
 Phase 3 encode→validate flow works with no live scoring session ever
 created — Phase 7 adds no coupling for it to newly depend on.

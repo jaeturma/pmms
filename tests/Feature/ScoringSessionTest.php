@@ -43,6 +43,18 @@ function basketballMatch(): EventMatch
     return EventMatch::factory()->create(['event_id' => $event->id, 'status' => MatchStatus::Scheduled]);
 }
 
+/**
+ * A scheduled match whose sport resolves to the boxing scoreboard
+ * (App\Enums\ScoreboardType — WP-07-05).
+ */
+function boxingMatch(): EventMatch
+{
+    $sport = Sport::factory()->create(['name' => 'Boxing']);
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+
+    return EventMatch::factory()->create(['event_id' => $event->id, 'status' => MatchStatus::Scheduled]);
+}
+
 test('guests are redirected from the scoring session endpoint', function () {
     $match = EventMatch::factory()->create();
 
@@ -409,4 +421,115 @@ test('the scoreboard page exposes board type and sport state for a basketball ma
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('session.board_type', 'basketball')
             ->where('session.sport_state', ['fouls_a' => 0, 'fouls_b' => 0]));
+});
+
+// WP-07-05: Boxing live scoreboard
+
+test('starting a session for a boxing match initializes an empty round history and the board type', function () {
+    $match = boxingMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Red', 'side_b_label' => 'Blue'])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    expect($session->toLivePayload())->toMatchArray([
+        'board_type' => 'boxing',
+        'sport_state' => ['rounds' => []],
+    ]);
+});
+
+test('recording round scores appends to the round history and sums into the running total', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => ['rounds' => []],
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 10, 'score_b' => 9])
+        ->assertSessionHasNoErrors();
+
+    $session->refresh();
+
+    expect($session->sport_state)->toBe(['rounds' => [['round' => 1, 'score_a' => 10, 'score_b' => 9]]])
+        ->and($session->score_a)->toBe(10)
+        ->and($session->score_b)->toBe(9);
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 9, 'score_b' => 10])
+        ->assertSessionHasNoErrors();
+
+    $session->refresh();
+
+    expect($session->sport_state)->toBe(['rounds' => [
+        ['round' => 1, 'score_a' => 10, 'score_b' => 9],
+        ['round' => 2, 'score_a' => 9, 'score_b' => 10],
+    ]])
+        ->and($session->score_a)->toBe(19)
+        ->and($session->score_b)->toBe(19)
+        ->and(AuditLog::query()->where('action', 'scoring.round_scored')->count())->toBe(2);
+});
+
+test('a round score must be between 0 and 10', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create(['match_id' => $match->id, 'sport_state' => ['rounds' => []]]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 11, 'score_b' => 9])
+        ->assertSessionHasErrors('score_a');
+});
+
+test('the round endpoint is rejected for a non-boxing scoring session', function () {
+    $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
+    $session = ScoringSession::factory()->create(['match_id' => $match->id]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 10, 'score_b' => 9])
+        ->assertStatus(422);
+});
+
+test('non-managers cannot record a round score', function (User $user) {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create(['match_id' => $match->id, 'sport_state' => ['rounds' => []]]);
+
+    $this->actingAs($user)
+        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 10, 'score_b' => 9])
+        ->assertForbidden();
+})->with([
+    'viewer' => fn () => User::factory()->create(),
+    'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+]);
+
+test('a round score cannot be recorded once the session has ended', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->ended()->create(['match_id' => $match->id, 'sport_state' => ['rounds' => []]]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 10, 'score_b' => 9])
+        ->assertSessionHasErrors('status');
+});
+
+test('the scoreboard page exposes board type and round history for a boxing match', function () {
+    $match = boxingMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Red', 'side_b_label' => 'Blue'])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 10, 'score_b' => 9])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)
+        ->get("/matches/{$match->id}/scoreboard")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('session.board_type', 'boxing')
+            ->where('session.sport_state', ['rounds' => [['round' => 1, 'score_a' => 10, 'score_b' => 9]]]));
 });

@@ -127,8 +127,14 @@ class ScoringSessionController extends Controller
             'started_at' => now(),
         ]);
 
-        if ($session->boardType() === ScoreboardType::Basketball) {
-            $session->forceFill(['sport_state' => ['fouls_a' => 0, 'fouls_b' => 0]])->save();
+        $initialSportState = match ($session->boardType()) {
+            ScoreboardType::Basketball => ['fouls_a' => 0, 'fouls_b' => 0],
+            ScoreboardType::Boxing => ['rounds' => []],
+            default => null,
+        };
+
+        if ($initialSportState !== null) {
+            $session->forceFill(['sport_state' => $initialSportState])->save();
         }
 
         $this->audit->record('scoring.started', $session, $this->context($session));
@@ -325,6 +331,52 @@ class ScoringSessionController extends Controller
         return back();
     }
 
+    /**
+     * Record a judged round score for both sides at once (boxing
+     * scoreboard only — WP-07-05), 10-point-must style. Appends to the
+     * round-by-round history in `sport_state` and adds to the session's
+     * running `score_a`/`score_b` total — the same cumulative total every
+     * board type displays. Past rounds are not individually editable here;
+     * a mis-scored round is fixed the same way as any other board type,
+     * through the generic `score` correction endpoint.
+     */
+    public function round(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->assertActive($session);
+        $this->assertBoxing($session);
+
+        $data = $request->validate([
+            'score_a' => ['required', 'integer', 'min:0', 'max:10'],
+            'score_b' => ['required', 'integer', 'min:0', 'max:10'],
+        ]);
+
+        $state = $session->sport_state ?? ['rounds' => []];
+        $roundNumber = count($state['rounds']) + 1;
+        $state['rounds'][] = ['round' => $roundNumber, ...$data];
+
+        $session->forceFill([
+            'sport_state' => $state,
+            'score_a' => $session->score_a + $data['score_a'],
+            'score_b' => $session->score_b + $data['score_b'],
+        ])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::RoundScore,
+            'payload' => ['round' => $roundNumber, ...$data],
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record('scoring.round_scored', $session, [...$this->context($session), 'round' => $roundNumber, ...$data]);
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
     private function assertActive(ScoringSession $session): void
     {
         if ($session->status === ScoringSessionStatus::Ended) {
@@ -338,6 +390,13 @@ class ScoringSessionController extends Controller
     {
         if ($session->boardType() !== ScoreboardType::Basketball) {
             abort(422, __('This action is only available for a basketball scoring session.'));
+        }
+    }
+
+    private function assertBoxing(ScoringSession $session): void
+    {
+        if ($session->boardType() !== ScoreboardType::Boxing) {
+            abort(422, __('This action is only available for a boxing scoring session.'));
         }
     }
 

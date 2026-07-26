@@ -26,6 +26,7 @@ import {
     pause as pauseRoute,
     period as periodRoute,
     resume as resumeRoute,
+    round as roundRoute,
     score as scoreRoute,
     show as pollRoute,
     start as startRoute,
@@ -34,6 +35,16 @@ import {
 type BasketballState = {
     fouls_a: number;
     fouls_b: number;
+};
+
+type BoxingRound = {
+    round: number;
+    score_a: number;
+    score_b: number;
+};
+
+type BoxingState = {
+    rounds: BoxingRound[];
 };
 
 type Session = {
@@ -48,10 +59,20 @@ type Session = {
     period_label: string | null;
     status_note: string | null;
     board_type: 'generic' | 'basketball' | 'boxing' | 'softball_baseball';
-    sport_state: BasketballState | null;
+    sport_state: BasketballState | BoxingState | null;
 };
 
 const BASKETBALL_BONUS_THRESHOLD = 5;
+
+function isBasketballState(
+    state: Session['sport_state'],
+): state is BasketballState {
+    return state !== null && 'fouls_a' in state;
+}
+
+function isBoxingState(state: Session['sport_state']): state is BoxingState {
+    return state !== null && 'rounds' in state;
+}
 
 type Props = {
     match: {
@@ -127,6 +148,76 @@ function CorrectionDialog({
                     </div>
                     <DialogFooter>
                         <Button type="submit">Save correction</Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function RoundScoreDialog({
+    labelA,
+    labelB,
+    nextRound,
+    onSubmit,
+}: {
+    labelA: string;
+    labelB: string;
+    nextRound: number;
+    onSubmit: (scoreA: number, scoreB: number) => void;
+}) {
+    const [open, setOpen] = useState(false);
+    const [scoreA, setScoreA] = useState('10');
+    const [scoreB, setScoreB] = useState('9');
+
+    const submit = (e: FormEvent) => {
+        e.preventDefault();
+        onSubmit(Number(scoreA), Number(scoreB));
+        setOpen(false);
+        setScoreA('10');
+        setScoreB('9');
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                    Record round {nextRound}
+                </Button>
+            </DialogTrigger>
+            <DialogContent>
+                <form onSubmit={submit}>
+                    <DialogHeader>
+                        <DialogTitle>Round {nextRound} score</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4 sm:grid-cols-2">
+                        <div className="grid gap-2">
+                            <Label htmlFor="round-score-a">{labelA}</Label>
+                            <Input
+                                id="round-score-a"
+                                type="number"
+                                min={0}
+                                max={10}
+                                value={scoreA}
+                                onChange={(e) => setScoreA(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="round-score-b">{labelB}</Label>
+                            <Input
+                                id="round-score-b"
+                                type="number"
+                                min={0}
+                                max={10}
+                                value={scoreB}
+                                onChange={(e) => setScoreB(e.target.value)}
+                                required
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button type="submit">Save round score</Button>
                     </DialogFooter>
                 </form>
             </DialogContent>
@@ -261,8 +352,28 @@ export default function ScoringBoard({
         );
     };
 
+    const recordRound = (scoreA: number, scoreB: number) => {
+        if (session === null) {
+            return;
+        }
+
+        router.patch(
+            roundRoute(session.id).url,
+            { score_a: scoreA, score_b: scoreB },
+            { preserveScroll: true },
+        );
+    };
+
     const isManager = canManage;
     const isActive = session !== null && session.status !== 'ended';
+    const basketballState =
+        session && isBasketballState(session.sport_state)
+            ? session.sport_state
+            : null;
+    const boxingState =
+        session && isBoxingState(session.sport_state)
+            ? session.sport_state
+            : null;
 
     return (
         <>
@@ -417,31 +528,46 @@ export default function ScoringBoard({
                             </p>
                         )}
 
-                        {session.board_type === 'basketball' &&
-                            session.sport_state && (
-                                <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-center text-sm text-muted-foreground">
-                                    <span className="flex items-center gap-2">
-                                        Team fouls — {session.side_a_label}:{' '}
-                                        {session.sport_state.fouls_a}
-                                        {session.sport_state.fouls_a >=
-                                            BASKETBALL_BONUS_THRESHOLD && (
-                                            <Badge variant="destructive">
-                                                Bonus
-                                            </Badge>
-                                        )}
-                                    </span>
-                                    <span className="flex items-center gap-2">
-                                        Team fouls — {session.side_b_label}:{' '}
-                                        {session.sport_state.fouls_b}
-                                        {session.sport_state.fouls_b >=
-                                            BASKETBALL_BONUS_THRESHOLD && (
-                                            <Badge variant="destructive">
-                                                Bonus
-                                            </Badge>
-                                        )}
-                                    </span>
-                                </div>
-                            )}
+                        {basketballState && (
+                            <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-center text-sm text-muted-foreground">
+                                <span className="flex items-center gap-2">
+                                    Team fouls — {session.side_a_label}:{' '}
+                                    {basketballState.fouls_a}
+                                    {basketballState.fouls_a >=
+                                        BASKETBALL_BONUS_THRESHOLD && (
+                                        <Badge variant="destructive">
+                                            Bonus
+                                        </Badge>
+                                    )}
+                                </span>
+                                <span className="flex items-center gap-2">
+                                    Team fouls — {session.side_b_label}:{' '}
+                                    {basketballState.fouls_b}
+                                    {basketballState.fouls_b >=
+                                        BASKETBALL_BONUS_THRESHOLD && (
+                                        <Badge variant="destructive">
+                                            Bonus
+                                        </Badge>
+                                    )}
+                                </span>
+                            </div>
+                        )}
+
+                        {boxingState && boxingState.rounds.length > 0 && (
+                            <div className="mx-auto w-full max-w-md">
+                                <p className="mb-2 text-center text-sm font-medium text-muted-foreground">
+                                    Round-by-round
+                                </p>
+                                <ul className="flex flex-col gap-1 text-center text-sm text-muted-foreground">
+                                    {boxingState.rounds.map((round) => (
+                                        <li key={round.round}>
+                                            Round {round.round}: {round.score_a}{' '}
+                                            – {round.score_b}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
 
                         {isManager && isActive && (
                             <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 print:hidden">
@@ -461,18 +587,14 @@ export default function ScoringBoard({
                                                 </Button>
                                             ))}
                                         </div>
-                                        {session.board_type ===
-                                            'basketball' && (
+                                        {basketballState && (
                                             <Button
                                                 variant="outline"
                                                 size="sm"
                                                 aria-label={`Add team foul, ${session.side_a_label}`}
                                                 onClick={() => recordFoul('a')}
                                             >
-                                                Foul (
-                                                {session.sport_state?.fouls_a ??
-                                                    0}
-                                                )
+                                                Foul ({basketballState.fouls_a})
                                             </Button>
                                         )}
                                         <CorrectionDialog
@@ -498,18 +620,14 @@ export default function ScoringBoard({
                                                 </Button>
                                             ))}
                                         </div>
-                                        {session.board_type ===
-                                            'basketball' && (
+                                        {basketballState && (
                                             <Button
                                                 variant="outline"
                                                 size="sm"
                                                 aria-label={`Add team foul, ${session.side_b_label}`}
                                                 onClick={() => recordFoul('b')}
                                             >
-                                                Foul (
-                                                {session.sport_state?.fouls_b ??
-                                                    0}
-                                                )
+                                                Foul ({basketballState.fouls_b})
                                             </Button>
                                         )}
                                         <CorrectionDialog
@@ -522,7 +640,7 @@ export default function ScoringBoard({
                                     </div>
                                 </div>
 
-                                {session.board_type === 'basketball' && (
+                                {basketballState && (
                                     <div className="flex justify-center">
                                         <Button
                                             variant="outline"
@@ -531,6 +649,19 @@ export default function ScoringBoard({
                                         >
                                             Reset fouls
                                         </Button>
+                                    </div>
+                                )}
+
+                                {boxingState && (
+                                    <div className="flex justify-center">
+                                        <RoundScoreDialog
+                                            labelA={session.side_a_label}
+                                            labelB={session.side_b_label}
+                                            nextRound={
+                                                boxingState.rounds.length + 1
+                                            }
+                                            onSubmit={recordRound}
+                                        />
                                     </div>
                                 )}
 
