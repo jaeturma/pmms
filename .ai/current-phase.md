@@ -328,9 +328,11 @@ instruction. **Reopened same day**: owner instructed sport-specific
 scoreboards after all, appended as WP-07-04 (Basketball, done) → WP-07-05
 (Boxing, done) → WP-07-06 (Softball/Baseball, done) rather than
 renumbering the shipped, committed/pushed WP-07-02 ("Generic Live
-Scoreboard UI") — see the Work Package Log below for WP-07-04/05/06. All
-three sport-specific scoreboards (the full sport-specific scope requested)
-are now built; original review: docs/phases/phase-07-live-scoring-enhancement/
+Scoreboard UI") — see the Work Package Log below for WP-07-04/05/06/07.
+All three sport-specific scoreboards are built, plus WP-07-07 (manual
+board-type override, done 2026-07-26 — force the generic board for an
+exhibition/non-standard match even when the sport has a dedicated one).
+Original review: docs/phases/phase-07-live-scoring-enhancement/
 phase-7-compliance-review.md (COMPLIANT; two Low accessibility gaps found
 and fixed during the review, no schema/authorization/architectural issues;
 full gate green: Pint+PHPStan+Pest 608/608 (3,020 assertions), ESLint+
@@ -632,11 +634,51 @@ acceptance. Execute one work package at a time on owner instruction.
   reject a mutation on an ended session, and the scoreboard page exposes
   board_type/sport_state), full gate green: Pint+PHPStan+ESLint+Prettier+
   tsc+build; no new migration (Ran: nothing to migrate); app HTTP 200 at
-  http://pmms.app; not committed/pushed) — this closes the owner's
-  sport-specific scoreboard request (WP-07-04/05/06 all done). Next: owner
-  review + commit decision for the whole Phase 7 tree (original 3 WPs plus
-  these 3 sport-specific ones, all still uncommitted), or a fourth
-  sport-specific WP if the owner wants another one.
+  http://pmms.app) — this closed the owner's original sport-specific
+  scoreboard request (WP-07-04/05/06). WP-07-04/05/06 committed 2026-07-26
+  as three individually-buildable commits (`c818903`/`1e7b9e7`/`650a7f5`,
+  each verified against its own full quality gate — WP-07-05's commit
+  required manually reconstructing its true intermediate file state since
+  it added no exclusive files of its own, backed up the final files first
+  and diffed against the backup at each step to confirm no drift) and
+  pushed to origin same day, next to WP-07-01..03's earlier commits.
+- WP-07-07 Generic Match Scoreboard (manual board-type override) — done
+  2026-07-26 (owner asked for this by that name; scoped down after
+  clarifying — the generic *board* already existed since WP-07-02 as the
+  automatic fallback for every sport without a dedicated one, so this WP
+  is specifically the manual **override**: let the operator force the
+  generic board at session start even for a sport that has a dedicated one,
+  for an exhibition or non-standard match the sport-specific rules don't
+  fit. New nullable `scoring_sessions.board_type_override` column;
+  `ScoringSession::boardType()` checks it first and returns it without even
+  loading the match's sport if present — the override always wins, for the
+  session's lifetime, no way to change it mid-session (would orphan
+  already-recorded sport_state, out of scope by design).
+  `ScoringSessionController::store()` accepts an optional `board_type`
+  field validated to only ever equal `"generic"` (deliberately no way to
+  force a *sport-specific* board onto an unrelated sport's match, only to
+  opt out down to generic); `board()` gains a `suggestedBoardType` prop
+  (the auto-derived board, independent of whether a session exists yet) so
+  the frontend knows whether the override control is even relevant.
+  `scoring/show.tsx`'s Start form shows a "Use the generic scoreboard
+  instead of the automatic {board} board" checkbox only when
+  `suggestedBoardType !== 'generic'` (new shadcn `Checkbox`, first use in
+  this file, matching the existing controlled-checkbox pattern from
+  `delegations/index.tsx`). `scoring.started`'s audit context now also
+  records the resolved `board_type` for traceability. docs/live-scoring.md
+  (new "Manual board-type override" section + data-model/endpoint/test
+  updates); no docs/audit-trail.md or docs/authorization.md changes needed
+  (no new audit action, same `scoring.start` endpoint/gate). Pest 644/644
+  (6 new tests in ScoringSessionTest: a Basketball/Boxing/Softball match's
+  session can each be forced to generic with sport_state staying null, a
+  Basketball match started without the override still gets the basketball
+  board (regression guard), the override rejects any value other than
+  "generic", and the scoreboard page exposes the correct suggestedBoardType
+  both for a Basketball match and for a match with no dedicated board),
+  full gate green: Pint+PHPStan+ESLint+Prettier+tsc+build; migration Ran on
+  MySQL pmmsdb; app HTTP 200 at http://pmms.app; not committed/pushed) —
+  next: owner's choice of a fourth sport-specific WP, commit decision for
+  WP-07-07, or moving on to Phase 6/8 planning.
 
 # Phase 5 — Executive and Management Dashboards
 COMPLETE 2026-07-25, all 8 WPs executed one at a time on owner instruction.

@@ -27,6 +27,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $period_label
  * @property string|null $status_note
  * @property array<string, mixed>|null $sport_state
+ * @property ScoreboardType|null $board_type_override
  * @property int|null $started_by
  * @property int|null $ended_by
  * @property Carbon|null $started_at
@@ -48,6 +49,7 @@ class ScoringSession extends Model
         return [
             'status' => ScoringSessionStatus::class,
             'sport_state' => 'array',
+            'board_type_override' => ScoreboardType::class,
             'started_at' => 'datetime',
             'ended_at' => 'datetime',
         ];
@@ -91,12 +93,18 @@ class ScoringSession extends Model
     }
 
     /**
-     * Which scoreboard UI this session uses, inferred from the match's
-     * sport (App\Enums\ScoreboardType). Not stored — always derived, so a
-     * sport rename or catalog edit is reflected immediately.
+     * Which scoreboard UI this session uses. Normally inferred from the
+     * match's sport (App\Enums\ScoreboardType) and not stored, so a sport
+     * rename or catalog edit is reflected immediately — unless the
+     * operator explicitly overrode it at session start (`board_type_
+     * override`, WP-07-07, generic-only), which always wins.
      */
     public function boardType(): ScoreboardType
     {
+        if ($this->board_type_override !== null) {
+            return $this->board_type_override;
+        }
+
         $this->loadMissing('match.event.sport');
 
         return ScoreboardType::forSport($this->match->event->sport->name);

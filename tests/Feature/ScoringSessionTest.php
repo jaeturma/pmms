@@ -762,3 +762,92 @@ test('the scoreboard page exposes board type and inning state for a softball mat
             ->where('session.sport_state.inning', 1)
             ->where('session.sport_state.half', 'top'));
 });
+
+// WP-07-07: Generic match scoreboard (manual board-type override)
+
+test('a basketball match session can be forced to the generic board at start', function () {
+    $match = basketballMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", [
+            'side_a_label' => 'Home', 'side_b_label' => 'Away', 'board_type' => 'generic',
+        ])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    expect($session->toLivePayload())->toMatchArray(['board_type' => 'generic', 'sport_state' => null]);
+});
+
+test('a boxing match session can be forced to the generic board at start', function () {
+    $match = boxingMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", [
+            'side_a_label' => 'Red', 'side_b_label' => 'Blue', 'board_type' => 'generic',
+        ])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    expect($session->toLivePayload())->toMatchArray(['board_type' => 'generic', 'sport_state' => null]);
+});
+
+test('a softball match session can be forced to the generic board at start', function () {
+    $match = softballMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", [
+            'side_a_label' => 'Home', 'side_b_label' => 'Away', 'board_type' => 'generic',
+        ])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    expect($session->toLivePayload())->toMatchArray(['board_type' => 'generic', 'sport_state' => null]);
+});
+
+test('without an override a basketball match session still gets the basketball board', function () {
+    $match = basketballMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Home', 'side_b_label' => 'Away'])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    expect($session->toLivePayload())->toMatchArray([
+        'board_type' => 'basketball',
+        'sport_state' => ['fouls_a' => 0, 'fouls_b' => 0],
+    ]);
+});
+
+test('the board type override only accepts generic, not another sport board', function () {
+    $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post("/matches/{$match->id}/scoring-sessions", [
+            'side_a_label' => 'A', 'side_b_label' => 'B', 'board_type' => 'basketball',
+        ])
+        ->assertSessionHasErrors('board_type');
+});
+
+test('the scoreboard page exposes the auto-derived suggested board type before a session starts', function () {
+    $match = basketballMatch();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get("/matches/{$match->id}/scoreboard")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('suggestedBoardType', 'basketball'));
+
+    $genericMatch = EventMatch::factory()->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get("/matches/{$genericMatch->id}/scoreboard")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('suggestedBoardType', 'generic'));
+});

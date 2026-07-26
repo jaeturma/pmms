@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogContent,
@@ -107,6 +108,8 @@ type Props = {
         is_scheduled: boolean;
     };
     suggestedLabels: [string | null, string | null];
+    suggestedBoardType:
+        'generic' | 'basketball' | 'boxing' | 'softball_baseball';
     session: Session | null;
     channel: string;
     canManage: boolean;
@@ -307,6 +310,7 @@ function RunDialog({
 export default function ScoringBoard({
     match,
     suggestedLabels,
+    suggestedBoardType,
     session: initialSession,
     channel,
     canManage,
@@ -316,6 +320,7 @@ export default function ScoringBoard({
     const [fullscreen, setFullscreen] = useState(false);
     const [sideALabel, setSideALabel] = useState(suggestedLabels[0] ?? '');
     const [sideBLabel, setSideBLabel] = useState(suggestedLabels[1] ?? '');
+    const [forceGeneric, setForceGeneric] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
     // Adjust local state during render when a fresh Inertia prop arrives
@@ -378,7 +383,11 @@ export default function ScoringBoard({
         e.preventDefault();
         router.post(
             startRoute(match.id).url,
-            { side_a_label: sideALabel, side_b_label: sideBLabel },
+            {
+                side_a_label: sideALabel,
+                side_b_label: sideBLabel,
+                ...(forceGeneric ? { board_type: 'generic' } : {}),
+            },
             { preserveScroll: true },
         );
     };
@@ -531,6 +540,29 @@ export default function ScoringBoard({
                                             required
                                         />
                                     </div>
+                                    {suggestedBoardType !== 'generic' && (
+                                        <div className="flex items-center gap-2 sm:col-span-2">
+                                            <Checkbox
+                                                id="force-generic"
+                                                checked={forceGeneric}
+                                                onCheckedChange={(checked) =>
+                                                    setForceGeneric(
+                                                        checked === true,
+                                                    )
+                                                }
+                                            />
+                                            <Label
+                                                htmlFor="force-generic"
+                                                className="font-normal"
+                                            >
+                                                Use the generic scoreboard
+                                                instead of the automatic{' '}
+                                                {suggestedBoardType} board (e.g.
+                                                for an exhibition or
+                                                non-standard match)
+                                            </Label>
+                                        </div>
+                                    )}
                                     <Button
                                         type="submit"
                                         className="sm:col-span-2"

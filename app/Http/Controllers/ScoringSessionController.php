@@ -86,6 +86,7 @@ class ScoringSessionController extends Controller
                 $entries[0]->athlete->school->name,
                 $entries[1]->athlete->school->name,
             ] : [null, null],
+            'suggestedBoardType' => ScoreboardType::forSport($match->event->sport->name)->value,
             'session' => $session === null ? null : $session->toLivePayload(),
             'channel' => "match.{$match->id}.scoring",
             'canManage' => Gate::allows('manage-meet-data'),
@@ -113,6 +114,7 @@ class ScoringSessionController extends Controller
         $data = $request->validate([
             'side_a_label' => ['required', 'string', 'max:255'],
             'side_b_label' => ['required', 'string', 'max:255'],
+            'board_type' => ['nullable', 'string', Rule::in([ScoreboardType::Generic->value])],
         ]);
 
         /** @var User $user */
@@ -127,6 +129,10 @@ class ScoringSessionController extends Controller
             'started_at' => now(),
         ]);
 
+        if (($data['board_type'] ?? null) === ScoreboardType::Generic->value) {
+            $session->forceFill(['board_type_override' => ScoreboardType::Generic])->save();
+        }
+
         $initialSportState = match ($session->boardType()) {
             ScoreboardType::Basketball => ['fouls_a' => 0, 'fouls_b' => 0],
             ScoreboardType::Boxing => ['rounds' => []],
@@ -140,7 +146,7 @@ class ScoringSessionController extends Controller
             $session->forceFill(['sport_state' => $initialSportState])->save();
         }
 
-        $this->audit->record('scoring.started', $session, $this->context($session));
+        $this->audit->record('scoring.started', $session, [...$this->context($session), 'board_type' => $session->boardType()->value]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Live scoring started.')]);
 

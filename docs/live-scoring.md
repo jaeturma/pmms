@@ -1,4 +1,4 @@
-# Live Scoring (Phase 7, WP-07-01..06)
+# Live Scoring (Phase 7, WP-07-01..07)
 
 Optional, provisional live scoring for a match in progress. **Never creates,
 updates, or implies an `EventResult`/`ResultPlacement`** — the only path to
@@ -61,6 +61,10 @@ the app to function.
   `board_type`; `null` for the generic board. Never stored as a separate
   column per sport — one flexible JSON column shared by every sport-specific
   scoreboard added to this phase.
+- `board_type_override` (nullable string, WP-07-07) — set only when the
+  operator explicitly forced the generic board at session start (see
+  "Manual board-type override" below). `null` for every session that used
+  the automatic, sport-derived board — the common case.
 
 ## Endpoints
 
@@ -78,6 +82,9 @@ All under `App\Http\Controllers\ScoringSessionController`:
 | `PATCH /scoring-sessions/{session}/round` (`scoring.round`, WP-07-05) | `role:admin,organizer`. Boxing board only — `422` for any other board type. `score_a`/`score_b` (0-10 each) append a round to `sport_state.rounds` and add to the session's running `score_a`/`score_b`. |
 | `PATCH /scoring-sessions/{session}/count` (`scoring.count`, WP-07-06) | `role:admin,organizer`. Softball/Baseball board only — `422` for any other board type. `action` = `out` \| `ball` \| `strike` \| `reset_count`; advances `sport_state`'s outs/count/inning per the cascading rules below. |
 | `PATCH /scoring-sessions/{session}/inning-run` (`scoring.inning-run`, WP-07-06) | `role:admin,organizer`. Softball/Baseball board only — `422` for any other board type. `side` + `runs` (1-20) add to the current inning's row in `sport_state.innings` and to the session's running `score_a`/`score_b`. |
+
+`scoring.start` also accepts an optional `board_type` (WP-07-07) — see
+"Manual board-type override" below.
 
 Every mutation appends a `score_events` row, records an `AuditLogger` event
 (`scoring.started`/`scored`/`corrected`/`period_changed`/`paused`/
@@ -212,6 +219,41 @@ Boxing and Softball/Baseball both reused Basketball's JSON column and
 per-board `store()` initialization without any schema change — the
 extension point WP-07-04 was built to prove out.
 
+## Manual board-type override (WP-07-07)
+
+The automatic, sport-derived board is always correct for a normal match —
+but an exhibition bout, a mixed-rules friendly, or any match that doesn't
+follow its sport's usual structure may not fit the sport-specific board's
+assumptions (basketball fouls, boxing rounds, softball innings/outs). At
+session start, the operator can force the plain generic board instead:
+`ScoringSessionController::store()` accepts an optional `board_type` field,
+validated to only ever equal `"generic"` (`Rule::in([ScoreboardType::
+Generic->value])`) — there is deliberately no way to force a *sport-specific*
+board onto a match of a different sport, only to opt out of one down to
+generic. When set, it's stored in the new `board_type_override` column;
+`ScoringSession::boardType()` checks it first and, if present, returns it
+without even loading the match's sport — the override always wins over the
+derived value, for the lifetime of that session. A generic-forced session
+never gets `sport_state` initialized (`store()`'s per-board-type `match`
+naturally returns `null` for `ScoreboardType::Generic`, same as any other
+sport with no dedicated board), so it behaves exactly like a session for a
+sport with no dedicated board at all.
+
+`ScoringSessionController::board()` exposes `suggestedBoardType` — the
+board that *would* be auto-selected, computed straight from the match's
+sport, independent of whether a session exists yet — so the frontend knows
+whether to show the override control at all. `scoring/show.tsx`'s "Start
+live scoring" form only renders the "Use the generic scoreboard instead of
+the automatic {board} board" checkbox when `suggestedBoardType !== 'generic'`
+(showing it for an already-generic sport would be a meaningless no-op
+control). The choice is a one-time decision at start, not something a
+session can flip mid-way — changing board type after sport-specific state
+already exists would orphan that state, so this is out of scope by design.
+`scoring.started`'s audit context now also records the resolved
+`board_type`, so an overridden session is traceable in the audit log even
+though the operator's choice itself isn't a separate mutation-with-reason
+like a score correction.
+
 ## Tests
 
 `tests/Feature/ScoringSessionTest.php` — authorization (Delegation Officer
@@ -250,7 +292,15 @@ out, a fourth ball resets the count without recording an out,
 `reset_count` only zeroes balls/strikes, both endpoints 422 for a
 non-Softball/Baseball session, are forbidden for non-managers, reject a
 mutation on an ended session, and the scoreboard page exposes
-`board_type`/`sport_state` for a Softball match.
+`board_type`/`sport_state` for a Softball match; a Basketball, Boxing, or
+Softball match's session can each be forced to `generic` (`sport_state`
+stays `null`) via the `board_type` override at start, a Basketball match
+started without the override still gets the basketball board (regression
+guard), the override rejects any value other than `"generic"` (e.g.
+`"basketball"` on an unrelated sport's match), and the scoreboard page
+exposes the auto-derived `suggestedBoardType` correctly both for a
+Basketball match and for a match with no dedicated board, before any
+session exists.
 `tests/Feature/ResultTest.php` (pre-existing, unchanged) already proves the
 Phase 3 encode→validate flow works with no live scoring session ever
 created — Phase 7 adds no coupling for it to newly depend on.
