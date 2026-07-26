@@ -11,19 +11,17 @@ below — note the renumbering: the roadmap's original Phase 7
 (live/real-time match scoring) inserted ahead of it, owner-directed
 2026-07-25.
 
-**Do not start Phase 6 from `docs/phases/phase-06-reports-uat-
-deployment-turnover/` as-is** (owner confirmed 2026-07-25 not ready to plan
-it yet). Checked 2026-07-25: unreviewed generic-template scaffolding that
-Phase 5's directory also had (see "Phase 5" section below for how that got
-fixed) — never written for or checked against this codebase; still carries
-the "municipality as the official delegation" assumption (WP-06-01) that
-collides with the Division initiative's real model. The same problem hit
-`docs/phases/phase-07-live-scoring-enhancement/` too (invented a
-"Tournament Manager" role, falsely claimed an existing "Reverb foundation")
-— that one has now been corrected into a real plan (see "Phase 7" section).
-Write a real plan for Phase 6 the same way Phase 4's, Phase 5's, and
-Phase 7's were (git history `a7bde91`, and the Phase 5/Phase 7 planning
-commits) when it's actually next — not adapted from this scaffolding.
+**Phase 6 — Reports, UAT, Deployment, and Turnover is now COMPLETE (all 9
+WPs, 2026-07-26/27)** — see its own section below. The old
+`docs/phases/phase-06-reports-uat-deployment-turnover/` scaffolding
+(unreviewed generic template, same "municipality as the official delegation"
+assumption WP-06-01 carried, colliding with the Division initiative's real
+model) was replaced with a real plan written fresh for this codebase, the
+same way Phase 4/5/7's were. COMPLIANT compliance review:
+docs/phases/phase-06-reports-uat-deployment-turnover/phase-6-compliance-review.md;
+full gate green: Pint+PHPStan+Pest 650/650 (3,245 assertions)+ESLint+Prettier+
+tsc+build; composer audit + npm audit both clean; zero new migrations (pure
+verification/documentation/ops-tooling phase); app HTTP 200 at http://pmms.app.
 Real deployment requirement (not part of the numbered Phase 2-4 plan above):
 the division can be City (schools/districts compete) or Province
 (municipalities compete, pooling multiple schools' athletes under one
@@ -1340,3 +1338,448 @@ Independent Phase 1 readiness check re-ran the full gate: Pint PASS, PHPStan L7 
 Pest 54/54 PASS, ESLint/Prettier/tsc PASS, `npm run build` PASS, app live at
 http://pmms.app (Laragon). Result: Ready with Constraints; WP-01-01 verified as already
 complete. Report: docs/reports/phase-01/phase-1-readiness-report.md
+
+# Phase 6 — Reports, UAT, Deployment, and Turnover
+Planned 2026-07-26, all 9 WPs executed one at a time on owner instruction,
+**COMPLETE 2026-07-27** — COMPLIANT compliance review:
+docs/phases/phase-06-reports-uat-deployment-turnover/phase-6-compliance-review.md
+(no Critical/High/Medium findings open; one Medium security finding found
+*and fixed* during WP-06-03, proven by test; every other item is a
+deliberate, documented deferral — City's "district competes" registration
+option, no `.xlsx` export, Reverb off in production/polling-only, outgoing
+production email not yet configured, one low-priority theoretical
+performance observation — none silently dropped). Diff against `main`
+confirms this phase is entirely verification/documentation/ops-tooling as
+scoped: the only application-code change across all 9 WPs is WP-06-03's
+scoped `ThrottleRegistration` middleware fix (+ its test); zero new
+migrations. Full gate green: Pint+PHPStan+Pest 650/650 (3,245 assertions)+
+ESLint+Prettier+tsc+build; composer audit + npm audit both clean; app HTTP
+200 at http://pmms.app; database confirmed clean of every WP's test/
+benchmark data (re-verified directly against `pmmsdb`, not assumed).
+Replaces the
+unreviewed generic-template draft that occupied
+`docs/phases/phase-06-reports-uat-deployment-turnover/` (same recurring
+scaffolding mixup Phase 4/5/7 each found and corrected before planning off it):
+it assumed the delegation was still the reporting attribution unit and that
+reports/CSV export/a compliance-review cadence didn't exist yet — all false as
+of 2026-07-26 (Division initiative WP1-7 re-keyed attribution to the individual's
+own school; `docs/reports.md`/`ReportController` already ship six reports with
+print + CSV export; Phase 3/4/5/7 each closed with their own compliance review).
+
+Scoped per owner decision 2026-07-26 (asked via four targeted questions, same
+approach as Phase 7's scoping rounds):
+- Production deployment target: the same local Laragon setup (http://pmms.app)
+  — harden what's running, no new cloud/VPS infra.
+- Excel `.xlsx` export: not needed — existing CSV export is sufficient, dropped
+  from scope entirely (not deferred).
+- Database backup: none exists today for `pmmsdb` — build one from scratch.
+- UAT: prepare materials only (scripts, checklists, feedback template) — no real
+  testers/timeline exist yet, so execution is out of scope for a coding session
+  and left as real-world future work.
+
+Nine WPs (leaner than the old 12-WP draft — Excel export, UAT execution, and
+pilot deployment/issue resolution are all dropped as either redundant or
+dependent on real-world state a coding session can't produce): WP-06-01 Reports
+& Print Verification (verify the six existing reports post-Division-initiative,
+not rebuild) → WP-06-02 Backup & Restore Baseline (new `mysqldump`-based
+backup/restore for `pmmsdb`, proven end-to-end by actually restoring a dump) →
+WP-06-03 Security & Privacy Review (re-verify `AuthorizationMatrixTest`/
+`AuditLogger`/`composer audit`/`npm audit`, review minor-athlete PII exposure
+paths and WP-07-08's public scoreboard routes) → WP-06-04 Performance & Load
+Verification (N+1/query review at realistic single-Division scale, not a
+synthetic load-testing framework) → WP-06-05 Administrator & User Manuals
+(role-based manuals under `docs/manuals/`, written from the real UI) →
+WP-06-06 UAT Preparation Materials (`docs/uat/` scripts + feedback template,
+runnable against `SampleProvinceDemoSeeder` data, execution deferred) →
+WP-06-07 Production Readiness & Deployment Hardening (production `.env`
+template, and — the one real functional gap found during planning — a queue
+worker needs to actually run continuously in production since
+`QUEUE_CONNECTION=database` means Phase 7's `ScoreUpdated` broadcast currently
+never fires without one) → WP-06-08 Training & Turnover Package (`docs/
+turnover.md` + training outline, building on WP-06-05/07 rather than
+duplicating them) → WP-06-09 Phase 6 Compliance Review & Acceptance (closes the
+phase the same way Phase 3/4/5/7 did).
+
+Plan: `docs/phases/phase-06-reports-uat-deployment-turnover/` (README +
+DESIGN-NOTES + CHECKLIST + WP-06-01..09), written fresh for this codebase.
+Execute one work package at a time on owner instruction; nothing committed or
+pushed.
+
+## Phase 6 Work Package Log
+- WP-06-01 Reports & Print Verification — done 2026-07-26 (verification pass,
+  no defects found, no code changes needed. Walked all six reports
+  (`ReportController` + `docs/reports.md`'s inventory: delegation roster,
+  per-event entry list, school participation summary, official result sheet,
+  medal tally, daily schedule) against the app as it stands after the Division
+  initiative and Phase 7 — confirmed `athlete.school`/
+  `Delegation::registrantName()`/`Division::current()->areaLabel()` are used
+  correctly everywhere with no stale delegation-as-school-proxy references,
+  all six pages consistently use the shared `ReportActions` component (print +
+  CSV, `print:hidden`) so print/export behavior is uniform, the medal tally
+  report correctly reflects the 2026-07-25 post-Division district-first
+  ordering refinement, and live scoring (Phase 7) correctly has no report of
+  its own (grepped `docs/live-scoring.md` — zero report references, consistent
+  with a live session being provisional by design). Noted but out of this WP's
+  scope: `reports/management` (Phase 5's Executive/Management Dashboards
+  report) uses the same `ReportActions` pattern but was never part of the
+  WP-02-12/WP-03-08 inventory `docs/reports.md` documents. Confirmed CSV
+  remains the only export format per the owner's WP-06-02-drop decision — no
+  `.xlsx` gap. `docs/reports.md` updated with a "Verified 2026 — Phase 6"
+  note. Pest 649/649 (no new tests — this WP is verification, not new
+  behavior; `ReportTest` 18/18 and `OperationsReportTest` 8/8 specifically
+  re-run and confirmed still passing), full gate green:
+  Pint+PHPStan+ESLint+Prettier+tsc+build; not committed/pushed) — next:
+  WP-06-02 Backup & Restore Baseline, on owner instruction.
+- WP-06-02 Backup & Restore Baseline — done 2026-07-26 (new operational
+  tooling — none of this existed before. `scripts/backup-database.ps1`
+  (mysqldump `--single-transaction --routines --triggers`, credentials read
+  from `.env` at runtime into a short-lived ACL-restricted defaults-extra-file
+  never logged/echoed/passed on the command line, timestamped gzip output to
+  `storage/app/private/backups/database/` — Laravel's non-web-accessible
+  local disk root, confirmed against `config/filesystems.php` — with a
+  keep-newest-N retention default of 14) and `scripts/restore-database.ps1`
+  (creates the target DB, transparently decompresses `.sql.gz`, refuses to
+  target the production `DB_DATABASE` name from `.env` unless `-Force` is
+  passed, so a routine drill can't overwrite live data). Hit and fixed a real
+  Windows PowerShell 5.1 gotcha along the way: `$PSScriptRoot` is not
+  populated inside `param()` default-value expressions on that PS version —
+  moved path resolution into the script body instead (`$PSScriptRoot` falling
+  back to `$MyInvocation.MyCommand.Path`'s directory), confirmed via a minimal
+  repro before fixing both scripts. **Proved backup->restore end-to-end
+  against the real `pmmsdb`, not just scripted**: took a real backup (39
+  tables), recorded a baseline directly from production (districts row count
+  + current `divisions.name`), restored into a throwaway `pmmsdb_restore_test`
+  database, confirmed both facts matched exactly plus the same 39-table
+  schema, then dropped the throwaway database — only the one real backup file
+  was left behind. `scripts/install-backup-schedule.ps1` (Windows Task
+  Scheduler registration via `Register-ScheduledTask`, daily) was written but
+  deliberately **not executed** this session — registering a scheduled task
+  changes real host state outside git, so per the WP's own scope it's left as
+  a script for whoever administers the production server to run themselves,
+  documented in `docs/backup-restore.md`. New `docs/backup-restore.md`
+  (what's backed up, how, where, the end-to-end proof, retention
+  recommendation — 14 daily, no offsite/cloud since the deployment target is
+  local-only per the owner's WP-06 scoping decision, scheduling, and a PII
+  access-control note cross-referenced to WP-06-03). `storage/app/private/
+  backups` added to `.gitignore`. No application code touched — this WP lives
+  entirely in `scripts/` + docs, outside the Pest suite by design; re-ran the
+  full existing gate to confirm nothing regressed: Pest 649/649 (no new
+  tests — not app behavior), Pint+PHPStan+ESLint+Prettier+tsc+build all
+  green; not committed/pushed) — next: WP-06-03 Security & Privacy Review, on
+  owner instruction.
+- WP-06-03 Security & Privacy Review — done 2026-07-26 (COMPLIANT, one
+  Medium finding found and fixed during the review — full report
+  `docs/phases/phase-06-reports-uat-deployment-turnover/
+  phase-6-security-review.md`. `composer audit`/`npm audit --omit=dev` both
+  clean (unchanged since Phase 7). Re-verified `AuthorizationMatrixTest`
+  coverage against `docs/authorization.md`'s matrix by direct inspection,
+  not just re-running it: confirmed WP-07-08's public scoreboard routes are
+  correctly covered by the existing blanket "Public portal" row (same
+  convention every other public page already follows, no page gets its own
+  row) and WP-06-02's backup directory (`storage/app/private/backups/
+  database/`) is unreachable via any web route (only `storage/app/public`
+  is symlinked). Swept minor-athlete/guardian PII across every public page
+  (`PortalController`) and all six internal reports against
+  `docs/public-portal.md`'s "name+school+placement only" public rule and
+  `docs/reports.md`'s documented field lists — no undocumented leak found
+  on either side; the live scoreboard in particular carries zero athlete
+  fields by schema design, confirmed by inspection not just the docs'
+  claim. Reviewed `FileUploadService`/`FileUploadPolicy` (extension
+  allow-list validated against real detected content, hashed storage
+  names, forced-attachment download) and confirmed `EligibilityController`
+  correctly does NOT route eligibility documents through the generic
+  uploader-only `FileUploadPolicy` — it authorizes via
+  `EligibilityReviewPolicy::view` instead (so a manager can review a
+  document an officer uploaded), a deliberate separation, not a
+  contradiction. Session/CSRF/Fortify posture reviewed: no CSRF
+  exceptions, no API/CORS surface to review, login/2FA/passkeys all
+  correctly rate-limited; `SESSION_SECURE_COOKIE` correctly flagged as a
+  `.env` production value and left for WP-06-07 rather than duplicated
+  here, per this WP's own scope note. **Finding (Medium, fixed inline):**
+  Fortify's `POST /register` had no rate limiter at all — unlike
+  login/2FA/passkeys, and Fortify exposes no `limiters.registration` hook
+  to attach one declaratively since the route lives entirely inside the
+  package. Severity Medium not High: `User`'s `#[Fillable(...)]` excludes
+  `role`, so self-registration can never produce anything above the
+  `viewer` default; not Low because `viewer` already reads delegation
+  lists/schedules/reports, and unlimited free registration is a real
+  mail-bombing/spam-account vector regardless. Fixed with a small new
+  `App\Http\Middleware\ThrottleRegistration` appended to the global `web`
+  group — a no-op for every route except `register.store` (matched via
+  `$request->routeIs()`, evaluated post-routing so it's independent of
+  Fortify's own route-registration timing), enforcing the same
+  5-per-minute-per-IP bar `login` already uses via direct
+  `RateLimiter::tooManyAttempts()`/`hit()` calls rather than a named
+  Fortify limiter (not attachable to a package-internal route
+  declaratively — confirmed the hard way: attempting to attach middleware
+  to Fortify's route object via `Route::getRoutes()->getByName(...)`
+  inside an `app()->booted()` callback reliably found `null`, since
+  Fortify's own route registration timing relative to other providers'
+  `booted()`-deferred hooks — e.g. the framework's own `AppRouteServiceProvider`
+  for `routes/web.php` — turned out not to be the simple "boot() runs
+  synchronously" story its source suggests; the route-name-matching
+  middleware sidesteps that entirely by running at actual request time,
+  after all routing is unambiguously complete). New test:
+  `'registration is rate limited (WP-06-03)'` in
+  `tests/Feature/Auth/RegistrationTest.php`. No other findings. Pest
+  650/650 (1 new test), full gate green: Pint+PHPStan+ESLint+Prettier+
+  tsc+build; not committed/pushed) — next: WP-06-04 Performance & Load
+  Verification, on owner instruction.
+- WP-06-04 Performance & Load Verification — done 2026-07-26 (no N+1 or
+  missing-index issues found, no code changes needed — full report
+  `docs/performance.md`. New `database/seeders/PerformanceBenchmarkSeeder.php`
+  (not registered in `DatabaseSeeder`'s default chain, run on demand only)
+  generates a realistic full-scale dataset distinct from
+  `SampleProvinceDemoSeeder`'s deliberately-small 3-athlete demo: unlike
+  every other `Sample*` seeder it attaches delegations to the real 11
+  Davao de Oro municipalities (`DivisionRegistrySeeder`) rather than
+  inventing its own, since the whole point is realistic query shape/volume
+  against what this deployment will actually have. First run picked up all
+  15 *active* districts (11 real + 4 from other Sample seeders, which are
+  also `active`) instead of just the 11 real ones — a real bug, caught by
+  checking counts after seeding rather than trusting the code; fixed with
+  an explicit `where('name', 'not like', 'Sample %')` filter, re-verified
+  correct on re-seed (11 delegations, 88 schools, 1,320 athletes, 2,640
+  entries, 80 medal placements across 8 events). Profiled 19 page/action
+  paths (medal tally, dashboard, management dashboard, all six WP-06-01
+  reports, schools/delegations/entries/athletes index pages) by calling
+  each controller directly as an authenticated admin with
+  `DB::enableQueryLog()` around the call — chosen over adding
+  `barryvdh/laravel-debugbar` as a new one-time dependency, per the WP's
+  own preference for manual query-log inspection. Every page's query count
+  is small and **bounded** — proven not just asserted: the entries index
+  stayed at exactly 19 queries across no-filter, search-term, and page-depth
+  variations from page 1 through page 175 (the last page at the fixed
+  15-per-row `SearchesAndPaginates` size), confirming pagination genuinely
+  limits the query via `LIMIT`/`OFFSET` rather than loading the full table.
+  Verified every FK the profiled queries filter/join on already carries an
+  index by reading the migrations directly (entries' delegation_id/
+  athlete_id/event_id plus an explicit composite (delegation_id, event_id);
+  result_placements' composite (event_result_id, rank); etc.) — no missing
+  index found. One theoretical (not actual) observation recorded but not
+  acted on: `MedalTallyService::standings()`'s `rank IN (1,2,3)` filter
+  doesn't lean on the existing composite index's leading column, but at
+  this deployment's actual scale (hundreds of placements per meet, a
+  handful of meets) that's sub-millisecond regardless — flagged in
+  docs/performance.md as only worth revisiting if a future phase adds
+  bulk multi-season aggregation. Benchmark data (1,320 synthetic athletes)
+  was deliberately removed from pmmsdb after profiling so it doesn't linger
+  for WP-06-06's UAT materials or ordinary local use — the seeder remains
+  available to re-run on demand, documented in docs/performance.md along
+  with cleanup steps. Pest 650/650 (no new tests — this WP is a query
+  profiling pass, not new application behavior), full gate green:
+  Pint+PHPStan+ESLint+Prettier+tsc all green, build not re-run since no
+  frontend file changed this WP (verified green at WP-06-03's close);
+  not committed/pushed) — next: WP-06-05 Administrator & User Manuals,
+  on owner instruction.
+- WP-06-05 Administrator & User Manuals — done 2026-07-26 (pure
+  documentation, no code touched — new `docs/manuals/` (five files:
+  `admin-manual.md`, `organizer-manual.md`, `delegation-officer-manual.md`,
+  `viewer-manual.md`, `public-portal-guide.md`), written from the real
+  running app rather than from memory: read every relevant `docs/*.md`
+  (division, registry, sports-catalog, meets, venues, scheduling,
+  delegations, athletes, personnel, entries, eligibility, accreditation,
+  matches, results, protests, medal-tally, live-scoring, announcements,
+  dashboard, management-dashboard, public-portal, authorization,
+  audit-trail, backup-restore), the full `php artisan route:list`, the
+  sidebar's actual nav labels/role-gating (`app-sidebar.tsx` — confirmed
+  the dynamic "Districts"→areaLabel pluralization and that
+  `managerNavItems`/`adminNavItems` are the only role-filtered groups,
+  everything else renders for every signed-in role regardless of access),
+  and spot-checked real dialog/button copy in the page components
+  (`grep`'d `DialogTitle`s across delegations/athletes/entries/results/
+  matches/protests/personnel/eligibility/incidents) rather than guessing
+  wording. One real, load-bearing finding surfaced while writing the
+  admin manual's planned "user/role management" section: **PMMS has no
+  in-app screen for creating accounts or changing roles at all** — new
+  accounts come only from the public self-registration page and always
+  start as Viewer (confirmed in WP-06-03), and promoting someone to a
+  higher role is only possible via direct `$user->forceFill(['role' =>
+  …])` database access, exactly as `docs/authorization.md` already
+  states but never spelled out for an end-user audience before. Wrote
+  this plainly rather than describing an aspirational "Users" screen
+  that doesn't exist, per the WP's own explicit instruction; cross-
+  referenced from the officer manual (getting assigned) and viewer
+  manual (how a role changes) so the same real limitation is consistent
+  everywhere it's relevant instead of contradicting itself across
+  manuals. Also documented, because it's real and not obvious from the
+  UI alone: the sidebar shows every nav item to every signed-in role
+  (only two small groups are role-filtered) — a Viewer sees links to
+  Athletes/Personnel/Entries/etc. that all 403 on click, which the
+  viewer manual now explains upfront so it doesn't read as a bug.
+  Manuals are task-oriented (numbered steps, exact navigation labels
+  and dialog titles) and cross-reference the technical `docs/*.md`
+  files rather than duplicating their detail, per the WP's own
+  structure. No screenshots (text + exact labels only, as the WP
+  allowed). Pest 650/650 (unchanged — no application behavior touched),
+  full gate green: Pint+PHPStan+ESLint+Prettier+tsc all green (build not
+  re-run, no frontend file changed); not committed/pushed) — next:
+  WP-06-06 UAT Preparation Materials, on owner instruction.
+- WP-06-06 UAT Preparation Materials — done 2026-07-26 (new `docs/uat/`:
+  `README.md`, `feedback-template.md`, and five per-role scripts (admin,
+  organizer, delegation-officer, viewer, public-guest), pure documentation,
+  no code touched. Designed as one connected, sequential scenario (create
+  a meet → register a delegation → enter athletes → confirm/approve →
+  schedule → match → live scoring → encode/validate a result → tally →
+  reports), matching the WP's own example, rather than five isolated
+  scripts — the Organizer and Delegation Officer scripts share a "UAT Test
+  Meet" and hand off to each other at two checkpoints (marked in both
+  files and in the README's "Running order"), since a real meet genuinely
+  requires that back-and-forth. **Caught and fixed two real errors carried
+  over from WP-06-05's manuals while grounding the scripts against the
+  actual authorization code** (`routes/web.php`, `DelegationPolicy`,
+  `Delegation::isEditableByOfficers()`) rather than trusting the manuals'
+  prose — exactly the kind of thing writing a step-by-step script is
+  supposed to surface: (1) `POST /delegations` sits inside the
+  `role:admin,organizer` route group — a Delegation Officer **cannot**
+  register a delegation themselves, only a manager can, after which the
+  manager assigns the officer to the already-created record; both
+  `docs/manuals/delegation-officer-manual.md` §1–2 and
+  `docs/manuals/organizer-manual.md` §5 had this backwards (described the
+  officer as self-registering) and are now corrected in place. (2) athlete/
+  personnel registration requires the delegation to still be **Draft**
+  (`isEditableByOfficers()`) — submitting the delegation first (as an
+  early draft of the officer UAT script had it) would have silently locked
+  the officer out of registering their roster; fixed by reordering the
+  officer script to register the whole roster (athletes, personnel,
+  eligibility, entries) before submitting last, matching what the manual
+  already correctly said ("submit when your roster is ready") but the
+  script itself had gotten backwards. Every dialog title, button label,
+  and status-transition name in every script was grepped directly from the
+  real page components (`DialogTitle`s, `ConfirmDialog` `confirmLabel`s,
+  `MeetStatus`/`MatchStatus::actionLabel()`) rather than guessed or copied
+  from the manuals' own prose, so a tester following a script sees exactly
+  the words the script told them to look for. Scripts run against a fresh
+  `php artisan migrate:fresh --seed` copy (never production) — the
+  README's environment-setup section covers the one other real gap this
+  surfaces: getting one test account per role ready needs the same
+  off-screen role-promotion step as real onboarding (`docs/manuals/
+  admin-manual.md` §2), which is itself now the first thing a UAT session
+  organizer has to do, documented explicitly rather than assumed. No
+  execution performed, per the owner's scoping decision — materials only.
+  Pest 650/650 (unchanged), full gate green: Pint+PHPStan+ESLint+Prettier+
+  tsc all green (build not re-run, no frontend file changed); not
+  committed/pushed) — next: WP-06-07 Production Readiness & Deployment
+  Hardening, on owner instruction.
+- WP-06-07 Production Readiness & Deployment Hardening — done 2026-07-26.
+  Asked the owner the two decisions the WP explicitly flagged rather than
+  assuming: (1) Reverb in production vs. polling-only — **polling-only**
+  chosen (no second always-on process to supervise; the 5-second poll
+  already fully works per Phase 7's design); (2) access topology — **this
+  one machine only** (not LAN-exposed to other office computers), which
+  settled the HTTPS/TLS question too (traffic never leaves loopback, no
+  new TLS work needed — Laragon's existing local HTTPS already covers the
+  `APP_URL=https://pmms.app` value); (3) production email — no SMTP
+  provider available yet, documented as a real explicit to-do rather than
+  invented. New `.env.production.example` (placeholders only, diffed
+  against dev `.env.example` with a table explaining every changed key,
+  including `SESSION_SECURE_COOKIE=true` — closes the WP-06-03 finding).
+  New `scripts/install-queue-worker-schedule.ps1` (same not-run-
+  automatically convention as WP-06-02's backup installer) registers a
+  Windows scheduled task keeping `php artisan queue:work` running at
+  startup with restart-on-failure, closing the real functional gap
+  flagged during Phase 6 planning: `QUEUE_CONNECTION=database` +
+  Phase 7's queued `ScoreUpdated` broadcast meant every live-scoring score
+  change silently piled up in the `jobs` table forever with nothing to
+  process it (polling still worked for end users the whole time — this
+  was a silent queue-growth issue, never a user-facing break). **Proved
+  the fix end-to-end, not just configured it**, per the WP's own explicit
+  acceptance criterion: created a real scheduled match + live scoring
+  session, submitted a score change through the actual
+  `ScoringSessionController::score()` code path, confirmed a job landed in
+  `jobs`, ran a real `php artisan queue:work --once` (with
+  `BROADCAST_CONNECTION=log`, matching the production decision) and
+  confirmed the job processed, `jobs`/`failed_jobs` both returned to 0,
+  and `storage/logs/laravel.log` recorded the actual broadcast payload —
+  then deleted the test match/session, leaving nothing behind. Validated
+  the new PowerShell script's non-mutating logic (php.exe discovery via
+  `Get-Command`, repo-root/artisan path resolution) directly against this
+  real machine without registering the actual scheduled task — same
+  "administrator runs it once, deliberately" boundary WP-06-02 already
+  established, not crossed here either. New `docs/deployment.md` ties it
+  together: the `.env` table, the queue-worker fix + its proof, the
+  broadcast decision and how to reverse it later, the outgoing-email
+  to-do, the HTTPS/TLS finding, a build/deploy procedure (confirmed
+  `storage:link` is genuinely not needed — grepped the codebase, nothing
+  references the public disk, every served file goes through an
+  authenticated policy-checked route on the private disk instead), and a
+  rollback procedure scoped to this git-based single-server topology
+  (prefer restoring a pre-deploy backup over `migrate:rollback`, since
+  this project's early migrations aren't all written with safe-rollback
+  `down()` methods). No application code changed. Pest 650/650
+  (unchanged), full gate green: Pint+PHPStan+ESLint+Prettier+tsc all
+  green; app reconfirmed HTTP 200 at http://pmms.app; not committed/
+  pushed) — next: WP-06-08 Training & Turnover Package, on owner
+  instruction.
+- WP-06-08 Training & Turnover Package — done 2026-07-27. New
+  `docs/turnover.md` and `docs/training-outline.md`, pure documentation,
+  no code touched. **Real finding while inspecting the repo for the
+  "architecture map" pointer the WP asked for**: `docs/01-architecture/`
+  (and the whole `docs/00-product/` through `docs/11-backlog/` tree) is
+  an elaborate pre-implementation planning exercise — 34 bounded
+  contexts, 53 roles, a Flutter mobile app, MinIO, Redis, Laravel
+  Horizon, AI-assisted duplicate-athlete detection — that does not
+  describe the system actually built (single-tenant Laravel modular
+  monolith, 4 roles, no Flutter/MinIO/Redis/Horizon/AI, database-backed
+  session/cache/queue). Every document in that tree is self-marked
+  "Status: Draft Complete — Pending Architecture, Security, and
+  Engineering Validation," and `.ai/project-context.md` already says
+  explicitly "Enterprise ADRs (`.ai/decisions/`) and `docs/11-backlog/`
+  are future-readiness reference only — simplified `.ai` files govern" —
+  so this was already a known, deliberately-superseded state, just never
+  spelled out for a future maintainer who might otherwise orient
+  themselves from it and be badly misled about what this app actually
+  is. `docs/turnover.md` flags this explicitly and points instead to
+  `.ai/architecture.md`, `.ai/current-phase.md`, and the per-feature
+  `docs/*.md` files as the real technical reference — the same
+  "stale generic-template" pattern this project has hit repeatedly at
+  the docs/phases/ level (Phase 4/5/6/7 each found and discarded a stale
+  draft before planning), just discovered here at its original, much
+  larger source. `docs/turnover.md` also collects every open/deferred
+  item from across the whole project into one place (City's "district
+  competes" gap, no `.xlsx` export by decision, Reverb off in production,
+  outgoing email not yet configured, the one low-priority WP-06-04
+  index observation) and explicitly notes WP-06-03's security findings
+  are now fully closed (both items it carried forward were resolved by
+  WP-06-07) — rather than leaving anyone to re-discover them. Escalation
+  contacts are a deliberate template with `_[fill in]_` placeholders, not
+  fabricated names, per the WP's own instruction. `docs/training-outline.md`
+  is an agenda (not a slide deck) built entirely on top of already-shipped
+  material — `docs/manuals/` (WP-06-05) as what to present, `docs/uat/`
+  (WP-06-06) scripts repurposed directly as hands-on exercises, including
+  reusing the Organizer/Delegation-Officer scripts' checkpoint handoff as
+  a live demonstration of how those two roles actually work together on
+  a real meet. Pest 650/650 (unchanged), full gate green: Pint+PHPStan+
+  ESLint+Prettier+tsc all green; not committed/pushed) — next: WP-06-09
+  Phase 6 Compliance Review & Acceptance, on owner instruction.
+- WP-06-09 Phase 6 Compliance Review & Acceptance — done 2026-07-27
+  (COMPLIANT, closes Phase 6 — full report `docs/phases/
+  phase-06-reports-uat-deployment-turnover/phase-6-compliance-review.md`.
+  Verified each of WP-06-01 through WP-06-08's deliverables actually exist
+  and match their own log entries (per-WP table in the review) rather
+  than trusting the log alone — every manual/script/doc file confirmed
+  present on disk. `git diff --stat main` confirms the WP's own explicit
+  acceptance criterion: the *only* application-code change across all 9
+  WPs is WP-06-03's scoped `ThrottleRegistration` middleware (+2 lines in
+  `bootstrap/app.php`, +15 lines of test) — no `app/Models/`,
+  `app/Policies/`, `app/Http/Controllers/`, or migration touched beyond
+  that one registration line; every other change is docs/scripts/a
+  non-default-chain seeder/a `.env` template. Re-verified `pmmsdb`
+  directly (not assumed from prior WPs' own claims) is clean of every
+  WP's test/benchmark data: only the original "Sample Provincial Meet"
+  demo remains, 0 matches, 0 scoring sessions, 0 rows in `jobs`/
+  `failed_jobs`, school/athlete counts match the pre-Phase-6 baseline
+  exactly, and `migrate:status` shows every migration Ran with zero
+  pending — confirms Phase 6 added no schema changes, as scoped. Full
+  final gate run: `composer audit`/`npm audit --omit=dev` both clean,
+  Pint clean, PHPStan L7 0 errors, Pest 650/650 (3,245 assertions),
+  ESLint/Prettier/tsc all clean, `npm run build` succeeded (14.41s), app
+  reconfirmed HTTP 200 at http://pmms.app. All 4 of the phase README's
+  own Visual Checkpoints confirmed demonstrable. `CHECKLIST.md` all 9
+  items checked off; this file's Phase 6 section and top-of-file summary
+  both updated to COMPLETE. Not committed/pushed, per project rules —
+  the tree is green pending owner instruction.) — this closes Phase 6.
+  Next: owner review of the compliance report, then a commit/push
+  decision for the Phase 6 tree, then the owner's choice of what comes
+  next — Phase 8 (Post-Deployment Support) or a real UAT/pilot session
+  using WP-06-06's prepared materials.
