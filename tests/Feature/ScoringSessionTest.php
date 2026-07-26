@@ -5,11 +5,13 @@ use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
 use App\Models\Entry;
+use App\Models\Event;
 use App\Models\EventMatch;
 use App\Models\EventResult;
 use App\Models\ResultPlacement;
 use App\Models\ScoreEvent;
 use App\Models\ScoringSession;
+use App\Models\Sport;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 
@@ -27,6 +29,18 @@ function confirmedEntryForScoringSession(EventMatch $match): Entry
         'delegation_id' => $delegation->id,
         'event_id' => $match->event_id,
     ]);
+}
+
+/**
+ * A scheduled match whose sport resolves to the basketball scoreboard
+ * (App\Enums\ScoreboardType — WP-07-04).
+ */
+function basketballMatch(): EventMatch
+{
+    $sport = Sport::factory()->create(['name' => 'Basketball']);
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+
+    return EventMatch::factory()->create(['event_id' => $event->id, 'status' => MatchStatus::Scheduled]);
 }
 
 test('guests are redirected from the scoring session endpoint', function () {
@@ -282,4 +296,117 @@ test('the scoreboard page reflects a score change made through the operator cons
             ->where('session.score_a', 0)
             ->where('session.score_b', 3)
             ->where('session.status', 'in_progress'));
+});
+
+// WP-07-04: Basketball live scoreboard
+
+test('starting a session for a basketball match initializes team fouls and the board type', function () {
+    $match = basketballMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Home', 'side_b_label' => 'Away'])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    expect($session->toLivePayload())->toMatchArray([
+        'board_type' => 'basketball',
+        'sport_state' => ['fouls_a' => 0, 'fouls_b' => 0],
+    ]);
+});
+
+test('a non-basketball match uses the generic board type with no sport state', function () {
+    $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Home', 'side_b_label' => 'Away'])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    expect($session->toLivePayload())->toMatchArray([
+        'board_type' => 'generic',
+        'sport_state' => null,
+    ]);
+});
+
+test('recording a team foul increments the correct side and reset zeroes both', function () {
+    $match = basketballMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => ['fouls_a' => 0, 'fouls_b' => 0],
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/foul", ['action' => 'add', 'side' => 'a'])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toBe(['fouls_a' => 1, 'fouls_b' => 0]);
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/foul", ['action' => 'add', 'side' => 'a'])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toBe(['fouls_a' => 2, 'fouls_b' => 0]);
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/foul", ['action' => 'reset'])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toBe(['fouls_a' => 0, 'fouls_b' => 0])
+        ->and(AuditLog::query()->whereIn('action', ['scoring.foul_recorded', 'scoring.fouls_reset'])->count())->toBe(3);
+});
+
+test('the foul endpoint is rejected for a non-basketball scoring session', function () {
+    $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
+    $session = ScoringSession::factory()->create(['match_id' => $match->id]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/foul", ['action' => 'add', 'side' => 'a'])
+        ->assertStatus(422);
+});
+
+test('non-managers cannot record a team foul', function (User $user) {
+    $match = basketballMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => ['fouls_a' => 0, 'fouls_b' => 0],
+    ]);
+
+    $this->actingAs($user)
+        ->patch("/scoring-sessions/{$session->id}/foul", ['action' => 'add', 'side' => 'a'])
+        ->assertForbidden();
+})->with([
+    'viewer' => fn () => User::factory()->create(),
+    'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+]);
+
+test('a team foul cannot be recorded once the session has ended', function () {
+    $match = basketballMatch();
+    $session = ScoringSession::factory()->ended()->create([
+        'match_id' => $match->id,
+        'sport_state' => ['fouls_a' => 0, 'fouls_b' => 0],
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/foul", ['action' => 'add', 'side' => 'a'])
+        ->assertSessionHasErrors('status');
+});
+
+test('the scoreboard page exposes board type and sport state for a basketball match', function () {
+    $match = basketballMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Home', 'side_b_label' => 'Away'])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)
+        ->get("/matches/{$match->id}/scoreboard")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('session.board_type', 'basketball')
+            ->where('session.sport_state', ['fouls_a' => 0, 'fouls_b' => 0]));
 });

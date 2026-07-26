@@ -1,4 +1,4 @@
-# Live Scoring (Phase 7, WP-07-01/02)
+# Live Scoring (Phase 7, WP-07-01..04)
 
 Optional, provisional live scoring for a match in progress. **Never creates,
 updates, or implies an `EventResult`/`ResultPlacement`** — the only path to
@@ -56,6 +56,11 @@ the app to function.
   whether a live session was used.
 - Only one non-`ended` session per match is allowed (enforced in
   `ScoringSessionController::store()`).
+- `sport_state` (nullable JSON, WP-07-04) — sport-specific structured data
+  the generic columns above don't cover. Shape depends on the session's
+  `board_type`; `null` for the generic board. Never stored as a separate
+  column per sport — one flexible JSON column shared by every sport-specific
+  scoreboard added to this phase.
 
 ## Endpoints
 
@@ -69,6 +74,7 @@ All under `App\Http\Controllers\ScoringSessionController`:
 | `PATCH /scoring-sessions/{session}/period` (`scoring.period`) | `role:admin,organizer`. Updates `period_label`/`status_note`. |
 | `PATCH /scoring-sessions/{session}/pause` \| `/resume` (`scoring.pause` / `scoring.resume`) | `role:admin,organizer`. |
 | `PATCH /scoring-sessions/{session}/end` (`scoring.end`) | `role:admin,organizer`. Sets the session `ended`; never touches `EventResult`. |
+| `PATCH /scoring-sessions/{session}/foul` (`scoring.foul`, WP-07-04) | `role:admin,organizer`. Basketball board only — `422` for any other board type. `action` = `add` (with `side`) or `reset`; mutates `sport_state.fouls_a`/`fouls_b`. |
 
 Every mutation appends a `score_events` row, records an `AuditLogger` event
 (`scoring.started`/`scored`/`corrected`/`period_changed`/`paused`/
@@ -120,6 +126,41 @@ controls, not two separate pages):
   Delegation Officer should be able to watch their own delegation's match
   even though they can't operate scoring).
 
+## Sport-specific scoreboards (WP-07-04)
+
+Per owner instruction, the generic board (score + free-text period/status)
+stays the default for every sport, and dedicated scoreboards are added
+per sport as their own WP. Which board a session uses is never stored —
+`ScoringSession::boardType()` derives it every time from the match's own
+`event.sport.name` via `App\Enums\ScoreboardType::forSport()`, so a later
+sport-catalog rename or edit is reflected immediately, with no backfill
+needed. `toLivePayload()` exposes it as `board_type`, alongside
+`sport_state`, so the frontend can pick the right controls without a
+separate request.
+
+- **Basketball** (`ScoreboardType::Basketball`, sport name "Basketball"):
+  `sport_state` is `{fouls_a, fouls_b}` — running **team** fouls for the
+  current quarter/period. Initialized to `{0, 0}` when a session starts for
+  a Basketball match (`ScoringSessionController::store()`). The quarter
+  itself reuses the existing generic `period_label` free-text field (e.g.
+  "Q2") rather than a new structured field — fouls are reset by an explicit
+  "Reset fouls" action (`scoring.foul` with `action: reset`) the operator
+  triggers when a new quarter starts, not inferred automatically from a
+  period-label change. A "Bonus" badge shows once a side's fouls reach
+  `BASKETBALL_BONUS_THRESHOLD` (5, a documented convention, not a hard
+  rule enforced elsewhere — a meet using different local rules can just
+  ignore the badge). Every foul action is also a `score_events` row
+  (`App\Enums\ScoreEventType::Foul`) and an `AuditLogger` event
+  (`scoring.foul_recorded` / `scoring.fouls_reset`).
+- **Boxing, Softball/Baseball**: `App\Enums\ScoreboardType` already has
+  `Boxing`/`SoftballBaseball` cases and will resolve either sport name to
+  them, but no dedicated `sport_state` shape or UI exists for either yet —
+  a session for those sports currently renders identically to the generic
+  board. Deferred to their own WPs, which will extend `sport_state` and the
+  frontend's `board_type` branching the same way this WP did, reusing the
+  same JSON column and dispatch pattern rather than adding new
+  infrastructure per sport.
+
 ## Tests
 
 `tests/Feature/ScoringSessionTest.php` — authorization (Delegation Officer
@@ -135,7 +176,13 @@ audited with the correct actor; the scoreboard page's own authorization
 (guest redirect, Viewer forbidden, Delegation Officer own-match-only),
 suggested side labels only appear for exactly two entries, and the page's
 `session` prop reflects a score change made through the operator
-endpoints (the polling contract, not a browser-only assertion).
+endpoints (the polling contract, not a browser-only assertion); a
+Basketball match's session initializes `board_type`/`sport_state`
+correctly and a non-Basketball match's doesn't, team fouls increment the
+correct side and reset zeroes both, the `scoring.foul` endpoint 422s for a
+non-Basketball session, is forbidden for non-managers, and rejects a
+mutation once the session has ended, and the scoreboard page exposes
+`board_type`/`sport_state` for a Basketball match.
 `tests/Feature/ResultTest.php` (pre-existing, unchanged) already proves the
 Phase 3 encode→validate flow works with no live scoring session ever
 created — Phase 7 adds no coupling for it to newly depend on.

@@ -22,6 +22,7 @@ import { Label } from '@/components/ui/label';
 import { index as matchesIndex } from '@/routes/matches';
 import {
     end as endRoute,
+    foul as foulRoute,
     pause as pauseRoute,
     period as periodRoute,
     resume as resumeRoute,
@@ -29,6 +30,11 @@ import {
     show as pollRoute,
     start as startRoute,
 } from '@/routes/scoring';
+
+type BasketballState = {
+    fouls_a: number;
+    fouls_b: number;
+};
 
 type Session = {
     id: number;
@@ -41,7 +47,11 @@ type Session = {
     score_b: number;
     period_label: string | null;
     status_note: string | null;
+    board_type: 'generic' | 'basketball' | 'boxing' | 'softball_baseball';
+    sport_state: BasketballState | null;
 };
+
+const BASKETBALL_BONUS_THRESHOLD = 5;
 
 type Props = {
     match: {
@@ -227,6 +237,30 @@ export default function ScoringBoard({
         );
     };
 
+    const recordFoul = (side: 'a' | 'b') => {
+        if (session === null) {
+            return;
+        }
+
+        router.patch(
+            foulRoute(session.id).url,
+            { action: 'add', side },
+            { preserveScroll: true },
+        );
+    };
+
+    const resetFouls = () => {
+        if (session === null) {
+            return;
+        }
+
+        router.patch(
+            foulRoute(session.id).url,
+            { action: 'reset' },
+            { preserveScroll: true },
+        );
+    };
+
     const isManager = canManage;
     const isActive = session !== null && session.status !== 'ended';
 
@@ -383,6 +417,32 @@ export default function ScoringBoard({
                             </p>
                         )}
 
+                        {session.board_type === 'basketball' &&
+                            session.sport_state && (
+                                <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-center text-sm text-muted-foreground">
+                                    <span className="flex items-center gap-2">
+                                        Team fouls — {session.side_a_label}:{' '}
+                                        {session.sport_state.fouls_a}
+                                        {session.sport_state.fouls_a >=
+                                            BASKETBALL_BONUS_THRESHOLD && (
+                                            <Badge variant="destructive">
+                                                Bonus
+                                            </Badge>
+                                        )}
+                                    </span>
+                                    <span className="flex items-center gap-2">
+                                        Team fouls — {session.side_b_label}:{' '}
+                                        {session.sport_state.fouls_b}
+                                        {session.sport_state.fouls_b >=
+                                            BASKETBALL_BONUS_THRESHOLD && (
+                                            <Badge variant="destructive">
+                                                Bonus
+                                            </Badge>
+                                        )}
+                                    </span>
+                                </div>
+                            )}
+
                         {isManager && isActive && (
                             <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 print:hidden">
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -401,6 +461,20 @@ export default function ScoringBoard({
                                                 </Button>
                                             ))}
                                         </div>
+                                        {session.board_type ===
+                                            'basketball' && (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                aria-label={`Add team foul, ${session.side_a_label}`}
+                                                onClick={() => recordFoul('a')}
+                                            >
+                                                Foul (
+                                                {session.sport_state?.fouls_a ??
+                                                    0}
+                                                )
+                                            </Button>
+                                        )}
                                         <CorrectionDialog
                                             side="a"
                                             label={session.side_a_label}
@@ -424,6 +498,20 @@ export default function ScoringBoard({
                                                 </Button>
                                             ))}
                                         </div>
+                                        {session.board_type ===
+                                            'basketball' && (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                aria-label={`Add team foul, ${session.side_b_label}`}
+                                                onClick={() => recordFoul('b')}
+                                            >
+                                                Foul (
+                                                {session.sport_state?.fouls_b ??
+                                                    0}
+                                                )
+                                            </Button>
+                                        )}
                                         <CorrectionDialog
                                             side="b"
                                             label={session.side_b_label}
@@ -433,6 +521,18 @@ export default function ScoringBoard({
                                         />
                                     </div>
                                 </div>
+
+                                {session.board_type === 'basketball' && (
+                                    <div className="flex justify-center">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={resetFouls}
+                                        >
+                                            Reset fouls
+                                        </Button>
+                                    </div>
+                                )}
 
                                 <PeriodForm session={session} />
 

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ScoreboardType;
 use App\Enums\ScoringSessionStatus;
 use Database\Factories\ScoringSessionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -25,6 +26,7 @@ use Illuminate\Support\Carbon;
  * @property int $score_b
  * @property string|null $period_label
  * @property string|null $status_note
+ * @property array<string, mixed>|null $sport_state
  * @property int|null $started_by
  * @property int|null $ended_by
  * @property Carbon|null $started_at
@@ -45,6 +47,7 @@ class ScoringSession extends Model
     {
         return [
             'status' => ScoringSessionStatus::class,
+            'sport_state' => 'array',
             'started_at' => 'datetime',
             'ended_at' => 'datetime',
         ];
@@ -88,6 +91,18 @@ class ScoringSession extends Model
     }
 
     /**
+     * Which scoreboard UI this session uses, inferred from the match's
+     * sport (App\Enums\ScoreboardType). Not stored — always derived, so a
+     * sport rename or catalog edit is reflected immediately.
+     */
+    public function boardType(): ScoreboardType
+    {
+        $this->loadMissing('match.event.sport');
+
+        return ScoreboardType::forSport($this->match->event->sport->name);
+    }
+
+    /**
      * The one shape sent to the frontend, whether by the polling read
      * endpoint or the Reverb broadcast — kept identical so the client
      * never has to reconcile two different payload shapes.
@@ -107,6 +122,8 @@ class ScoringSession extends Model
             'score_b' => $this->score_b,
             'period_label' => $this->period_label,
             'status_note' => $this->status_note,
+            'board_type' => $this->boardType()->value,
+            'sport_state' => $this->sport_state,
         ];
     }
 }

@@ -42,6 +42,7 @@ The current authenticated user, IP, and user agent are captured automatically; p
 | `report.result_sheet_exported` / `tally_exported` / `schedule_exported` (CSV exports) | `ReportController` (WP-03-08) |
 | `report.management_exported` (CSV export) | `ManagementDashboardController` (WP-05-06) |
 | `scoring.started` / `scored` / `corrected` (reason in context) / `period_changed` / `paused` / `resumed` / `ended` | `ScoringSessionController` (WP-07-01) |
+| `scoring.foul_recorded` / `fouls_reset` (basketball board only) | `ScoringSessionController` (WP-07-04) |
 
 Deliberately not audited (accepted deviations, reviewed WP-02-11 and WP-03-10):
 

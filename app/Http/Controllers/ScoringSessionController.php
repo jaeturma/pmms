@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\MatchStatus;
+use App\Enums\ScoreboardType;
 use App\Enums\ScoreEventType;
 use App\Enums\ScoringSessionStatus;
 use App\Enums\UserRole;
@@ -125,6 +126,10 @@ class ScoringSessionController extends Controller
             'started_by' => $user->id,
             'started_at' => now(),
         ]);
+
+        if ($session->boardType() === ScoreboardType::Basketball) {
+            $session->forceFill(['sport_state' => ['fouls_a' => 0, 'fouls_b' => 0]])->save();
+        }
 
         $this->audit->record('scoring.started', $session, $this->context($session));
 
@@ -272,12 +277,67 @@ class ScoringSessionController extends Controller
         return back();
     }
 
+    /**
+     * Record or reset a team foul (basketball scoreboard only — WP-07-04).
+     * Fouls live in `sport_state`, decoupled from the generic score/period
+     * columns every board type shares.
+     */
+    public function foul(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->assertActive($session);
+        $this->assertBasketball($session);
+
+        $data = $request->validate([
+            'action' => ['required', Rule::in(['add', 'reset'])],
+            'side' => ['required_if:action,add', 'nullable', Rule::in(['a', 'b'])],
+        ]);
+
+        $state = $session->sport_state ?? ['fouls_a' => 0, 'fouls_b' => 0];
+
+        if ($data['action'] === 'add') {
+            $column = $data['side'] === 'a' ? 'fouls_a' : 'fouls_b';
+            $state[$column] = ($state[$column] ?? 0) + 1;
+        } else {
+            $state['fouls_a'] = 0;
+            $state['fouls_b'] = 0;
+        }
+
+        $session->forceFill(['sport_state' => $state])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::Foul,
+            'payload' => [...$data, 'fouls_a' => $state['fouls_a'], 'fouls_b' => $state['fouls_b']],
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record(
+            $data['action'] === 'add' ? 'scoring.foul_recorded' : 'scoring.fouls_reset',
+            $session,
+            [...$this->context($session), ...$data],
+        );
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
     private function assertActive(ScoringSession $session): void
     {
         if ($session->status === ScoringSessionStatus::Ended) {
             throw ValidationException::withMessages([
                 'status' => __('This scoring session has already ended.'),
             ]);
+        }
+    }
+
+    private function assertBasketball(ScoringSession $session): void
+    {
+        if ($session->boardType() !== ScoreboardType::Basketball) {
+            abort(422, __('This action is only available for a basketball scoring session.'));
         }
     }
 

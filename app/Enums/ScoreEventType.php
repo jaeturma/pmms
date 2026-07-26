@@ -11,6 +11,7 @@ enum ScoreEventType: string
     case Paused = 'paused';
     case Resumed = 'resumed';
     case Ended = 'ended';
+    case Foul = 'foul';
 
     public function label(): string
     {
@@ -22,6 +23,7 @@ enum ScoreEventType: string
             self::Paused => 'Paused',
             self::Resumed => 'Resumed',
             self::Ended => 'Ended',
+            self::Foul => 'Foul',
         };
     }
 }
