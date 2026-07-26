@@ -49,3 +49,27 @@ own delegation (City) **or** any athletes/personnel of its own under a
 municipal delegation (Province) — not gated on the school having a direct
 delegation row, which would otherwise hide every Province-deployment school.
 See `docs/delegations.md`.
+
+## Verified 2026 — Phase 6 (WP-06-01)
+
+Re-verified all six reports (page, print layout, CSV export) against the app as
+it stands after the Division initiative and Phase 7: `ReportController` uses
+`athlete.school`/`Delegation::registrantName()`/`Division::current()->areaLabel()`
+correctly everywhere, with no stale delegation-as-school-proxy references left.
+All six report pages consistently use the shared `ReportActions` component
+(print + CSV buttons, `print:hidden`), so print/export behavior is uniform
+across the set. The medal tally report correctly reflects the district-first
+ordering from the 2026-07-25 post-Division refinement (district/municipality
+standings shown first, school table demoted to a "reference only" note).
+Live scoring (Phase 7) correctly has no report of its own — a live session is
+provisional by design and was never expected to produce one.
+`tests/Feature/ReportTest.php` (18 tests) and
+`tests/Feature/OperationsReportTest.php` (8 tests) still pass and still cover
+current behavior. No defects found; no code changes were needed. Per owner
+decision, CSV remains the only export format — native `.xlsx` export was
+considered and explicitly dropped as unnecessary (`docs/phases/phase-06-reports-uat-deployment-turnover/README.md`).
+
+Note: `reports/management` (Phase 5's Executive/Management Dashboards printable
+report, `docs/management-dashboard.md`) is a separate report built on the same
+`ReportActions` pattern but is out of this document's/this verification's scope
+— it was never part of the WP-02-12/WP-03-08 inventory above.
