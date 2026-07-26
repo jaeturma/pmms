@@ -41,6 +41,12 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('meets/{meet}/tally', [PortalController::class, 'tally'])
         ->whereNumber('meet')
         ->name('public.tally');
+    Route::get('meets/{meet}/matches/{match}/scoreboard', [PortalController::class, 'scoreboard'])
+        ->whereNumber(['meet', 'match'])
+        ->name('public.scoreboard');
+    Route::get('meets/{meet}/matches/{match}/scoreboard/poll', [PortalController::class, 'scoreboardPoll'])
+        ->whereNumber(['meet', 'match'])
+        ->name('public.scoreboard.poll');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {

@@ -2,7 +2,10 @@
 
 WP-04-01 foundation. A no-login, mobile-first window into published meet
 information, per product scope §9: published schedules, validated results, medal
-tally, and announcements — nothing else.
+tally, and announcements — nothing else. **Extended in Phase 7 (WP-07-08)**
+to also include live, provisional match scores — see "Live scoreboard"
+below; this was a deliberate expansion beyond §9's original four
+categories, owner-directed, not a silent scope creep.
 
 ## Publication model
 
@@ -75,6 +78,47 @@ re-keyed as of WP5 (`docs/medal-tally.md`). See `docs/delegations.md`.
   `PublicAnnouncements` component: latest five on the portal home (general +
   per-meet, meet labeled), a meet's own on its meet page. Managed internally at
   `/announcements` (manager-only) — see `docs/announcements.md`.
+
+## Live scoreboard (Phase 7, WP-07-08)
+
+`/meets/{meet}/matches/{match}/scoreboard` (`public.scoreboard`) — a
+read-only view of a match's live scoring session (`docs/live-scoring.md`),
+resolved through the same `Meet::published()` scope as every other public
+page **and** the match must belong to that meet — either 404s. No separate
+opt-in: a manager's existing publish decision is the one decision point,
+matching how the schedule/results/tally already work; there is no
+per-feature toggle to also approve live scores specifically. This is
+provisional data by definition (an in-progress, unvalidated score, unlike
+the "validated results only" guarantee everywhere else on the portal), so
+the page carries an explicit "Live score — provisional, not the official
+result" badge to keep it visually distinct from `/meets/{meet}/results`.
+No live session for a match is not an error — an ordinary empty state, same
+as every other no-data path on the portal. Polling only (`public.scoreboard.
+poll`, same 5-second baseline the internal page guarantees works
+standalone) — no Reverb channel for guests this WP, since a private Echo
+channel requires an authenticated user and building a public-channel
+exception was out of scope for this pass.
+
+Discovery: the public meet page (`/meets/{meet}`) gets a new "Live now"
+section listing every match in that meet with a currently active
+(non-ended) session, each linking into its scoreboard — without this, the
+feature would only be reachable by guessing or sharing a direct URL.
+`PortalController::liveMatches()` queries `ScoringSession` directly
+(`status != ended`, scoped to the meet's matches) rather than through
+`EventMatch`, since only one non-ended session can exist per match, so
+this is naturally one row per live match already, not per session.
+
+Privacy: `side_a_label`/`side_b_label` are the same free-text labels the
+operator set internally (school names, from `suggestedLabels`, or manual
+text) — no individual athlete data (name, birthdate, etc.) ever appears
+anywhere in a scoring session, so this page needed no new privacy review
+beyond confirming that. `resources/js/components/live-score-display.tsx`
+is the one shared, purely presentational component both this page and the
+internal operator console (`scoring/show.tsx`) render from — extracted in
+this WP so the two views can't drift apart; each page still fetches and
+shapes its own props independently (`PortalController` never reuses an
+internal page's props, the binding rule above), only the rendering itself
+is shared.
 
 ## Accessibility & mobile review (WP-04-06)
 

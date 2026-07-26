@@ -1,5 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
-import { CalendarDays, MapPin } from 'lucide-react';
+import { CalendarDays, MapPin, Radio } from 'lucide-react';
 import { EmptyState } from '@/components/empty-state';
 import Heading from '@/components/heading';
 import { PublicAnnouncements } from '@/components/public-announcements';
@@ -14,7 +14,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { meet as publicMeet } from '@/routes/public';
+import { meet as publicMeet, scoreboard } from '@/routes/public';
 
 type Slot = {
     id: number;
@@ -42,6 +42,17 @@ type Announcement = {
     published_at: string | null;
 };
 
+type LiveMatch = {
+    match_id: number;
+    event: string;
+    round_label: string;
+    side_a_label: string;
+    side_b_label: string;
+    score_a: number;
+    score_b: number;
+    status_label: string;
+};
+
 type Props = {
     meet: {
         id: number;
@@ -57,6 +68,7 @@ type Props = {
     selectedDay: string | null;
     venuesForDay: VenueGroup[];
     venueGuide: { name: string; address: string | null }[];
+    liveMatches: LiveMatch[];
 };
 
 export default function PublicMeet({
@@ -66,6 +78,7 @@ export default function PublicMeet({
     selectedDay,
     venuesForDay,
     venueGuide,
+    liveMatches,
 }: Props) {
     return (
         <>
@@ -88,6 +101,42 @@ export default function PublicMeet({
                 <PublicMeetNav meetId={meet.id} active="schedule" />
 
                 <PublicAnnouncements announcements={announcements} />
+
+                {liveMatches.length > 0 && (
+                    <section className="flex flex-col gap-3">
+                        <Heading variant="small" title="Live now" />
+                        <ul className="grid gap-2 sm:grid-cols-2">
+                            {liveMatches.map((match) => (
+                                <li key={match.match_id}>
+                                    <Link
+                                        href={
+                                            scoreboard({
+                                                meet: meet.id,
+                                                match: match.match_id,
+                                            }).url
+                                        }
+                                        className="flex flex-col gap-1 rounded-xl border p-3 text-sm hover:bg-accent"
+                                    >
+                                        <span className="flex items-center gap-2 font-medium">
+                                            <Radio
+                                                aria-hidden="true"
+                                                className="size-4 text-muted-foreground"
+                                            />
+                                            {match.event}
+                                        </span>
+                                        <span className="text-muted-foreground">
+                                            {match.round_label} ·{' '}
+                                            {match.side_a_label} {match.score_a}
+                                            –{match.score_b}{' '}
+                                            {match.side_b_label} (
+                                            {match.status_label})
+                                        </span>
+                                    </Link>
+                                </li>
+                            ))}
+                        </ul>
+                    </section>
+                )}
 
                 <section className="flex flex-col gap-3">
                     <Heading variant="small" title="Schedule" />

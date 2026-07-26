@@ -328,10 +328,13 @@ instruction. **Reopened same day**: owner instructed sport-specific
 scoreboards after all, appended as WP-07-04 (Basketball, done) → WP-07-05
 (Boxing, done) → WP-07-06 (Softball/Baseball, done) rather than
 renumbering the shipped, committed/pushed WP-07-02 ("Generic Live
-Scoreboard UI") — see the Work Package Log below for WP-07-04/05/06/07.
+Scoreboard UI") — see the Work Package Log below for WP-07-04/05/06/07/08.
 All three sport-specific scoreboards are built, plus WP-07-07 (manual
 board-type override, done 2026-07-26 — force the generic board for an
-exhibition/non-standard match even when the sport has a dedicated one).
+exhibition/non-standard match even when the sport has a dedicated one) and
+WP-07-08 (public live scoreboard, done 2026-07-26 — a second scope
+reversal the same day, extending the public portal to live/provisional
+scores; original Phase 7 scope had explicitly deferred public exposure).
 Original review: docs/phases/phase-07-live-scoring-enhancement/
 phase-7-compliance-review.md (COMPLIANT; two Low accessibility gaps found
 and fixed during the review, no schema/authorization/architectural issues;
@@ -676,9 +679,70 @@ acceptance. Execute one work package at a time on owner instruction.
   "generic", and the scoreboard page exposes the correct suggestedBoardType
   both for a Basketball match and for a match with no dedicated board),
   full gate green: Pint+PHPStan+ESLint+Prettier+tsc+build; migration Ran on
-  MySQL pmmsdb; app HTTP 200 at http://pmms.app; not committed/pushed) —
-  next: owner's choice of a fourth sport-specific WP, commit decision for
-  WP-07-07, or moving on to Phase 6/8 planning.
+  MySQL pmmsdb; app HTTP 200 at http://pmms.app) — committed as `607bb38`
+  and pushed to origin 2026-07-26, a single clean commit (no reconstruction
+  needed, unlike WP-07-05 — nothing further modified these files
+  afterward).
+- WP-07-08 Public Live Scoreboard — done 2026-07-26 (owner instructed
+  extending the public portal to live scores, reversing Phase 7's original
+  "internal only" decision (DESIGN-NOTES had explicitly deferred this "to
+  its own future WP if this version proves out") — clarified first that the
+  existing meets.is_published flag should cover it, no separate opt-in,
+  matching how the schedule/results/tally already work; a manager's one
+  publish decision is the one decision point. New public routes
+  `/meets/{meet}/matches/{match}/scoreboard` (`public.scoreboard`, page) and
+  its `/poll` sibling (`public.scoreboard.poll`, JSON), both resolved
+  through `Meet::published()` **and** requiring the match belong to that
+  meet — either condition failing 404s, same as every other public route.
+  Read-only always: no operator controls exist on this route at all
+  (structurally impossible to leak, not just hidden by a flag), page test
+  asserts `canManage`/`suggestedLabels` are structurally absent. Polling
+  only, no Reverb for guests (a private Echo channel needs an authenticated
+  user; building a public-channel exception was out of scope this pass) —
+  same 5-second baseline every internal live-scoring page already
+  guarantees works standalone. Explicit "Live score — provisional, not the
+  official result" badge on the page, since this is genuinely different in
+  character from every other public category (validated-only results,
+  official schedule) — the one thing on the portal that's deliberately
+  unvalidated. `PortalController::liveMatches()` (new private helper) feeds
+  a new "Live now" section on the public meet page listing every match with
+  a currently active session, linking into its scoreboard — without this
+  the feature would only be reachable by guessing a URL; queries
+  `ScoringSession` directly (`status != ended`, scoped through
+  `match.meet_id`) since only one non-ended session can exist per match,
+  so it's naturally one row per live match already. Extracted
+  `resources/js/components/live-score-display.tsx` (`LiveScoreDisplay` +
+  the `Session`/`BasketballState`/`BoxingState`/`SoftballState` types and
+  guards, all previously private to `scoring/show.tsx`) as the one shared,
+  purely presentational read-only rendering both the internal operator
+  console and this new public page render from — each page still fetches
+  and shapes its own props independently (`PortalController` never reuses
+  an internal page's props, the binding public-portal.md rule), only the
+  rendering itself is shared, specifically to stop the two views from
+  drifting apart over time the way duplicated ~140 lines of JSX would
+  invite. No schema change, no new dependency. docs/public-portal.md (new
+  "Live scoreboard" section, top summary line updated to flag this as a
+  deliberate expansion beyond product-scope §9's original four categories),
+  docs/live-scoring.md (short cross-reference section + test list); no
+  docs/authorization.md change (the existing generic "Public portal" row
+  already covers every public route, individual pages never got their own
+  rows). Pest 649/649 (5 new tests in new PublicScoreboardTest: guests can
+  view the public scoreboard for a published meet and unpublished meets
+  404, a match outside the given meet 404s, the page exposes the live
+  session read-only including sport-specific state with operator-only
+  fields structurally absent, the poll endpoint mirrors the page and 404s
+  the same way, and the public meet page's liveMatches lists only matches
+  with a currently active session scoped to that meet), full gate green:
+  Pint+PHPStan+ESLint+Prettier+tsc+build (hit and correctly dismissed one
+  PHPStan false positive — analysing the new test file in isolation
+  reported `$this->get()` as undefined, a known quirk of not loading the
+  full Pest/Larastan bootstrap that way; the full-codebase run was clean);
+  rebuilt before running the new page's tests (this project's documented
+  gotcha: Inertia page-render tests need `public/build`'s manifest to
+  include a newly-added page first); app + public portal both HTTP 200 at
+  http://pmms.app; not committed/pushed) — next: owner's choice of a fifth
+  sport-specific WP, commit decision for WP-07-08, or moving on to Phase
+  6/8 planning.
 
 # Phase 5 — Executive and Management Dashboards
 COMPLETE 2026-07-25, all 8 WPs executed one at a time on owner instruction.

@@ -3,12 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ResultStatus;
+use App\Enums\ScoringSessionStatus;
 use App\Models\Announcement;
+use App\Models\EventMatch;
 use App\Models\EventResult;
 use App\Models\EventSchedule;
 use App\Models\Meet;
 use App\Models\ResultPlacement;
+use App\Models\ScoringSession;
 use App\Services\MedalTallyService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
@@ -117,6 +121,7 @@ class PortalController extends Controller
                 ->sortBy('name')
                 ->values()
                 ->all(),
+            'liveMatches' => $this->liveMatches($meet),
         ]);
     }
 
@@ -200,6 +205,57 @@ class PortalController extends Controller
     }
 
     /**
+     * Public live scoreboard for one match (Phase 7, WP-07-08): read-only,
+     * always provisional — never the official result (that's
+     * /meets/{meet}/results, validated only). A live scoreboard is visible
+     * whenever its meet is published, the same publication decision that
+     * already covers the schedule/results/tally — no separate opt-in. No
+     * live session is not an error, just an empty state. Unpublished
+     * meets, or a match that doesn't belong to this meet, both 404.
+     */
+    public function scoreboard(int $meet, int $match): Response
+    {
+        $meet = Meet::query()->published()->findOrFail($meet);
+
+        $match = EventMatch::query()
+            ->where('meet_id', $meet->id)
+            ->with('event.sport:id,name')
+            ->findOrFail($match);
+
+        $session = $match->scoringSessions()->latest('id')->first();
+
+        return Inertia::render('public/scoreboard', [
+            'meet' => $this->meetSummary($meet),
+            'match' => [
+                'id' => $match->id,
+                'event' => sprintf('%s — %s', $match->event->sport->name, $match->event->name),
+                'round_label' => $match->round_label,
+            ],
+            'session' => $session === null ? null : $session->toLivePayload(),
+        ]);
+    }
+
+    /**
+     * Polling contract for the public scoreboard — the guest equivalent of
+     * the internal `scoring.show` endpoint, scoped to published meets. No
+     * Reverb channel for guests this WP; polling alone is the whole
+     * mechanism, same baseline every internal live-scoring page already
+     * guarantees works standalone.
+     */
+    public function scoreboardPoll(int $meet, int $match): JsonResponse
+    {
+        $meet = Meet::query()->published()->findOrFail($meet);
+
+        $match = EventMatch::query()->where('meet_id', $meet->id)->findOrFail($match);
+
+        $session = $match->scoringSessions()->latest('id')->first();
+
+        return response()->json([
+            'session' => $session === null ? null : $session->toLivePayload(),
+        ]);
+    }
+
+    /**
      * Published announcements, newest first. The portal home shows the
      * latest few across all meets; a meet page shows its own only.
      *
@@ -264,5 +320,34 @@ class PortalController extends Controller
             'venue' => $meet->venue,
             'status_label' => $meet->status->label(),
         ];
+    }
+
+    /**
+     * Matches in this meet with a currently active (non-ended) live
+     * scoring session — the "watch live now" entry points on the public
+     * meet page. Only one non-ended session can exist per match, so this
+     * is naturally one row per live match, not per session.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function liveMatches(Meet $meet): array
+    {
+        return ScoringSession::query()
+            ->where('status', '!=', ScoringSessionStatus::Ended->value)
+            ->whereHas('match', fn ($query) => $query->where('meet_id', $meet->id))
+            ->with('match.event.sport:id,name')
+            ->get()
+            ->map(fn (ScoringSession $session): array => [
+                'match_id' => $session->match_id,
+                'event' => sprintf('%s — %s', $session->match->event->sport->name, $session->match->event->name),
+                'round_label' => $session->match->round_label,
+                'side_a_label' => $session->side_a_label,
+                'side_b_label' => $session->side_b_label,
+                'score_a' => $session->score_a,
+                'score_b' => $session->score_b,
+                'status_label' => $session->status->label(),
+            ])
+            ->values()
+            ->all();
     }
 }

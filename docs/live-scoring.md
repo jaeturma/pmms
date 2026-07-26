@@ -1,4 +1,4 @@
-# Live Scoring (Phase 7, WP-07-01..07)
+# Live Scoring (Phase 7, WP-07-01..08)
 
 Optional, provisional live scoring for a match in progress. **Never creates,
 updates, or implies an `EventResult`/`ResultPlacement`** — the only path to
@@ -254,6 +254,17 @@ already exists would orphan that state, so this is out of scope by design.
 though the operator's choice itself isn't a separate mutation-with-reason
 like a score correction.
 
+## Public exposure (WP-07-08)
+
+Live scoring was internal-only through WP-07-07 — per owner instruction,
+WP-07-08 extends the public portal (`docs/public-portal.md`, "Live
+scoreboard") to a read-only, provisional view of a match's live session for
+any published meet, no separate opt-in beyond the existing publish
+decision. Full detail lives in that doc, not duplicated here; the
+short version: same `Meet::published()` scope, polling only (no Reverb for
+guests), and a shared `LiveScoreDisplay` presentational component so the
+public and internal read-only rendering can never drift apart.
+
 ## Tests
 
 `tests/Feature/ScoringSessionTest.php` — authorization (Delegation Officer
@@ -304,6 +315,13 @@ session exists.
 `tests/Feature/ResultTest.php` (pre-existing, unchanged) already proves the
 Phase 3 encode→validate flow works with no live scoring session ever
 created — Phase 7 adds no coupling for it to newly depend on.
+`tests/Feature/PublicScoreboardTest.php` (WP-07-08) — guests can view the
+public scoreboard for a published meet's match and unpublished meets 404,
+a match that doesn't belong to the given meet 404s, the page exposes the
+live session read-only (including sport-specific state) with `canManage`/
+`suggestedLabels` structurally absent, the poll endpoint returns the same
+payload and 404s the same way, and the public meet page's `liveMatches`
+lists only matches with a currently active session, scoped to that meet.
 
 ## Reconnection and concurrent-operator behavior (WP-07-03)
 
