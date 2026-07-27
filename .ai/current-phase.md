@@ -2199,3 +2199,31 @@ owner instruction. Next: owner approval, then WP1.
   tests, not just by convention. Next: owner review of
   `docs/reports/ddopaa-2025-seed-data-completion.md`, then a commit/push
   decision — entirely the owner's call, not started here.
+- **Post-completion fix, 2026-07-27 — Maco missing from the medal
+  tally.** WP1–WP7 were committed (`fc06233`..`f874e91`) and pushed to
+  `origin/main` on owner instruction; the owner then reviewed the
+  seeded data ahead of a presentation and reported Maco missing from
+  "Municipalities." Investigated rather than assumed: Maco's underlying
+  data was fully present (approved delegation, 20 schools, 36 athletes,
+  21 confirmed entries across 10 different events, all in events that
+  *did* get a validated result) — the actual cause was
+  `MedalTallyService::standings()` only ever lists a district that
+  appears in at least one placement, and deterministic rotation had
+  left Maco the one municipality with confirmed entries but zero
+  top-3 finishes anywhere, so it silently had no row at all rather than
+  a zero row. `database/seeders/DdopaaResultsSeeder.php` gained
+  `guaranteeMunicipalityCoverage()`: for any municipality with confirmed
+  entries but no placement, swap a bronze (rank 3) slot in one
+  individual event they're entered in away from whichever delegation
+  currently holds it — only when that donor has enough medals (>= 2)
+  that losing one bronze can't drop them to zero themselves. Never
+  touches the 4 `PARTIALLY_VERIFIED` corroborated events (all team or
+  already-decided). Applied: Maco now shows 1 bronze (donor was
+  Nabunturan, 11→10 total, nowhere near zero); all 11 municipalities
+  now appear in the tally; `ResultPlacement` count unchanged at 69 (a
+  swap, not an addition); reconciliation re-verified clean (0
+  municipality/school mismatches, 0 unvalidated placements). Verified
+  idempotent (re-ran twice, stable). Full gate green: Pint clean,
+  PHPStan L7 (0 errors), Pest 671/671 including all 16 WP6 tests
+  unchanged. App reconfirmed HTTP 200. **Not yet committed or pushed —
+  this fix is new since the WP1–WP7 push**, pending owner instruction.

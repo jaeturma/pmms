@@ -98,6 +98,111 @@ class DdopaaResultsSeeder extends Seeder
 
             $this->validatedResult($meet, $event, $admin, $placements);
         }
+
+        $this->guaranteeMunicipalityCoverage($meet);
+    }
+
+    /**
+     * With 11 municipalities competing across a limited event catalog,
+     * deterministic rotation can leave one or more with confirmed
+     * entries but zero top-3 placements anywhere — invisible on the
+     * medal tally page entirely (not just at zero), since
+     * `MedalTallyService::standings()` only lists districts that appear
+     * in at least one placement. Found by the project owner reviewing
+     * the seeded data before a presentation (Maco, in practice).
+     *
+     * Every municipality with a confirmed entry is guaranteed at least
+     * one placement here: swap a bronze (rank 3) slot in one
+     * individual — never team, to avoid disturbing a tied team
+     * roster — event they're entered in, taken from whichever
+     * delegation currently holds that bronze, only when the donor
+     * already has enough medals that losing one bronze can't drop them
+     * to zero themselves. All `SYNTHETIC_DEMO` — the four
+     * `PARTIALLY_VERIFIED` corroborated events (3x3 Basketball,
+     * Volleyball, Artistic Gymnastics, Boxing Boys) are all team events
+     * or already the corroborated winner, so this never touches them.
+     * Deterministic and idempotent: once a delegation has any
+     * placement, it's skipped on every later run.
+     */
+    private function guaranteeMunicipalityCoverage(Meet $meet): void
+    {
+        $delegations = Delegation::query()
+            ->where('meet_id', $meet->id)
+            ->orderBy('district_id')
+            ->get();
+
+        foreach ($delegations as $delegation) {
+            if ($this->hasAnyPlacement($meet, $delegation)) {
+                continue;
+            }
+
+            $this->coverDelegation($meet, $delegation);
+        }
+    }
+
+    private function hasAnyPlacement(Meet $meet, Delegation $delegation): bool
+    {
+        return ResultPlacement::query()
+            ->whereHas('result', fn ($q) => $q->where('meet_id', $meet->id))
+            ->whereHas('entry', fn ($q) => $q->where('delegation_id', $delegation->id))
+            ->exists();
+    }
+
+    private function coverDelegation(Meet $meet, Delegation $delegation): void
+    {
+        $entries = Entry::query()
+            ->where('delegation_id', $delegation->id)
+            ->where('status', 'confirmed')
+            ->whereHas('event', fn ($q) => $q->where('is_team_event', false))
+            ->with('event')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($entries as $entry) {
+            $result = EventResult::query()
+                ->where('meet_id', $meet->id)
+                ->where('event_id', $entry->event_id)
+                ->where('status', ResultStatus::Validated->value)
+                ->first();
+
+            if ($result === null) {
+                continue;
+            }
+
+            $bronze = ResultPlacement::query()
+                ->where('event_result_id', $result->id)
+                ->where('rank', 3)
+                ->first();
+
+            if ($bronze === null || $bronze->entry_id === $entry->id) {
+                continue;
+            }
+
+            $donorDelegationId = (int) Entry::query()->whereKey($bronze->entry_id)->value('delegation_id');
+
+            // Only swap from a donor with medals to spare — never
+            // create a new zero-medal municipality while fixing this
+            // one. 2 is the minimum: losing 1 bronze still leaves 1.
+            if ($this->delegationMedalCount($meet, $donorDelegationId) < 2) {
+                continue;
+            }
+
+            $bronze->forceFill([
+                'entry_id' => $entry->id,
+                'mark' => $this->mark($entry->event, $entry),
+            ])->save();
+
+            return;
+        }
+    }
+
+    private function delegationMedalCount(Meet $meet, int $delegationId): int
+    {
+        return ResultPlacement::query()
+            ->whereIn('rank', [1, 2, 3])
+            ->whereHas('result', fn ($q) => $q->where('meet_id', $meet->id)->where('status', ResultStatus::Validated->value))
+            ->whereHas('entry', fn ($q) => $q->where('delegation_id', $delegationId))
+            ->count();
     }
 
     /**
