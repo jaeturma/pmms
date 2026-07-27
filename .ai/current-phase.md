@@ -1783,3 +1783,419 @@ pushed.
   decision for the Phase 6 tree, then the owner's choice of what comes
   next — Phase 8 (Post-Deployment Support) or a real UAT/pilot session
   using WP-06-06's prepared materials.
+
+# DdOPAA 2025 Reference Dataset (standalone initiative, planned 2026-07-27)
+Not a roadmap "Phase" — a cross-cutting data initiative, same category as
+the Division Type & Municipality-Based Delegations initiative, independent
+of Phase 8 (unrelated scope). Owner asked for a realistic 2025 Davao de Oro
+Provincial Athletic Association reference dataset sourced primarily from a
+named Facebook page, with a Provincial Government article as a supporting
+source, and gave 16 detailed parts specifying source classification
+(`VERIFIED_OFFICIAL`/`PARTIALLY_VERIFIED`/`SYNTHETIC_DERIVED`/
+`SYNTHETIC_DEMO`), privacy rules, seeder structure, testing, and
+documentation — explicitly requiring an implementation plan before any code
+changes (Part 15).
+
+**Critical research finding, before any planning was written:** the named
+Facebook page — the requested *primary* source — is completely
+inaccessible. `WebFetch` against it returned only the page title, zero
+posts; no available tool can authenticate to or render Facebook. The
+Provincial Government article (supporting source) was also blocked
+directly (403 from `davaodeoro.gov.ph`); everything attributed to it comes
+from `WebSearch`'s own synthesis, not a primary read. Full inventory:
+`docs/data-reference/ddopaa-2025-source-register.md` — the only concrete
+things that survived corroboration (all `PARTIALLY_VERIFIED`, sourced from
+search snippets + Scribd document previews, never `VERIFIED_OFFICIAL`):
+meet opened January 17, 2025 at Maragusan Grandstand Arena, all 11
+municipalities participated, sports touched across sources (Athletics,
+Basketball incl. 3x3, Volleyball, Swimming, Gymnastics, Boxing), five real
+delegation nicknames (Nabunturan "Black Mamba," Montevista "Blazing
+Fighters," New Bataan "Rock Wreckers," Mawab "Pick Hammer," Maragusan
+"Maroon Knights"), and a handful of team-level event outcomes. **One real
+student-athlete's name surfaced during research (a boxing gold medalist)
+and was deliberately never recorded anywhere** — the owner's standing
+instruction is no real athlete name without explicit authorization,
+regardless of whether it's already public; followed strictly even though
+this one technically already appeared in a public post.
+
+Presented this finding plus a Part 15 implementation plan and asked the
+owner three pivotal questions rather than guessing: (1) given the Facebook
+gap, proceed anyway, have the owner supply the post content directly, or
+pause? → **proceed mostly-synthetic**, honestly labeled, nothing beyond the
+short corroborated list ever claimed as verified; (2) provenance metadata:
+new DB columns/tables, or documentation-only? → **documentation-only, no
+schema changes** (matches this project's "avoid unnecessary complexity"
+posture and the request's own "choose the simplest compatible approach"
+instruction); (3) build all 16 parts in one pass, or break into WPs like
+every other phase? → **break into WPs**.
+
+Plan written accordingly: `docs/phases/ddopaa-2025-reference-dataset/`
+(README + DESIGN-NOTES + CHECKLIST + WP1..7) — WP1 Meet/Venue/Sports
+Catalog Setup → WP2 Standard Dataset (11 real delegations, 10–25 schools
+each, 500–700 synthetic athletes) → WP3 Results & Medal Tally
+Reconciliation (through the existing encode→validate flow and
+`MedalTallyService`, no hardcoded tally) → WP4 Live Scoring Samples
+(basketball/boxing/softball-baseball, each scheduled+live+completed) →
+WP5 Demo & Load-Test Tier Wiring (reuses WP-06-04's
+`PerformanceBenchmarkSeeder` for the load-test tier rather than duplicating
+it) → WP6 Testing & Seeding Safety → WP7 Documentation & Completion
+Review. Confirmed the existing schema needs zero changes — every structure
+this needs (District/School/Delegation/Athlete/Sport/Event/Venue/
+EventSchedule/EventMatch/EventResult/ResultPlacement/ScoringSession/
+ScoreEvent) already exists, built across Phases 1–7 and the Division
+initiative for exactly this shape of data. `docs/data-reference/
+ddopaa-2025-source-register.md` already written (the Part 2 research
+deliverable). Nothing else committed/pushed; execute one WP at a time on
+owner instruction. Next: owner approval, then WP1.
+
+## DdOPAA Work Package Log
+- WP1 Meet, Venue & Sports Catalog Setup — done 2026-07-27. New
+  `database/seeders/DdopaaReferenceSeeder.php` (flat file, `local`/
+  `testing`-guarded like every existing sample seeder, not registered in
+  `DatabaseSeeder`'s default chain — matches `PerformanceBenchmarkSeeder`'s
+  precedent and Part 12's "separate commands" requirement). Creates
+  "DdOPAA Meet 2025" (Active, published; `PARTIALLY_VERIFIED` start date
+  2025-01-17 corroborated across 3 source-register fetches;
+  `SYNTHETIC_DERIVED` end date, none was found). Sets nicknames on
+  exactly the 5 real municipalities the source register corroborates
+  (Nabunturan "Black Mamba," Montevista "Blazing Fighters," New Bataan
+  "Rock Wreckers," Mawab "Pick Hammer," Maragusan "Maroon Knights") via
+  a plain `District::where(...)->update()` — never creates new District
+  rows, the other 6 municipalities deliberately untouched. Three venues
+  (`PARTIALLY_VERIFIED` "Maragusan Grandstand Arena," 2 `SYNTHETIC_DEMO`
+  supporting venues for indoor/aquatic events later WPs need). Added
+  Boxing as a `Sport` row (already a supported live-scoring board type
+  since Phase 7, but never in the seeded catalog) and 11 new `Event` rows
+  across Basketball/Volleyball/Gymnastics/Swimming/Boxing — reused the
+  one pre-existing "Basketball" (Boys) event from the earlier ad-hoc
+  live-scoreboard-link demo rather than duplicating it. Every event is
+  individually annotated `PARTIALLY_VERIFIED` (directly matches a
+  corroborated source-register fact — e.g. "3x3 Basketball, Boys" since
+  Montevista's win is on record) or `SYNTHETIC_DERIVED` (a realistic
+  gender-paired counterpart or, for Swimming, a plausible baseline event
+  — the sport's inclusion is corroborated, no specific event is). All
+  12 events (11 new + 1 reused) attached to the meet. Verified end-to-end
+  against the real `pmmsdb`, not just written and assumed correct: ran
+  the seeder, confirmed every fact above via `tinker`, re-ran it a second
+  time and confirmed identical counts (true idempotency, no duplicates).
+  Dedicated automated test coverage deliberately deferred to WP6 (Testing
+  & Seeding Safety), per the initiative's own plan — this WP's evidence
+  is the direct verification above, matching how WP-06-04's seeder work
+  was verified. Data left in place for WP2 onward to build on (unlike
+  WP-06-04's benchmark seeder, which was cleaned up after one-off
+  profiling — this is a multi-WP foundation, not a one-off test). Pest
+  655/655 (unchanged — no test code touched), full gate green:
+  Pint+PHPStan L7 (0 errors); frontend checks not re-run, no frontend
+  file touched. App reconfirmed HTTP 200 at http://pmms.app. Not
+  committed/pushed — next: WP2 Standard Dataset — Delegations, Schools,
+  Athletes & Personnel, on owner instruction.
+- WP2 Standard Dataset — done 2026-07-27. New
+  `database/seeders/DdopaaStandardSeeder.php` (flat, `local`/`testing`-
+  only, requires WP1's meet to already exist, not in the default seed
+  chain). Registers all 11 real municipalities as approved delegations;
+  177 schools (10–25 per municipality, `SYNTHETIC_DERIVED` DepEd-style
+  names — explicitly not a verified roster, documented as such); 531
+  synthetic athletes (within the requested 500–700 standard-tier range),
+  synthetic Filipino names from fixed 20-name pools, no real names; 11
+  coaches; 311 confirmed entries. Deterministic throughout (index/LRN-
+  based selection, never `random_int`) specifically so idempotency holds
+  — proven, not assumed: ran it twice, byte-identical counts both times
+  (11/177/531/311). `guaranteedEntries()` ensures the 5 corroborated
+  delegation/event pairs from the source register (Montevista→3x3
+  Basketball Boys, Nabunturan→Volleyball Girls + Boxing Boys ×3,
+  Mawab→Volleyball Girls, Maragusan→Volleyball Girls, New Bataan→Artistic
+  Gymnastics Boys) actually have real entries ready for WP3 to place as
+  winners, regardless of how the generic sex-matched distribution
+  happened to land — verified present after both seeding runs.
+  **Caught and fixed a real data-quality bug before finalizing, not
+  after**: the first draft assigned each athlete's grade level
+  independently of which school they were enrolled at, producing
+  nonsense like a Grade 9 student "attending" an Elementary school (since
+  `School.level` is just descriptive metadata, nothing in the app itself
+  enforces this consistency, but it's an obvious tell in seed data meant
+  to look realistic). Fixed by deriving grade level from the assigned
+  school's own `level` (Elementary→3-6, Secondary→7-10, Integrated→either)
+  instead of a school-independent formula; since `Athlete` firstOrCreate
+  is keyed on LRN, the already-seeded bad rows wouldn't have self-
+  corrected on a second run, so the WP2-scoped data (never WP1's
+  meet/venues/events/nicknames) was explicitly cleared and reseeded fresh
+  — verified 0 mismatched grade/school-level athletes afterward, and
+  re-verified idempotency again post-fix. No cross-municipality school
+  assignment (schools are always created directly under their own
+  municipality's District, never reassigned). Dedicated automated test
+  coverage remains deferred to WP6 per the plan; this WP's evidence is
+  the direct `tinker` verification above (2 full seed runs, a
+  targeted mismatch query, and the 6 guaranteed-entry checks). Pest
+  655/655 (unchanged), full gate green: Pint+PHPStan L7 (0 errors);
+  frontend checks not re-run, no frontend file touched. App reconfirmed
+  HTTP 200. Not committed/pushed — next: WP3 Results & Medal Tally
+  Reconciliation, on owner instruction.
+- WP3 Results & Medal Tally Reconciliation — done 2026-07-27. New
+  `database/seeders/DdopaaResultsSeeder.php` (flat, `local`/`testing`-
+  only, requires WP1+WP2's meet and delegations to already exist, not in
+  the default seed chain). Uses the app's own existing encode→validate
+  flow exactly as `ResultController` does — `EventResult`/
+  `ResultPlacement` rows only, no parallel "medal award" table;
+  `MedalTallyService::standings()` derives the tally at read time,
+  unchanged, per the initiative's Part-required flow (Event Result →
+  Result Validated → Result Finalized → tally recalculated). Team events
+  (`teamPlacements()`) rank by delegation, not individual entry — every
+  teammate at a shared rank gets `is_tie=true`, so each roster member
+  earns the medal individually in the tally, matching real multi-sport-
+  meet medal counting. Individual events (`individualPlacements()`) rank
+  entries directly, with a `sweep` option (Nabunturan Boxing Boys) where
+  every entry from the winning delegation shares rank 1, approximating
+  the source register's "4 golds" note against a catalog with only one
+  non-weight-classed Boxing event. `KNOWN_WINNERS` (3x3 Basketball Boys→
+  Montevista, Artistic Gymnastics Boys→New Bataan, Boxing Boys→
+  Nabunturan/sweep) and `VOLLEYBALL_GIRLS_BRACKET` (Nabunturan, Mawab,
+  Maragusan) encode exactly the `PARTIALLY_VERIFIED` facts from the
+  source register; every other placement, and every "how did the rest of
+  the field finish" detail even within a corroborated event, is
+  `SYNTHETIC_DERIVED`/`SYNTHETIC_DEMO`, documented per-method. Produced
+  14 validated results, 69 placements.
+  **Caught and fixed three real bugs before finalizing, not after**:
+  (1) Revisited WP2's `pickEvent()` — its fixed candidate-scan order let
+  high-capacity events (Basketball, cap 12) absorb nearly all entries
+  before low-capacity events (Swimming, Gymnastics, Boxing) got any,
+  leaving 4 of 12 events with zero participants and nothing for WP3 to
+  place; fixed by rotating the starting candidate index off the
+  athlete's own LRN, required clearing and reseeding WP2's data again,
+  verified 10 of 12 events multi-delegation afterward while the 6
+  guaranteed entries and idempotency both still held. (2) Found WP2's
+  elementary Athletics events were queried for athlete entries but never
+  synced onto the meet itself (`$meet->events()->syncWithoutDetaching(...)`
+  was missing), meaning 44 entries pointed at events the meet didn't
+  actually offer — inconsistent with what `EntryController::store()`
+  would ever allow; fixed additively, no data wipe needed. (3) A
+  destructuring bug in `individualPlacements()` —
+  `[$winner, , , $sweep] = $this->knownWinnerRow($event) ?? [...]` read
+  `$winner` from index 0 (the event name string) instead of index 2 (the
+  winning municipality) — silently broke winner-prioritization for
+  Boxing and Gymnastics; it "accidentally" looked right for Gymnastics
+  only because that event happened to have a single participating
+  delegation, so any ordering put them first regardless, but Boxing
+  (3 competing delegations) exposed it: Maragusan (lowest entry ID by
+  chance) placed 1st instead of Nabunturan. Fixed to
+  `[, , $winner, $sweep] = ...`, cleared and reseeded results. (4) After
+  fixing #3, the fallback ranking's plain ascending-ID sort made
+  Compostela (alphabetically first, lowest delegation ID) sweep ~19 golds
+  — nearly every event with no corroborated winner — an obviously
+  artificial-looking result; fixed by adding deterministic `rotated()`/
+  `rotatedEntries()` helpers that rotate the sorted ID list by the
+  event's own ID (never `random_int`, idempotency preserved), spreading
+  wins realistically across municipalities. Verified via direct
+  `pmmsdb` queries, not assumed correct from code review: re-ran the
+  seeder three times post-fix, stable at 14 results/69 placements every
+  time (true idempotency); spot-checked all 4 known winners correct
+  (3x3 Basketball Boys=Montevista, Volleyball Girls bracket=Nabunturan/
+  Mawab/Maragusan, Artistic Gymnastics Boys=New Bataan, Boxing
+  Boys=Nabunturan with a 3-way rank-1 tie); reviewed the full
+  `MedalTallyService` standings for realism (top New Bataan 8 golds down
+  to Mawab/Maragusan 1-2 total, spread across ~10 municipalities, no
+  single-municipality sweep); reconciled every municipality's tally
+  total against the sum of its own schools' totals — 0 mismatches across
+  all 10 municipalities with results — and confirmed all 69 placements
+  trace to the 14 validated results with no orphans. Dedicated automated
+  test coverage remains deferred to WP6 per the plan; this WP's evidence
+  is the direct verification above. Full gate green: Pint clean,
+  PHPStan L7 (0 errors), Pest 655/655 (3,305 assertions, unchanged — no
+  test code touched), frontend checks not re-run (no frontend file
+  touched). App reconfirmed HTTP 200 at http://pmms.app. Not committed/
+  pushed — next: WP4 Live Scoring Samples (Basketball, Boxing,
+  Softball/Baseball), on owner instruction.
+- WP4 Live Scoring Samples (Basketball, Boxing, Softball/Baseball) —
+  done 2026-07-27. New `database/seeders/DdopaaLiveScoringSeeder.php`
+  (flat, `local`/`testing`-only, requires WP1+WP2's meet and delegations,
+  not in the default seed chain). Mirrors the ad-hoc
+  `SampleProvinceDemoSeeder::liveBasketballGame()` pattern exactly —
+  same `ScoringSession`/`ScoreEvent` fields, same `firstOrCreate`/
+  `forceFill` idempotency approach — generalized to 3 sports × 3 states
+  (9 `EventMatch` rows total, each with its own `EventSchedule` slot so
+  the Schedule page's live-link column has real state to show):
+  Basketball (reused WP1's "Basketball" Girls team event), Boxing
+  (reused WP1's "Boxing" Boys individual event — a live bout is a
+  separate, provisional concept from the `EventResult` WP3 already
+  validated for the same event; both coexist, same as the real app
+  allows), and Softball (one new "Softball" Girls team event,
+  `SYNTHETIC_DEMO` — WP1's catalog had no sport mapping to
+  `ScoreboardType::SoftballBaseball`, which requires a sport literally
+  named "Softball" or "Baseball"; both already existed unused in
+  `SportsCatalogSeeder`). Per sport: one `Scheduled` match with no
+  session; one match with an `in_progress` session (running score,
+  correct sport-specific `sport_state` — team fouls for basketball, a
+  partial round history for boxing, partial inning/count state for
+  softball, each summing correctly to the running score); one
+  `Completed` match (`match.status` explicitly forced, since the app
+  itself never auto-transitions a match on session end — confirmed by
+  reading `ScoringSessionController::end()`, which only ever touches the
+  session) with an `ended` session — a full, internally consistent final
+  state (3 complete boxing rounds summing to 29-28; 7 complete softball
+  innings summing to 9-6). Every value `SYNTHETIC_DEMO`, documented as
+  such — no source has real score/round/inning data for any match.
+  Never creates or touches `EventResult`/`ResultPlacement` — verified,
+  not assumed: counts stayed at 14/69 (WP3's exact numbers) before and
+  after running this seeder. Verified via direct `pmmsdb` queries: 9
+  matches / 6 sessions (3 in-progress + 3 ended; scheduled matches
+  correctly have none) / 4 `ScoreEvent` rows / 9 `EventSchedule` slots,
+  identical after a second run (idempotent); every completed match's
+  round/inning breakdown hand-checked to sum to its final score (Boxing
+  10+9+10=29 / 9+10+9=28; Softball 1+0+2+1+0+3+2=9 / 0+1+0+2+0+1+2=6).
+  Dedicated automated test coverage remains deferred to WP6 per the
+  plan; this WP's evidence is the direct verification above. Full gate
+  green: Pint clean, PHPStan L7 (0 errors), Pest 655/655 (3,305
+  assertions, unchanged — no test code touched); frontend checks not
+  re-run, no frontend file touched. App reconfirmed HTTP 200 at
+  http://pmms.app. Not committed/pushed — next: WP5 Demo & Load-Test
+  Tier Wiring, on owner instruction.
+- WP5 Demo & Load-Test Tier Wiring — done 2026-07-27. Three separate,
+  clearly-named commands per the request's own Part 12 requirement
+  (never one seeder with a tier flag). New
+  `database/seeders/DdopaaDemoSeeder.php` (demo tier: calls WP1, then
+  adds 3 municipalities × 6 athletes = 18 total — a quick-to-eyeball
+  fraction of WP2's 500+ volume, own 942xxx LRN/school-code range so it
+  never collides with WP2's 941xxx or WP-06-04's 950xxx). New
+  `database/seeders/DdopaaStandardTierSeeder.php` (standard tier: a thin
+  `$this->call()` orchestrator chaining WP1→WP2→WP3→WP4 in order, same
+  pattern `DatabaseSeeder` itself already uses — not to be confused with
+  WP2's own `DdopaaStandardSeeder`, which is just the athlete-volume
+  ingredient, not the full tier). Load-test tier: confirmed
+  `PerformanceBenchmarkSeeder` (WP-06-04) still works as-is and needs no
+  changes — reran it directly (11 delegations / 88 schools / 1,320
+  athletes, unchanged scale), left untouched per this WP's own Out of
+  Scope.
+  **Caught and fixed a real cross-run idempotency bug before finalizing,
+  not after** — found by actually re-running the new standard-tier
+  orchestrator twice in a row rather than assuming a single successful
+  run proved it safe: `DdopaaStandardSeeder`'s (WP2) event-capacity
+  simulation reset to empty on every invocation and replayed
+  deterministically only as long as the meet's attached event catalog
+  never changed between runs. Because the orchestrator runs WP4 (which
+  adds a new "Softball" event) *after* WP2 every time, a second
+  orchestrator run fed WP2 a bigger catalog than the first run saw,
+  causing two compounding problems: already-entered athletes could pick
+  up a second entry in the newly available event, and skipping those
+  athletes on the guard-check shifted the local capacity simulation
+  enough that *other*, previously-unentered athletes also drifted onto
+  different events — confirmed entries grew 314 → 358 → 402 over three
+  successive runs, nowhere near stable. Root-caused and fixed by making
+  `$entryCounts` DB-backed instead of run-local: seeded from actual
+  existing `Entry` rows at the start of `run()` (new
+  `existingEntryCounts()` method) and gated by a new `alreadyEntered()`
+  check so a previously-entered athlete is never re-evaluated, on top of
+  a catalog that now always reflects true cumulative state rather than a
+  from-scratch-per-run simulation. Applied the identical, smaller-scale
+  fix to the new `DdopaaDemoSeeder` (same latent bug, same mechanism, own
+  `existingEntryCounts()` scoped to one delegation) since it has the
+  same generic-catalog + local-capacity-tracking shape. Verified by
+  fully resetting the DdOPAA-scoped data (delegations through matches,
+  including deleting and letting WP4 recreate the Softball event) and
+  replaying the whole stack from a genuine clean slate: first pass
+  reproduced WP3's exact previously-documented evidence (531 athletes /
+  314 confirmed entries / 14 results / 69 placements), and three full
+  standard-tier re-runs plus two full demo-tier re-runs afterward held
+  perfectly stable at those same numbers (plus 18 stable demo entries on
+  top, 332 total) — true idempotency, not just a single lucky run.
+  Medal-tally reconciliation re-verified clean (0 municipality/school
+  mismatches) after the fix. The 8 athletes who hold 2 confirmed entries
+  is a separate, pre-existing, stable, and intentional characteristic of
+  `guaranteedEntries()` (WP2) — it can layer a guaranteed entry onto an
+  athlete the generic pass already entered elsewhere — not a regression
+  from this fix. Noting for WP6: an automated idempotency test for the
+  standard tier must run the *orchestrator* at least twice (not just
+  WP2 alone with a frozen catalog) to actually exercise this fixed path.
+  Full gate green: Pint clean, PHPStan L7 (0 errors), Pest 655/655
+  (3,305 assertions, unchanged — no test code touched); frontend checks
+  not re-run, no frontend file touched. App reconfirmed HTTP 200 at
+  http://pmms.app. Not committed/pushed — next: WP6 Testing & Seeding
+  Safety, on owner instruction.
+- WP6 Testing & Seeding Safety — done 2026-07-27. New
+  `tests/Feature/DdopaaReferenceDatasetTest.php` (16 tests), running the
+  real seeder classes against the test database (sqlite `:memory:`,
+  phpunit.xml) rather than reconstructing their output with factories,
+  since the point is proving what the actual seeders produce — every
+  invariant from the request's Part 13 list, plus the environment guard:
+  all 11 real municipality delegations exist and approved; every
+  athlete's school is within their own delegation's municipality; no
+  school crosses municipalities even after a repeat run; no duplicate
+  delegation per municipality even after a repeat run; every medal
+  placement traces to a validated result and municipality totals equal
+  their own schools' summed totals; an encoded-but-unvalidated result
+  never appears in the tally (proven with a real extra encoded result
+  injected via factory, not just by absence); live-scoring seeding never
+  creates or touches `EventResult`/`ResultPlacement`; the standard-tier,
+  demo-tier, and load-test-tier commands are each idempotent (run
+  twice, identical counts); all 6 new seeder classes
+  (`DdopaaReferenceSeeder`, `DdopaaStandardSeeder`, `DdopaaResultsSeeder`,
+  `DdopaaLiveScoringSeeder`, `DdopaaDemoSeeder`, `DdopaaStandardTierSeeder`)
+  individually refuse to run outside `local`/`testing` — each guard test
+  seeds valid prerequisites first, then flips `app()['env']` to
+  `production` and proves specifically the environment guard (not a
+  missing-prerequisite early return) is what blocks it.
+  **Caught and fixed a second real bug before finalizing** — this one
+  invisible in every manual MySQL check done throughout WP4/WP5, only
+  surfaced by actually running the new idempotency test against the
+  project's real test database: `DdopaaLiveScoringSeeder`'s `slot()`
+  method (WP4) queried `EventSchedule::firstOrNew(['scheduled_date' =>
+  $date->toDateString(), ...])` — a bare `Y-m-d` string — but Eloquent's
+  `date` cast serializes new rows through the query grammar's default
+  datetime format (`Y-m-d H:i:s`) when saving, so the two never actually
+  matched as strings. MySQL's native `DATE` column silently truncates
+  the time part on INSERT, which is exactly why this stayed invisible
+  across every earlier manual `tinker` re-run against the dev database;
+  SQLite has no such column type, stores the full string verbatim, and
+  a second orchestrator run in the Pest suite created a duplicate
+  `EventSchedule`/`EventMatch` pair for all 9 matches instead of finding
+  the existing ones (9 → 18). Fixed by replacing the raw-string
+  `firstOrNew` key with an explicit `whereDate('scheduled_date', ...)`
+  lookup — the Laravel helper built specifically for comparing only the
+  date portion, portable across both engines — falling back to `new
+  EventSchedule(...)` only when no match is found. Verified idempotent
+  afterward in both places: the Pest suite (9 schedules/9 matches stable
+  across two runs) and the real dev MySQL database (re-ran
+  `DdopaaLiveScoringSeeder` directly, still 9/9, no regression from the
+  fix). This is the second cross-database-engine lesson from this
+  initiative (WP5's fix was cross-run, catalog-order; this one is
+  cross-engine, date-serialization) — both were caught only because a
+  seeder's own claimed idempotency was actually exercised against a
+  different environment than the one it was written and eyeballed in,
+  not assumed from a single successful manual run.
+  Dedicated automated coverage was this WP's own purpose, so nothing
+  further deferred. Full gate green: Pint clean, PHPStan L7 (0 errors),
+  Pest 671/671 (655 existing + 16 new, 3,341 assertions total, all
+  green — proves no regression); frontend checks not re-run, no
+  frontend file touched. App reconfirmed HTTP 200 at http://pmms.app.
+  Not committed/pushed — next: WP7 Documentation & Completion Review,
+  on owner instruction.
+- WP7 Documentation & Completion Review — done 2026-07-27. **Initiative
+  complete (WP1–WP7).** Four new docs: `docs/data-reference/
+  ddopaa-2025-reference-data.md` (what's actually in the dataset, by
+  classification — nothing reaches `VERIFIED_OFFICIAL`, only a short
+  `PARTIALLY_VERIFIED` list plus `SYNTHETIC_DERIVED`/`SYNTHETIC_DEMO`
+  everywhere else), `docs/data-reference/ddopaa-2025-data-limitations.md`
+  (the honest "what this dataset is not" — no verified medal tally, no
+  verified champion, no verified schedule, no real athlete names, and
+  why, expanding the source register's own section), `docs/testing/
+  ddopaa-2025-demo-data-guide.md` (the three tier commands, expected
+  counts, how to reset safely, prerequisites per seeder), and
+  `docs/reports/ddopaa-2025-seed-data-completion.md` (the completion
+  report — a per-WP verification table, all 4 bugs found and fixed
+  during the initiative summarized in one place, every owner-approved
+  scope deviation listed, final dataset counts, full gate results).
+  Verified every WP1–WP6 deliverable actually exists on disk (not just
+  trusted from their own completion reports) — all 6 seeder files, the
+  WP6 test file, and the source register confirmed present via direct
+  file check. Re-ran the full quality gate one final time, this time
+  including the frontend checks every earlier WP in this initiative
+  correctly skipped (no frontend file was touched until now, so there
+  was nothing to re-check) — all green: Pint clean, PHPStan L7 (0
+  errors), Pest 671/671 (3,341 assertions), ESLint 0 errors, Prettier
+  clean, `tsc --noEmit` 0 errors, Vite build succeeded. App reconfirmed
+  HTTP 200 at http://pmms.app. `README.md`'s status line updated from
+  "Planned — pending owner approval" to "Complete." CHECKLIST.md now
+  shows all 7 WPs checked. **Not committed, not pushed, no production
+  seeder run** — every command executed throughout this initiative
+  stayed `local`/`testing`-only, proven automatically by WP6's guard
+  tests, not just by convention. Next: owner review of
+  `docs/reports/ddopaa-2025-seed-data-completion.md`, then a commit/push
+  decision — entirely the owner's call, not started here.

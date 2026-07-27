@@ -1,10 +1,13 @@
 # DdOPAA 2025 Reference Dataset
 
-**Status:** Planned 2026-07-27 — pending owner approval. Execution has not
-started. Not a roadmap "Phase" — a standalone, cross-cutting data
-initiative, same category as the Division Type & Municipality-Based
-Delegations initiative (7 WPs, completed 2026-07-25). Runs independently
-of Phase 8 (Post-Deployment Support), which is unrelated in scope.
+**Status:** Complete 2026-07-27 — all 7 WPs delivered, full quality gate
+green, not committed or pushed (owner decision pending). Not a roadmap
+"Phase" — a standalone, cross-cutting data initiative, same category as
+the Division Type & Municipality-Based Delegations initiative (7 WPs,
+completed 2026-07-25). Runs independently of Phase 8 (Post-Deployment
+Support), which is unrelated in scope. See
+`docs/reports/ddopaa-2025-seed-data-completion.md` for the full
+completion report.
 
 ## Goal
 
