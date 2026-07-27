@@ -1,5 +1,5 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { CalendarDays, Plus, Printer } from 'lucide-react';
+import { CalendarDays, Plus, Printer, Radio } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/page-header';
 import { PaginationControls } from '@/components/pagination-controls';
 import type { Paginated } from '@/components/pagination-controls';
 import { SearchBar } from '@/components/search-bar';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -36,6 +37,7 @@ import {
 } from '@/components/ui/table';
 import { schedule as scheduleSheet } from '@/routes/reports';
 import { destroy, index, store, update } from '@/routes/schedule';
+import { board as scoringBoard } from '@/routes/scoring';
 
 type ScheduleSlot = {
     id: number;
@@ -50,6 +52,8 @@ type ScheduleSlot = {
     starts_at: string;
     ends_at: string;
     note: string | null;
+    match_id: number | null;
+    is_live: boolean;
 };
 
 type Option = { id: number; label: string };
@@ -454,6 +458,7 @@ export default function Schedule({
                                     <TableHead>Venue</TableHead>
                                     <TableHead>Meet</TableHead>
                                     <TableHead>Note</TableHead>
+                                    <TableHead>Live</TableHead>
                                     {canManage && (
                                         <TableHead className="text-right">
                                             Actions
@@ -475,6 +480,46 @@ export default function Schedule({
                                         <TableCell>{slot.meet}</TableCell>
                                         <TableCell className="max-w-48 truncate">
                                             {slot.note ?? '—'}
+                                        </TableCell>
+                                        <TableCell>
+                                            {slot.match_id ? (
+                                                <div className="flex items-center gap-2">
+                                                    {slot.is_live && (
+                                                        <Badge
+                                                            variant="destructive"
+                                                            className="gap-1"
+                                                        >
+                                                            <span
+                                                                className="inline-block h-1.5 w-1.5 rounded-full bg-current"
+                                                                aria-hidden="true"
+                                                            />
+                                                            Live
+                                                        </Badge>
+                                                    )}
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        asChild
+                                                    >
+                                                        <Link
+                                                            href={
+                                                                scoringBoard(
+                                                                    slot.match_id,
+                                                                ).url
+                                                            }
+                                                        >
+                                                            <Radio aria-hidden="true" />
+                                                            {slot.is_live
+                                                                ? 'Watch'
+                                                                : 'Scoreboard'}
+                                                        </Link>
+                                                    </Button>
+                                                </div>
+                                            ) : (
+                                                <span className="text-sm text-muted-foreground">
+                                                    —
+                                                </span>
+                                            )}
                                         </TableCell>
                                         {canManage && (
                                             <TableCell className="text-right">

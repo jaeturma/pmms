@@ -18,6 +18,18 @@ declare module '@inertiajs/core' {
                 name: string;
                 areaLabel: string;
             };
+            currentMeet: {
+                name: string;
+                status_label: string;
+                starts_at: string;
+                ends_at: string;
+                venue: string | null;
+            } | null;
+            publicNav: {
+                meetId: number;
+                meetName: string;
+                liveCount: number;
+            } | null;
             [key: string]: unknown;
         };
     }

@@ -170,6 +170,40 @@ test('draft meets can be deleted but started meets cannot', function () {
     $this->assertDatabaseHas('meets', ['id' => $open->id]);
 });
 
+test('activating a published meet deactivates any other active meet, audited', function () {
+    $current = Meet::factory()->active()->published()->featured()->create();
+    $next = Meet::factory()->active()->published()->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/meets/{$next->id}/activate")
+        ->assertRedirect();
+
+    expect($current->refresh()->is_active)->toBeFalse()
+        ->and($next->refresh()->is_active)->toBeTrue()
+        ->and(AuditLog::query()->where('action', 'meet.activated')->exists())->toBeTrue();
+});
+
+test('an unpublished meet cannot be set active', function () {
+    $meet = Meet::factory()->active()->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/meets/{$meet->id}/activate")
+        ->assertRedirect();
+
+    expect($meet->refresh()->is_active)->toBeFalse();
+});
+
+test('deactivating the active meet leaves no meet active, audited', function () {
+    $meet = Meet::factory()->active()->published()->featured()->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/meets/{$meet->id}/deactivate")
+        ->assertRedirect();
+
+    expect($meet->refresh()->is_active)->toBeFalse()
+        ->and(AuditLog::query()->where('action', 'meet.deactivated')->exists())->toBeTrue();
+});
+
 test('the registration window hook follows meet status', function () {
     expect(Meet::factory()->registrationOpen()->create()->isRegistrationOpen())->toBeTrue()
         ->and(Meet::factory()->create()->isRegistrationOpen())->toBeFalse();

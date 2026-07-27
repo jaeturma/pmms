@@ -15,6 +15,7 @@ use Illuminate\Support\Carbon;
 /**
  * @property int $id
  * @property int $district_id
+ * @property int|null $school_district_id
  * @property string $name
  * @property string $school_id_code
  * @property SchoolLevel $level
@@ -27,7 +28,7 @@ use Illuminate\Support\Carbon;
  * @property-read int|null $personnel_count
  * @property-read int|null $entries_count
  */
-#[Fillable(['district_id', 'name', 'school_id_code', 'level', 'address'])]
+#[Fillable(['district_id', 'school_district_id', 'name', 'school_id_code', 'level', 'address'])]
 class School extends Model
 {
     /** @use HasFactory<SchoolFactory> */
@@ -52,6 +53,18 @@ class School extends Model
     public function district(): BelongsTo
     {
         return $this->belongsTo(District::class);
+    }
+
+    /**
+     * The school's own school district — nullable, since most schools
+     * won't have one assigned until an admin sets it up via the registry
+     * (see SchoolDistrict's docblock).
+     *
+     * @return BelongsTo<SchoolDistrict, $this>
+     */
+    public function schoolDistrict(): BelongsTo
+    {
+        return $this->belongsTo(SchoolDistrict::class);
     }
 
     /**

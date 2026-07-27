@@ -23,6 +23,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ResultController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\SchoolController;
+use App\Http\Controllers\SchoolDistrictController;
 use App\Http\Controllers\ScoringSessionController;
 use App\Http\Controllers\SportController;
 use App\Http\Controllers\TallyController;
@@ -41,6 +42,9 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('meets/{meet}/tally', [PortalController::class, 'tally'])
         ->whereNumber('meet')
         ->name('public.tally');
+    Route::get('meets/{meet}/athletics', [PortalController::class, 'athletics'])
+        ->whereNumber('meet')
+        ->name('public.athletics');
     Route::get('meets/{meet}/matches/{match}/scoreboard', [PortalController::class, 'scoreboard'])
         ->whereNumber(['meet', 'match'])
         ->name('public.scoreboard');
@@ -57,6 +61,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('uploads/{upload}', [FileUploadController::class, 'destroy'])->name('uploads.destroy');
 
     Route::get('districts', [DistrictController::class, 'index'])->name('districts.index');
+    Route::get('school-districts', [SchoolDistrictController::class, 'index'])->name('school-districts.index');
     Route::get('schools', [SchoolController::class, 'index'])->name('schools.index');
     Route::get('sports', [SportController::class, 'index'])->name('sports.index');
     Route::get('events', [EventController::class, 'index'])->name('events.index');
@@ -152,6 +157,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('districts/{district}/restore', [DistrictController::class, 'restore'])->name('districts.restore');
         Route::delete('districts/{district}', [DistrictController::class, 'destroy'])->name('districts.destroy');
 
+        Route::post('school-districts', [SchoolDistrictController::class, 'store'])->name('school-districts.store');
+        Route::put('school-districts/{schoolDistrict}', [SchoolDistrictController::class, 'update'])->name('school-districts.update');
+        Route::patch('school-districts/{schoolDistrict}/archive', [SchoolDistrictController::class, 'archive'])->name('school-districts.archive');
+        Route::patch('school-districts/{schoolDistrict}/restore', [SchoolDistrictController::class, 'restore'])->name('school-districts.restore');
+        Route::delete('school-districts/{schoolDistrict}', [SchoolDistrictController::class, 'destroy'])->name('school-districts.destroy');
+
         Route::post('schools', [SchoolController::class, 'store'])->name('schools.store');
         Route::put('schools/{school}', [SchoolController::class, 'update'])->name('schools.update');
         Route::patch('schools/{school}/archive', [SchoolController::class, 'archive'])->name('schools.archive');
@@ -185,6 +196,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('meets/{meet}/status', [MeetController::class, 'updateStatus'])->name('meets.status');
         Route::patch('meets/{meet}/publish', [MeetController::class, 'publish'])->name('meets.publish');
         Route::patch('meets/{meet}/unpublish', [MeetController::class, 'unpublish'])->name('meets.unpublish');
+        Route::patch('meets/{meet}/activate', [MeetController::class, 'activate'])->name('meets.activate');
+        Route::patch('meets/{meet}/deactivate', [MeetController::class, 'deactivate'])->name('meets.deactivate');
         Route::put('meets/{meet}/events', [MeetController::class, 'syncEvents'])->name('meets.events');
         Route::delete('meets/{meet}', [MeetController::class, 'destroy'])->name('meets.destroy');
 

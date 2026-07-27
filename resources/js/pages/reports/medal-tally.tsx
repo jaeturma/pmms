@@ -152,7 +152,7 @@ export default function MedalTallyReport({
                                                 #
                                             </TableHead>
                                             <TableHead>School</TableHead>
-                                            <TableHead>{areaLabel}</TableHead>
+                                            <TableHead>District</TableHead>
                                             <TableHead className="w-16 text-center">
                                                 Gold
                                             </TableHead>

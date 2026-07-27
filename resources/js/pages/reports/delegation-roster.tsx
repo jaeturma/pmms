@@ -82,6 +82,7 @@ export default function DelegationRoster({
                         <EmptyState
                             icon={Users}
                             title="No athletes registered"
+                            description="Registered athletes will appear here."
                         />
                     ) : (
                         <div className="overflow-x-auto rounded-xl border">
@@ -136,6 +137,7 @@ export default function DelegationRoster({
                         <EmptyState
                             icon={Users}
                             title="No personnel registered"
+                            description="Registered coaches and chaperones will appear here."
                         />
                     ) : (
                         <div className="overflow-x-auto rounded-xl border">

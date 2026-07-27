@@ -27,6 +27,8 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import {
+    activate,
+    deactivate,
     destroy,
     events as meetEvents,
     index,
@@ -52,6 +54,7 @@ type Meet = {
     status: string;
     status_label: string;
     is_published: boolean;
+    is_active: boolean;
     event_ids: number[];
     allowed_transitions: Transition[];
 };
@@ -369,6 +372,11 @@ export default function Meets({ meets, eventOptions, canManage }: Props) {
                                                         Public
                                                     </Badge>
                                                 )}
+                                                {meet.is_active && (
+                                                    <Badge variant="default">
+                                                        Active on landing page
+                                                    </Badge>
+                                                )}
                                             </div>
                                         </TableCell>
                                         {canManage && (
@@ -461,6 +469,54 @@ export default function Meets({ meets, eventOptions, canManage }: Props) {
                                                                               meet.id,
                                                                           ).url
                                                                         : publish(
+                                                                              meet.id,
+                                                                          ).url,
+                                                                    {},
+                                                                    {
+                                                                        preserveScroll: true,
+                                                                    },
+                                                                )
+                                                            }
+                                                        />
+                                                    )}
+                                                    {meet.is_published && (
+                                                        <ConfirmDialog
+                                                            trigger={
+                                                                <Button
+                                                                    variant={
+                                                                        meet.is_active
+                                                                            ? 'outline'
+                                                                            : 'secondary'
+                                                                    }
+                                                                    size="sm"
+                                                                >
+                                                                    {meet.is_active
+                                                                        ? 'Deactivate'
+                                                                        : 'Set active'}
+                                                                </Button>
+                                                            }
+                                                            title={
+                                                                meet.is_active
+                                                                    ? 'Remove from landing page?'
+                                                                    : 'Set as the featured meet?'
+                                                            }
+                                                            description={
+                                                                meet.is_active
+                                                                    ? 'The public landing page no longer features this meet directly.'
+                                                                    : 'This meet becomes the one shown on the public landing page. Any other active meet is deactivated automatically.'
+                                                            }
+                                                            confirmLabel={
+                                                                meet.is_active
+                                                                    ? 'Deactivate'
+                                                                    : 'Set active'
+                                                            }
+                                                            onConfirm={() =>
+                                                                router.patch(
+                                                                    meet.is_active
+                                                                        ? deactivate(
+                                                                              meet.id,
+                                                                          ).url
+                                                                        : activate(
                                                                               meet.id,
                                                                           ).url,
                                                                     {},

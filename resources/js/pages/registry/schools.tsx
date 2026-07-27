@@ -48,12 +48,14 @@ import {
 type School = {
     id: number;
     district_id: number;
+    school_district_id: number | null;
     name: string;
     school_id_code: string;
     level: string;
     address: string | null;
     active: boolean;
     district: { id: number; name: string };
+    school_district: { id: number; name: string } | null;
 };
 
 type DistrictOption = {
@@ -61,12 +63,21 @@ type DistrictOption = {
     name: string;
 };
 
+type SchoolDistrictOption = {
+    id: number;
+    district_id: number;
+    name: string;
+};
+
 type Props = {
     schools: Paginated<School>;
     filters: { search: string };
     districts: DistrictOption[];
+    schoolDistricts: SchoolDistrictOption[];
     canManage: boolean;
 };
+
+const NO_SCHOOL_DISTRICT = 'none';
 
 const levelLabels: Record<string, string> = {
     elementary: 'Elementary',
@@ -77,21 +88,30 @@ const levelLabels: Record<string, string> = {
 function SchoolFormDialog({
     school,
     districts,
+    schoolDistricts,
     open,
     onOpenChange,
 }: {
     school: School | null;
     districts: DistrictOption[];
+    schoolDistricts: SchoolDistrictOption[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
     const { data, setData, post, put, processing, errors, reset } = useForm({
         district_id: school ? String(school.district_id) : '',
+        school_district_id: school?.school_district_id
+            ? String(school.school_district_id)
+            : '',
         name: school?.name ?? '',
         school_id_code: school?.school_id_code ?? '',
         level: school?.level ?? '',
         address: school?.address ?? '',
     });
+
+    const availableSchoolDistricts = schoolDistricts.filter(
+        (option) => String(option.district_id) === data.district_id,
+    );
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -124,9 +144,21 @@ function SchoolFormDialog({
                         <Label htmlFor="school-district">District</Label>
                         <Select
                             value={data.district_id}
-                            onValueChange={(value) =>
-                                setData('district_id', value)
-                            }
+                            onValueChange={(value) => {
+                                setData((current) => ({
+                                    ...current,
+                                    district_id: value,
+                                    school_district_id: schoolDistricts.some(
+                                        (option) =>
+                                            String(option.district_id) ===
+                                                value &&
+                                            String(option.id) ===
+                                                current.school_district_id,
+                                    )
+                                        ? current.school_district_id
+                                        : '',
+                                }));
+                            }}
                         >
                             <SelectTrigger id="school-district">
                                 <SelectValue placeholder="Select a district" />
@@ -143,6 +175,39 @@ function SchoolFormDialog({
                             </SelectContent>
                         </Select>
                         <InputError message={errors.district_id} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="school-school-district">
+                            Specific school district (optional)
+                        </Label>
+                        <Select
+                            value={data.school_district_id || NO_SCHOOL_DISTRICT}
+                            onValueChange={(value) =>
+                                setData(
+                                    'school_district_id',
+                                    value === NO_SCHOOL_DISTRICT ? '' : value,
+                                )
+                            }
+                            disabled={availableSchoolDistricts.length === 0}
+                        >
+                            <SelectTrigger id="school-school-district">
+                                <SelectValue placeholder="None" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value={NO_SCHOOL_DISTRICT}>
+                                    None
+                                </SelectItem>
+                                {availableSchoolDistricts.map((option) => (
+                                    <SelectItem
+                                        key={option.id}
+                                        value={String(option.id)}
+                                    >
+                                        {option.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <InputError message={errors.school_district_id} />
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="school-name">Name</Label>
@@ -211,6 +276,7 @@ export default function Schools({
     schools,
     filters,
     districts,
+    schoolDistricts,
     canManage,
 }: Props) {
     const [formOpen, setFormOpen] = useState(false);
@@ -276,6 +342,7 @@ export default function Schools({
                                     <TableHead>Name</TableHead>
                                     <TableHead>School ID</TableHead>
                                     <TableHead>District</TableHead>
+                                    <TableHead>Specific district</TableHead>
                                     <TableHead>Level</TableHead>
                                     <TableHead>Status</TableHead>
                                     {canManage && (
@@ -296,6 +363,10 @@ export default function Schools({
                                         </TableCell>
                                         <TableCell>
                                             {school.district.name}
+                                        </TableCell>
+                                        <TableCell className="text-muted-foreground">
+                                            {school.school_district?.name ??
+                                                '—'}
                                         </TableCell>
                                         <TableCell>
                                             {levelLabels[school.level] ??
@@ -414,6 +485,7 @@ export default function Schools({
                 key={editing?.id ?? 'create'}
                 school={editing}
                 districts={districts}
+                schoolDistricts={schoolDistricts}
                 open={formOpen}
                 onOpenChange={setFormOpen}
             />

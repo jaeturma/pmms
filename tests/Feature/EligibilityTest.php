@@ -274,6 +274,35 @@ test('the queue can be filtered by status', function () {
             ->where('reviews.data.0.status', 'pending'));
 });
 
+test('the queue can be searched by athlete name', function () {
+    $athlete = Athlete::factory()->create(['first_name' => 'Juan', 'last_name' => 'Dela Cruz']);
+    EligibilityReview::factory()->create(['athlete_id' => $athlete->id]);
+
+    $other = Athlete::factory()->create(['first_name' => 'Maria', 'last_name' => 'Santos']);
+    EligibilityReview::factory()->create(['athlete_id' => $other->id]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get('/eligibility?search=Dela+Cruz')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('reviews.data', 1)
+            ->where('reviews.data.0.athlete', 'Juan Dela Cruz')
+            ->where('filters.search', 'Dela Cruz'));
+});
+
+test('summary counts reflect the whole queue regardless of the status filter', function () {
+    EligibilityReview::factory()->count(2)->create();
+    EligibilityReview::factory()->approved()->create();
+    EligibilityReview::factory()->returned()->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get('/eligibility?status=approved')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('reviews.data', 1)
+            ->where('counts.pending', 2)
+            ->where('counts.approved', 1)
+            ->where('counts.returned', 1));
+});
+
 test('entries flag athletes whose eligibility is not approved', function () {
     $delegation = Delegation::factory()->create();
     $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);

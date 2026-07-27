@@ -43,4 +43,17 @@ class District extends Model
     {
         return $this->hasMany(School::class);
     }
+
+    /**
+     * This municipality's school districts (the real DepEd sub-unit —
+     * see SchoolDistrict's docblock). Zero rows is a normal, common case:
+     * a school-standings display should fall back to this municipality's
+     * own name when there's no more than one.
+     *
+     * @return HasMany<SchoolDistrict, $this>
+     */
+    public function schoolDistricts(): HasMany
+    {
+        return $this->hasMany(SchoolDistrict::class);
+    }
 }

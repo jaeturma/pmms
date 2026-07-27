@@ -68,6 +68,7 @@ class ScoringSessionController extends Controller
             'event.sport:id,name',
             'entries.athlete:id,first_name,last_name,school_id',
             'entries.athlete.school:id,name',
+            'schedule.venue:id,name',
         ]);
 
         $session = $match->scoringSessions()->latest('id')->first();
@@ -78,7 +79,11 @@ class ScoringSessionController extends Controller
                 'id' => $match->id,
                 'meet' => $match->meet->name,
                 'event' => sprintf('%s — %s', $match->event->sport->name, $match->event->name),
+                'sport' => $match->event->sport->name,
+                'category' => sprintf('%s %s', $match->event->gender->label(), $match->event->age_division->label()),
                 'round_label' => $match->round_label,
+                'venue' => $match->schedule?->venue?->name,
+                'scheduled_date' => $match->schedule?->scheduled_date?->format('M j, Y'),
                 'status' => $match->status->value,
                 'is_scheduled' => $match->status === MatchStatus::Scheduled,
             ],

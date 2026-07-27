@@ -82,7 +82,7 @@ export default function AccreditationCards({
                         {cards.map((card) => (
                             <div
                                 key={card.id}
-                                className="w-84 shrink-0 break-inside-avoid overflow-hidden rounded-xl border bg-white text-neutral-900 shadow-sm print:shadow-none"
+                                className="w-84 max-w-full shrink-0 break-inside-avoid overflow-hidden rounded-xl border bg-white text-neutral-900 shadow-sm print:shadow-none"
                             >
                                 <div className="border-b bg-neutral-900 px-4 py-2 text-white">
                                     <p className="text-sm leading-tight font-semibold">

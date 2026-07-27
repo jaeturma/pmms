@@ -9,6 +9,7 @@ use App\Models\Meet;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -38,6 +39,7 @@ class MeetController extends Controller
                     'status' => $meet->status->value,
                     'status_label' => $meet->status->label(),
                     'is_published' => $meet->is_published,
+                    'is_active' => $meet->is_active,
                     'event_ids' => $meet->events->pluck('id')->all(),
                     'allowed_transitions' => array_map(
                         fn (MeetStatus $status): array => [
@@ -208,6 +210,67 @@ class MeetController extends Controller
         $this->audit->record('meet.unpublished', $meet, ['name' => $meet->name]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Meet removed from the public portal.')]);
+
+        return back();
+    }
+
+    /**
+     * Make this the one meet featured on the public landing page.
+     * Auto-exclusive: any other active meet is deactivated in the same
+     * transaction, so at most one row ever has is_active = true.
+     */
+    public function activate(Meet $meet): RedirectResponse
+    {
+        if (! $meet->is_published) {
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => __('Only published meets can be set active.'),
+            ]);
+
+            return back();
+        }
+
+        if ($meet->is_active) {
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => __('This meet is already active.'),
+            ]);
+
+            return back();
+        }
+
+        DB::transaction(function () use ($meet): void {
+            Meet::query()->where('is_active', true)->update(['is_active' => false]);
+            $meet->forceFill(['is_active' => true])->save();
+        });
+
+        $this->audit->record('meet.activated', $meet, ['name' => $meet->name]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Meet set active on the public landing page.')]);
+
+        return back();
+    }
+
+    /**
+     * Stop featuring this meet on the public landing page, leaving no
+     * meet active until another one is explicitly activated.
+     */
+    public function deactivate(Meet $meet): RedirectResponse
+    {
+        if (! $meet->is_active) {
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => __('This meet is not active.'),
+            ]);
+
+            return back();
+        }
+
+        $meet->forceFill(['is_active' => false])->save();
+
+        $this->audit->record('meet.deactivated', $meet, ['name' => $meet->name]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Meet removed from the public landing page.')]);
 
         return back();
     }

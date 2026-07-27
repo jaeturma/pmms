@@ -324,7 +324,7 @@ export default function Incidents({
                         }
                     >
                         <SelectTrigger
-                            className="w-44"
+                            className="w-56"
                             aria-label="Filter by status"
                         >
                             <SelectValue placeholder="All statuses" />

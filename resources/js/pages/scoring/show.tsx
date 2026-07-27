@@ -13,6 +13,7 @@ import {
     LiveScoreDisplay,
 } from '@/components/live-score-display';
 import { PageHeader } from '@/components/page-header';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -48,7 +49,11 @@ type Props = {
         id: number;
         meet: string;
         event: string;
+        sport: string;
+        category: string;
         round_label: string;
+        venue: string | null;
+        scheduled_date: string | null;
         status: string;
         is_scheduled: boolean;
     };
@@ -262,6 +267,7 @@ export default function ScoringBoard({
 }: Props) {
     const [session, setSession] = useState(initialSession);
     const [syncedSession, setSyncedSession] = useState(initialSession);
+    const [pollFailures, setPollFailures] = useState(0);
     const [fullscreen, setFullscreen] = useState(false);
     const [sideALabel, setSideALabel] = useState(suggestedLabels[0] ?? '');
     const [sideBLabel, setSideBLabel] = useState(suggestedLabels[1] ?? '');
@@ -286,11 +292,15 @@ export default function ScoringBoard({
                 headers: { Accept: 'application/json' },
             })
                 .then((response) => response.json())
-                .then((data: { session: Session | null }) =>
-                    setSession(data.session),
-                )
+                .then((data: { session: Session | null }) => {
+                    setSession(data.session);
+                    setPollFailures(0);
+                })
                 .catch(() => {
-                    // Polling retries on its own next tick — no user action needed.
+                    // Polling retries on its own next tick — no user
+                    // action needed, but the display flags it after a
+                    // couple of misses (WP-08-10).
+                    setPollFailures((n) => n + 1);
                 });
         }, 5000);
 
@@ -300,7 +310,10 @@ export default function ScoringBoard({
     useEcho<{ session: Session }>(
         channel,
         'score.updated',
-        (payload) => setSession(payload.session),
+        (payload) => {
+            setSession(payload.session);
+            setPollFailures(0);
+        },
         [channel],
     );
 
@@ -450,6 +463,28 @@ export default function ScoringBoard({
                     }
                 />
 
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+                    <span className="font-medium text-foreground">
+                        {match.sport}
+                    </span>
+                    <span aria-hidden="true">›</span>
+                    <span>{match.category}</span>
+                    <span aria-hidden="true">›</span>
+                    <span>{match.round_label}</span>
+                    {isActive && (
+                        <Badge variant="destructive" className="ml-1">
+                            Live now
+                        </Badge>
+                    )}
+                    {(match.scheduled_date || match.venue) && (
+                        <span className="w-full text-xs">
+                            {[match.scheduled_date, match.venue]
+                                .filter(Boolean)
+                                .join(' · ')}
+                        </span>
+                    )}
+                </div>
+
                 {session === null ? (
                     isManager && match.is_scheduled ? (
                         <Card>
@@ -541,6 +576,7 @@ export default function ScoringBoard({
                             session={session}
                             fullscreen={fullscreen}
                             onToggleFullscreen={toggleFullscreen}
+                            disconnected={pollFailures >= 2}
                         />
 
                         {isManager && isActive && (

@@ -14,6 +14,7 @@ import {
     MapPin,
     Medal,
     Megaphone,
+    Milestone,
     School,
     ScrollText,
     Swords,
@@ -24,7 +25,7 @@ import {
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
-import { NavUser } from '@/components/nav-user';
+import { SidebarMeetCard } from '@/components/sidebar-meet-card';
 import {
     Sidebar,
     SidebarContent,
@@ -53,6 +54,7 @@ import { index as personnelIndex } from '@/routes/personnel';
 import { index as protestsIndex } from '@/routes/protests';
 import { index as resultsIndex } from '@/routes/results';
 import { index as scheduleIndex } from '@/routes/schedule';
+import { index as schoolDistrictsIndex } from '@/routes/school-districts';
 import { index as schoolsIndex } from '@/routes/schools';
 import { index as sportsIndex } from '@/routes/sports';
 import { index as tallyIndex } from '@/routes/tally';
@@ -69,6 +71,11 @@ const mainNavItems: NavItem[] = [
         title: 'Districts',
         href: districtsIndex(),
         icon: Landmark,
+    },
+    {
+        title: 'School districts',
+        href: schoolDistrictsIndex(),
+        icon: Milestone,
     },
     {
         title: 'Schools',
@@ -194,7 +201,7 @@ export function AppSidebar() {
     ];
 
     return (
-        <Sidebar collapsible="icon" variant="inset">
+        <Sidebar collapsible="icon">
             <SidebarHeader>
                 <SidebarMenu>
                     <SidebarMenuItem>
@@ -212,7 +219,7 @@ export function AppSidebar() {
             </SidebarContent>
 
             <SidebarFooter>
-                <NavUser />
+                <SidebarMeetCard />
             </SidebarFooter>
         </Sidebar>
     );

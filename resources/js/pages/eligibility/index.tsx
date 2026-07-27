@@ -1,5 +1,5 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { FileCheck, Plus, Trash2 } from 'lucide-react';
+import { FileCheck, FileText, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -8,6 +8,9 @@ import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
 import { PaginationControls } from '@/components/pagination-controls';
 import type { Paginated } from '@/components/pagination-controls';
+import { SearchBar } from '@/components/search-bar';
+import { StatCard } from '@/components/stat-card';
+import type { StatCardTone } from '@/components/stat-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -44,6 +47,7 @@ type DocumentRow = {
     id: number;
     label: string;
     file_name: string;
+    uploaded_at: string | null;
     url: string;
     can_delete: boolean;
 };
@@ -62,17 +66,19 @@ type ReviewRow = {
     can_decide: boolean;
 };
 
+type Counts = { pending: number; approved: number; returned: number };
+
 type Props = {
     reviews: Paginated<ReviewRow>;
-    filters: { status: string | null };
+    counts: Counts;
+    filters: { status: string | null; search: string | null };
     athleteOptions: Array<{ id: number; label: string }>;
     documentTypeOptions: Array<{ value: string; label: string }>;
 };
 
-const statusVariants: Record<string, 'default' | 'secondary' | 'outline'> = {
-    pending: 'default',
-    approved: 'secondary',
-    returned: 'outline',
+const statusBadgeClasses: Record<string, string> = {
+    pending: 'border-warning/30 bg-warning/10 text-warning',
+    approved: 'border-success/30 bg-success/10 text-success',
 };
 
 function UploadDialog({
@@ -279,6 +285,7 @@ function DecisionDialog({
 
 export default function Eligibility({
     reviews,
+    counts,
     filters,
     athleteOptions,
     documentTypeOptions,
@@ -290,52 +297,94 @@ export default function Eligibility({
     } | null>(null);
 
     const applyStatusFilter = (value: string) => {
-        router.get(index().url, value === 'all' ? {} : { status: value }, {
-            preserveState: true,
-            preserveScroll: true,
-        });
+        router.get(
+            index().url,
+            {
+                ...(filters.search ? { search: filters.search } : {}),
+                ...(value === 'all' ? {} : { status: value }),
+            },
+            { preserveState: true, preserveScroll: true },
+        );
     };
+
+    const countCards: Array<{
+        label: string;
+        value: number;
+        tone?: StatCardTone;
+    }> = [
+        { label: 'Pending review', value: counts.pending, tone: 'warning' },
+        { label: 'Approved', value: counts.approved, tone: 'success' },
+        { label: 'Returned', value: counts.returned },
+    ];
 
     return (
         <>
             <Head title="Eligibility" />
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
-                    title="Eligibility"
+                    title="Eligibility Review"
                     description="Document submission and manual review. Decisions are always made by a person."
                     actions={
                         athleteOptions.length > 0 && (
                             <Button onClick={() => setUploadOpen(true)}>
-                                <Plus />
+                                <Plus aria-hidden="true" />
                                 Upload document
                             </Button>
                         )
                     }
                 />
 
-                <Select
-                    value={filters.status ?? 'all'}
-                    onValueChange={applyStatusFilter}
-                >
-                    <SelectTrigger
-                        className="w-56"
-                        aria-label="Filter by status"
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    {countCards.map((card) => (
+                        <StatCard
+                            key={card.label}
+                            label={card.label}
+                            value={card.value}
+                            icon={FileCheck}
+                            tone={card.tone}
+                        />
+                    ))}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                    <SearchBar
+                        initial={filters.search ?? ''}
+                        placeholder="Search athlete name"
+                        url={index().url}
+                        extraParams={
+                            filters.status ? { status: filters.status } : {}
+                        }
+                    />
+                    <Select
+                        value={filters.status ?? 'all'}
+                        onValueChange={applyStatusFilter}
                     >
-                        <SelectValue placeholder="All statuses" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All statuses</SelectItem>
-                        <SelectItem value="pending">Pending Review</SelectItem>
-                        <SelectItem value="approved">Approved</SelectItem>
-                        <SelectItem value="returned">Returned</SelectItem>
-                    </SelectContent>
-                </Select>
+                        <SelectTrigger
+                            className="w-56"
+                            aria-label="Filter by status"
+                        >
+                            <SelectValue placeholder="All statuses" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All statuses</SelectItem>
+                            <SelectItem value="pending">
+                                Pending Review
+                            </SelectItem>
+                            <SelectItem value="approved">Approved</SelectItem>
+                            <SelectItem value="returned">Returned</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
 
                 {reviews.data.length === 0 ? (
                     <EmptyState
                         icon={FileCheck}
                         title="No eligibility records"
-                        description="Uploaded documents create a review record per athlete."
+                        description={
+                            filters.search
+                                ? 'No records match your search.'
+                                : 'Uploaded documents create a review record per athlete.'
+                        }
                     />
                 ) : (
                     <>
@@ -367,13 +416,17 @@ export default function Eligibility({
                                                 0 ? (
                                                     '—'
                                                 ) : (
-                                                    <ul className="space-y-1">
+                                                    <ul className="space-y-1.5">
                                                         {review.documents.map(
                                                             (doc) => (
                                                                 <li
                                                                     key={doc.id}
-                                                                    className="flex items-center gap-1"
+                                                                    className="flex items-center gap-1.5"
                                                                 >
+                                                                    <FileText
+                                                                        aria-hidden="true"
+                                                                        className="size-3.5 shrink-0 text-muted-foreground"
+                                                                    />
                                                                     <a
                                                                         href={
                                                                             doc.url
@@ -386,6 +439,15 @@ export default function Eligibility({
                                                                             doc.label
                                                                         }
                                                                     </a>
+                                                                    {doc.uploaded_at && (
+                                                                        <span className="text-xs text-muted-foreground">
+                                                                            (
+                                                                            {
+                                                                                doc.uploaded_at
+                                                                            }
+                                                                            )
+                                                                        </span>
+                                                                    )}
                                                                     {doc.can_delete && (
                                                                         <ConfirmDialog
                                                                             trigger={
@@ -424,9 +486,15 @@ export default function Eligibility({
                                             <TableCell>
                                                 <Badge
                                                     variant={
-                                                        statusVariants[
+                                                        review.status ===
+                                                        'returned'
+                                                            ? 'destructive'
+                                                            : 'outline'
+                                                    }
+                                                    className={
+                                                        statusBadgeClasses[
                                                             review.status
-                                                        ] ?? 'outline'
+                                                        ]
                                                     }
                                                 >
                                                     {review.status_label}
@@ -474,9 +542,14 @@ export default function Eligibility({
                             page={reviews}
                             url={index().url}
                             label="records"
-                            params={
-                                filters.status ? { status: filters.status } : {}
-                            }
+                            params={{
+                                ...(filters.status
+                                    ? { status: filters.status }
+                                    : {}),
+                                ...(filters.search
+                                    ? { search: filters.search }
+                                    : {}),
+                            }}
                         />
                     </>
                 )}

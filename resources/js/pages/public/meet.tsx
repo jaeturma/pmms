@@ -1,5 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
-import { CalendarDays, MapPin, Radio } from 'lucide-react';
+import { CalendarDays, MapPin, Radio, Timer } from 'lucide-react';
 import { EmptyState } from '@/components/empty-state';
 import Heading from '@/components/heading';
 import { PublicAnnouncements } from '@/components/public-announcements';
@@ -14,7 +14,11 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { meet as publicMeet, scoreboard } from '@/routes/public';
+import {
+    athletics as publicAthletics,
+    meet as publicMeet,
+    scoreboard,
+} from '@/routes/public';
 
 type Slot = {
     id: number;
@@ -69,6 +73,7 @@ type Props = {
     venuesForDay: VenueGroup[];
     venueGuide: { name: string; address: string | null }[];
     liveMatches: LiveMatch[];
+    hasAthletics: boolean;
 };
 
 export default function PublicMeet({
@@ -79,6 +84,7 @@ export default function PublicMeet({
     venuesForDay,
     venueGuide,
     liveMatches,
+    hasAthletics,
 }: Props) {
     return (
         <>
@@ -99,6 +105,20 @@ export default function PublicMeet({
                 </div>
 
                 <PublicMeetNav meetId={meet.id} active="schedule" />
+
+                {hasAthletics && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-fit"
+                        asChild
+                    >
+                        <Link href={publicAthletics(meet.id)}>
+                            <Timer aria-hidden="true" />
+                            Athletics schedule and results
+                        </Link>
+                    </Button>
+                )}
 
                 <PublicAnnouncements announcements={announcements} />
 

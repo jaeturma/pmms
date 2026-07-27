@@ -1,13 +1,16 @@
 <?php
 
+use App\Enums\AgeDivision;
 use App\Enums\ResultStatus;
 use App\Models\Athlete;
 use App\Models\Delegation;
 use App\Models\District;
 use App\Models\Entry;
+use App\Models\Event;
 use App\Models\EventResult;
 use App\Models\ResultPlacement;
 use App\Models\School;
+use App\Models\Sport;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 
@@ -240,4 +243,112 @@ test('the tally can be filtered per meet and per sport', function () {
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('schools', 1)
             ->where('schools.0.school', 'Meet B School'));
+});
+
+test('district points are weighted gold=3/silver=2/bronze=1 and never change the official rank order', function () {
+    // A single gold (3 points) still outranks two silvers (4 points) —
+    // proves `points` (WP-08-05) is display-only and the app's documented
+    // gold-then-silver-then-bronze rank order (docs/medal-tally.md) is
+    // untouched by it.
+    $goldDistrict = District::factory()->create(['name' => 'Gold District']);
+    $silverDistrict = District::factory()->create(['name' => 'Silver District']);
+
+    $goldSchool = School::factory()->create(['district_id' => $goldDistrict->id]);
+    $silverSchool = School::factory()->create(['district_id' => $silverDistrict->id]);
+
+    $first = EventResult::factory()->validated()->create();
+    placeSchool($first, $goldSchool, 1);
+
+    $second = EventResult::factory()->validated()->create(['meet_id' => $first->meet_id]);
+    placeSchool($second, $silverSchool, 2);
+    $third = EventResult::factory()->validated()->create(['meet_id' => $first->meet_id]);
+    placeSchool($third, $silverSchool, 2);
+
+    $this->actingAs(User::factory()->create())
+        ->get('/tally')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('districts.0.district', 'Gold District')
+            ->where('districts.0.position', 1)
+            ->where('districts.0.points', 3)
+            ->where('districts.1.district', 'Silver District')
+            ->where('districts.1.position', 2)
+            ->where('districts.1.points', 4)
+            ->where('totals.gold', 1)
+            ->where('totals.silver', 2)
+            ->where('totals.total', 3)
+            ->where('topByPoints.0.district', 'Silver District'));
+});
+
+test('the tally can be filtered by age division', function () {
+    $elementaryEvent = Event::factory()->create(['age_division' => AgeDivision::Elementary]);
+    $secondaryEvent = Event::factory()->create(['age_division' => AgeDivision::Secondary]);
+
+    $elementaryResult = EventResult::factory()->validated()->create(['event_id' => $elementaryEvent->id]);
+    $elementarySchool = School::factory()->create(['name' => 'Elementary School']);
+    placeSchool($elementaryResult, $elementarySchool, 1);
+
+    $secondaryResult = EventResult::factory()->validated()->create(['meet_id' => $elementaryResult->meet_id, 'event_id' => $secondaryEvent->id]);
+    $secondarySchool = School::factory()->create(['name' => 'Secondary School']);
+    placeSchool($secondaryResult, $secondarySchool, 1);
+
+    $this->actingAs(User::factory()->create())
+        ->get('/tally?age_division=elementary')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('schools', 1)
+            ->where('schools.0.school', 'Elementary School')
+            ->where('filters.age_division', 'elementary'));
+});
+
+test('an invalid age division filter is ignored rather than erroring', function () {
+    $result = EventResult::factory()->validated()->create();
+    placeSchool($result, School::factory()->create(), 1);
+
+    $this->actingAs(User::factory()->create())
+        ->get('/tally?age_division=not-a-real-division')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('schools', 1)
+            ->where('filters.age_division', null));
+});
+
+test('medals by sport groups placements by their event\'s sport', function () {
+    $basketball = Sport::factory()->create(['name' => 'Basketball']);
+    $chess = Sport::factory()->create(['name' => 'Chess']);
+
+    $basketballEvent = Event::factory()->create(['sport_id' => $basketball->id]);
+    $chessEvent = Event::factory()->create(['sport_id' => $chess->id]);
+
+    $basketballResult = EventResult::factory()->validated()->create(['event_id' => $basketballEvent->id]);
+    placeSchool($basketballResult, School::factory()->create(), 1);
+    placeSchool($basketballResult, School::factory()->create(), 2);
+
+    $chessResult = EventResult::factory()->validated()->create(['meet_id' => $basketballResult->meet_id, 'event_id' => $chessEvent->id]);
+    placeSchool($chessResult, School::factory()->create(), 1);
+
+    $this->actingAs(User::factory()->create())
+        ->get('/tally')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('bySport', 2)
+            ->where('bySport.0.sport', 'Basketball')
+            ->where('bySport.0.total', 2)
+            ->where('bySport.1.sport', 'Chess')
+            ->where('bySport.1.total', 1));
+});
+
+test('recent medals only count placements validated within the last 24 hours', function () {
+    $recent = EventResult::factory()->validated()->create();
+    placeSchool($recent, School::factory()->create(), 1);
+
+    $stale = EventResult::factory()->validated()->create([
+        'meet_id' => $recent->meet_id,
+        'validated_at' => now()->subDays(3),
+    ]);
+    placeSchool($stale, School::factory()->create(), 1);
+
+    $this->actingAs(User::factory()->create())
+        ->get('/tally')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('totals.gold', 2)
+            ->where('recentMedals.gold', 1)
+            ->where('recentMedals.total', 1));
 });

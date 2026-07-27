@@ -22,6 +22,26 @@ municipalities seeded as `District` rows.
 - `districts.nickname` (nullable) — a delegation's nickname (e.g. Maco →
   "Tigers") for banners/ID cards/public portal. Seeded where known, editable
   via the district/municipality registry screen otherwise.
+- `school_districts` — the real DepEd school-district sub-unit (e.g. "Laak
+  North"), a level *below* `districts`/municipality, added for the medal
+  tally's "School standings" District column and the public landing page.
+  This is still **not** a new `Municipality` table and doesn't reopen the
+  decision above: `school_districts.district_id` points at the existing
+  `districts` row it belongs to (the FK is named `district_id`, meaning
+  "municipality," for the same reason `schools.district_id`/
+  `delegations.district_id` already do), and delegation registration is
+  completely untouched — a delegation still registers at the municipality
+  (`districts`) level regardless of how many school districts it has.
+  `schools.school_district_id` (nullable) is the one new link: a school may
+  optionally belong to a specific school district within its municipality.
+  Most municipalities have zero school-district rows and are expected to —
+  it's opt-in registry data, not a required backfill (same "seeded where
+  known, editable otherwise" policy as `nickname` above). Only Laak is
+  seeded with real school districts (Laak North / Laak South) by
+  `DivisionRegistrySeeder`; the other ten municipalities are left for an
+  admin to fill in via the districts registry (`registry/school-
+  districts.tsx`, `SchoolDistrictController`) if/when they actually split.
+  See `docs/medal-tally.md` for how the tally's District column uses this.
 
 ## Type lock
 
@@ -86,6 +106,16 @@ itself is still identified by its municipality. Demonstrated with seed data
 via `SampleProvinceDemoSeeder` (WP6). The officer-sees-whole-municipal-roster
 authorization consequence is reviewed and documented as accepted/intended —
 see `docs/delegations.md` "Officer roster scope" (WP7).
+
+## Open item: school districts for the other ten municipalities
+
+Only Laak has real school-district rows seeded (North/South). The other ten
+municipalities' actual DepEd school-district breakdowns (if any) aren't
+verified data and weren't guessed at — an admin adds them via the districts
+registry as they're confirmed, the same "known vs. blank, filled in later"
+policy `nickname` already follows above. A municipality with zero or one
+school district shows its own name in the tally's District column; nothing
+needs to change there as districts get added.
 
 ## Open item: City's "district competes" option
 

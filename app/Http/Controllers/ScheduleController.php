@@ -3,13 +3,18 @@
 namespace App\Http\Controllers;
 
 use App\Enums\MeetStatus;
+use App\Enums\ScoringSessionStatus;
+use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\ScheduleRequest;
 use App\Models\Event;
+use App\Models\EventMatch;
 use App\Models\EventSchedule;
 use App\Models\Meet;
+use App\Models\User;
 use App\Models\Venue;
 use App\Services\AuditLogger;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -28,6 +33,9 @@ class ScheduleController extends Controller
      */
     public function index(Request $request): Response
     {
+        /** @var User $user */
+        $user = $request->user();
+
         $search = $this->searchTerm($request);
         $meetId = $request->integer('meet_id');
         $venueId = $request->integer('venue_id');
@@ -57,28 +65,38 @@ class ScheduleController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
+        $slots = $query->paginate($this->registryPageSize)->withQueryString();
+
+        $matchesBySchedule = $this->matchesForSlots($slots->pluck('id'), $user);
+
         return Inertia::render('schedule/index', [
-            'schedules' => $query->paginate($this->registryPageSize)->withQueryString()
-                ->through(fn (EventSchedule $schedule): array => [
-                    'id' => $schedule->id,
-                    'meet_id' => $schedule->meet_id,
-                    'event_id' => $schedule->event_id,
-                    'venue_id' => $schedule->venue_id,
-                    'meet' => $schedule->meet->name,
-                    'event' => sprintf(
-                        '%s — %s (%s, %s)',
-                        $schedule->event->sport->name,
-                        $schedule->event->name,
-                        $schedule->event->gender->label(),
-                        $schedule->event->age_division->label(),
-                    ),
-                    'venue' => $schedule->venue->name,
-                    'date' => $schedule->scheduled_date->toDateString(),
-                    'date_label' => $schedule->scheduled_date->format('D, M j, Y'),
-                    'starts_at' => substr($schedule->starts_at, 0, 5),
-                    'ends_at' => substr($schedule->ends_at, 0, 5),
-                    'note' => $schedule->note,
-                ]),
+            'schedules' => $slots
+                ->through(function (EventSchedule $schedule) use ($matchesBySchedule): array {
+                    $match = $matchesBySchedule->get($schedule->id);
+
+                    return [
+                        'id' => $schedule->id,
+                        'meet_id' => $schedule->meet_id,
+                        'event_id' => $schedule->event_id,
+                        'venue_id' => $schedule->venue_id,
+                        'meet' => $schedule->meet->name,
+                        'event' => sprintf(
+                            '%s — %s (%s, %s)',
+                            $schedule->event->sport->name,
+                            $schedule->event->name,
+                            $schedule->event->gender->label(),
+                            $schedule->event->age_division->label(),
+                        ),
+                        'venue' => $schedule->venue->name,
+                        'date' => $schedule->scheduled_date->toDateString(),
+                        'date_label' => $schedule->scheduled_date->format('D, M j, Y'),
+                        'starts_at' => substr($schedule->starts_at, 0, 5),
+                        'ends_at' => substr($schedule->ends_at, 0, 5),
+                        'note' => $schedule->note,
+                        'match_id' => $match?->id,
+                        'is_live' => $match !== null && $match->scoringSessions->isNotEmpty(),
+                    ];
+                }),
             'filters' => [
                 'search' => $search,
                 'meet_id' => $meetId > 0 ? $meetId : null,
@@ -221,6 +239,40 @@ class ScheduleController extends Controller
     private function meetIsSchedulable(Meet $meet): bool
     {
         return in_array($meet->status, [MeetStatus::RegistrationClosed, MeetStatus::Active], true);
+    }
+
+    /**
+     * Matches tied to the given schedule slots, keyed by
+     * `event_schedule_id` — the schedule page's "watch live" link data.
+     * Scoped exactly like `MatchController::index()` (delegation officers
+     * see only their own delegation's matches; viewers see none, since
+     * live scoring is forbidden to them regardless) so a link is never
+     * shown for a match the viewer couldn't actually open.
+     *
+     * @param  \Illuminate\Support\Collection<int, int>  $scheduleIds
+     * @return Collection<int, EventMatch>
+     */
+    private function matchesForSlots(\Illuminate\Support\Collection $scheduleIds, User $user): Collection
+    {
+        if ($user->role === UserRole::Viewer) {
+            return new Collection;
+        }
+
+        $query = EventMatch::query()
+            ->whereIn('event_schedule_id', $scheduleIds)
+            ->with(['scoringSessions' => fn ($sessions) => $sessions
+                ->where('status', '!=', ScoringSessionStatus::Ended->value)
+                ->latest('id')
+                ->limit(1)]);
+
+        if ($user->role === UserRole::DelegationOfficer) {
+            $query->whereHas(
+                'entries.delegation.officers',
+                fn ($officers) => $officers->whereKey($user->getKey()),
+            );
+        }
+
+        return $query->get()->keyBy('event_schedule_id');
     }
 
     /**

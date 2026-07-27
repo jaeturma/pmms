@@ -5,17 +5,24 @@ import {
     CalendarDays,
     Contact,
     Crown,
+    FileCheck,
     Gavel,
     IdCard,
     ListChecks,
+    Medal,
+    Megaphone,
     School,
     TriangleAlert,
+    UserCog,
     Users,
     UsersRound,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
+import { PublicAnnouncements } from '@/components/public-announcements';
+import { RankBadge } from '@/components/rank-badge';
+import type { StatCardTone } from '@/components/stat-card';
 import { StatCard } from '@/components/stat-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,8 +35,14 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useClock } from '@/hooks/use-clock';
+import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
+import { index as athletesIndex } from '@/routes/athletes';
+import { index as delegationsIndex } from '@/routes/delegations';
+import { index as eventsIndex } from '@/routes/events';
 import { index as incidentsIndex } from '@/routes/incidents';
+import { index as personnelIndex } from '@/routes/personnel';
 import { index as protestsIndex } from '@/routes/protests';
 import { schedule as scheduleSheet } from '@/routes/reports';
 import { index as resultsIndex } from '@/routes/results';
@@ -47,6 +60,14 @@ type ActivityEntry = {
     action: string;
     user: string | null;
     created_at_human: string | null;
+};
+
+type Announcement = {
+    id: number;
+    title: string;
+    body: string;
+    meet: string | null;
+    published_at: string | null;
 };
 
 type CurrentMeet = {
@@ -83,10 +104,18 @@ type MyProtest = {
     status_label: string;
 };
 
+type EventsOverview = {
+    completed: number;
+    ongoing: number;
+    upcoming: number;
+    total: number;
+};
+
 type Operations = {
     meet: { id: number; name: string };
     todaySlots: TodaySlot[];
     tallyTop: TallyRow[];
+    eventsOverview: EventsOverview;
     queues: {
         pending_results: number;
         open_protests: number;
@@ -102,6 +131,7 @@ type Props = {
     operations: Operations | null;
     stats: Stat[];
     recentActivity: ActivityEntry[];
+    announcements: Announcement[];
 };
 
 const statIcons: Record<string, LucideIcon> = {
@@ -113,10 +143,226 @@ const statIcons: Record<string, LucideIcon> = {
     activity_today: Activity,
 };
 
+const statTones: Record<string, StatCardTone> = {
+    schools: 'primary',
+    delegations: 'success',
+    athletes: 'gold',
+    entries: 'warning',
+    users: 'primary',
+    activity_today: 'success',
+};
+
+/**
+ * "HH:MM" strings compare lexicographically the same as chronologically
+ * — no need to parse into a real time value just to order/compare them.
+ */
+function slotStatus(
+    slot: TodaySlot,
+    nowLabel: string,
+): { label: string; variant: 'default' | 'secondary' | 'outline' } {
+    if (nowLabel < slot.starts_at) {
+        return { label: 'Upcoming', variant: 'outline' };
+    }
+
+    if (nowLabel > slot.ends_at) {
+        return { label: 'Completed', variant: 'secondary' };
+    }
+
+    return { label: 'Ongoing', variant: 'default' };
+}
+
+const quickActions: Array<{
+    label: string;
+    href: string;
+    icon: LucideIcon;
+}> = [
+    {
+        label: 'Register delegation',
+        href: delegationsIndex().url,
+        icon: UsersRound,
+    },
+    { label: 'Register athlete', href: athletesIndex().url, icon: Contact },
+    { label: 'Add official', href: personnelIndex().url, icon: UserCog },
+    { label: 'Manage events', href: eventsIndex().url, icon: Medal },
+    { label: 'Encode results', href: resultsIndex().url, icon: Award },
+    { label: 'Medal tally', href: tallyIndex().url, icon: Crown },
+];
+
+function QuickActions() {
+    return (
+        <section className="flex flex-col gap-3">
+            <h2 className="text-base font-medium">Quick actions</h2>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                {quickActions.map((action) => (
+                    <Button
+                        key={action.label}
+                        variant="outline"
+                        className="h-auto flex-col gap-2 py-4"
+                        asChild
+                    >
+                        <Link href={action.href}>
+                            <action.icon
+                                aria-hidden="true"
+                                className="size-5 text-primary"
+                            />
+                            <span className="text-xs font-medium text-wrap">
+                                {action.label}
+                            </span>
+                        </Link>
+                    </Button>
+                ))}
+            </div>
+        </section>
+    );
+}
+
+function EventsOverviewCard({ overview }: { overview: EventsOverview }) {
+    const segments: Array<{
+        key: string;
+        label: string;
+        value: number;
+        barClass: string;
+        dotClass: string;
+    }> = [
+        {
+            key: 'completed',
+            label: 'Completed',
+            value: overview.completed,
+            barClass: 'bg-success',
+            dotClass: 'bg-success',
+        },
+        {
+            key: 'ongoing',
+            label: 'Ongoing',
+            value: overview.ongoing,
+            barClass: 'bg-primary',
+            dotClass: 'bg-primary',
+        },
+        {
+            key: 'upcoming',
+            label: 'Upcoming',
+            value: overview.upcoming,
+            barClass: 'bg-warning',
+            dotClass: 'bg-warning',
+        },
+    ];
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="text-sm font-medium">
+                    Events overview
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                {overview.total === 0 ? (
+                    <EmptyState
+                        icon={CalendarDays}
+                        title="No events attached to this meet yet"
+                    />
+                ) : (
+                    <>
+                        <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
+                            {segments.map((segment) => (
+                                <div
+                                    key={segment.key}
+                                    className={segment.barClass}
+                                    style={{
+                                        width: `${(segment.value / overview.total) * 100}%`,
+                                    }}
+                                />
+                            ))}
+                        </div>
+                        <dl className="grid grid-cols-3 gap-2 text-sm">
+                            {segments.map((segment) => (
+                                <div key={segment.key}>
+                                    <dt className="flex items-center gap-1.5 text-muted-foreground">
+                                        <span
+                                            className={cn(
+                                                'size-2 rounded-full',
+                                                segment.dotClass,
+                                            )}
+                                            aria-hidden="true"
+                                        />
+                                        {segment.label}
+                                    </dt>
+                                    <dd className="text-lg font-semibold tracking-tight">
+                                        {segment.value}
+                                    </dd>
+                                </div>
+                            ))}
+                        </dl>
+                    </>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
+const activityMeta: Record<string, { icon: LucideIcon; toneClass: string }> = {
+    athlete: { icon: Contact, toneClass: 'bg-primary/10 text-primary' },
+    delegation: { icon: UsersRound, toneClass: 'bg-primary/10 text-primary' },
+    personnel: { icon: UserCog, toneClass: 'bg-primary/10 text-primary' },
+    school: { icon: School, toneClass: 'bg-primary/10 text-primary' },
+    district: { icon: UsersRound, toneClass: 'bg-primary/10 text-primary' },
+    division: { icon: UsersRound, toneClass: 'bg-primary/10 text-primary' },
+    result: { icon: Award, toneClass: 'bg-success/15 text-success' },
+    eligibility: { icon: FileCheck, toneClass: 'bg-success/15 text-success' },
+    accreditation: { icon: IdCard, toneClass: 'bg-success/15 text-success' },
+    protest: { icon: Gavel, toneClass: 'bg-destructive/10 text-destructive' },
+    incident: {
+        icon: TriangleAlert,
+        toneClass: 'bg-destructive/10 text-destructive',
+    },
+    schedule: { icon: CalendarDays, toneClass: 'bg-primary/10 text-primary' },
+    match: { icon: CalendarDays, toneClass: 'bg-primary/10 text-primary' },
+    meet: { icon: CalendarDays, toneClass: 'bg-primary/10 text-primary' },
+    venue: { icon: CalendarDays, toneClass: 'bg-primary/10 text-primary' },
+    event: { icon: CalendarDays, toneClass: 'bg-primary/10 text-primary' },
+    sport: { icon: CalendarDays, toneClass: 'bg-primary/10 text-primary' },
+    scoring: { icon: Activity, toneClass: 'bg-warning/15 text-warning' },
+    report: { icon: FileCheck, toneClass: 'bg-primary/10 text-primary' },
+    announcement: { icon: Megaphone, toneClass: 'bg-primary/10 text-primary' },
+    entry: { icon: ListChecks, toneClass: 'bg-primary/10 text-primary' },
+};
+
+/** "athlete.created" -> "Athlete created" — a general transform, not a
+ * per-action lookup table, so newly added audit-log actions never need
+ * this file updated to read correctly. */
+function formatActionLabel(action: string): string {
+    const words = action.replace(/[._]/g, ' ');
+
+    return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function ActivityIcon({ action }: { action: string }) {
+    const prefix = action.split('.')[0];
+    const meta = activityMeta[prefix];
+    const Icon = meta?.icon ?? Activity;
+
+    return (
+        <span
+            className={cn(
+                'flex size-8 shrink-0 items-center justify-center rounded-full',
+                meta?.toneClass ?? 'bg-muted text-muted-foreground',
+            )}
+        >
+            <Icon aria-hidden="true" className="size-4" />
+        </span>
+    );
+}
+
 function MeetOperations({ operations }: { operations: Operations }) {
     const { division } = usePage().props;
     const areaLabel = division.areaLabel;
-    const { meet, todaySlots, tallyTop, queues, myProtests } = operations;
+    const { meet, todaySlots, tallyTop, eventsOverview, queues, myProtests } =
+        operations;
+    const now = useClock();
+    const nowLabel = now.toLocaleTimeString(undefined, {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+    });
 
     return (
         <section className="flex flex-col gap-4">
@@ -131,6 +377,7 @@ function MeetOperations({ operations }: { operations: Operations }) {
                             label="Results awaiting validation"
                             value={queues.pending_results}
                             icon={Award}
+                            tone="warning"
                         />
                     </Link>
                     <Link href={protestsIndex()} className="block">
@@ -138,6 +385,7 @@ function MeetOperations({ operations }: { operations: Operations }) {
                             label="Open protests"
                             value={queues.open_protests}
                             icon={Gavel}
+                            tone="destructive"
                         />
                     </Link>
                     <Link href={incidentsIndex()} className="block">
@@ -145,6 +393,7 @@ function MeetOperations({ operations }: { operations: Operations }) {
                             label="Open incidents"
                             value={queues.open_incidents}
                             icon={TriangleAlert}
+                            tone="destructive"
                         />
                     </Link>
                     <StatCard
@@ -152,11 +401,12 @@ function MeetOperations({ operations }: { operations: Operations }) {
                         value={`${queues.accredited} / ${queues.accreditable}`}
                         icon={IdCard}
                         description="Accredited participants"
+                        tone="success"
                     />
                 </div>
             )}
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between gap-2">
                         <CardTitle className="text-sm font-medium">
@@ -181,20 +431,36 @@ function MeetOperations({ operations }: { operations: Operations }) {
                             <div className="overflow-x-auto">
                                 <Table>
                                     <TableBody>
-                                        {todaySlots.map((slot) => (
-                                            <TableRow key={slot.id}>
-                                                <TableCell className="font-medium whitespace-nowrap">
-                                                    {slot.starts_at}–
-                                                    {slot.ends_at}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {slot.event}
-                                                </TableCell>
-                                                <TableCell className="text-muted-foreground">
-                                                    {slot.venue}
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
+                                        {todaySlots.map((slot) => {
+                                            const status = slotStatus(
+                                                slot,
+                                                nowLabel,
+                                            );
+
+                                            return (
+                                                <TableRow key={slot.id}>
+                                                    <TableCell className="font-medium whitespace-nowrap">
+                                                        {slot.starts_at}–
+                                                        {slot.ends_at}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {slot.event}
+                                                    </TableCell>
+                                                    <TableCell className="text-muted-foreground">
+                                                        {slot.venue}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Badge
+                                                            variant={
+                                                                status.variant
+                                                            }
+                                                        >
+                                                            {status.label}
+                                                        </Badge>
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
                                     </TableBody>
                                 </Table>
                             </div>
@@ -241,7 +507,9 @@ function MeetOperations({ operations }: { operations: Operations }) {
                                         {tallyTop.map((row) => (
                                             <TableRow key={row.district}>
                                                 <TableCell>
-                                                    {row.position}
+                                                    <RankBadge
+                                                        position={row.position}
+                                                    />
                                                 </TableCell>
                                                 <TableCell className="font-medium">
                                                     {row.district}
@@ -267,6 +535,8 @@ function MeetOperations({ operations }: { operations: Operations }) {
                     </CardContent>
                 </Card>
             </div>
+
+            <EventsOverviewCard overview={eventsOverview} />
 
             {myProtests && (
                 <Card>
@@ -313,6 +583,7 @@ export default function Dashboard({
     operations,
     stats,
     recentActivity,
+    announcements,
 }: Props) {
     return (
         <>
@@ -342,6 +613,8 @@ export default function Dashboard({
                     </Card>
                 )}
 
+                <QuickActions />
+
                 {operations && <MeetOperations operations={operations} />}
 
                 <div className="grid auto-rows-min gap-4 md:grid-cols-3">
@@ -351,47 +624,51 @@ export default function Dashboard({
                             label={stat.label}
                             value={stat.value}
                             icon={statIcons[stat.key]}
+                            tone={statTones[stat.key]}
                         />
                     ))}
                 </div>
 
-                <section className="flex flex-col gap-3">
-                    <h2 className="text-base font-medium">Recent Activity</h2>
-                    {recentActivity.length === 0 ? (
-                        <EmptyState
-                            icon={Activity}
-                            title="No activity yet"
-                            description="Actions performed in the system will appear here."
-                        />
-                    ) : (
-                        <div className="rounded-xl border">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Action</TableHead>
-                                        <TableHead>User</TableHead>
-                                        <TableHead>When</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {recentActivity.map((entry) => (
-                                        <TableRow key={entry.id}>
-                                            <TableCell className="font-medium">
-                                                {entry.action}
-                                            </TableCell>
-                                            <TableCell>
+                <div className="grid gap-6 md:grid-cols-2">
+                    <section className="flex flex-col gap-3">
+                        <h2 className="text-base font-medium">
+                            Recent Activity
+                        </h2>
+                        {recentActivity.length === 0 ? (
+                            <EmptyState
+                                icon={Activity}
+                                title="No activity yet"
+                                description="Actions performed in the system will appear here."
+                            />
+                        ) : (
+                            <ul className="flex flex-col gap-1 rounded-xl border p-2">
+                                {recentActivity.map((entry) => (
+                                    <li
+                                        key={entry.id}
+                                        className="flex items-center gap-3 rounded-lg px-2 py-2"
+                                    >
+                                        <ActivityIcon action={entry.action} />
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-sm font-medium">
+                                                {formatActionLabel(
+                                                    entry.action,
+                                                )}
+                                            </p>
+                                            <p className="truncate text-xs text-muted-foreground">
                                                 {entry.user ?? 'System'}
-                                            </TableCell>
-                                            <TableCell className="text-muted-foreground">
-                                                {entry.created_at_human}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    )}
-                </section>
+                                            </p>
+                                        </div>
+                                        <span className="shrink-0 text-xs text-muted-foreground">
+                                            {entry.created_at_human}
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </section>
+
+                    <PublicAnnouncements announcements={announcements} />
+                </div>
             </div>
         </>
     );

@@ -22,7 +22,11 @@ type Props = {
     match: {
         id: number;
         event: string;
+        sport: string;
+        category: string;
         round_label: string;
+        venue: string | null;
+        scheduled_date: string | null;
     };
     session: LiveSession | null;
 };
@@ -33,6 +37,7 @@ export default function PublicScoreboard({
     session: initialSession,
 }: Props) {
     const [session, setSession] = useState(initialSession);
+    const [pollFailures, setPollFailures] = useState(0);
     const [fullscreen, setFullscreen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -45,11 +50,15 @@ export default function PublicScoreboard({
                 headers: { Accept: 'application/json' },
             })
                 .then((response) => response.json())
-                .then((data: { session: LiveSession | null }) =>
-                    setSession(data.session),
-                )
+                .then((data: { session: LiveSession | null }) => {
+                    setSession(data.session);
+                    setPollFailures(0);
+                })
                 .catch(() => {
-                    // Polling retries on its own next tick — no user action needed.
+                    // Polling retries on its own next tick — no user
+                    // action needed, but the display flags it after a
+                    // couple of misses (WP-08-10).
+                    setPollFailures((n) => n + 1);
                 });
         }, 5000);
 
@@ -89,6 +98,28 @@ export default function PublicScoreboard({
                     </p>
                 </div>
 
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+                    <span className="font-medium text-foreground">
+                        {match.sport}
+                    </span>
+                    <span aria-hidden="true">›</span>
+                    <span>{match.category}</span>
+                    <span aria-hidden="true">›</span>
+                    <span>{match.round_label}</span>
+                    {session !== null && session.status !== 'ended' && (
+                        <Badge variant="destructive" className="ml-1">
+                            Live now
+                        </Badge>
+                    )}
+                    {(match.scheduled_date || match.venue) && (
+                        <span className="w-full text-xs">
+                            {[match.scheduled_date, match.venue]
+                                .filter(Boolean)
+                                .join(' · ')}
+                        </span>
+                    )}
+                </div>
+
                 <Badge variant="outline" className="w-fit">
                     Live score — provisional, not the official result
                 </Badge>
@@ -119,6 +150,7 @@ export default function PublicScoreboard({
                             session={session}
                             fullscreen={fullscreen}
                             onToggleFullscreen={toggleFullscreen}
+                            disconnected={pollFailures >= 2}
                         />
                     </div>
                 )}

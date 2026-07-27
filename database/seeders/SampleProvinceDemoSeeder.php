@@ -10,6 +10,8 @@ use App\Enums\MeetStatus;
 use App\Enums\PersonnelRole;
 use App\Enums\ResultStatus;
 use App\Enums\SchoolLevel;
+use App\Enums\ScoreEventType;
+use App\Enums\ScoringSessionStatus;
 use App\Enums\Sex;
 use App\Enums\UserRole;
 use App\Models\Athlete;
@@ -17,12 +19,18 @@ use App\Models\Delegation;
 use App\Models\District;
 use App\Models\Entry;
 use App\Models\Event;
+use App\Models\EventMatch;
 use App\Models\EventResult;
+use App\Models\EventSchedule;
 use App\Models\Meet;
 use App\Models\Personnel;
 use App\Models\ResultPlacement;
 use App\Models\School;
+use App\Models\ScoreEvent;
+use App\Models\ScoringSession;
+use App\Models\Sport;
 use App\Models\User;
+use App\Models\Venue;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 
@@ -99,13 +107,20 @@ class SampleProvinceDemoSeeder extends Seeder
             [$entryAlphaNorth, 2, '11.58s'],
             [$entryBravo, 3, '11.71s'],
         ]);
+
+        // A second, independent demo: a scheduled slot for today with a
+        // currently in-progress basketball game — so the Schedule page has
+        // a real "watch live" link to click without needing to first walk
+        // through Meets → Matches → Start live scoring by hand.
+        $this->liveBasketballGame($meet, $delegationAlpha, $delegationBravo, $admin);
     }
 
     private function meet(): Meet
     {
-        // 'status' and 'is_published' are guarded (state transitions only
-        // happen through Meet::forceFill(), mirroring MeetController) so
-        // they cannot go in firstOrCreate()'s create array.
+        // 'status', 'is_published', and 'is_active' are guarded (state
+        // transitions only happen through Meet::forceFill(), mirroring
+        // MeetController) so they cannot go in firstOrCreate()'s create
+        // array.
         $meet = Meet::query()->firstOrCreate(
             ['name' => 'Sample Provincial Meet'],
             [
@@ -116,12 +131,18 @@ class SampleProvinceDemoSeeder extends Seeder
             ],
         );
 
-        if ($meet->status !== MeetStatus::Active || ! $meet->is_published) {
+        if ($meet->status !== MeetStatus::Active || ! $meet->is_published || ! $meet->is_active) {
             $meet->forceFill([
                 'status' => MeetStatus::Active,
                 'is_published' => true,
+                'is_active' => true,
             ])->save();
         }
+
+        // The public landing page features exactly one meet — make sure
+        // no other seeded meet is left active alongside this one.
+        Meet::query()->where('id', '!=', $meet->id)->where('is_active', true)
+            ->update(['is_active' => false]);
 
         return $meet;
     }
@@ -252,5 +273,96 @@ class SampleProvinceDemoSeeder extends Seeder
             'validated_by' => $admin?->id,
             'validated_at' => now(),
         ])->save();
+    }
+
+    /**
+     * A scheduled slot today, with an in-progress basketball match on it —
+     * demonstrates the Schedule page's "watch live" link end to end
+     * (WP-08 sample-data addition). Re-seeding always repositions the slot
+     * to today and refreshes the running score, so this stays a
+     * plausible "game in progress right now" no matter when the seeder
+     * actually runs, rather than drifting into a stale past date.
+     */
+    private function liveBasketballGame(Meet $meet, Delegation $alpha, Delegation $bravo, ?User $admin): void
+    {
+        $basketball = Sport::query()->where('name', 'Basketball')->first();
+
+        if ($basketball === null) {
+            // Sports catalog not seeded yet — same defensive early-return
+            // as the 100m dash lookup above; SportsCatalogSeeder runs
+            // first in DatabaseSeeder, so this should not happen in
+            // practice.
+            return;
+        }
+
+        $event = Event::query()->firstOrCreate(
+            [
+                'sport_id' => $basketball->id,
+                'name' => 'Basketball',
+                'gender' => GenderCategory::Boys->value,
+                'age_division' => AgeDivision::Secondary->value,
+            ],
+            ['is_team_event' => true, 'max_entries_per_delegation' => 5],
+        );
+
+        $meet->events()->syncWithoutDetaching([$event->id]);
+
+        $venue = Venue::query()->firstOrCreate(
+            ['name' => 'Sample Gymnasium'],
+            ['address' => 'Sample address (demonstration data)', 'active' => true],
+        );
+
+        $slot = EventSchedule::query()->firstOrNew([
+            'meet_id' => $meet->id,
+            'event_id' => $event->id,
+            'venue_id' => $venue->id,
+        ]);
+        $slot->fill([
+            'scheduled_date' => Carbon::now()->toDateString(),
+            'starts_at' => Carbon::now()->subMinutes(28)->format('H:i:s'),
+            'ends_at' => Carbon::now()->addMinutes(12)->format('H:i:s'),
+            'note' => 'Sample live-scoring demonstration game',
+        ])->save();
+
+        $match = EventMatch::query()->firstOrCreate(
+            ['meet_id' => $meet->id, 'event_id' => $event->id, 'event_schedule_id' => $slot->id],
+            ['round_label' => 'Championship Game', 'sequence' => 1],
+        );
+
+        $session = $match->scoringSessions()->where('status', '!=', ScoringSessionStatus::Ended->value)->first();
+        $isNewSession = $session === null;
+
+        if ($session === null) {
+            $session = new ScoringSession(['match_id' => $match->id]);
+        }
+
+        $session->fill([
+            'side_a_label' => $alpha->registrantName(),
+            'side_b_label' => $bravo->registrantName(),
+        ]);
+        $session->forceFill([
+            'status' => ScoringSessionStatus::InProgress,
+            'score_a' => 52,
+            'score_b' => 47,
+            'period_label' => 'Q4',
+            'sport_state' => ['fouls_a' => 3, 'fouls_b' => 4],
+            'started_by' => $admin?->id,
+            'started_at' => Carbon::now()->subMinutes(28),
+        ])->save();
+
+        if ($isNewSession) {
+            ScoreEvent::create([
+                'scoring_session_id' => $session->id,
+                'type' => ScoreEventType::Point,
+                'payload' => ['side' => 'a', 'delta' => 52, 'total' => 52],
+                'recorded_by' => $admin?->id,
+            ]);
+            ScoreEvent::create([
+                'scoring_session_id' => $session->id,
+                'type' => ScoreEventType::Point,
+                'payload' => ['side' => 'b', 'delta' => 47, 'total' => 47],
+                'recorded_by' => $admin?->id,
+            ]);
+        }
     }
 }

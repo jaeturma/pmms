@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\SchoolRequest;
 use App\Models\District;
 use App\Models\School;
+use App\Models\SchoolDistrict;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -27,7 +28,7 @@ class SchoolController extends Controller
         $search = $this->searchTerm($request);
 
         $query = School::query()
-            ->with('district:id,name')
+            ->with('district:id,name', 'schoolDistrict:id,name')
             ->orderBy('name');
 
         $this->applySearch($query, $search, ['name', 'school_id_code', 'district.name']);
@@ -37,18 +38,27 @@ class SchoolController extends Controller
                 ->through(fn (School $school): array => [
                     'id' => $school->id,
                     'district_id' => $school->district_id,
+                    'school_district_id' => $school->school_district_id,
                     'name' => $school->name,
                     'school_id_code' => $school->school_id_code,
                     'level' => $school->level->value,
                     'address' => $school->address,
                     'active' => $school->active,
                     'district' => ['id' => $school->district->id, 'name' => $school->district->name],
+                    'school_district' => $school->schoolDistrict === null ? null : [
+                        'id' => $school->schoolDistrict->id,
+                        'name' => $school->schoolDistrict->name,
+                    ],
                 ]),
             'filters' => ['search' => $search],
             'districts' => District::query()
                 ->where('active', true)
                 ->orderBy('name')
                 ->get(['id', 'name']),
+            'schoolDistricts' => SchoolDistrict::query()
+                ->where('active', true)
+                ->orderBy('name')
+                ->get(['id', 'district_id', 'name']),
             'canManage' => Gate::allows('manage-meet-data'),
         ]);
     }

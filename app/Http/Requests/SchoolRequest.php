@@ -21,6 +21,11 @@ class SchoolRequest extends FormRequest
 
         return [
             'district_id' => ['required', 'integer', Rule::exists('districts', 'id')],
+            'school_district_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('school_districts', 'id')->where('district_id', $this->integer('district_id')),
+            ],
             'name' => [
                 'required',
                 'string',

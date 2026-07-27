@@ -37,6 +37,23 @@ test('guests can view the public scoreboard for a published meet; unpublished me
     $this->get("/meets/{$hidden->id}/matches/{$hiddenMatch->id}/scoreboard")->assertNotFound();
 });
 
+test('the public scoreboard exposes real match metadata: sport, category, round, venue, and date', function () {
+    $meet = Meet::factory()->active()->published()->create();
+    $sport = Sport::factory()->create(['name' => 'Basketball']);
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+    $match = EventMatch::factory()->create([
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+        'status' => MatchStatus::Scheduled,
+    ]);
+
+    $this->get("/meets/{$meet->id}/matches/{$match->id}/scoreboard")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('match.sport', 'Basketball')
+            ->has('match.category')
+            ->where('match.round_label', $match->round_label));
+});
+
 test('a match that does not belong to the given meet 404s', function () {
     $meet = Meet::factory()->active()->published()->create();
     $otherMeet = Meet::factory()->active()->published()->create();

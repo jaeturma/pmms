@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\EligibilityDocumentType;
 use App\Enums\EligibilityStatus;
 use App\Enums\UserRole;
+use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Models\Athlete;
 use App\Models\Delegation;
 use App\Models\EligibilityDocument;
@@ -25,13 +26,16 @@ use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class EligibilityController extends Controller
 {
+    use SearchesAndPaginates;
+
     public function __construct(
         private readonly AuditLogger $audit,
         private readonly FileUploadService $uploads,
     ) {}
 
     /**
-     * The eligibility review queue, filterable by status, officer-scoped.
+     * The eligibility review queue, searchable by athlete name and
+     * filterable by status, officer-scoped.
      */
     public function index(Request $request): Response
     {
@@ -40,28 +44,42 @@ class EligibilityController extends Controller
         /** @var User $user */
         $user = $request->user();
 
+        $search = $this->searchTerm($request);
         $status = (string) $request->query('status', '');
 
-        $query = EligibilityReview::query()
+        $base = EligibilityReview::query()
             ->with([
                 'athlete.school:id,name',
                 'athlete.delegation.meet:id,name',
                 'athlete.eligibilityDocuments.fileUpload:id,original_name',
                 'reviewer:id,name',
-            ])
-            ->orderByRaw("case status when 'pending' then 0 when 'returned' then 1 else 2 end")
-            ->orderByDesc('id');
+            ]);
 
         if ($user->role === UserRole::DelegationOfficer) {
-            $query->whereHas(
+            $base->whereHas(
                 'athlete.delegation.officers',
                 fn ($officers) => $officers->whereKey($user->getKey()),
             );
         }
 
+        // Counts reflect the officer's whole queue regardless of the
+        // status/search filters below — the summary cards' "at a glance"
+        // totals shouldn't shift just because the list is filtered.
+        $counts = [
+            'pending' => (clone $base)->where('status', EligibilityStatus::Pending->value)->count(),
+            'approved' => (clone $base)->where('status', EligibilityStatus::Approved->value)->count(),
+            'returned' => (clone $base)->where('status', EligibilityStatus::Returned->value)->count(),
+        ];
+
+        $query = (clone $base)
+            ->orderByRaw("case status when 'pending' then 0 when 'returned' then 1 else 2 end")
+            ->orderByDesc('id');
+
         if (EligibilityStatus::tryFrom($status) !== null) {
             $query->where('status', $status);
         }
+
+        $this->applySearch($query, $search, ['athlete.first_name', 'athlete.last_name']);
 
         $delegationScope = Delegation::query()->with(['school:id,name', 'district:id,name', 'meet:id,name']);
 
@@ -76,32 +94,12 @@ class EligibilityController extends Controller
             ->filter(fn (Delegation $delegation): bool => $user->can('upload', [EligibilityReview::class, $delegation]));
 
         return Inertia::render('eligibility/index', [
-            'reviews' => $query->paginate(15)->withQueryString()
-                ->through(fn (EligibilityReview $review): array => [
-                    'id' => $review->id,
-                    'athlete' => $review->athlete->fullName(),
-                    'school' => $review->athlete->school->name,
-                    'meet' => $review->athlete->delegation->meet->name,
-                    'status' => $review->status->value,
-                    'status_label' => $review->status->label(),
-                    'remarks' => $review->remarks,
-                    'reviewer' => $review->reviewer?->name,
-                    'decided_at' => $review->decided_at?->diffForHumans(),
-                    'documents' => $review->athlete->eligibilityDocuments
-                        ->map(fn (EligibilityDocument $document): array => [
-                            'id' => $document->id,
-                            'label' => $document->document_type->label(),
-                            'file_name' => $document->fileUpload->original_name,
-                            'url' => route('eligibility.documents.download', $document),
-                            'can_delete' => $review->status !== EligibilityStatus::Approved
-                                && $user->can('upload', [EligibilityReview::class, $review->athlete->delegation]),
-                        ])
-                        ->values(),
-                    'can_decide' => $review->status === EligibilityStatus::Pending
-                        && $user->can('decide', $review),
-                ]),
+            'reviews' => $query->paginate($this->registryPageSize)->withQueryString()
+                ->through(fn (EligibilityReview $review): array => $this->reviewRow($review, $user)),
+            'counts' => $counts,
             'filters' => [
                 'status' => EligibilityStatus::tryFrom($status)?->value,
+                'search' => $search !== '' ? $search : null,
             ],
             'athleteOptions' => Athlete::query()
                 ->with('school:id,name')
@@ -121,6 +119,46 @@ class EligibilityController extends Controller
                 EligibilityDocumentType::cases(),
             ),
         ]);
+    }
+
+    /**
+     * @return array{id: int, athlete: string, school: string, meet: string, status: string, status_label: string, remarks: string|null, reviewer: string|null, decided_at: string|null, documents: array<int, array{id: int, label: string, file_name: string, uploaded_at: string|null, url: string, can_delete: bool}>, can_decide: bool}
+     */
+    private function reviewRow(EligibilityReview $review, User $user): array
+    {
+        return [
+            'id' => $review->id,
+            'athlete' => $review->athlete->fullName(),
+            'school' => $review->athlete->school->name,
+            'meet' => $review->athlete->delegation->meet->name,
+            'status' => $review->status->value,
+            'status_label' => $review->status->label(),
+            'remarks' => $review->remarks,
+            'reviewer' => $review->reviewer?->name,
+            'decided_at' => $review->decided_at?->diffForHumans(),
+            'documents' => $review->athlete->eligibilityDocuments
+                ->map(fn (EligibilityDocument $document): array => $this->documentRow($document, $review, $user))
+                ->values()
+                ->all(),
+            'can_decide' => $review->status === EligibilityStatus::Pending
+                && $user->can('decide', $review),
+        ];
+    }
+
+    /**
+     * @return array{id: int, label: string, file_name: string, uploaded_at: string|null, url: string, can_delete: bool}
+     */
+    private function documentRow(EligibilityDocument $document, EligibilityReview $review, User $user): array
+    {
+        return [
+            'id' => $document->id,
+            'label' => $document->document_type->label(),
+            'file_name' => $document->fileUpload->original_name,
+            'uploaded_at' => $document->created_at !== null ? $document->created_at->format('M j, Y') : null,
+            'url' => route('eligibility.documents.download', $document),
+            'can_delete' => $review->status !== EligibilityStatus::Approved
+                && $user->can('upload', [EligibilityReview::class, $review->athlete->delegation]),
+        ];
     }
 
     /**

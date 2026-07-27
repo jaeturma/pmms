@@ -1,4 +1,15 @@
 # Current Phase
+**Phase 8 — UI/UX Implementation and Visual Alignment is now COMPLETE
+(all 16 WPs, 2026-07-27)** — see its own section below; compliance
+review: `docs/phases/phase-08-ui-ux-visual-alignment/
+phase-8-compliance-review.md`. One real open item carried into any
+sign-off decision: zero live browser verification was possible across
+the entire phase (Chrome extension disconnected every session) — a
+manual visual/responsive/accessibility QA pass is recommended before
+treating the phase's visual work as fully signed off. Not committed/
+pushed. Phase 9 — Post-Deployment Support is scaffolded and ready on
+owner instruction.
+
 Division Type & Municipality-Based Delegations — COMPLETE 2026-07-25, all 7 WPs
 executed one at a time on owner instruction. Phase 4 — Responsive Public
 Portal and Phase 5 — Executive and Management Dashboards are ALSO complete
@@ -1783,6 +1794,76 @@ pushed.
   decision for the Phase 6 tree, then the owner's choice of what comes
   next — Phase 8 (Post-Deployment Support) or a real UAT/pilot session
   using WP-06-06's prepared materials.
+- **Phase 6 committed and pushed 2026-07-27** on owner instruction, same
+  day as WP-06-09 closed it. Committed as 10 commits following the
+  established per-WP convention exactly (one planning commit + one per
+  WP-06-01..09): `9251fb1` (docs: plan Phase 6), `7a31b6b` (WP-06-01),
+  `2fd80b8` (WP-06-02), `01634f9` (WP-06-03), `70a8e63` (WP-06-04),
+  `c25315c` (WP-06-05), `8382f04` (WP-06-06), `1b4d38b` (WP-06-07),
+  `d3f2811` (WP-06-08), `0728687` (WP-06-09). Each commit carries only
+  the files that WP actually produced (verified via `git status` between
+  every commit); `.ai/current-phase.md` and `CHECKLIST.md` — both
+  cross-cutting, touched by every WP's log entry — were attributed
+  entirely to the closing WP-06-09 commit rather than sliced per-WP,
+  the same "final-state, intermediates for history readability only"
+  simplification Phase 3 already established for this repo; every other
+  file's attribution is exact, not simplified. `.claude/` stayed
+  untracked/excluded, matching the Phase 7 precedent. Post-commit,
+  re-ran Pint and the full Pest suite against the committed tree —
+  still 650/650, still clean. Pushed to `origin/main`
+  (`34492cc..0728687`) on explicit owner instruction, same session.
+
+<!--
+  NOTE (2026-07-27): the two entries below (Phase 8 planning and the
+  ad-hoc schedule live-link feature) were RECONSTRUCTED after an
+  accidental overwrite of this file during the DdOPAA WP7 closing
+  commit — the exact original wording was lost (never backed up before
+  the file was overwritten to build the DdOPAA-only commit slice).
+  Content below is rebuilt from the real, still-intact source files
+  (`docs/phases/phase-09-post-deployment-support/README.md`, the actual
+  code diffs for the schedule live-link feature) rather than from
+  memory alone, so the facts are accurate, but the prose is not the
+  original text. Flagged here rather than silently presented as
+  untouched history.
+-->
+- **Phase 8 — Post-Deployment Support: planned 2026-07-27**, pending
+  owner approval, execution not started. No plan existed anywhere
+  before this — the roadmap (`docs/howtorun/ROADMAP-UPDATE.md`) only
+  ever named the phase (renamed from the original Phase 7 slot to make
+  room for Live Scoring), with no scope written down. Scoped fresh via
+  two rounds of owner Q&A the same day: **in scope** — a bug/support
+  workflow and monitoring/health-check coverage (a multi-select of four
+  options; the owner picked these two); **not in scope** — a real
+  UAT/pilot session (WP-06-06 already prepared materials for this, it
+  stays future work). **Issue tracking:** GitHub Issues
+  (`github.com/jaeturma/pmms`) — zero new infrastructure, not a
+  markdown log in the repo. **Monitoring depth:** a documented manual
+  routine, explicitly not a new always-on/automated-alerting process,
+  matching every prior phase's "no new cloud/VPS infra, no CI/CD
+  automation" posture. Wrote a full plan (README, DESIGN-NOTES,
+  CHECKLIST, WP-08-01 Bug & Support Workflow, WP-08-02 Monitoring &
+  Health-Check Routine, WP-08-03 Compliance Review & Acceptance) at
+  `docs/phases/phase-08-post-deployment-support/`, then stopped for
+  owner instruction — execution not started in this session.
+- **Ad-hoc addition, 2026-07-27 — schedule page live-scoreboard link +
+  demo data**, requested before starting the DdOPAA initiative. Added a
+  "Live" column to the Schedule page: `ScheduleController` gained a
+  `matchesForSlots()` private method (scoped like
+  `MatchController::index()`'s own authorization) mapping each
+  schedule slot to its match, if any, and whether that match has a
+  non-ended `ScoringSession`; `resources/js/pages/schedule/index.tsx`
+  renders a `Badge`/`Radio` icon linking straight to the live
+  scoreboard when true. `SampleProvinceDemoSeeder` gained a
+  `liveBasketballGame()` method seeding one real in-progress demo game
+  so the feature has something to show without waiting for a real
+  match. Five new tests added to `tests/Feature/ScheduleTest.php`: a
+  slot with no match exposes no live-scoreboard link; a slot with an
+  in-progress session is flagged live for managers; a slot with only an
+  ended session is not flagged live; viewers never get a live-scoreboard
+  link even for a live match; delegation officers only get the link for
+  their own delegation's match. `docs/scheduling.md` and
+  `docs/live-scoring.md` updated to document the new column. Full gate
+  green at the time; not committed/pushed.
 
 # DdOPAA 2025 Reference Dataset (standalone initiative, planned 2026-07-27)
 Not a roadmap "Phase" — a cross-cutting data initiative, same category as
@@ -2227,3 +2308,866 @@ owner instruction. Next: owner approval, then WP1.
   PHPStan L7 (0 errors), Pest 671/671 including all 16 WP6 tests
   unchanged. App reconfirmed HTTP 200. **Not yet committed or pushed —
   this fix is new since the WP1–WP7 push**, pending owner instruction.
+
+# Phase 8 — UI/UX Implementation and Visual Alignment
+`docs/phases/phase-08-ui-ux-visual-alignment/` (16 WPs) — this directory,
+its reference images (`docs/ui-ux/references/`), and `.ai/project-rules.md`/
+`.ai/work-package-runner.md`/`.ai/ui-ux-rules.md` all predate this
+conversation's visibility into them — created in a session not reflected
+elsewhere in this log. Picked up here starting with WP-08-01 on owner
+instruction ("Read: project-rules.md current-phase.md
+work-package-runner.md ui-ux-rules.md Then read and implement:
+WP-08-01...").
+
+## Phase 8 (UI/UX) Work Package Log
+- WP-08-01 Screenshot and Current UI Gap Assessment — done 2026-07-27.
+  `docs/reports/phase-08/WP-08-01-completion.md` created — an
+  evidence-based gap assessment comparing all 5 reference images
+  against the actual current implementation. Chrome extension was
+  unavailable this session (confirmed via `tabs_context_mcp`, tried
+  twice), so the assessment reads the real source (React/TSX
+  components, Tailwind classes, the theme's CSS custom properties, and
+  the backend data each page actually receives) rather than comparing
+  screenshots — flagged explicitly as a substitution, with a
+  recommendation to re-run a real screenshot pass before WP-08-13/
+  WP-08-15 once reconnected. Key findings: (1) the entire current theme
+  is zero-chroma grayscale (`oklch(x 0 0)` on every token in
+  `resources/css/app.css`, shadcn's unmodified default) — the root
+  cause behind nearly every visual gap, which is exactly what WP-08-02
+  is scoped to fix; (2) most dashboard/medal-tally gaps are visual only
+  (missing colored stat cards, donut charts, icons) but a few are
+  functional — no per-event status aggregate for an "Events Overview"
+  donut, no points-based (Gold=3/Silver=2/Bronze=1) ranking system, no
+  "vs. yesterday" delta tracking; (3) the Athlete Eligibility reference
+  shows an automated rule-checking flow (age/grade/residency/duplicate
+  checks, instant PASS/FAIL) but the real app has a fundamentally
+  different, deliberate manual document-upload-and-human-review
+  workflow (`EligibilityReview`'s own doc comment: decisions are
+  "always made by a person") — flagged as needing an owner scoping
+  decision before WP-08-06, not a restyle; (4) Basketball/Softball live
+  scoreboard gaps are partly visual, partly `sport_state`-schema gaps
+  (no quarter-by-quarter history, no team shooting/hitting stats, no
+  per-athlete attribution — `ScoreEvent` already has enough history for
+  a play-by-play feed though, that part is purely a missing display);
+  (5) Athletics has **no existing live-scoreboard foundation at all** —
+  `ScoreboardType` has no Athletics case, so this reference needs new
+  backend modeling before any UI work, not a restyle, flagged for
+  whoever scopes WP-08-11. No application code changed — assessment
+  only, per this WP's own rules. `CHECKLIST.md` WP-08-01 checked off.
+  Not committed/pushed. Not begun: WP-08-02, per this WP's explicit
+  "do not begin the next work package" rule — next on owner
+  instruction.
+- WP-08-02 PMMS Design Tokens and Visual Standards — done 2026-07-27.
+  Rather than guess a palette, sampled every new color directly from
+  the 9 approved reference PNGs via a small Python/Pillow script
+  (downsample, bucket pixel colors, filter anti-aliasing/low-saturation
+  noise, convert sRGB→OKLCH) — two hues converged consistently across
+  every reference: deep navy (hue≈258, sidebars) and vivid royal blue
+  (hue≈263, buttons/badges/active states), plus gold (hue≈85) and
+  green (hue≈145) from the medal-tally/eligibility references. The
+  existing destructive red already matched the reference's "LIVE" red
+  almost exactly (sampled hue 27–28 vs. the app's existing 27.325) —
+  left unchanged rather than needlessly re-tuned. Updated
+  `resources/css/app.css` (Tailwind 4 CSS-first config, no
+  `tailwind.config.js`): `--primary`/`--sidebar`/`--sidebar-primary`/
+  `--sidebar-accent` (+dark variants) replaced with the sampled
+  palette; `--secondary`/`--muted`/`--accent`/`--border`/`--input`/
+  `--ring` given only a subtle cool-blue tint (deliberately kept
+  low-chroma — these back Radix/shadcn's pervasive subtle-hover states
+  used by every dropdown/select/menu item, so a strong brand tint there
+  would show up everywhere the references don't show it); two new
+  semantic pairs added (`--success`/`--warning`, neither existed
+  before — matches "ONGOING"/"UPCOMING" badges); three new medal-color
+  pairs added (`--medal-gold`/`--medal-silver`/`--medal-bronze` — the
+  rank-1/2/3 highlights that recur across Dashboard/Medal
+  Tally/mobile-ranking, currently unstyled plain text everywhere);
+  `--chart-1..5` remapped to the brand+status palette for the
+  not-yet-built donut charts WP-08-01 flagged. **Fixed a real
+  pre-existing bug found while auditing the tokens**:
+  `--destructive-foreground` was literally the same value as
+  `--destructive` in light mode (invisible text) and a different-but-
+  still-wrong mid-red in dark mode — never visibly broken only because
+  `Button`'s destructive variant hardcodes `text-white` instead of
+  using the token, but the token itself was wrong; fixed to white in
+  both modes. New `docs/ui-ux/design-tokens.md` documents every token,
+  why accent/secondary/muted were deliberately left neutral, and lists
+  (via grep, not fixed) pages already using raw Tailwind palette
+  classes instead of semantic tokens, flagged for a later consistency
+  WP. No `.tsx` file touched — this WP is token-values-only per its
+  own scope (WP-08-03 onward applies them); every shadcn/ui primitive
+  already reads these CSS variables, so buttons/badges/sidebar/focus-
+  rings already pick up the new brand colors automatically without any
+  component edit. Verified every new token round-trips OKLCH→sRGB
+  in-gamut (Python check) before writing them, and `npm run build`
+  compiled clean. Chrome extension still unavailable this session
+  (checked 3 times) — could not get a live visual screenshot, flagged
+  for a real visual check before WP-08-03 proceeds. Full gate green:
+  Pint clean, PHPStan L7 (0 errors, neither touched — CSS-only change),
+  Pest 671/671 unchanged, ESLint 0 errors, Prettier clean, tsc 0
+  errors, Vite build succeeded. App reconfirmed HTTP 200.
+  `CHECKLIST.md` WP-08-02 checked off. Not committed/pushed. Not begun:
+  WP-08-03, per this WP's own rule — next on owner instruction.
+- WP-08-03 Admin Application Shell and Navigation — done 2026-07-27.
+  This WP's own listed reference images were the same generic
+  live-scoreboard set copy-pasted onto WP-08-02 — not
+  `admin-dashboard.png`, the only image that actually shows a shell —
+  confirming WP-08-01's "templated docs" finding again; used the
+  actual shell-showing references instead. Confirmed via grep first
+  that no backend Pest test touches sidebar/header DOM (no frontend
+  component tests in this project), so restructuring carried no
+  regression risk to the test suite. Three structural fixes: (1)
+  `Sidebar` was `variant="inset"` (floating/rounded/gapped) — every
+  reference shows a flush full-height sidebar — changed to the default
+  `variant="sidebar"`; (2) header had no date/time or visible identity
+  and used `--sidebar-border` for its own border despite sitting in the
+  light main-content panel, not the dark sidebar — rebuilt with a new
+  `useClock` hook (30s refresh) and an avatar/name/role dropdown
+  reusing the existing `UserMenuContent` unchanged, fixed border to
+  `--border`; (3) the sidebar footer's `NavUser` became a redundant
+  second identity menu once the header had one — replaced with a new
+  `SidebarMeetCard` showing the real current meet (name/status/dates/
+  venue, globally shared from `HandleInertiaRequests`, guarded to
+  authenticated requests so public-portal guest loads never pay the
+  extra query) instead of the reference's fictional "Stronger Together,
+  Champions Forever!" tagline/illustration, which doesn't correspond to
+  anything real in this app — `nav-user.tsx` deleted after confirming
+  via grep it's unused anywhere else. Also added `role_label` to the
+  shared `auth.user` payload (reusing `UserRole::label()`, existed on
+  the backend enum, never surfaced to the frontend before) and renamed
+  the nav section label "Platform"→"Main Navigation" to match every
+  reference. Incidental fix while already in the file: `UserInfo`'s
+  avatar fallback used hardcoded `bg-neutral-200`/`dark:bg-neutral-700`
+  instead of WP-08-02's semantic `bg-muted`/`text-muted-foreground`
+  tokens — fixed, not swept repo-wide (out of scope here). Deliberately
+  did NOT add a notification bell — no notification concept (model,
+  table, event) exists anywhere in the backend, and WP-08-01 explicitly
+  deferred that decision to this WP; building one would be a new
+  feature, and a non-functional bell would itself violate "do not
+  hardcode screenshot values" by implying functionality that doesn't
+  exist — documented as a deliberate omission, revisit only if a future
+  WP explicitly scopes real notifications. No dashboard content
+  touched (WP-08-04's scope). Chrome extension still unavailable this
+  session (checked twice more) — no live screenshot possible, flagged
+  again for a visual check before WP-08-04. Full gate green: Pint
+  clean, PHPStan L7 (0 errors), Pest 671/671 unchanged (meaningful here
+  since `HandleInertiaRequests` runs on every request), ESLint 0
+  errors, Prettier clean, tsc 0 errors, Vite build succeeded. App
+  reconfirmed HTTP 200. `CHECKLIST.md` WP-08-03 checked off. Not
+  committed/pushed. Not begun: WP-08-04, per this WP's own rule — next
+  on owner instruction.
+- WP-08-04 Admin Dashboard Visual Implementation — done 2026-07-27. This
+  WP's own listed reference images were again the wrong copy-pasted set
+  (generic live-scoreboard/ranking images, not `admin-dashboard.png`) —
+  same templated-doc issue WP-08-01/02/03 already flagged; used
+  `admin-dashboard.png` instead. Four real gaps closed against it: (1)
+  `StatCard` gained an optional `tone` prop (colored circular icon
+  badges, backed by WP-08-02's tokens) — every other `StatCard` usage
+  (e.g. `management/index.tsx`) untouched, opt-in only; (2) new
+  `DashboardController::eventsOverview()` — a real, non-invented 3-way
+  Completed/Ongoing/Upcoming breakdown from `EventResult`/
+  `EventSchedule` (deliberately no "Cancelled" bucket — no such concept
+  exists on `Event`, inventing one would hardcode a screenshot value),
+  rendered as a new `EventsOverviewCard` segmented-bar widget with its
+  own empty state; (3) medal-tally rank numbers replaced with a
+  `RankBadge` using WP-08-02's `--medal-gold/silver/bronze` tokens; (4) a
+  new quick-actions row of six shortcut tiles, all reused existing
+  Wayfinder routes, no new routes/permissions. Two smaller real
+  additions found already-available-but-unused: today's schedule rows
+  now show an Upcoming/Ongoing/Completed badge derived client-side via
+  `useClock` (reused from WP-08-03) against each slot's start/end time
+  (lexicographic "HH:MM" comparison, no date parsing); recent-activity
+  entries get per-action-prefix colored icons (`ActivityIcon`, generic
+  fallback so a future audit action never needs this file touched).
+  Dashboard also now surfaces the 3 most-recent published announcements
+  (reusing the existing `Announcement` model and the existing
+  `PublicAnnouncements` component already used on the public portal — no
+  new backend or duplicated rendering). One cross-page addition scoped
+  from the same "what's happening right now" reference intent: a "Watch
+  live" link on the Schedule page — `ScheduleController::
+  matchesForSlots()` exposes `match_id`/`is_live` per slot, scoped
+  exactly like `MatchController::index()` (Viewers never receive the
+  field; a Delegation Officer only sees their own delegation's matches),
+  computed once per page load, not per-row; documented in
+  docs/scheduling.md ("Live scoreboard link") and cross-referenced from
+  docs/live-scoring.md. `SampleProvinceDemoSeeder` gained a re-seedable
+  `liveBasketballGame()` helper (always repositions to "today") so the
+  new link has real demo data without hand-walking Meets → Matches →
+  Start scoring. No schema changes, no authorization changes — every
+  widget is read-side over existing queries/relations plus the two new
+  additive/scoped queries above, both mirroring authorization already
+  proven by `MatchController`'s own tests rather than duplicating it.
+  Pest 671/671 (5 new tests in ScheduleTest proving the live-link scoping:
+  no-match, in-progress, ended-only, viewer-forbidden, delegation-
+  officer-own-match-only), full gate green: Pint+PHPStan+ESLint+
+  Prettier+tsc+build. Chrome extension still unavailable this session
+  (re-checked via `tabs_context_mcp` immediately before writing the
+  completion report) — no live screenshot possible, flagged again for a
+  visual check before WP-08-05. Local Laragon MySQL/web services were
+  not running this session (a first for this phase — WP-08-01/02/03 all
+  recorded HTTP 200); `php artisan serve` surfaced a `PDOException`
+  connecting to 127.0.0.1:3306, confirming the gap is "services not
+  started" rather than an application bug (the Pest suite runs against
+  SQLite and doesn't depend on this) — flagged for an owner follow-up to
+  start Laragon and reconfirm HTTP 200 before WP-08-05, not treated as a
+  blocker given every other gate passed.
+  docs/reports/phase-08/WP-08-04-completion.md written; `CHECKLIST.md`
+  WP-08-04 checked off. Not committed/pushed. Not begun: WP-08-05, per
+  this WP's own rule — next on owner instruction.
+- WP-08-05 Admin Medal Tally and Rankings UI — done 2026-07-27. This WP's
+  own reference-image list was again the wrong copy-pasted set — used
+  `admin-medal-tally.png` instead. Two of the app's own already-
+  documented rules shaped this WP's design rather than following the
+  reference literally: (1) `docs/medal-tally.md`'s "ordering is
+  conventional: gold, then silver, then bronze, then name" is a tested,
+  deliberate official-standings rule, not an oversight — even though the
+  reference visually implies points-based ranking ("Ranking is based on:
+  Gold (3 points)..."), a new `points` value (Gold×3/Silver×2/Bronze×1)
+  was added as display-only (new column + its own separately labeled
+  "Top by points" widget) without touching the tested rank order —
+  proven by a new test where a single-gold district (fewer points) still
+  outranks a two-silver district (more points); (2) the Post-Division
+  refinement rule that school standings must never read as a competing
+  standing meant the reference's "View Ranking By: Municipality/School"
+  toggle was deliberately not built — both tables stay always-visible,
+  district-first/official, school-below/reference-only, as already
+  established. `MedalTallyService` gained (additive only, existing
+  `standings()` behavior/signature-compatible, tested order unchanged):
+  `points` on district rows; new `medalsBySport()` (same validated/
+  filtered placement set, grouped by sport); new `recentMedals()`
+  (gold/silver/bronze/total awarded in the last 24 hours from
+  `event_results.validated_at`, real and computed at read time, no
+  stored snapshot); a new `$ageDivision` filter reusing the existing
+  `AgeDivision` enum — this is what the reference's "Division: All
+  Divisions" dropdown actually maps to in real data (this app's
+  `Division` model is one deployment-wide City/Province setting, not a
+  filterable list; Event age division is the real, different, existing
+  concept the reference means). All three methods share a new
+  `basePlacements()` extraction instead of duplicating the validated-
+  only/meet/sport `whereHas` chain three times. `TallyController`
+  composes district totals, top-5-by-points, the sport breakdown, the
+  recent-medals delta, and age-division options. `tally/index.tsx`
+  rebuilt to match the reference: retitled "Medal Tally & Rankings"; new
+  "Export report" button (the CSV download route already existed on the
+  backend but was never linked from this page — only reachable via the
+  printable report); new age-division filter; four summary `StatCard`s
+  with a real 24-hour delta (omitted rather than shown as "+0" when
+  there's no recent activity); a CSS conic-gradient "Medal distribution"
+  donut — no charting library added, same dependency-isolation
+  discipline as WP-08-04's events-overview bar; `RankBadge` extracted
+  from `dashboard.tsx` into a shared `components/rank-badge.tsx` (its
+  second use site) so the two pages don't drift; a Points column +
+  explicit caption stating rank still follows gold/silver/bronze, not
+  points; "Top by points" and "Medals by sport" widgets; a real-time-
+  update `Alert` banner. `StatCard`'s `tone` prop gained `silver`/
+  `bronze` variants (only had `gold` before). Deliberately not done: no
+  municipality/school ranking toggle, no points-based re-ranking, no "As
+  of Date" historical point-in-time filter (would need reconstructing a
+  snapshot from history that doesn't exist for this purpose — a real
+  feature, not a restyle), no changes to `reports/medal-tally.tsx`/
+  `public/tally.tsx`/the dashboard's tally widget (WP-08-08's scope, not
+  this WP's). Pest 676/676 (5 new tests in MedalTallyTest: points
+  weighted 3/2/1 never reorder standings, age-division filter narrows
+  correctly, an invalid age-division value is silently ignored,
+  medalsBySport groups by sport, recentMedals excludes placements older
+  than 24 hours), full gate green: Pint+PHPStan+ESLint+Prettier+tsc+
+  build. Chrome extension still unavailable this session. Laragon's
+  MySQL and Apache came up on their own this session (both were down at
+  the end of WP-08-04) and the pmms.app vhost is correctly configured,
+  but the running Apache process is still serving Laragon's own default
+  landing page for it instead of routing to the vhost — needs a service
+  restart to pick up the config. Deliberately did not restart Apache:
+  the same instance also serves roughly a dozen other unrelated local
+  projects already running on this machine, and restarting a shared
+  service for one WP's optional visual check isn't a risk worth taking
+  without asking first — flagged for the owner, not treated as a
+  blocker given every other gate passed (same precedent WP-08-04 set).
+  docs/medal-tally.md extended (points/by-sport/recent-medals/age-
+  division sections); docs/reports/phase-08/WP-08-05-completion.md
+  written; `CHECKLIST.md` WP-08-05 checked off. Not committed/pushed.
+  Not begun: WP-08-06, per this WP's own rule — next on owner
+  instruction. Note for whoever picks up WP-08-06: WP-08-01 flagged that
+  reference as showing an automated PASS/FAIL rule-checking flow that
+  conflicts with the app's real, deliberate manual document-review
+  workflow — likely needs an owner scoping decision before
+  implementation, same as this WP needed one for points-based ranking.
+- WP-08-06 Athlete Eligibility Checker UI — done 2026-07-27. Confirmed
+  the flagged conflict before writing any code: the reference shows a
+  fully automated eligibility-rule engine (search athlete → pick sport/
+  event/category → "Check Eligibility" → auto PASS/FAIL per rule →
+  auto ELIGIBLE/INELIGIBLE verdict), directly contradicting
+  docs/eligibility.md's explicit "PMMS records documents and human
+  decisions — it never adjudicates eligibility... automated rules are
+  policy-dependent and deferred," with automated rules/age adjudication/
+  duplicate-entry checks named out of scope. Presented the owner three
+  options before touching code: restyle the real manual-review queue
+  only; build a new single-athlete lookup page (still no invented
+  rules); or actually build the automated rule engine (reversing the
+  documented decision). **Owner chose: restyle the real queue only.**
+  No automated rules, no PASS/FAIL checklist, no auto-verdict, no QR
+  scanning, no sport/event/category filters, no Print/Export PDF were
+  built — none of that exists in this app's data model and none was
+  invented to match the mockup. What WAS added, all real/computed: a
+  name search (`EligibilityController` now uses the shared
+  `SearchesAndPaginates` trait, searching `athlete.first_name`/
+  `athlete.last_name` — the identical pattern `EntryController` already
+  uses); three summary `StatCard`s (Pending review/Approved/Returned)
+  computed once from a cloned base query *before* the status/search
+  filters narrow it, so the totals don't shift when the list is
+  filtered; each document's real upload date now shown next to its
+  download link; status badges recolored with WP-08-02's semantic
+  tokens (pending=warning, approved=success, returned=destructive).
+  Extracted `reviewRow()`/`documentRow()` private methods with explicit
+  array-shape docblocks out of the inline `->through()` closure — needed
+  to resolve a real PHPStan/Larastan "Collection template is not
+  covariant" false positive triggered by the nested `map()` inside
+  `through()` (tried the nullsafe-`!==null` workaround from the Division
+  initiative first; didn't resolve it here — extracting named methods
+  with explicit docblocks did). Page retitled "Eligibility" → "Eligibility
+  Review" (kept honest, not "Checker," since no automated checking was
+  built). Reused the existing shared `SearchBar` component (already used
+  by `athletes/index.tsx`) rather than building a new search input.
+  docs/eligibility.md updated with a full "WP-08-06 visual alignment —
+  restyle only, no automated rules" section recording the scoping
+  decision and what was/wasn't built, so this doesn't need re-litigating
+  later. Pest 678/678 (2 new tests in EligibilityTest: search by athlete
+  name, summary counts reflect the whole scoped queue regardless of the
+  status filter), full gate green: Pint+PHPStan+ESLint+Prettier+tsc+
+  build. Chrome extension still unavailable this session. The pmms.app
+  Apache vhost routing issue noted in WP-08-05 is still unresolved (not
+  re-investigated this WP, same not-a-blocker status).
+  docs/reports/phase-08/WP-08-06-completion.md written; `CHECKLIST.md`
+  WP-08-06 checked off. Not committed/pushed. Not begun: WP-08-07, per
+  this WP's own rule — next on owner instruction.
+- WP-08-07 Public Portal Shell and Branding — done 2026-07-27. Its own
+  reference-image list was again the wrong generic set;
+  `public-medal-tally.png` is the only image that actually shows a
+  public page, so it's what this WP's shell/nav/branding work was
+  checked against (it doubles as WP-08-08's own reference too). The
+  existing `public-layout.tsx` was genuinely minimal — logo + Sign-in/
+  Dashboard button, no site nav connecting the portal home to a meet's
+  pages at all. Only real routes got nav entries: the reference's News &
+  Announcements/Galleries/About items don't correspond to any page in
+  this app and were not built (would mean dead links or fabricated
+  pages). Since Schedule/Results/Medal Tally are meet-scoped routes, not
+  standalone pages, the header needs a meet to link into — added a new
+  guest-only shared Inertia prop, `publicNav` (`HandleInertiaRequests`),
+  the same "shell-level chrome shared once via middleware" pattern
+  WP-08-03 established for the authenticated sidebar's `currentMeet`,
+  mirrored here for guests: resolves the most recently started
+  *published* meet, counts its active `ScoringSession`s for a "Live now"
+  indicator (reusing `PortalController::liveMatches()`'s exact scoping
+  as a `count()` instead of a full fetch), guarded to `$user === null`
+  so authenticated loads never pay for it, `null` when nothing's
+  published (header then shows only "Home"). `public-layout.tsx`
+  rebuilt: nav renders from `publicNav`, active-link highlighting
+  compares the current pathname (query stripped) against each item's
+  exact route, and a "Live now" badge appears only when `liveCount > 0`
+  — no indicator for nothing to indicate, same rule as WP-08-03's
+  no-notification-bell decision — linking into the meet page's existing
+  full "Live now" section (WP-07-08) rather than duplicating a live-
+  match list inline in the header. New
+  `resources/js/components/public-page-hero.tsx` — a reusable branded
+  band built from the existing sidebar/primary tokens (WP-08-02, no new
+  colors), applied to `public/home.tsx` this WP as proof-of-use;
+  results/tally/scoreboard/meet pages weren't restyled with it (each
+  page's own later WP's job, WP-08-08 for tally). Deliberately not
+  built: a "Live now" dropdown with an inline match list (simplified to
+  a link, avoiding duplicated rendering), a hamburger/Sheet mobile nav
+  drawer (only up to 4 real nav items, so `PublicMeetNav`'s existing
+  horizontal-scroll pattern was enough), a footer motto banner (the
+  reference's "ONE MEET. ONE SPIRIT. ONE CHAMPION." is decorative copy
+  with no real counterpart, not invented, same discipline as WP-08-03's
+  fictional-tagline rejection), and a shell-wide announcement ticker
+  (the existing `PublicAnnouncements` section already covers this;
+  judged out of proportion to add a second, ticker-specific data path
+  for a decorative element). docs/public-portal.md extended with a
+  "Header nav & 'Live now'" section recording all of this. Pest 681/681
+  (3 new tests in PublicPortalTest: `publicNav` resolves to the most
+  recently started published meet with a correct live-match count —
+  proven against one ended and one active session so only the active
+  one counts; `publicNav` is null with no published meets;
+  authenticated requests never receive it), full gate green:
+  Pint+PHPStan+ESLint+Prettier+tsc+build. Chrome extension still
+  unavailable this session. The pmms.app Apache vhost routing issue
+  (WP-08-05/06) remains unresolved, not re-investigated this WP, same
+  not-a-blocker status. docs/reports/phase-08/WP-08-07-completion.md
+  written; `CHECKLIST.md` WP-08-07 checked off. Not committed/pushed.
+  Not begun: WP-08-08, per this WP's own rule — next on owner
+  instruction.
+- WP-08-08 Public Medal Tally and Rankings Page — done 2026-07-27.
+  `public-medal-tally.png` (already identified in WP-08-07's report as
+  the one real public-facing reference) is the same reference WP-08-05
+  already implemented against for the *internal* admin tally page, so
+  this WP ports that same treatment to the public page rather than
+  reinventing it — none of WP-08-05's additions (points, donut,
+  by-sport, recent-medals delta) are more privacy-sensitive than the
+  medal counts already shown publicly.
+  `PortalController::tally()` gained `totals`/`topByPoints`/`bySport`/
+  `recentMedals`/an `age_division` filter — all direct calls into the
+  exact same `MedalTallyService` methods WP-08-05 already added; no new
+  backend logic written. Extracted `tally/index.tsx`'s five widgets
+  (`MedalDistributionCard`, `TopByPointsCard`, `MedalsBySportCard`,
+  `MedalCells`/`MedalHeader` — `RankBadge` was already shared) into
+  `resources/js/components/`, the same "shared rendering, independent
+  props" pattern `live-score-display.tsx` established for live scoring
+  in WP-07-08, so the internal and public tally pages render from one
+  implementation instead of two that could drift; `PortalController`
+  still builds its own minimal public-safe prop array, only the widget
+  rendering is shared. `public/tally.tsx` rebuilt on these plus adopts
+  `PublicPageHero` (WP-08-07) for its title band — the hero component's
+  first real second use, as that WP's report anticipated. Found and
+  fixed a real pre-existing duplication bug while in the file: WP-08-05
+  had defined a local `pluralize()` in `tally/index.tsx` identical to
+  `pluralizeAreaLabel()`, which already existed in `@/lib/utils` and was
+  already used by `app-sidebar.tsx`/`registry/districts.tsx` — replaced
+  the local copy with the existing shared one; also moved
+  `recentDescription()` (the "+N in the last 24 hours" delta formatter)
+  to `@/lib/utils` alongside it, now needed by both tally pages. Pest
+  683/683 (2 new tests in PublicTallyTest: the page exposes totals/
+  points/bySport/recentMedals correctly, the age-division filter narrows
+  results the same way the internal page's does), full gate green:
+  Pint+PHPStan+ESLint+Prettier+tsc+build. Chrome extension still
+  unavailable this session. The pmms.app Apache vhost routing issue
+  (WP-08-05/06/07) remains unresolved, not re-investigated this WP, same
+  not-a-blocker status. docs/medal-tally.md and docs/public-portal.md
+  extended; docs/reports/phase-08/WP-08-08-completion.md written;
+  `CHECKLIST.md` WP-08-08 checked off. Not committed/pushed. Not begun:
+  WP-08-09, per this WP's own rule — next on owner instruction.
+- WP-08-09 Mobile Ranking and Medal Tally UI — done 2026-07-27. First WP
+  in this phase whose own reference-image list was actually correct
+  (`mobile-ranking-medal-tally.png`); its objective line was also
+  unusually specific ("compact medal cards, delegation ranking table,
+  sports strip, sport filter, safe-area spacing, and bottom
+  navigation") — treated as the literal scope checklist. The
+  reference's mobile shell moves site nav from the header into a fixed
+  bottom tab bar — a genuinely different pattern from WP-08-07's
+  horizontal header nav, not a restyle of it. New
+  `resources/js/components/public-bottom-nav.tsx`: `sm:hidden`, fixed
+  to the viewport bottom; the header nav is now `hidden sm:flex` — the
+  two are complementary, never both visible. Reuses the same real
+  `publicNav` destinations the header nav already resolves, plus a
+  "Live" tab shown only when there's an actual live match (same "no
+  indicator for nothing to indicate" rule as everywhere else this
+  phase); shorter labels ("Ranking" vs. "Medal Tally") since five tabs
+  share one row, same destination either way. Padded with
+  `env(safe-area-inset-bottom)`; `<main>` gets matching bottom padding;
+  footer credit line hidden below `sm:` since the bottom nav now serves
+  that role. `public/tally.tsx` (this WP's specific page) picked up the
+  rest: summary `StatCard`s go 4-across starting at `sm:` instead of
+  `lg:`; the ranking table collapses to the top 8 rows by default with
+  a "View full ranking (N total)" expand button — backend still returns
+  every row regardless (proven by a new test with 10 districts), so
+  expanding needs no extra request; the table's already-documented
+  reference-only "Points" column is hidden below `sm:` to free up width;
+  new `resources/js/components/sports-medal-strip.tsx` — a compact
+  horizontally-scrollable icon-forward preview of the busiest 4 sports
+  above the existing full `MedalsBySportCard` table (strip is a shorter
+  preview, not a duplicate), with a "More sports" tile as a plain
+  `#anchor` (not an Inertia `Link`, which would attempt a page
+  navigation) scrolling to the full table — per-sport icons are purely
+  decorative (Waves/Footprints/Swords/Dumbbell-fallback), no functional
+  meaning, since this project's icon set has no sport-specific icons.
+  Also added "As of {generatedAt}" to the public tally's info banner
+  (same convention the internal admin tally already used) — this page
+  never had a generated-at timestamp before. Deliberately not built: no
+  "Public View ▾" role-switcher dropdown (the existing Sign in/
+  Dashboard button already covers this, no real "view mode" concept
+  exists); no restructuring of the official ranking table to show
+  individual schools even though the reference's mockup pairs a school
+  name with a municipality subtext there — would reopen the "school
+  must never read as a competing standing" conflict WP-08-05 already
+  resolved; no new "Live Scores" index page (the bottom nav's Live tab
+  reuses the meet page's existing "Live now" section, same reasoning as
+  WP-08-07's header badge); no changes to the internal admin tally page
+  (out of this WP's public-mobile scope). Pest 684/684 (1 new test in
+  PublicTallyTest: 10 districts all arrive in props and `generatedAt` is
+  present, proving the mobile top-8 collapse is client-side display
+  only), full gate green: Pint+PHPStan+ESLint+Prettier+tsc+build. Chrome
+  extension still unavailable this session — flagged more prominently
+  than usual given how much genuinely visual/responsive surface this WP
+  touched (fixed bottom bar, safe-area padding, breakpoint changes). The
+  pmms.app Apache vhost routing issue (WP-08-05/06/07/08) remains
+  unresolved — checked again this session (MySQL/Apache both running,
+  unlike WP-08-04's session, but still serving Laragon's own default
+  page for the vhost), not re-investigated further, same not-a-blocker
+  reasoning (shared instance serving ~a dozen other local projects).
+  docs/public-portal.md extended with "Mobile bottom navigation" and
+  "Mobile medal tally" sections; docs/reports/phase-08/
+  WP-08-09-completion.md written; `CHECKLIST.md` WP-08-09 checked off.
+  Not committed/pushed. Not begun: WP-08-10, per this WP's own rule —
+  next on owner instruction.
+- WP-08-10 Basketball Live Scoreboard UI — done 2026-07-27. References
+  (`desktop-basketball-live-score.png` + mobile counterpart) were, for
+  once, actually correctly listed. They show a far richer scoreboard
+  than what's tracked: game clock, 24-second shot clock, timeouts,
+  quarter-by-quarter breakdown, a play-by-play with player names/jersey
+  numbers, full team shooting/rebounding/assist stats, and per-player
+  "top performers" with photos. Checked what's real first: basketball
+  `sport_state` is still just `{fouls_a, fouls_b}` (WP-07-04); no clock/
+  shot-clock/timeout state exists anywhere; and critically, no scoring
+  event anywhere in this app records which athlete did anything — a
+  point is only ever attributed to a side, never a player, so per-player
+  stats/top-performers are structurally impossible without a new
+  feature. Presented the owner three options before writing code:
+  restyle with real data only; restyle plus two cheap new trackers
+  (timeouts, an operator-set clock value); or a full build (real
+  per-player attribution, functioning clocks, derived box score).
+  **Owner chose: restyle with real data only.** No clock, shot clock,
+  timeouts, team stats, box score, or top performers were built. What
+  WAS built, all real: a genuine play-by-play feed — new
+  `ScoringSession::playByPlay()`/`describeEvent()`, included in
+  `toLivePayload()` so every board type gets it for free, not just
+  basketball, reconstructed by replaying every point/correction event in
+  order (same `max(0,...)` floor the controller itself uses) since a
+  single event's payload only records the one side it changed — capped
+  at 30 events, newest first, `LiveScoreDisplay` shows the first 8 with
+  a "View full play by play" expand (same collapse pattern WP-08-09
+  established for the mobile ranking table); fouls rendered as dots
+  (`FoulDots`) instead of a bare number — same real count, different
+  rendering; real match metadata (sport/category/venue/scheduled_date,
+  the latter two new — both controllers now eager-load `schedule.venue`)
+  in a breadcrumb-style header replacing the plain title on both
+  `scoring/show.tsx` and `public/scoreboard.tsx`; and a "disconnected"
+  indicator — both pages already polled every 5 seconds (WP-07-01) but
+  silently retried failures with no visible signal, closing a real
+  pre-existing gap against this phase's own "support ... disconnected
+  ... states" rule rather than new scope invented for this WP (after 2
+  consecutive poll failures, `LiveScoreDisplay` shows a "Connection
+  lost — retrying automatically" banner, cleared by any successful poll
+  or Echo push). Reverb updates, 5-second polling, and the provisional-
+  score badge were already real and unchanged (WP-07-01/02/08) —
+  re-verified via tests, not rebuilt. Pest 687/687 (3 new tests: the
+  play-by-play feed reconstructs correctly newest-first with correct
+  per-row running scores across a point/foul/point sequence; both the
+  internal and public scoreboard pages expose the new real metadata),
+  full gate green: Pint+PHPStan+ESLint+Prettier+tsc+build. Chrome
+  extension still unavailable this session. The pmms.app Apache vhost
+  routing issue (WP-08-05 onward) remains unresolved, not
+  re-investigated this WP, same not-a-blocker status. docs/live-
+  scoring.md extended with a "Basketball scoreboard visual alignment
+  (WP-08-10)" section recording the scoping decision and what was/
+  wasn't built; docs/reports/phase-08/WP-08-10-completion.md written;
+  `CHECKLIST.md` WP-08-10 checked off. Not committed/pushed. Not begun:
+  WP-08-11, per this WP's own rule — next on owner instruction. Note for
+  whoever picks up WP-08-11: WP-08-01 flagged that **Athletics has no
+  existing live-scoreboard foundation at all** — `ScoreboardType` has no
+  Athletics case, so that reference needs new backend modeling before
+  any UI work, not a restyle — likely needs the same kind of owner
+  scoping decision this WP and WP-08-06 both needed, probably even
+  earlier (whether to build Athletics live scoring at all, not just how
+  to style it).
+- WP-08-11 Athletics Live Event UI — done 2026-07-27. Confirmed and
+  extended WP-08-01's flag before writing code: `ScoreboardType` has no
+  Athletics case, and more fundamentally, no scoring event anywhere in
+  this app attributes a time/mark to an individual athlete mid-event —
+  the whole `ScoringSession`/`EventMatch` model is built around two-
+  sided team matches, which a multi-competitor race or field event
+  doesn't fit at all; a bigger structural gap than WP-08-10's basketball
+  one, not just a missing visual style. "Meet Records" (a wholly separate
+  historical-records concept) doesn't exist in any form either.
+  Presented the owner three options: a real shell using only what's real
+  (schedule + medal totals + validated results once they exist, honest
+  notice about no live tracking); new backend infrastructure for real
+  per-athlete athletics results; or deferring the WP entirely. **Owner
+  chose: real shell only.** New public route `/meets/{meet}/athletics` →
+  `PortalController::athletics()` → `public/athletics.tsx`: for a
+  selected day, every Athletics-sport `EventSchedule` slot with a real
+  Upcoming/Ongoing/Completed status (the exact same time-window-vs-
+  `now()` derivation `DashboardController::eventsOverview()` established
+  in WP-08-04, reused not reinvented); once validated, an event's real
+  top-3 placements with real marks (the same `EventResult`/
+  `ResultPlacement` data `/meets/{meet}/results` already shows, filtered
+  to Athletics, attached inline per event — an unvalidated/encoded
+  result correctly shows nothing, proven by test); a medal-totals summary
+  scoped to Athletics only via `MedalTallyService::standings($meetId,
+  $athleticsSportId)`, summed; an explicit banner stating live per-
+  athlete tracking isn't available yet. Linked from `/meets/{meet}` via
+  a new "Athletics schedule and results" button shown only when the meet
+  actually has Athletics events (`hasAthletics`, derived from the same
+  schedule query `meet()` already runs, no extra query). Deliberately
+  not built: live race clock/shot clock, per-athlete live position/time/
+  gap, live field-event standings, meet records register, weather,
+  live-updates ticker, any new `ScoringSession`/`ScoreboardType`
+  infrastructure, and no `PublicMeetNav` tab (not one of that shared
+  component's three fixed destinations, and not every meet has Athletics
+  events — reached via a conditional link instead, same discovery
+  pattern the live-scoreboard page already uses). Hit two real gotchas:
+  the project's documented "new Inertia page needs a build before its
+  first page-render test passes" issue (rebuilt, then all tests passed);
+  and accidentally regenerated Wayfinder routes without `--with-form`
+  while hand-adding the new route, briefly breaking every page using a
+  route's `.form()` helper — caught immediately by `tsc --noEmit`,
+  fixed by regenerating with `--with-form` (these generated directories
+  are gitignored, so no diff was ever at risk). Pest 693/693 (6 new
+  tests in PublicAthleticsTest covering guest access, sport filtering,
+  upcoming/completed status derivation, real placements/marks, medal
+  totals scoped to Athletics only, and unvalidated results never
+  appearing), full gate green: Pint+PHPStan+ESLint+Prettier+tsc+build.
+  Chrome extension still unavailable this session. The pmms.app Apache
+  vhost routing issue (WP-08-05 onward) remains unresolved, not
+  re-investigated this WP, same not-a-blocker status. docs/public-
+  portal.md extended; docs/reports/phase-08/WP-08-11-completion.md
+  written; `CHECKLIST.md` WP-08-11 checked off. Not committed/pushed.
+  Not begun: WP-08-12, per this WP's own rule — next on owner
+  instruction. Note for whoever picks this up: unlike Athletics,
+  Softball/Baseball already has a real `ScoreboardType`/`sport_state`
+  foundation (WP-07-06), so this WP should be closer in shape to
+  WP-08-10's basketball restyle than to this WP's shell-only outcome —
+  still worth re-checking what per-player data (if any) that reference
+  expects before assuming so.
+- WP-08-12 Softball and Baseball Live Scoreboard UI — done 2026-07-27.
+  Checked the reference first as WP-08-11 flagged to: same shape of gap
+  as basketball (WP-08-10) — a "Team Comparison" panel (hits/errors/
+  walks/strikeouts/stolen bases/batting average/slugging %), per-player
+  "Top Performers"/"Current Pitcher" panels, none tracked; the
+  reference's baserunner diamond isn't real either (no baserunner model
+  has ever existed, a deliberate WP-07-06 omission). Since the owner had
+  already answered this exact structural question twice (WP-08-10,
+  WP-08-11) with "real data only," and this WP is the same shape as
+  WP-08-10's specifically (real `sport_state` core exists; reference
+  wants extra per-player data that doesn't), applied that established
+  answer directly rather than asking a third time. Built: a proper line-
+  score table (`SoftballLineScore`) from the real `sport_state.innings`
+  breakdown — deliberately not a fixed 7/9-inning grid, since no
+  configured game length is tracked, so only innings that actually
+  happened get a column; balls/strikes/outs as colored dot rows via a
+  new generic `CountDots` (basketball's `FoulDots` generalized on its
+  second use) with real caps matching WP-07-06's own auto-reset rules
+  (3 balls/2 strikes/2 outs); real play-by-play descriptions for
+  softball's own event types (`Count`/`InningRun`, previously falling
+  through `describeEvent()`'s bare-label fallback) — deliberately no
+  inferred "walk"/"strikeout" labels, since `count()`'s payload has no
+  batter/side field to ground such an inference in. Found and fixed a
+  real bug while extending this: `playByPlay()`'s running-score
+  reconstruction (WP-08-10) only replayed point/correction deltas,
+  silently ignoring `InningRun` and `RoundScore` — a softball or boxing
+  play-by-play's displayed score would have stayed frozen at 0-0 all
+  game. Not a regression against anything shipped (`playByPlay()` itself
+  is uncommitted WP-08-10 work) but a real catch, found by a failing test
+  while writing this WP's own coverage; fixed for both sports, and gave
+  `RoundScore` a real description too while already in that method,
+  closing boxing's last generic-fallback gap as a side effect. Match-
+  header metadata and the disconnected indicator were already generic
+  (not basketball-gated) from WP-08-10, so softball/baseball got them
+  for free — reconfirmed via tests, not rebuilt. Pest 695/695 (2 new
+  tests: softball play-by-play descriptions with correct reconstructed
+  running scores; the same running-score fix proven for boxing's
+  RoundScore), full gate green: Pint+PHPStan+ESLint+Prettier+tsc+build.
+  Chrome extension still unavailable this session. The pmms.app Apache
+  vhost routing issue (WP-08-05 onward) remains unresolved, not
+  re-investigated this WP, same not-a-blocker status. docs/live-
+  scoring.md extended; docs/reports/phase-08/WP-08-12-completion.md
+  written; `CHECKLIST.md` WP-08-12 checked off. Not committed/pushed.
+  Not begun: WP-08-13, per this WP's own rule — next on owner
+  instruction. Note for whoever picks this up: WP-08-13's own title
+  ("Shared Tables, Cards, Charts, Scoreboards, and Filters") suggests a
+  consolidation/audit pass over components already built across WP-08-04
+  through WP-08-12 (`StatCard`, `MedalDistributionCard`,
+  `TopByPointsCard`, `MedalsBySportCard`, `RankBadge`, `CountDots`,
+  `SoftballLineScore`, etc.) rather than new scoreboard work — worth
+  confirming its actual scope against its reference images before
+  assuming, same discipline every WP this phase has needed.
+- WP-08-13 Shared Tables, Cards, Charts, Scoreboards, and Filters — done
+  2026-07-27. Confirmed the prediction from WP-08-12's note: no
+  reference image actually depicts "shared components" as a concept
+  (back to the same wrong generic image list every WP starts with, this
+  time with no sport-specific exception) — this WP is a consolidation/
+  audit pass, not new visual work against a mockup. Delegated a
+  read-only background audit across every page using a Select-based
+  filter, the shared Table components, and StatCard grids; verified each
+  finding by hand before acting, since several turned out correct-by-
+  context rather than bugs: "bare overflow-x-auto without a border" on 5
+  tables was correct — all five sit inside a Card or a `rounded-xl
+  border` section that already provides one, adding a second would have
+  been a double-border regression; "Rank/# column width varies" was
+  correct — the header text itself varies ("Rank" vs "#"), so different
+  widths are proportional, not inconsistent; single-filter pages missing
+  the `flex flex-wrap gap-2` wrapper render pixel-identical with or
+  without it, nothing to fix; two report pages' `gap-3 items-center`
+  filter row was correct on one of them (mixes a date Input with a
+  differently-sized text label, genuinely needs items-center) so left
+  both alone rather than partially fixing a 4px difference with no other
+  effect. Three real inconsistencies found and fixed:
+  `incidents/index.tsx`'s status filter was `w-44` against every
+  identical status-filter pattern elsewhere (`w-56`) — normalized; the
+  medal-summary StatCard grid (Total Gold/Silver/Bronze/Medals, same
+  four cards/same data) used `lg:grid-cols-4` on the internal admin
+  tally page (WP-08-05) but `sm:grid-cols-4` on the two public pages
+  built afterwards (WP-08-08/09) — the same widget looked different on a
+  tablet-width screen depending on which page you were on; normalized
+  `tally/index.tsx` to match the more deliberately-chosen public
+  breakpoint; four `EmptyState` call sites (`accreditation/index.tsx`
+  and `reports/delegation-roster.tsx`'s athlete/personnel panels)
+  omitted a description, rendering visibly shorter than every sibling
+  empty state on the same pages — added the exact wording `athletes/
+  index.tsx`/`personnel/index.tsx` already established rather than
+  inventing new phrasing. Reconfirmed (no change needed): dashboard's
+  two distinct StatCard grids and management/index.tsx's matching one
+  are a genuinely different widget category already consistent with
+  each other; the donut/segmented-bar/bar-list chart family already
+  shares one visual language despite being three different chart types,
+  no further extraction needed; scoring/show.tsx and public/
+  scoreboard.tsx both still render exclusively through the shared
+  LiveScoreDisplay with no local reimplementation. New docs/ui-ux/
+  shared-components.md catalogs every shared presentational component
+  built across Phase 8 (file, originating WP, consuming pages) plus
+  this audit's findings, so a future pass doesn't need to re-run it from
+  scratch. No new tests needed (pure className/prop consistency fixes,
+  no new behavior); existing coverage for every touched page
+  (AccreditationTest, IncidentTest, MedalTallyTest, ReportTest) re-run
+  and confirmed unaffected. Pest 695/695 unchanged, full gate green:
+  Pint+PHPStan+ESLint+Prettier+tsc+build. Chrome extension still
+  unavailable this session. The pmms.app Apache vhost routing issue
+  (WP-08-05 onward) remains unresolved, not re-investigated this WP,
+  same not-a-blocker status. docs/reports/phase-08/
+  WP-08-13-completion.md written; `CHECKLIST.md` WP-08-13 checked off.
+  Not committed/pushed. Not begun: WP-08-14, per this WP's own rule —
+  next on owner instruction. Note for whoever picks this up: likely
+  another cross-cutting pass rather than new-page work, similar in shape
+  to this WP — worth confirming scope against its own reference images
+  before assuming.
+- WP-08-14 Responsive Mobile Tablet and Large Display Alignment — done
+  2026-07-27. Confirmed the prediction: same generic wrong reference
+  list, no image depicting "responsive alignment" — a second
+  consolidation/audit pass, this time targeting responsive-breakpoint
+  behavior (missing scroll wrappers, non-collapsing grids, fixed widths,
+  touch targets, large-display space use, the 640-1023px tablet range)
+  rather than cross-page component consistency (WP-08-13's scope).
+  Delegated a second background audit; verified every finding by hand
+  before acting, same discipline as WP-08-13 — several were correct-by-
+  design: `division/edit.tsx`'s capped form width and `scoring/show.tsx`'s
+  capped control-panel width are standard, correct readability practice,
+  not wasted large-display space; dashboard's 3-column events-overview
+  legend has short enough labels to not need a responsive prefix; all 52
+  Table usages already have an overflow-x-auto ancestor. Two real issues
+  fixed: `accreditation/cards.tsx`'s printable ID cards (336px fixed
+  width, Tailwind v4 dynamic spacing) sat in a bare flex-wrap with no
+  scroll wrapper — would overflow the page on phones under ~370px since
+  flex-wrap wraps between items, not within one; added `max-w-full`
+  alongside the fixed width so it shrinks to fit below 336px while
+  staying fixed (better for its real print purpose) above that. Six
+  widget-pair/sidebar grids (ranking-table+donut and top-by-points+
+  medals-by-sport on both `tally/index.tsx` and `public/tally.tsx`;
+  dashboard's schedule+companion-widget and recent-activity splits)
+  jumped straight from single-column mobile to a split layout at `lg:`
+  (1024px), leaving the whole 640-1023px tablet range single-column for
+  content wide enough to benefit from splitting sooner — moved all six
+  to `md:` (768px), verified safe first since every table involved
+  already has its own overflow-x-auto and the sidebar widgets wrap
+  gracefully rather than overflow at a narrower width. Also confirmed
+  (not changed) WP-04-06's accepted 32px touch-target convention still
+  applies unchanged to the two public pages added since that review
+  (`public/scoreboard.tsx`, `public/athletics.tsx`) — extended
+  docs/public-portal.md's accepted-deviations note to say so explicitly.
+  No new tests needed (pure className/breakpoint changes, no new
+  behavior); full suite re-run and confirmed unaffected. Pest 695/695
+  unchanged, full gate green: Pint+PHPStan+ESLint+Prettier+tsc+build.
+  Chrome extension still unavailable this session — flagged more
+  pointedly than usual this time, since two consecutive WPs' worth of
+  static-analysis-only responsive/consistency fixes have now
+  accumulated with zero live viewport verification. The pmms.app Apache
+  vhost routing issue (WP-08-05 onward) remains unresolved, not
+  re-investigated this WP, same not-a-blocker status. docs/ui-ux/
+  shared-components.md extended with a "Responsive breakpoint audit
+  (WP-08-14)" section; docs/reports/phase-08/WP-08-14-completion.md
+  written; `CHECKLIST.md` WP-08-14 checked off. Not committed/pushed.
+  Not begun: WP-08-15, per this WP's own rule — next on owner
+  instruction. Note for whoever picks this up: WP-08-15 is "Visual
+  Regression and Accessibility Review" — its visual-regression component
+  may itself need an owner scoping conversation about how to proceed
+  given the Chrome extension has been unavailable for every WP in this
+  entire phase, rather than assuming a workaround exists.
+- WP-08-15 Visual Regression and Accessibility Review — done 2026-07-27.
+  Raised the flagged question before writing anything: this project has
+  no screenshot/visual-diff tooling of any kind, and the Chrome
+  extension has been unavailable for every WP this phase, so there was
+  no way to capture real screenshots to diff manually or automatically.
+  Presented the owner two options: accessibility-only this session with
+  visual regression documented as deferred, or installing a screenshot-
+  testing tool and establishing a first baseline now (a genuine
+  first-of-its-kind new dependency, comparable in weight to Phase 7's
+  Reverb decision). **Owner chose: accessibility-only, visual regression
+  deferred.** Accessibility audit deliberately scoped to everything new
+  or significantly modified since the project's two prior dedicated
+  accessibility passes (WP-04-06 for the original public portal,
+  WP-07-03 for the original live-scoring UI) — i.e. every page/component
+  built across WP-08-03 through WP-08-14. Delegated a background audit
+  across 7 categories (icon-only elements, decorative-icon aria-hidden,
+  live regions, heading order, color-only information, focus management,
+  form labels); verified every finding by hand, same discipline as
+  WP-08-13/14's audits — most categories came back already correct.
+  Real gaps found and fixed: six decorative icons sitting directly next
+  to their own visible text label, missing `aria-hidden="true"`
+  (Download/Printer/Info in tally/index.tsx, Info in public/tally.tsx
+  and public/athletics.tsx, Plus in eligibility/index.tsx) — a screen
+  reader would otherwise announce the icon's implicit name redundantly
+  alongside the text already doing that job. One finding examined and
+  deliberately left unchanged: the play-by-play list (WP-08-10/12) is
+  not an aria-live region — re-announcing every new play on every poll/
+  Echo push would be disruptive noise for a screen-reader user during an
+  active game, not a helpful update; the running score's existing
+  aria-live="polite" remains the one audible live signal, confirmed as a
+  deliberate, correct design choice rather than an oversight. Everything
+  else checked (icon-only buttons, other decorative icons, heading
+  order, color-only info, focus management on the new bottom nav/expand
+  buttons, form labels on new search/filter controls) verified already
+  sound, no changes needed. New docs/ui-ux/accessibility-review.md
+  records the scope decision and the full audit findings (including
+  everything verified sound) so a future pass doesn't need to re-check
+  it. No new tests needed (pure aria-hidden attribute additions, no new
+  behavior); full suite re-run and confirmed unaffected. Pest 695/695
+  unchanged, full gate green: Pint+PHPStan+ESLint+Prettier+tsc+build.
+  Chrome extension still unavailable this session — now three
+  consecutive WPs (08-13/14/15) recommending a real device/browser QA
+  pass before Phase 8 closes out. The pmms.app Apache vhost routing
+  issue (WP-08-05 onward) remains unresolved, not re-investigated this
+  WP, same not-a-blocker status. docs/reports/phase-08/
+  WP-08-15-completion.md written; `CHECKLIST.md` WP-08-15 checked off.
+  Not committed/pushed. Not begun: WP-08-16, per this WP's own rule —
+  next on owner instruction. Note for whoever picks this up: WP-08-16
+  ("Phase 8 Final Visual Acceptance") may itself need to open with the
+  same question this WP opened with — how to reach "acceptance" honestly
+  without ever having seen the app rendered this entire phase.
+- WP-08-16 Phase 8 Final Visual Acceptance — done 2026-07-27. **This
+  closes Phase 8 (all 16 WPs).** Not new UI work — the phase-closing
+  compliance review, following the same template this project already
+  used for Phase 5 and Phase 7's own closing reviews. New
+  docs/phases/phase-08-ui-ux-visual-alignment/phase-8-compliance-review.md:
+  architecture conformance table, result-integrity boundary re-
+  verification (grepped every Phase 8-touched file with any EventResult/
+  ResultPlacement relationship — zero write references, confirmed read-
+  only throughout), authorization re-verification (zero Policy/Gate
+  files touched all phase, confirmed via git diff --stat), a final full
+  quality-gate run, and — specific to this phase — a table re-affirming
+  all seven reference-vs-real-app scoping conflicts raised to the owner
+  across the phase (WP-08-05 points-ranking, WP-08-06 automated-
+  eligibility-rules, WP-08-09 school-ranking, WP-08-10 basketball clock/
+  box-score, WP-08-11 athletics live-race data, WP-08-12 softball
+  equivalent, WP-08-15 visual-regression tooling) are still implemented
+  exactly as decided, not silently reverted or drifted. Verified before
+  writing, not assumed: composer.json/lock and package.json/lock have
+  zero diff across all 16 WPs (confirmed zero new dependencies added
+  this phase); composer audit and npm audit both clean. Final gate:
+  Pint PASS, PHPStan L7 PASS (0 errors), Pest PASS 695/695 (3,640
+  assertions — 649 at Phase 7's close, +46 across this phase),
+  ESLint/Prettier/tsc PASS, npm run build PASS. Re-checked both standing
+  environment gaps one last time: Chrome extension still disconnected
+  (every one of 16 WPs this phase had zero live browser verification —
+  named as the one real gap in the review, honestly, not glossed over);
+  pmms.app returns HTTP 200 but is still serving Laragon's own default
+  placeholder page, not the app itself (vhost config is correct, the
+  running Apache process just needs a restart — declined to do
+  unilaterally, same reasoning as every WP since WP-08-05, a shared
+  instance serving ~a dozen other local projects). Recommendation:
+  Phase 8 is complete and internally consistent — real data used
+  throughout, Phase 3's result-integrity core and every authorization
+  rule completely untouched, zero new dependencies, green gate — but a
+  real device/browser QA pass (or restored Chrome extension
+  connectivity) is the recommended next step before treating the
+  phase's visual work as fully signed off, ahead of any commit decision.
+  docs/reports/phase-08/WP-08-16-completion.md written; `CHECKLIST.md`
+  WP-08-16 checked off (**all 16 Phase 8 WPs now complete**). Not
+  committed/pushed. Phase 9 — Post-Deployment Support is already
+  scaffolded at docs/phases/phase-09-post-deployment-support/ and ready
+  to pick up on owner instruction, alongside the owner's commit decision
+  for the Phase 8 tree.

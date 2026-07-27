@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ScoreboardType;
+use App\Enums\ScoreEventType;
 use App\Enums\ScoringSessionStatus;
 use Database\Factories\ScoringSessionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -132,6 +133,126 @@ class ScoringSession extends Model
             'status_note' => $this->status_note,
             'board_type' => $this->boardType()->value,
             'sport_state' => $this->sport_state,
+            'playByPlay' => $this->playByPlay(),
         ];
+    }
+
+    /**
+     * A real, read-only play-by-play feed reconstructed from the
+     * append-only `score_events` log (WP-08-10) — every board type gets
+     * this for free since it lives on the shared model, not just
+     * basketball. Both running scores are reconstructed by replaying
+     * every point/correction delta in order (mirroring
+     * `ScoringSessionController::score()`'s own `max(0, ...)` floor)
+     * since a single event's payload only records the one side it
+     * changed. Newest first, capped — this is a feed, not a paginated
+     * archive.
+     *
+     * @return array<int, array{id: int, description: string, score_a: int, score_b: int, created_at: string|null}>
+     */
+    public function playByPlay(int $limit = 30): array
+    {
+        $runningA = 0;
+        $runningB = 0;
+        $rows = [];
+
+        foreach ($this->events()->oldest('id')->get() as $event) {
+            $payload = $event->payload ?? [];
+
+            if (in_array($event->type, [ScoreEventType::Point, ScoreEventType::Correction], true)) {
+                $delta = (int) ($payload['delta'] ?? 0);
+
+                if (($payload['side'] ?? null) === 'a') {
+                    $runningA = max(0, $runningA + $delta);
+                } elseif (($payload['side'] ?? null) === 'b') {
+                    $runningB = max(0, $runningB + $delta);
+                }
+            } elseif ($event->type === ScoreEventType::InningRun) {
+                $runs = (int) ($payload['runs'] ?? 0);
+
+                if (($payload['side'] ?? null) === 'a') {
+                    $runningA += $runs;
+                } elseif (($payload['side'] ?? null) === 'b') {
+                    $runningB += $runs;
+                }
+            } elseif ($event->type === ScoreEventType::RoundScore) {
+                $runningA += (int) ($payload['score_a'] ?? 0);
+                $runningB += (int) ($payload['score_b'] ?? 0);
+            }
+
+            $rows[] = [
+                'id' => $event->id,
+                'description' => $this->describeEvent($event),
+                'score_a' => $runningA,
+                'score_b' => $runningB,
+                'created_at' => $event->created_at?->format('g:i:s A'),
+            ];
+        }
+
+        return array_slice(array_reverse($rows), 0, $limit);
+    }
+
+    private function describeEvent(ScoreEvent $event): string
+    {
+        $payload = $event->payload ?? [];
+
+        $sideLabel = function (mixed $side): ?string {
+            return match ($side) {
+                'a' => $this->side_a_label,
+                'b' => $this->side_b_label,
+                default => null,
+            };
+        };
+
+        return match ($event->type) {
+            ScoreEventType::Point => sprintf(
+                '%s%d — %s',
+                ((int) ($payload['delta'] ?? 0)) >= 0 ? '+' : '',
+                (int) ($payload['delta'] ?? 0),
+                $sideLabel($payload['side'] ?? null) ?? 'Unknown',
+            ),
+            ScoreEventType::Correction => sprintf(
+                'Correction: %s%d — %s%s',
+                ((int) ($payload['delta'] ?? 0)) >= 0 ? '+' : '',
+                (int) ($payload['delta'] ?? 0),
+                $sideLabel($payload['side'] ?? null) ?? 'Unknown',
+                isset($payload['reason']) && $payload['reason'] !== ''
+                    ? " ({$payload['reason']})"
+                    : '',
+            ),
+            ScoreEventType::Foul => ($payload['action'] ?? null) === 'reset'
+                ? 'Team fouls reset'
+                : sprintf('Foul — %s', $sideLabel($payload['side'] ?? null) ?? 'Unknown'),
+            ScoreEventType::PeriodChange => trim(implode(' — ', array_filter([
+                isset($payload['period_label']) ? "Period: {$payload['period_label']}" : null,
+                isset($payload['status_note']) ? (string) $payload['status_note'] : null,
+            ]))) ?: 'Period updated',
+            ScoreEventType::Paused => 'Game paused',
+            ScoreEventType::Resumed => 'Game resumed',
+            ScoreEventType::Ended => 'Game ended',
+            ScoreEventType::RoundScore => sprintf(
+                'Round %s: %s %d – %d %s',
+                (string) ($payload['round'] ?? '?'),
+                $this->side_a_label,
+                (int) ($payload['score_a'] ?? 0),
+                (int) ($payload['score_b'] ?? 0),
+                $this->side_b_label,
+            ),
+            ScoreEventType::InningRun => sprintf(
+                '+%d run%s — %s (Inning %s)',
+                (int) ($payload['runs'] ?? 0),
+                ((int) ($payload['runs'] ?? 0)) === 1 ? '' : 's',
+                $sideLabel($payload['side'] ?? null) ?? 'Unknown',
+                (string) ($payload['inning'] ?? '?'),
+            ),
+            ScoreEventType::Count => match ($payload['action'] ?? null) {
+                'out' => sprintf('Out (%d out%s this half)', (int) ($payload['outs'] ?? 0), ((int) ($payload['outs'] ?? 0)) === 1 ? '' : 's'),
+                'ball' => sprintf('Ball (%d-%d)', (int) ($payload['balls'] ?? 0), (int) ($payload['strikes'] ?? 0)),
+                'strike' => sprintf('Strike (%d-%d)', (int) ($payload['balls'] ?? 0), (int) ($payload['strikes'] ?? 0)),
+                'reset_count' => 'Count reset',
+                default => 'Count updated',
+            },
+            default => $event->type->label(),
+        };
     }
 }

@@ -134,7 +134,11 @@ controls, not two separate pages):
 - Linked from `matches/index.tsx`'s new always-visible "Live" column
   (not gated behind `canManage`, unlike the existing Actions column — a
   Delegation Officer should be able to watch their own delegation's match
-  even though they can't operate scoring).
+  even though they can't operate scoring). Also linked from the Schedule
+  page (Phase 8 addition) — see `docs/scheduling.md` "Live scoreboard
+  link" — for the same reason: someone looking at what's scheduled today
+  shouldn't have to detour through Matches to find a game already in
+  progress.
 
 ## Sport-specific scoreboards (WP-07-04)
 
@@ -218,6 +222,137 @@ separate request.
 Boxing and Softball/Baseball both reused Basketball's JSON column and
 per-board `store()` initialization without any schema change — the
 extension point WP-07-04 was built to prove out.
+
+## Basketball scoreboard visual alignment (WP-08-10)
+
+`docs/ui-ux/references/desktop-basketball-live-score.png` and its mobile
+counterpart show a much richer scoreboard than this app tracks: a running
+game clock, a 24-second shot clock, timeouts, a quarter-by-quarter score
+breakdown, a play-by-play feed with player names/jersey numbers, full team
+shooting/rebounding/assist stats, and per-player "top performers" with
+photos. None of that exists here — `sport_state` for basketball is still
+just `{fouls_a, fouls_b}` (WP-07-04), and **no scoring event anywhere in
+this app records which athlete did anything** — a point is only ever
+attributed to a side (`a`/`b`), never a player.
+
+Presented the owner three options before writing code: restyle with real
+data only; restyle plus a couple of cheap new trackers (timeouts, an
+operator-set clock value); or a full build (real per-player attribution,
+functioning clocks, derived box score). **Owner chose: restyle with real
+data only.** No clock, shot clock, timeouts, team shooting/rebounding
+stats, or per-player top performers were built — all omitted rather than
+faked, same discipline as WP-08-06's eligibility-checker decision and
+WP-08-09's ranking-table decision.
+
+What **was** built, all real:
+
+- **A genuine play-by-play feed**, reconstructed from the existing
+  append-only `score_events` log — `ScoringSession::playByPlay()` (new),
+  included in `toLivePayload()` so every board type gets it for free, not
+  just basketball. Replays every `point`/`correction` event in order,
+  applying the same `max(0, ...)` floor `ScoringSessionController::
+  score()` itself uses, to reconstruct **both** sides' running scores at
+  each point in time — a single event's payload only ever records the one
+  side it changed, so this is a real reconstruction, not a stored value.
+  `describeEvent()` formats a human-readable line per event type (point,
+  correction with its reason, foul add/reset, period change, pause/
+  resume/end) — no player names, since none are tracked. Capped at the 30
+  most recent events (a feed, not a paginated archive), newest first;
+  `LiveScoreDisplay` shows the first 8 with a "View full play by play"
+  expand button, the same collapse pattern WP-08-09 established for the
+  mobile ranking table.
+- **Fouls rendered as dots** instead of a bare number (`FoulDots`,
+  `resources/js/components/live-score-display.tsx`) — still the same real
+  `fouls_a`/`fouls_b` count, just a different rendering, matching the
+  reference's visual language.
+- **Real match metadata** in the page header (both `scoring/show.tsx` and
+  `public/scoreboard.tsx`): sport name, gender+age-division category, and
+  — new — venue and scheduled date, sourced from the match's own
+  `EventSchedule`/`Venue` (`ScoringSessionController::board()` and
+  `PortalController::scoreboard()` both now eager-load `schedule.venue`).
+  All real, existing fields; no new columns.
+- **A "disconnected" indicator** — both live-scoring pages already polled
+  every 5 seconds (WP-07-01) but silently retried failures with no visible
+  signal; this WP adds one. After 2 consecutive poll failures,
+  `LiveScoreDisplay` shows a "Connection lost — retrying automatically"
+  banner; any successful poll or Echo push clears it immediately. This was
+  a real pre-existing gap against this phase's own stated rule ("support
+  ... disconnected ... states"), not new scope invented for this WP —
+  every earlier live-scoring WP had the polling/Reverb mechanism itself,
+  just no user-visible signal when it was actually failing.
+
+Reverb updates, the 5-second polling baseline, and the provisional-score
+badge on the public page were all already real and unchanged by this WP
+(WP-07-01/02/08) — re-verified working via the existing test suite, not
+rebuilt.
+
+## Softball/baseball scoreboard visual alignment (WP-08-12)
+
+`docs/ui-ux/references/desktop-softball-live-score.png` shows the same
+shape of gap WP-08-10 found for basketball, at a similar scale: a "Team
+Comparison" panel (hits, errors, walks, strikeouts, stolen bases, batting
+average, slugging %), per-player "Top Performers" with photos and batting
+lines, and a "Current Pitcher" panel with per-player pitching stats — none
+of which exist. Worse than basketball's gap in one respect: the
+reference's diamond graphic showing runners on base isn't real either —
+`sport_state` for softball/baseball has never tracked a baserunner model
+at all (documented as a deliberate omission back in WP-07-06: "a walk —
+no baserunner model, so no run auto-added").
+
+Given the owner had already answered this exact structural
+question twice for WP-08-10 (basketball) and WP-08-11 (athletics) with
+"restyle/build with real data only," and this WP is the same shape as
+WP-08-10's (a real `sport_state` core already exists; the reference wants
+additional per-player/team-comparison data that doesn't), this WP applied
+that same established answer directly rather than asking a third time.
+What was built, all real:
+
+- **A proper line-score table** (`SoftballLineScore`,
+  `live-score-display.tsx`) — innings as columns, R as the final column,
+  from the real `sport_state.innings` breakdown. Deliberately **not** a
+  fixed 7- or 9-inning grid the way the reference shows: this app doesn't
+  track a configured game length, so only innings that have actually
+  happened get a column, however many that is — inventing empty "-"
+  placeholder columns for a fixed length would be a real, if small,
+  fabrication.
+- **Balls/strikes/outs as colored dot rows** instead of "Count 1-2 · 1
+  Out" text, reusing a new generic `CountDots` (basketball's `FoulDots`
+  generalized to take `max`/`colorClass`, since this is its second real
+  use). Real caps, not decorative round numbers: 3 balls (the 4th is a
+  walk, auto-resets), 2 strikes (the 3rd is itself an out, auto-resets),
+  2 outs (the 3rd flips the half-inning, auto-resets) — the same
+  business rules WP-07-06 already enforces server-side, just reflected
+  here as the dot rows' real maximum.
+- **Real play-by-play descriptions for softball's own event types** —
+  `ScoringSession::describeEvent()` (WP-08-10) previously only handled
+  the generic/basketball event types; `Count` and `InningRun` fell
+  through to a bare type-label fallback ("Count", "Inning run") with no
+  detail. Now describes them from their real payload: `InningRun` as
+  "+N run(s) — {side} (Inning M)"; `Count` per action as "Ball (B-S)" /
+  "Strike (B-S)" / "Out (N outs this half)" / "Count reset". Deliberately
+  does **not** try to infer derived events like "walk" or "strikeout" —
+  `count()`'s payload has no `side`/batter field at all, and inferring a
+  walk from "the count reset to 0 after a ball action" would be a fragile
+  guess rather than a fact actually recorded.
+- **Fixed a real bug found while extending this**: `playByPlay()`'s
+  running-score reconstruction (added in WP-08-10) only replayed
+  `point`/`correction` deltas — it silently ignored `InningRun` (softball
+  runs) and `RoundScore` (boxing rounds) entirely, so a softball or boxing
+  play-by-play's displayed running score would have been stuck at 0-0
+  throughout. Not a regression against anything shipped (`playByPlay()`
+  itself is new, uncommitted WP-08-10 work), but worth recording since it
+  would have shipped broken for two sports if not caught here. Fixed by
+  also applying `InningRun`'s single-side runs and `RoundScore`'s
+  simultaneous both-side deltas during replay; `RoundScore` also gained a
+  real description ("Round N: {side A} X – Y {side B}") while already in
+  that method, closing the last remaining generic-fallback gap for boxing
+  too.
+
+Match/scoreboard-page header metadata (sport/category/venue/scheduled
+date) and the disconnected-polling indicator were both already built
+generically in WP-08-10 (not gated to basketball), so softball/baseball
+sessions already had them for free — reconfirmed via the existing test
+suite, not rebuilt.
 
 ## Manual board-type override (WP-07-07)
 

@@ -5,9 +5,11 @@ import type { User } from '@/types';
 export function UserInfo({
     user,
     showEmail = false,
+    showRole = false,
 }: {
     user: User;
     showEmail?: boolean;
+    showRole?: boolean;
 }) {
     const getInitials = useInitials();
 
@@ -15,7 +17,7 @@ export function UserInfo({
         <>
             <Avatar className="h-8 w-8 overflow-hidden rounded-full">
                 <AvatarImage src={user.avatar} alt={user.name} />
-                <AvatarFallback className="rounded-lg bg-neutral-200 text-black dark:bg-neutral-700 dark:text-white">
+                <AvatarFallback className="rounded-lg bg-muted text-muted-foreground">
                     {getInitials(user.name)}
                 </AvatarFallback>
             </Avatar>
@@ -24,6 +26,11 @@ export function UserInfo({
                 {showEmail && (
                     <span className="truncate text-xs text-muted-foreground">
                         {user.email}
+                    </span>
+                )}
+                {showRole && (
+                    <span className="truncate text-xs text-muted-foreground">
+                        {user.role_label}
                     </span>
                 )}
             </div>

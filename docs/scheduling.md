@@ -45,3 +45,21 @@ event name, paginated. Managers get a slot dialog with dependent meet → event 
 inputs, and note. Sidebar entry "Schedule" after Venues, visible to all roles.
 
 Printable schedule sheets arrive in WP-03-08.
+
+## Live scoreboard link (Phase 8 addition)
+
+A slot whose event has a match (`matches.event_schedule_id`) gets a "Live" column
+entry — a link straight into that match's scoreboard (`/matches/{id}/scoreboard`),
+with a red "Live" badge when the match currently has an in-progress or paused
+session (mirrors `matches/index.tsx`'s own "Live" column). This lets a manager or
+delegation officer jump from "what's on today" straight to "watch the game
+happening right now" without a detour through the Matches page.
+
+The link data is scoped exactly like `MatchController::index()`, not just readable
+by "all roles" the way the rest of the schedule is: **Viewers never receive
+`match_id`/`is_live` at all** (live scoring is forbidden to them regardless, so a
+link that would just 403 is never shown), and a **Delegation Officer only sees it
+for matches involving their own delegation's entries** — a match belonging to
+another delegation shows no link, same as it would on their own Matches list.
+`ScheduleController::matchesForSlots()` computes this once per page load, keyed by
+`event_schedule_id`, rather than a per-row query.

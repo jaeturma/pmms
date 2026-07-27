@@ -1,12 +1,34 @@
 <?php
 
+use App\Models\Athlete;
 use App\Models\AuditLog;
+use App\Models\Delegation;
+use App\Models\Entry;
 use App\Models\Event;
+use App\Models\EventMatch;
 use App\Models\EventSchedule;
 use App\Models\Meet;
+use App\Models\ScoringSession;
 use App\Models\User;
 use App\Models\Venue;
 use Inertia\Testing\AssertableInertia;
+
+/**
+ * A confirmed entry for the given match's event, in its own approved
+ * delegation — mirrors MatchTest.php's own helper, kept local since Pest
+ * test files don't share functions across files.
+ */
+function scheduleTestConfirmedEntryFor(EventMatch $match): Entry
+{
+    $delegation = Delegation::factory()->approved()->create(['meet_id' => $match->meet_id]);
+    $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);
+
+    return Entry::factory()->confirmed()->create([
+        'athlete_id' => $athlete->id,
+        'delegation_id' => $delegation->id,
+        'event_id' => $match->event_id,
+    ]);
+}
 
 /**
  * @return array{meet_id: int, event_id: int, venue_id: int, scheduled_date: string, starts_at: string, ends_at: string, note: null}
@@ -246,4 +268,91 @@ test('venues with schedule slots cannot be deleted', function () {
         ->assertRedirect();
 
     $this->assertDatabaseHas('venues', ['id' => $slot->venue_id]);
+});
+
+test('a slot with no match exposes no live-scoreboard link', function () {
+    $slot = EventSchedule::factory()->create();
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->get('/schedule')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('schedules.data.0.match_id', null)
+            ->where('schedules.data.0.is_live', false));
+});
+
+test('a slot with an in-progress live session is flagged live for managers', function () {
+    $slot = EventSchedule::factory()->create();
+    $match = EventMatch::factory()->create([
+        'meet_id' => $slot->meet_id,
+        'event_id' => $slot->event_id,
+        'event_schedule_id' => $slot->id,
+    ]);
+    ScoringSession::factory()->create(['match_id' => $match->id]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get('/schedule')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('schedules.data.0.match_id', $match->id)
+            ->where('schedules.data.0.is_live', true));
+});
+
+test('a slot with only an ended session is not flagged live', function () {
+    $slot = EventSchedule::factory()->create();
+    $match = EventMatch::factory()->create([
+        'meet_id' => $slot->meet_id,
+        'event_id' => $slot->event_id,
+        'event_schedule_id' => $slot->id,
+    ]);
+    ScoringSession::factory()->ended()->create(['match_id' => $match->id]);
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->get('/schedule')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('schedules.data.0.match_id', $match->id)
+            ->where('schedules.data.0.is_live', false));
+});
+
+test('viewers never get a live-scoreboard link, even for a live match', function () {
+    $slot = EventSchedule::factory()->create();
+    $match = EventMatch::factory()->create([
+        'meet_id' => $slot->meet_id,
+        'event_id' => $slot->event_id,
+        'event_schedule_id' => $slot->id,
+    ]);
+    ScoringSession::factory()->create(['match_id' => $match->id]);
+
+    $this->actingAs(User::factory()->create())
+        ->get('/schedule')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('schedules.data.0.match_id', null)
+            ->where('schedules.data.0.is_live', false));
+});
+
+test('delegation officers only get a live-scoreboard link for their own delegation\'s match', function () {
+    $slot = EventSchedule::factory()->create();
+    $match = EventMatch::factory()->create([
+        'meet_id' => $slot->meet_id,
+        'event_id' => $slot->event_id,
+        'event_schedule_id' => $slot->id,
+    ]);
+    $entry = scheduleTestConfirmedEntryFor($match);
+    $match->entries()->attach($entry);
+    ScoringSession::factory()->create(['match_id' => $match->id]);
+
+    $stranger = User::factory()->delegationOfficer()->create();
+
+    $this->actingAs($stranger)
+        ->get('/schedule')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('schedules.data.0.match_id', null)
+            ->where('schedules.data.0.is_live', false));
+
+    $officer = User::factory()->delegationOfficer()->create();
+    $entry->delegation->officers()->attach($officer);
+
+    $this->actingAs($officer)
+        ->get('/schedule')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('schedules.data.0.match_id', $match->id)
+            ->where('schedules.data.0.is_live', true));
 });

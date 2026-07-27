@@ -1,0 +1,16 @@
+- [x] WP-08-01 — Screenshot and Current UI Gap Assessment
+- [x] WP-08-02 — PMMS Design Tokens and Visual Standards
+- [x] WP-08-03 — Admin Application Shell and Navigation
+- [x] WP-08-04 — Admin Dashboard Visual Implementation
+- [x] WP-08-05 — Admin Medal Tally and Rankings UI
+- [x] WP-08-06 — Athlete Eligibility Checker UI
+- [x] WP-08-07 — Public Portal Shell and Branding
+- [x] WP-08-08 — Public Medal Tally and Rankings Page
+- [x] WP-08-09 — Mobile Ranking and Medal Tally UI
+- [x] WP-08-10 — Basketball Live Scoreboard UI
+- [x] WP-08-11 — Athletics Live Event UI
+- [x] WP-08-12 — Softball and Baseball Live Scoreboard UI
+- [x] WP-08-13 — Shared Tables Cards Charts Scoreboards and Filters
+- [x] WP-08-14 — Responsive Mobile Tablet and Large Display Alignment
+- [x] WP-08-15 — Visual Regression and Accessibility Review
+- [x] WP-08-16 — Phase 8 Final Visual Acceptance

@@ -7,6 +7,7 @@ use App\Enums\ProtestStatus;
 use App\Enums\ResultStatus;
 use App\Enums\UserRole;
 use App\Models\Accreditation;
+use App\Models\Announcement;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
@@ -94,6 +95,21 @@ class DashboardController extends Controller
                     'created_at_human' => $log->created_at?->diffForHumans(),
                 ])
                 ->values(),
+            'announcements' => Announcement::query()
+                ->published()
+                ->with('meet:id,name')
+                ->orderByDesc('published_at')
+                ->orderByDesc('id')
+                ->limit(3)
+                ->get()
+                ->map(fn (Announcement $announcement): array => [
+                    'id' => $announcement->id,
+                    'title' => $announcement->title,
+                    'body' => $announcement->body,
+                    'meet' => $announcement->meet?->name,
+                    'published_at' => $announcement->published_at?->format('M j, Y g:i A'),
+                ])
+                ->values(),
         ]);
     }
 
@@ -144,6 +160,7 @@ class DashboardController extends Controller
                 ->values()
                 ->all(),
             'tallyTop' => array_slice($tally->standings($meet->id)['districts'], 0, 5),
+            'eventsOverview' => $this->eventsOverview($meet),
             'queues' => $canManage ? [
                 'pending_results' => EventResult::query()
                     ->where('meet_id', $meet->id)
@@ -183,6 +200,51 @@ class DashboardController extends Controller
                     ->values()
                     ->all()
                 : null,
+        ];
+    }
+
+    /**
+     * A 3-way event-status breakdown for the "events overview" dashboard
+     * widget (WP-08-04) — deliberately 3 categories, not the 4
+     * ("Cancelled" included) the visual reference shows: this catalog has
+     * no cancelled/void concept for an `Event` or `EventSchedule` at all,
+     * so a "Cancelled" count would have to be invented rather than
+     * computed. Completed = has at least one validated result; Ongoing =
+     * has a today's `EventSchedule` slot whose time window contains right
+     * now (and isn't already counted as completed); Upcoming = everything
+     * else attached to the meet. A deliberate approximation, not a
+     * tracked event-lifecycle status — documented here so nobody mistakes
+     * it for one later.
+     *
+     * @return array{completed: int, ongoing: int, upcoming: int, total: int}
+     */
+    private function eventsOverview(Meet $meet): array
+    {
+        $total = $meet->events()->count();
+
+        $completedEventIds = EventResult::query()
+            ->where('meet_id', $meet->id)
+            ->where('status', ResultStatus::Validated->value)
+            ->pluck('event_id')
+            ->unique();
+
+        $ongoing = EventSchedule::query()
+            ->where('meet_id', $meet->id)
+            ->whereDate('scheduled_date', today())
+            ->where('starts_at', '<=', now()->format('H:i:s'))
+            ->where('ends_at', '>=', now()->format('H:i:s'))
+            ->whereNotIn('event_id', $completedEventIds)
+            ->distinct('event_id')
+            ->count('event_id');
+
+        $completed = $completedEventIds->count();
+        $upcoming = max(0, $total - $completed - $ongoing);
+
+        return [
+            'completed' => $completed,
+            'ongoing' => $ongoing,
+            'upcoming' => $upcoming,
+            'total' => $total,
         ];
     }
 }

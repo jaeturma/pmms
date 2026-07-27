@@ -2,15 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AgeDivision;
 use App\Enums\ResultStatus;
 use App\Enums\ScoringSessionStatus;
 use App\Models\Announcement;
+use App\Models\Delegation;
+use App\Models\District;
 use App\Models\EventMatch;
 use App\Models\EventResult;
 use App\Models\EventSchedule;
 use App\Models\Meet;
 use App\Models\ResultPlacement;
 use App\Models\ScoringSession;
+use App\Models\Sport;
 use App\Services\MedalTallyService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,26 +30,19 @@ use Inertia\Response;
 class PortalController extends Controller
 {
     /**
-     * Portal home: the published meets.
+     * Portal home: the single meet the system admin has set active, with
+     * the municipalities competing in it. Only one meet is ever active
+     * (Meet::scopeActive(), enforced by MeetController::activate()) —
+     * this is deliberately not a list of meets.
      */
     public function home(): Response
     {
+        $meet = Meet::query()->published()->active()->first();
+
         return Inertia::render('public/home', [
-            'meets' => Meet::query()
-                ->published()
-                ->orderByDesc('starts_at')
-                ->get()
-                ->map(fn (Meet $meet): array => [
-                    'id' => $meet->id,
-                    'name' => $meet->name,
-                    'school_year' => $meet->school_year,
-                    'starts_at' => $meet->starts_at->format('M j, Y'),
-                    'ends_at' => $meet->ends_at->format('M j, Y'),
-                    'venue' => $meet->venue,
-                    'status_label' => $meet->status->label(),
-                ])
-                ->values(),
-            'announcements' => $this->publishedAnnouncements(),
+            'meet' => $meet === null ? null : $this->meetSummary($meet),
+            'municipalities' => $meet === null ? [] : $this->competingMunicipalities($meet),
+            'announcements' => $this->publishedAnnouncements($meet?->id),
         ]);
     }
 
@@ -80,6 +77,7 @@ class PortalController extends Controller
         return Inertia::render('public/meet', [
             'meet' => $this->meetSummary($meet),
             'announcements' => $this->publishedAnnouncements($meet->id),
+            'hasAthletics' => $slots->contains(fn (EventSchedule $slot): bool => $slot->event->sport->name === 'Athletics'),
             'days' => $days
                 ->map(fn (string $day): array => [
                     'value' => $day,
@@ -192,15 +190,167 @@ class PortalController extends Controller
         $meet = Meet::query()->published()->findOrFail($meet);
 
         $sportId = $request->integer('sport_id');
+        $ageDivision = AgeDivision::tryFrom((string) $request->query('age_division', ''))?->value;
 
-        $standings = $tally->standings($meet->id, $sportId > 0 ? $sportId : null);
+        $standings = $tally->standings(
+            $meet->id,
+            $sportId > 0 ? $sportId : null,
+            $ageDivision,
+        );
+
+        $districts = collect($standings['districts']);
 
         return Inertia::render('public/tally', [
             'meet' => $this->meetSummary($meet),
             'schools' => $standings['schools'],
             'districts' => $standings['districts'],
-            'filters' => ['sport_id' => $sportId > 0 ? $sportId : null],
+            'totals' => [
+                'gold' => (int) $districts->sum('gold'),
+                'silver' => (int) $districts->sum('silver'),
+                'bronze' => (int) $districts->sum('bronze'),
+                'total' => (int) $districts->sum('total'),
+            ],
+            'topByPoints' => $districts
+                ->sortByDesc('points')
+                ->take(5)
+                ->values()
+                ->all(),
+            'bySport' => $tally->medalsBySport($meet->id, $sportId > 0 ? $sportId : null, $ageDivision),
+            'recentMedals' => $tally->recentMedals($meet->id, $sportId > 0 ? $sportId : null, $ageDivision),
+            'filters' => [
+                'sport_id' => $sportId > 0 ? $sportId : null,
+                'age_division' => $ageDivision,
+            ],
             'sportOptions' => $this->validatedSportOptions($meet),
+            'ageDivisionOptions' => array_map(
+                fn (AgeDivision $division): array => ['id' => $division->value, 'label' => $division->label()],
+                AgeDivision::cases(),
+            ),
+            'generatedAt' => now()->toDayDateTimeString(),
+        ]);
+    }
+
+    /**
+     * Public Athletics event listing (WP-08-10 flagged, WP-08-11):
+     * deliberately a real-data-only "shell," not a live scoreboard.
+     * `App\Enums\ScoreboardType` has no Athletics case and no scoring
+     * event anywhere attributes a time or mark to an individual athlete
+     * mid-race — Athletics results are only ever recorded after the fact,
+     * through Phase 3's normal encode->validate flow, the same as every
+     * other individual event. This page shows the real schedule for a
+     * selected day plus, once validated, the real top-3 placements — no
+     * live clock, no per-athlete live position, no field-event live
+     * board, no meet-records register, all of which the approved
+     * reference shows but none of which exist as real data. Unpublished
+     * meets 404.
+     */
+    public function athletics(Request $request, int $meet, MedalTallyService $tally): Response
+    {
+        $meet = Meet::query()->published()->findOrFail($meet);
+
+        $athleticsSportId = Sport::query()->where('name', 'Athletics')->value('id');
+
+        $slots = EventSchedule::query()
+            ->where('meet_id', $meet->id)
+            ->when(
+                $athleticsSportId !== null,
+                fn ($query) => $query->whereHas('event', fn ($event) => $event->where('sport_id', $athleticsSportId)),
+                fn ($query) => $query->whereRaw('1 = 0'),
+            )
+            ->with(['venue:id,name', 'event:id,name,gender,age_division'])
+            ->orderBy('scheduled_date')
+            ->orderBy('starts_at')
+            ->get();
+
+        $days = $slots
+            ->map(fn (EventSchedule $slot): string => $slot->scheduled_date->toDateString())
+            ->unique()
+            ->values();
+
+        $requested = $request->string('date')->toString();
+
+        $selectedDay = match (true) {
+            $days->contains($requested) => $requested,
+            $days->contains(today()->toDateString()) => today()->toDateString(),
+            default => $days->first(),
+        };
+
+        $validatedResults = EventResult::query()
+            ->where('meet_id', $meet->id)
+            ->where('status', ResultStatus::Validated->value)
+            ->when(
+                $athleticsSportId !== null,
+                fn ($query) => $query->whereHas('event', fn ($event) => $event->where('sport_id', $athleticsSportId)),
+                fn ($query) => $query->whereRaw('1 = 0'),
+            )
+            ->with([
+                'placements' => fn ($placements) => $placements->orderBy('rank')->limit(3),
+                'placements.entry.athlete:id,first_name,last_name,school_id',
+                'placements.entry.athlete.school:id,name',
+            ])
+            ->get()
+            ->keyBy('event_id');
+
+        $now = now();
+        $today = today()->toDateString();
+
+        $totals = collect($tally->standings($meet->id, $athleticsSportId)['districts'])
+            ->reduce(fn (array $carry, array $row): array => [
+                'gold' => $carry['gold'] + $row['gold'],
+                'silver' => $carry['silver'] + $row['silver'],
+                'bronze' => $carry['bronze'] + $row['bronze'],
+                'total' => $carry['total'] + $row['total'],
+            ], ['gold' => 0, 'silver' => 0, 'bronze' => 0, 'total' => 0]);
+
+        return Inertia::render('public/athletics', [
+            'meet' => $this->meetSummary($meet),
+            'days' => $days
+                ->map(fn (string $day): array => [
+                    'value' => $day,
+                    'label' => Carbon::parse($day)->format('D, M j'),
+                ])
+                ->all(),
+            'selectedDay' => $selectedDay,
+            'medalTotals' => $totals,
+            'slots' => $slots
+                ->filter(fn (EventSchedule $slot): bool => $slot->scheduled_date->toDateString() === $selectedDay)
+                ->map(function (EventSchedule $slot) use ($validatedResults, $now, $today): array {
+                    $result = $validatedResults->get($slot->event_id);
+
+                    $status = match (true) {
+                        $result !== null => 'completed',
+                        $slot->scheduled_date->toDateString() === $today
+                            && $now->format('H:i:s') >= $slot->starts_at
+                            && $now->format('H:i:s') <= $slot->ends_at => 'ongoing',
+                        default => 'upcoming',
+                    };
+
+                    return [
+                        'id' => $slot->id,
+                        'starts_at' => substr($slot->starts_at, 0, 5),
+                        'ends_at' => substr($slot->ends_at, 0, 5),
+                        'event' => sprintf(
+                            '%s (%s, %s)',
+                            $slot->event->name,
+                            $slot->event->gender->label(),
+                            $slot->event->age_division->label(),
+                        ),
+                        'venue' => $slot->venue->name,
+                        'status' => $status,
+                        'top_placements' => $result === null ? [] : $result->placements
+                            ->map(fn (ResultPlacement $placement): array => [
+                                'rank' => $placement->rank,
+                                'athlete' => $placement->entry->athlete->fullName(),
+                                'school' => $placement->entry->athlete->school->name,
+                                'mark' => $placement->mark,
+                            ])
+                            ->values()
+                            ->all(),
+                        'official_as_of' => $result?->validated_at?->format('M j, Y g:i A'),
+                    ];
+                })
+                ->values()
+                ->all(),
         ]);
     }
 
@@ -219,7 +369,7 @@ class PortalController extends Controller
 
         $match = EventMatch::query()
             ->where('meet_id', $meet->id)
-            ->with('event.sport:id,name')
+            ->with(['event.sport:id,name', 'schedule.venue:id,name'])
             ->findOrFail($match);
 
         $session = $match->scoringSessions()->latest('id')->first();
@@ -229,7 +379,11 @@ class PortalController extends Controller
             'match' => [
                 'id' => $match->id,
                 'event' => sprintf('%s — %s', $match->event->sport->name, $match->event->name),
+                'sport' => $match->event->sport->name,
+                'category' => sprintf('%s %s', $match->event->gender->label(), $match->event->age_division->label()),
                 'round_label' => $match->round_label,
+                'venue' => $match->schedule?->venue?->name,
+                'scheduled_date' => $match->schedule?->scheduled_date?->format('M j, Y'),
             ],
             'session' => $session === null ? null : $session->toLivePayload(),
         ]);
@@ -320,6 +474,34 @@ class PortalController extends Controller
             'venue' => $meet->venue,
             'status_label' => $meet->status->label(),
         ];
+    }
+
+    /**
+     * The municipalities competing in this meet — one row per registered
+     * delegation's municipality, deduplicated (a delegation is rooted at
+     * either a district/municipality or, in a City division, a school —
+     * both resolve to a municipality here). This is the landing page's
+     * "competing entry" list, each shown with a placeholder logo.
+     *
+     * @return array<int, array{id: int, name: string, nickname: string|null}>
+     */
+    private function competingMunicipalities(Meet $meet): array
+    {
+        return Delegation::query()
+            ->where('meet_id', $meet->id)
+            ->with(['district', 'school.district'])
+            ->get()
+            ->map(fn (Delegation $delegation): ?District => $delegation->district ?? $delegation->school?->district)
+            ->filter()
+            ->unique('id')
+            ->sortBy('name')
+            ->values()
+            ->map(fn (District $municipality): array => [
+                'id' => $municipality->id,
+                'name' => $municipality->name,
+                'nickname' => $municipality->nickname,
+            ])
+            ->all();
     }
 
     /**

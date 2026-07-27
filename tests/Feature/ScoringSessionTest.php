@@ -435,6 +435,57 @@ test('the scoreboard page exposes board type and sport state for a basketball ma
             ->where('session.sport_state', ['fouls_a' => 0, 'fouls_b' => 0]));
 });
 
+// WP-08-10: real play-by-play reconstructed from the score_events log
+
+test('the live payload includes a play-by-play feed reconstructed from score events, newest first', function () {
+    $match = basketballMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Mabini', 'side_b_label' => 'Montevista'])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/score", ['type' => 'point', 'side' => 'a', 'delta' => 2])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/foul", ['action' => 'add', 'side' => 'b'])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/score", ['type' => 'point', 'side' => 'b', 'delta' => 3])
+        ->assertSessionHasNoErrors();
+
+    $plays = $session->refresh()->toLivePayload()['playByPlay'];
+
+    expect($plays)->toHaveCount(3)
+        // Newest first: the last thing recorded was Montevista's 3-point play.
+        ->and($plays[0]['description'])->toBe('+3 — Montevista')
+        ->and($plays[0]['score_a'])->toBe(2)
+        ->and($plays[0]['score_b'])->toBe(3)
+        ->and($plays[1]['description'])->toBe('Foul — Montevista')
+        ->and($plays[1]['score_a'])->toBe(2)
+        ->and($plays[1]['score_b'])->toBe(0)
+        ->and($plays[2]['description'])->toBe('+2 — Mabini')
+        ->and($plays[2]['score_a'])->toBe(2)
+        ->and($plays[2]['score_b'])->toBe(0);
+});
+
+test('the scoreboard page exposes real match metadata: sport, category, round, venue, and date', function () {
+    $match = basketballMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->get("/matches/{$match->id}/scoreboard")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('match.sport', 'Basketball')
+            ->has('match.category')
+            ->where('match.round_label', $match->round_label));
+});
+
 // WP-07-05: Boxing live scoreboard
 
 test('starting a session for a boxing match initializes an empty round history and the board type', function () {
@@ -484,6 +535,35 @@ test('recording round scores appends to the round history and sums into the runn
         ->and($session->score_a)->toBe(19)
         ->and($session->score_b)->toBe(19)
         ->and(AuditLog::query()->where('action', 'scoring.round_scored')->count())->toBe(2);
+});
+
+test('the play-by-play feed reconstructs running scores across rounds for boxing (WP-08-12 fix)', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'side_a_label' => 'Red',
+        'side_b_label' => 'Blue',
+        'sport_state' => ['rounds' => []],
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 10, 'score_b' => 9])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 9, 'score_b' => 10])
+        ->assertSessionHasNoErrors();
+
+    $plays = $session->refresh()->toLivePayload()['playByPlay'];
+
+    expect($plays)->toHaveCount(2)
+        ->and($plays[0]['description'])->toBe('Round 2: Red 9 – 10 Blue')
+        ->and($plays[0]['score_a'])->toBe(19)
+        ->and($plays[0]['score_b'])->toBe(19)
+        ->and($plays[1]['description'])->toBe('Round 1: Red 10 – 9 Blue')
+        ->and($plays[1]['score_a'])->toBe(10)
+        ->and($plays[1]['score_b'])->toBe(9);
 });
 
 test('a round score must be between 0 and 10', function () {
@@ -761,6 +841,42 @@ test('the scoreboard page exposes board type and inning state for a softball mat
             ->where('session.board_type', 'softball_baseball')
             ->where('session.sport_state.inning', 1)
             ->where('session.sport_state.half', 'top'));
+});
+
+// WP-08-12: real play-by-play descriptions for softball/baseball's own event types
+
+test('the play-by-play feed describes inning runs and count updates from real payload data', function () {
+    $match = softballMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Home', 'side_b_label' => 'Away'])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/inning-run", ['side' => 'a', 'runs' => 2])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/count", ['action' => 'ball'])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/count", ['action' => 'strike'])
+        ->assertSessionHasNoErrors();
+
+    $plays = $session->refresh()->toLivePayload()['playByPlay'];
+
+    expect($plays)->toHaveCount(3)
+        // Newest first.
+        ->and($plays[0]['description'])->toBe('Strike (1-1)')
+        ->and($plays[0]['score_a'])->toBe(2)
+        ->and($plays[1]['description'])->toBe('Ball (1-0)')
+        ->and($plays[2]['description'])->toBe('+2 runs — Home (Inning 1)')
+        ->and($plays[2]['score_a'])->toBe(2)
+        ->and($plays[2]['score_b'])->toBe(0);
 });
 
 // WP-07-07: Generic match scoreboard (manual board-type override)

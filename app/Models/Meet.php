@@ -20,6 +20,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $venue
  * @property MeetStatus $status
  * @property bool $is_published
+ * @property bool $is_active
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read int|null $events_count
@@ -42,6 +43,7 @@ class Meet extends Model
             'ends_at' => 'date',
             'status' => MeetStatus::class,
             'is_published' => 'boolean',
+            'is_active' => 'boolean',
         ];
     }
 
@@ -55,6 +57,19 @@ class Meet extends Model
     public function scopePublished($query)
     {
         return $query->where('is_published', true);
+    }
+
+    /**
+     * The one meet featured on the public landing page. At most one row
+     * should ever match — enforced by MeetController::setActive(), not a
+     * database constraint.
+     *
+     * @param  Builder<Meet>  $query
+     * @return Builder<Meet>
+     */
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
     }
 
     /**

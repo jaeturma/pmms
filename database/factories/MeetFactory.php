@@ -77,4 +77,16 @@ class MeetFactory extends Factory
             'is_published' => true,
         ]);
     }
+
+    /**
+     * Indicate that this is the one meet featured on the public landing
+     * page (Meet::scopeActive()) — distinct from the `active()` lifecycle
+     * status state above.
+     */
+    public function featured(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'is_active' => true,
+        ]);
+    }
 }

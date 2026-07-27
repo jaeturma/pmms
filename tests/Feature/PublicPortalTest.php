@@ -1,7 +1,12 @@
 <?php
 
+use App\Enums\MatchStatus;
 use App\Models\AuditLog;
+use App\Models\Delegation;
+use App\Models\District;
+use App\Models\EventMatch;
 use App\Models\Meet;
+use App\Models\ScoringSession;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 
@@ -10,30 +15,55 @@ test('guests can view the portal home without authentication', function () {
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('public/home')
-            ->has('meets', 0));
+            ->where('meet', null)
+            ->has('municipalities', 0));
 });
 
-test('only published meets appear on the portal home', function () {
-    $published = Meet::factory()->active()->published()->create();
-    Meet::factory()->active()->create();
+test('only the one published and active meet appears on the portal home', function () {
+    $featured = Meet::factory()->active()->published()->featured()->create();
+    Meet::factory()->active()->published()->create();
+    Meet::factory()->active()->featured()->create();
     Meet::factory()->create();
 
     $this->get('/')
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('meets', 1)
-            ->where('meets.0.name', $published->name)
-            ->where('meets.0.status_label', 'Active'));
+            ->where('meet.name', $featured->name)
+            ->where('meet.status_label', 'Active'));
 });
 
 test('portal meet props carry public-safe fields only', function () {
-    Meet::factory()->active()->published()->create();
+    Meet::factory()->active()->published()->featured()->create();
 
     $this->get('/')
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('meets.0', fn (AssertableInertia $meet) => $meet
+            ->has('meet', fn (AssertableInertia $meet) => $meet
                 ->hasAll(['id', 'name', 'school_year', 'starts_at', 'ends_at', 'venue', 'status_label'])
                 ->missing('is_published')
+                ->missing('is_active')
                 ->missing('status')));
+});
+
+test('the portal home lists the active meet\'s competing municipalities, deduplicated', function () {
+    $meet = Meet::factory()->active()->published()->featured()->create();
+
+    $nabunturan = District::factory()->create(['name' => 'Nabunturan']);
+    Delegation::factory()->approved()->create([
+        'meet_id' => $meet->id,
+        'school_id' => null,
+        'district_id' => $nabunturan->id,
+    ]);
+
+    $otherMeet = Meet::factory()->active()->published()->create();
+    Delegation::factory()->approved()->create([
+        'meet_id' => $otherMeet->id,
+        'school_id' => null,
+        'district_id' => District::factory()->create(['name' => 'Compostela'])->id,
+    ]);
+
+    $this->get('/')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('municipalities', 1)
+            ->where('municipalities.0.name', 'Nabunturan'));
 });
 
 test('managers can publish a non-draft meet, audited', function () {
@@ -59,7 +89,7 @@ test('draft meets cannot be published', function () {
 });
 
 test('unpublishing removes the meet from the portal immediately, audited', function () {
-    $meet = Meet::factory()->active()->published()->create();
+    $meet = Meet::factory()->active()->published()->featured()->create();
 
     $this->actingAs(User::factory()->admin()->create())
         ->patch("/meets/{$meet->id}/unpublish")
@@ -69,7 +99,7 @@ test('unpublishing removes the meet from the portal immediately, audited', funct
         ->and(AuditLog::query()->where('action', 'meet.unpublished')->exists())->toBeTrue();
 
     $this->get('/')
-        ->assertInertia(fn (AssertableInertia $page) => $page->has('meets', 0));
+        ->assertInertia(fn (AssertableInertia $page) => $page->where('meet', null));
 });
 
 test('an unpublished or nonexistent meet renders the branded not-found page for guests', function () {
@@ -91,6 +121,38 @@ test('the not-found page also renders for authenticated users', function () {
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('error')
             ->where('status', 404));
+});
+
+test('the public nav points at the most recently started published meet, with a live-match count', function () {
+    Meet::factory()->active()->published()->create(['starts_at' => now()->subDays(30)]);
+    $latest = Meet::factory()->active()->published()->create(['starts_at' => now()]);
+
+    $match = EventMatch::factory()->create(['meet_id' => $latest->id, 'status' => MatchStatus::Scheduled]);
+    ScoringSession::factory()->create(['match_id' => $match->id]);
+    ScoringSession::factory()->ended()->create([
+        'match_id' => EventMatch::factory()->create(['meet_id' => $latest->id, 'status' => MatchStatus::Scheduled])->id,
+    ]);
+
+    $this->get('/')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('publicNav.meetId', $latest->id)
+            ->where('publicNav.meetName', $latest->name)
+            ->where('publicNav.liveCount', 1));
+});
+
+test('the public nav is absent when there are no published meets', function () {
+    Meet::factory()->active()->create();
+
+    $this->get('/')
+        ->assertInertia(fn (AssertableInertia $page) => $page->where('publicNav', null));
+});
+
+test('authenticated users never receive the public nav', function () {
+    Meet::factory()->active()->published()->create();
+
+    $this->actingAs(User::factory()->create())
+        ->get('/dashboard')
+        ->assertInertia(fn (AssertableInertia $page) => $page->where('publicNav', null));
 });
 
 test('viewers and delegation officers cannot publish or unpublish', function (User $user) {
