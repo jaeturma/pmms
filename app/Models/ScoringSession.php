@@ -134,7 +134,48 @@ class ScoringSession extends Model
             'board_type' => $this->boardType()->value,
             'sport_state' => $this->sport_state,
             'playByPlay' => $this->playByPlay(),
+            'started_at' => $this->started_at?->toIso8601String(),
+            'elapsed_seconds' => $this->activeElapsedSeconds(),
+            'clock_running' => $this->status === ScoringSessionStatus::InProgress,
         ];
+    }
+
+    /**
+     * Real running-clock seconds, excluding any paused time — reconstructed
+     * from the append-only `score_events` log (same source-of-truth
+     * approach `playByPlay()` already uses for the running score), not a
+     * separately stored/drifting counter. Frozen at whatever it was on the
+     * last `Paused` event while the session is currently paused; frozen at
+     * `ended_at` once ended.
+     */
+    public function activeElapsedSeconds(): int
+    {
+        if ($this->started_at === null) {
+            return 0;
+        }
+
+        $endpoint = match ($this->status) {
+            ScoringSessionStatus::Ended => $this->ended_at ?? now(),
+            default => now(),
+        };
+
+        $cursor = $this->started_at;
+        $seconds = 0;
+
+        foreach ($this->events()->whereIn('type', [ScoreEventType::Paused->value, ScoreEventType::Resumed->value])->oldest('id')->get() as $event) {
+            if ($event->type === ScoreEventType::Paused && $cursor !== null) {
+                $seconds += (int) $cursor->diffInSeconds($event->created_at);
+                $cursor = null;
+            } elseif ($event->type === ScoreEventType::Resumed && $cursor === null) {
+                $cursor = $event->created_at;
+            }
+        }
+
+        if ($cursor !== null) {
+            $seconds += (int) $cursor->diffInSeconds($endpoint);
+        }
+
+        return max(0, $seconds);
     }
 
     /**

@@ -386,6 +386,11 @@ class PortalController extends Controller
                 'scheduled_date' => $match->schedule?->scheduled_date?->format('M j, Y'),
             ],
             'session' => $session === null ? null : $session->toLivePayload(),
+            // No `participants`/photo prop here, deliberately — athlete
+            // photos are never public (docs/public-portal.md's privacy
+            // baseline), unlike the internal operator console. The public
+            // boxing scoreboard falls back to the same generated logo
+            // badge basketball/softball already use.
         ]);
     }
 

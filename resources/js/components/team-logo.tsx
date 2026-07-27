@@ -9,7 +9,7 @@ const PALETTE = [
     'bg-teal-500',
 ] as const;
 
-/** Deterministic so the same municipality always gets the same color. */
+/** Deterministic so the same name always gets the same color. */
 function colorFor(name: string): string {
     let hash = 0;
 
@@ -23,6 +23,10 @@ function colorFor(name: string): string {
 function initialsFor(name: string): string {
     const words = name.replace(/[—–-]/g, ' ').trim().split(/\s+/);
 
+    if (words.length === 0 || words[0] === '') {
+        return '?';
+    }
+
     if (words.length === 1) {
         return words[0].slice(0, 2).toUpperCase();
     }
@@ -33,17 +37,21 @@ function initialsFor(name: string): string {
 type Props = {
     name: string;
     className?: string;
+    shape?: 'circle' | 'square';
 };
 
 /**
- * A placeholder logo for a competing municipality — no logo upload exists
- * yet, so this generates a deterministic colored initials avatar instead.
+ * A placeholder "team logo" — a deterministic colored initials badge
+ * generated from a name (municipality, school, or delegation label). No
+ * logo upload infrastructure exists for any of those yet, so this stands
+ * in wherever a real one would go: the public landing page's competing
+ * municipalities, and each side of a live scoreboard.
  */
-export function MunicipalityBadge({ name, className = '' }: Props) {
+export function TeamLogo({ name, className = '', shape = 'circle' }: Props) {
     return (
         <div
             aria-hidden="true"
-            className={`flex items-center justify-center rounded-full font-semibold text-white ${colorFor(name)} ${className}`}
+            className={`flex shrink-0 items-center justify-center font-semibold text-white ${shape === 'circle' ? 'rounded-full' : 'rounded-lg'} ${colorFor(name)} ${className}`}
         >
             {initialsFor(name)}
         </div>

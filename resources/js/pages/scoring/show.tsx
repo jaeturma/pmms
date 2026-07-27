@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
-import type { LiveSession } from '@/components/live-score-display';
+import type { LiveSession, Participant } from '@/components/live-score-display';
 import {
     isBasketballState,
     isBoxingState,
@@ -63,6 +63,7 @@ type Props = {
     session: Session | null;
     channel: string;
     canManage: boolean;
+    participants: [Participant | null, Participant | null];
 };
 
 function CorrectionDialog({
@@ -264,6 +265,7 @@ export default function ScoringBoard({
     session: initialSession,
     channel,
     canManage,
+    participants,
 }: Props) {
     const [session, setSession] = useState(initialSession);
     const [syncedSession, setSyncedSession] = useState(initialSession);
@@ -577,6 +579,7 @@ export default function ScoringBoard({
                             fullscreen={fullscreen}
                             onToggleFullscreen={toggleFullscreen}
                             disconnected={pollFailures >= 2}
+                            participants={participants}
                         />
 
                         {isManager && isActive && (

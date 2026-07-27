@@ -8,11 +8,13 @@ use App\Models\Entry;
 use App\Models\Event;
 use App\Models\EventMatch;
 use App\Models\EventResult;
+use App\Models\FileUpload;
 use App\Models\ResultPlacement;
 use App\Models\ScoreEvent;
 use App\Models\ScoringSession;
 use App\Models\Sport;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 use Inertia\Testing\AssertableInertia;
 
 /**
@@ -194,6 +196,44 @@ test('a full session lifecycle works entirely through the polling read endpoint'
         ])->count())->toBe(7);
 });
 
+test('the running clock excludes paused time and freezes once ended', function () {
+    Carbon::setTestNow('2026-01-01 10:00:00');
+
+    $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Home', 'side_b_label' => 'Away'])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    Carbon::setTestNow('2026-01-01 10:01:00'); // +60s active
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/pause", [])->assertSessionHasNoErrors();
+
+    Carbon::setTestNow('2026-01-01 10:01:30'); // +30s paused — must not count
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/resume", [])->assertSessionHasNoErrors();
+
+    Carbon::setTestNow('2026-01-01 10:02:15'); // +45s active
+
+    $payload = $session->refresh()->toLivePayload();
+
+    expect($payload['elapsed_seconds'])->toBe(105)
+        ->and($payload['clock_running'])->toBeTrue();
+
+    Carbon::setTestNow('2026-01-01 10:02:20'); // +5s active, before ending
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/end", [])->assertSessionHasNoErrors();
+
+    Carbon::setTestNow('2026-01-01 10:05:00'); // time passing after the game ended must not count
+
+    $endedPayload = $session->refresh()->toLivePayload();
+
+    expect($endedPayload['elapsed_seconds'])->toBe(110)
+        ->and($endedPayload['clock_running'])->toBeFalse();
+
+    Carbon::setTestNow();
+});
+
 test('a correction requires a reason', function () {
     $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
     $session = ScoringSession::factory()->create(['match_id' => $match->id]);
@@ -298,6 +338,34 @@ test('the scoreboard page suggests side labels only when the match has exactly t
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('suggestedLabels.0', null)
             ->where('suggestedLabels.1', null));
+});
+
+test('the scoreboard page exposes participant photos only for a two-entry match, and only when accredited', function () {
+    $match = EventMatch::factory()->create();
+    $entryA = confirmedEntryForScoringSession($match);
+    $entryB = confirmedEntryForScoringSession($match);
+    $match->entries()->attach([$entryA->id, $entryB->id]);
+
+    $photo = FileUpload::factory()->create();
+    $entryA->athlete->forceFill(['photo_upload_id' => $photo->id])->save();
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->get("/matches/{$match->id}/scoreboard")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('participants', 2)
+            ->where('participants.0.photo_url', route('athletes.photo', $entryA->athlete))
+            ->where('participants.1.photo_url', null));
+
+    $entryC = confirmedEntryForScoringSession($match);
+    $match->entries()->attach($entryC->id);
+
+    $this->actingAs($admin)
+        ->get("/matches/{$match->id}/scoreboard")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('participants.0', null)
+            ->where('participants.1', null));
 });
 
 test('the scoreboard page reflects a score change made through the operator console', function () {

@@ -1,9 +1,9 @@
 import { Head, Link } from '@inertiajs/react';
 import { Award, CalendarDays, Crown, Flag, MapPin, Users } from 'lucide-react';
 import { EmptyState } from '@/components/empty-state';
-import { MunicipalityBadge } from '@/components/municipality-badge';
 import { PublicAnnouncements } from '@/components/public-announcements';
 import { PublicPageHero } from '@/components/public-page-hero';
+import { TeamLogo } from '@/components/team-logo';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -154,7 +154,7 @@ export default function PublicHome({
                                     key={municipality.id}
                                     className="flex flex-col items-center gap-2 rounded-xl border p-4 text-center transition hover:shadow-md"
                                 >
-                                    <MunicipalityBadge
+                                    <TeamLogo
                                         name={municipality.name}
                                         className="size-14 text-lg sm:size-16 sm:text-xl"
                                     />

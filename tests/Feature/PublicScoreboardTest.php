@@ -94,6 +94,27 @@ test('the public scoreboard exposes the live session read-only, including sport-
             ->missing('suggestedLabels'));
 });
 
+test('the public scoreboard never exposes participant photos, even for a boxing match', function () {
+    // Athlete photos are never public (docs/public-portal.md's privacy
+    // baseline) — unlike the internal operator console
+    // (ScoringSessionTest's "participant photos" test), this page must
+    // never receive a `participants` prop at all.
+    $meet = Meet::factory()->active()->published()->create();
+    $sport = Sport::factory()->create(['name' => 'Boxing']);
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+    $match = EventMatch::factory()->create([
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+        'status' => MatchStatus::Scheduled,
+    ]);
+
+    ScoringSession::factory()->create(['match_id' => $match->id]);
+
+    $this->get("/meets/{$meet->id}/matches/{$match->id}/scoreboard")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->missing('participants'));
+});
+
 test('the public scoreboard poll endpoint returns the same read-only payload', function () {
     $meet = Meet::factory()->active()->published()->create();
     $match = publicScoreboardMatch($meet);

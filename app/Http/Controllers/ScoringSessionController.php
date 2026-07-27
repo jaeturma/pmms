@@ -17,6 +17,7 @@ use App\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -66,7 +67,7 @@ class ScoringSessionController extends Controller
         $match->loadMissing([
             'meet:id,name',
             'event.sport:id,name',
-            'entries.athlete:id,first_name,last_name,school_id',
+            'entries.athlete:id,first_name,last_name,school_id,photo_upload_id',
             'entries.athlete.school:id,name',
             'schedule.venue:id,name',
         ]);
@@ -95,6 +96,7 @@ class ScoringSessionController extends Controller
             'session' => $session === null ? null : $session->toLivePayload(),
             'channel' => "match.{$match->id}.scoring",
             'canManage' => Gate::allows('manage-meet-data'),
+            'participants' => $this->matchParticipants($entries),
         ]);
     }
 
@@ -129,10 +131,20 @@ class ScoringSessionController extends Controller
             'match_id' => $match->id,
             'side_a_label' => $data['side_a_label'],
             'side_b_label' => $data['side_b_label'],
+        ]);
+
+        // 'status'/'started_by'/'started_at' are guarded (not in
+        // #[Fillable]) — state transitions only happen through
+        // forceFill(), the same convention pause()/resume()/end() below
+        // already use. `status` happens to also have a matching DB
+        // default ('in_progress'), which is the only reason a session
+        // has ever looked "started" correctly without this — started_at/
+        // started_by were silently never persisted before this fix.
+        $session->forceFill([
             'status' => ScoringSessionStatus::InProgress,
             'started_by' => $user->id,
             'started_at' => now(),
-        ]);
+        ])->save();
 
         if (($data['board_type'] ?? null) === ScoreboardType::Generic->value) {
             $session->forceFill(['board_type_override' => ScoreboardType::Generic])->save();
@@ -627,6 +639,33 @@ class ScoringSessionController extends Controller
         if (! $isOwnMatch) {
             abort(403);
         }
+    }
+
+    /**
+     * The two individual participants' photos (boxing's red/blue corner
+     * display) — only meaningful for a 1v1 individual match, the same
+     * `count() === 2` condition `suggestedLabels` already uses. A team
+     * event (basketball/softball/baseball) has no single "the team's
+     * photo," so this is `[null, null]` for those; the frontend falls
+     * back to a generated logo badge from the side label instead.
+     *
+     * @param  Collection<int, Entry>  $entries
+     * @return array{0: array{photo_url: string|null}|null, 1: array{photo_url: string|null}|null}
+     */
+    private function matchParticipants($entries): array
+    {
+        if ($entries->count() !== 2) {
+            return [null, null];
+        }
+
+        $photoUrl = fn (Entry $entry): ?string => $entry->athlete->photo_upload_id === null
+            ? null
+            : route('athletes.photo', $entry->athlete);
+
+        return [
+            ['photo_url' => $photoUrl($entries[0])],
+            ['photo_url' => $photoUrl($entries[1])],
+        ];
     }
 
     /**
