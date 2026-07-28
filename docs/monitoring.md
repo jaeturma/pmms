@@ -52,13 +52,30 @@ suggests weekly while a meet is active.
    all, it was never installed on this machine — see
    `docs/backup-restore.md`/`docs/deployment.md` for the one-time
    `scripts\install-backup-schedule.ps1`/
-   `scripts\install-queue-worker-schedule.ps1` setup step. **As of this
-   writing, neither task is registered on this development machine** —
-   expected here (both install scripts are explicitly a one-time,
-   deliberate step "the server administrator runs... when setting up,"
-   not something development work triggers automatically), but a real
-   action item before/at production go-live if this machine is also the
-   production server (`docs/deployment.md`).
+   `scripts\install-queue-worker-schedule.ps1` setup step.
+
+   **Both tasks were installed on this machine 2026-07-28** (owner
+   instruction, following up on this WP's own flagged action item).
+   Registration was verified for real, not assumed: `Get-ScheduledTask`
+   shows both present with the correct action/trigger, and the backup
+   task's `NextRunTime` correctly shows the next 2 AM slot. The backup
+   script itself was also proven end-to-end — invoked directly with the
+   exact command line the task runs, it produced a real
+   `pmmsdb-*.sql.gz` file (then removed, as a test artifact, not a
+   scheduled one). One honest caveat: manually forcing an immediate run
+   via `Start-ScheduledTask` from an automated/remote session gave
+   inconsistent results for both tasks (registered correctly, but the
+   forced-immediate-run didn't reliably reflect in a new file or a
+   persistent process) — most likely because both tasks use
+   `LogonType: Interactive`, which expects a genuine interactively
+   logged-on desktop session to attach to, and that automated session
+   may not present as one. This shouldn't affect the *real* trigger
+   paths (the actual 2 AM clock event, or a normal user login for the
+   `AtStartup` trigger), which go through Windows' standard trigger-and-
+   logon flow — but it also hasn't been independently confirmed by a
+   real reboot or a real overnight backup yet. Worth a look at
+   `storage/app/private/backups/database/` tomorrow morning to confirm
+   a same-day file actually appeared.
 
 ## One-shot convenience script
 
@@ -74,8 +91,9 @@ Exits `0` if everything passes, or the number of failed checks otherwise
 — a person runs this themselves; it is **not** a background process or a
 scheduled task.
 
-**Proven against the real running app while writing this WP**, not just
-written and assumed to work:
+**Proven against the real running app**, not just written and assumed to
+work — first when writing this doc (2026-07-28, before either scheduled
+task was installed), and re-run after installing both:
 
 ```text
 === PMMS health check ===
@@ -88,18 +106,19 @@ written and assumed to work:
     [2026-07-27 15:59:54] local.ERROR: SQLSTATE[HY000] [2002] ...
 
 [3/3] Scheduled Tasks
-  FAIL - 'PMMS Database Backup' is not registered
-  FAIL - 'PMMS Queue Worker' is not registered
+  PASS - 'PMMS Database Backup' (Queued, last run: 07/28/2026 22:04:20)
+  PASS - 'PMMS Queue Worker' (Queued, last run: 07/28/2026 22:03:23)
 
 ===========================
-3 check(s) failed - see above.
+1 check(s) failed - see above.
 ```
 
 This is the genuine current state of this development machine, not a
-sanitized example — check 1 passes for real, and checks 2/3 fail for the
-real, explainable reasons described above (a historical log line, and
-scheduled tasks that are a deliberate one-time production setup step, not
-yet run on this dev machine). The script correctly detected all three —
+sanitized example. Check 1 passes for real. Check 2 still fails for the
+same real, explainable, historical reason described above (a log line
+that's no longer current, not something to fix). Check 3 now passes —
+both tasks are registered as of 2026-07-28 (see above). The script
+correctly detected all three states, before and after the install —
 which is itself the proof that it's runnable and reports real status,
 not a script that just always prints "PASS."
 

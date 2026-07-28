@@ -3637,3 +3637,37 @@ as-is) before starting any real work.
   Phase 9 — next is entirely the owner's call (real production go-live,
   a genuine UAT/pilot session using WP-06-06's materials, or something
   else), alongside the commit/push decision for the Phase 9 tree.
+
+**2026-07-28, post-Phase-9 operational action (owner instruction, not a
+new WP)**: installed both Scheduled Tasks flagged as open items in
+WP-09-02/WP-09-03 — ran `scripts\install-backup-schedule.ps1` and
+`scripts\install-queue-worker-schedule.ps1` (pre-existing Phase 6
+tooling, no new code). Both registered correctly: `Get-ScheduledTask`
+confirms the right action/trigger for each, `PMMS Database Backup`'s
+`NextRunTime` correctly shows the next 2 AM slot.
+`scripts\health-check.ps1` re-run afterward now shows 2/3 passing
+(only the same pre-existing, historical, confirmed-harmless log line
+still fails check 2 — unrelated to this action). **Proved the backup
+script end-to-end**: invoked directly with the exact command line the
+task runs, it produced a real `pmmsdb-*.sql.gz` file (then deleted, a
+test artifact, not a scheduled one). **One honest, unresolved nuance**:
+manually forcing an immediate run via `Start-ScheduledTask` from this
+automated session gave inconsistent results for both tasks (registered
+fine, but the forced-immediate-run didn't reliably persist a new file
+or a running process) — most likely because both tasks use
+`LogonType: Interactive`, which expects a genuine interactively
+logged-on desktop session, and this automated session may not present
+as one to the Task Scheduler service (a `Start-Process` spawn attempt
+from this same session also hit a sandbox-level `EPERM`, suggesting
+this environment has real constraints around process/session handling
+that don't necessarily apply to Task Scheduler's own normal trigger
+paths). This should not affect the *real* trigger paths (the actual
+2 AM clock event, or a normal user login for the `AtStartup` trigger),
+but that specific claim hasn't been independently confirmed by an
+actual reboot or an actual overnight backup yet — worth checking
+`storage/app/private/backups/database/` tomorrow morning for a
+same-day file. `docs/monitoring.md` updated to record the install, the
+proof, and this caveat honestly rather than overclaiming full
+end-to-end confirmation. Not a new WP, no completion report — a direct
+operational action on explicit owner instruction following up on an
+already-documented, already-flagged item.
