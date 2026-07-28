@@ -7,8 +7,10 @@ import type { SportRow } from '@/components/medals-by-sport-card';
  * just a reasonable visual match by sport name. Ball sports and any
  * unrecognized sport share the same generic fallback rather than
  * guessing at icons that don't exist in this project's icon set.
+ * Exported (WP-10-07) so `public/sports.tsx`'s card grid can reuse the
+ * exact same icon-matching logic instead of duplicating it.
  */
-function sportIcon(name: string): LucideIcon {
+export function sportIcon(name: string): LucideIcon {
     const lower = name.toLowerCase();
 
     if (lower.includes('swim')) {

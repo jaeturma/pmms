@@ -111,7 +111,7 @@ export default function PublicHome({
         return (
             <>
                 <Head title="Provincial Meet" />
-                <div className="flex min-h-[calc(100vh-10rem)] flex-col gap-6">
+                <div className="flex min-h-[calc(100vh-10rem)] flex-col gap-6 sm:gap-8">
                     <PublicPageHero
                         title="Provincial Meet"
                         description="Schedules, results, and medal standings of the Schools Division Office athletic meets."
@@ -131,7 +131,7 @@ export default function PublicHome({
     return (
         <>
             <Head title={meet.name} />
-            <div className="flex min-h-[calc(100vh-10rem)] flex-col gap-8">
+            <div className="flex min-h-[calc(100vh-10rem)] flex-col gap-8 sm:gap-12">
                 <PublicPageHero
                     title={meet.name}
                     description="Schedules, results, and medal standings of the Schools Division Office athletic meet."
@@ -226,7 +226,7 @@ export default function PublicHome({
 
                 <PublicLiveMatches meetId={meet.id} matches={liveMatches} />
 
-                <section className="grid gap-4 lg:grid-cols-3">
+                <section className="grid gap-4 sm:gap-6 lg:grid-cols-3">
                     <div className="animate-card-in">
                         <TopByPointsCard
                             rows={currentLeaders}
@@ -314,7 +314,7 @@ export default function PublicHome({
                     </Card>
                 </section>
 
-                <section className="flex flex-1 flex-col gap-4">
+                <section className="flex flex-1 flex-col gap-4 sm:gap-6">
                     <div className="flex items-center gap-2">
                         <Users
                             aria-hidden="true"
@@ -337,11 +337,11 @@ export default function PublicHome({
                             description="Competing municipalities will appear here once their delegations are registered."
                         />
                     ) : (
-                        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                             {municipalities.map((municipality, i) => (
                                 <div
                                     key={municipality.id}
-                                    className="flex animate-card-in flex-col items-center gap-2 rounded-xl border p-4 text-center transition hover:shadow-md"
+                                    className="flex animate-card-in flex-col items-center gap-2 rounded-xl border p-4 text-center transition-[transform,box-shadow] duration-(--duration-base) ease-premium hover:-translate-y-0.5 hover:shadow-md sm:p-5"
                                     style={{
                                         animationDelay: `${Math.min(i, 12) * 30}ms`,
                                     }}

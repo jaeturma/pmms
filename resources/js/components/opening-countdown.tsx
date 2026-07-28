@@ -64,22 +64,29 @@ export function OpeningCountdown({ startsAt }: { startsAt: string }) {
     const seconds = remainingSeconds % 60;
 
     return (
-        <div className="flex flex-col items-center gap-3 rounded-2xl border-2 bg-card px-6 py-10 text-center shadow-sm">
-            <Timer
-                aria-hidden="true"
-                className="size-8 text-muted-foreground"
-            />
-            <p className="text-sm font-medium text-muted-foreground">
-                Starting in
-            </p>
-            <p
-                className="text-clock text-5xl sm:text-7xl"
-                aria-label={`Starts in ${hours} hours, ${minutes} minutes, ${seconds} seconds`}
-            >
-                {hours > 0 && `${String(hours).padStart(2, '0')}:`}
-                {String(minutes).padStart(2, '0')}:
-                {String(seconds).padStart(2, '0')}
-            </p>
+        // Same "boxed board" shell `LiveScoreDisplay` uses (`rounded-2xl
+        // border-2` + a gradient top strip) — the pre-match countdown and
+        // the live board it hands off to read as one consistent premium-
+        // broadcast family rather than two unrelated card styles (WP-10-05).
+        <div className="overflow-hidden rounded-2xl border-2 bg-card shadow-sm">
+            <div className="h-1.5 w-full bg-gradient-to-r from-sidebar to-primary" />
+            <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+                <Timer
+                    aria-hidden="true"
+                    className="size-8 text-muted-foreground"
+                />
+                <p className="text-sm font-medium text-muted-foreground">
+                    Starting in
+                </p>
+                <p
+                    className="text-clock text-5xl sm:text-7xl"
+                    aria-label={`Starts in ${hours} hours, ${minutes} minutes, ${seconds} seconds`}
+                >
+                    {hours > 0 && `${String(hours).padStart(2, '0')}:`}
+                    {String(minutes).padStart(2, '0')}:
+                    {String(seconds).padStart(2, '0')}
+                </p>
+            </div>
         </div>
     );
 }

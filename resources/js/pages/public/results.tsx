@@ -131,7 +131,7 @@ export default function PublicResults({
                         description="Official results appear here as soon as they are validated."
                     />
                 ) : (
-                    <div className="flex animate-card-in flex-col gap-4">
+                    <div className="flex animate-card-in flex-col gap-4 sm:gap-6">
                         {results.map((result) => {
                             const podium = result.placements.filter(
                                 (placement) => placement.rank <= 3,
@@ -143,7 +143,7 @@ export default function PublicResults({
                             return (
                                 <section
                                     key={result.id}
-                                    className="rounded-xl border"
+                                    className="rounded-xl border transition-[transform,box-shadow] duration-(--duration-base) ease-premium hover:-translate-y-0.5 hover:shadow-md"
                                 >
                                     <div className="border-b p-4">
                                         <p className="font-medium">

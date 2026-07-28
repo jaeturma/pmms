@@ -264,7 +264,7 @@ export default function PublicTally({
     return (
         <>
             <Head title={`Medal tally — ${meet.name}`} />
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-6 sm:gap-8">
                 <PublicPageHero
                     title="Medal Tally & Rankings"
                     description="Real-time overall medal count and ranking of all municipalities."
@@ -357,8 +357,8 @@ export default function PublicTally({
                         description="Standings appear as soon as results are validated."
                     />
                 ) : (
-                    <div className="flex animate-card-in flex-col gap-6">
-                        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    <div className="flex animate-card-in flex-col gap-6 sm:gap-8">
+                        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-5">
                             <StatCard
                                 label="Total gold"
                                 value={totals.gold}
@@ -397,14 +397,22 @@ export default function PublicTally({
                             />
                         </div>
 
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-6">
                             <section className="space-y-3 md:col-span-2">
                                 <Heading
                                     title={`Overall ranking by ${areaLabel.toLowerCase()}`}
                                     description="Official standings for this meet."
                                 />
                                 <div className="overflow-x-auto rounded-xl border">
-                                    <Table>
+                                    {/* `text-base` (one step up from the
+                                        default `text-sm`) — same "size the
+                                        table, every cell inherits it"
+                                        technique the kiosk view above
+                                        already uses at `text-lg`, just a
+                                        more modest step for a normal
+                                        browser width (WP-10-06's "large,
+                                        spacious ranking presentation"). */}
+                                    <Table className="text-base">
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead className="w-12">
@@ -479,7 +487,7 @@ export default function PublicTally({
 
                         <div
                             id="medals-by-sport"
-                            className="grid scroll-mt-4 grid-cols-1 gap-4 md:grid-cols-2"
+                            className="grid scroll-mt-4 grid-cols-1 gap-4 md:grid-cols-2 md:gap-6"
                         >
                             <TopByPointsCard
                                 rows={topByPoints}

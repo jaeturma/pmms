@@ -45,6 +45,15 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('meets/{meet}/athletics', [PortalController::class, 'athletics'])
         ->whereNumber('meet')
         ->name('public.athletics');
+    Route::get('meets/{meet}/sports', [PortalController::class, 'sports'])
+        ->whereNumber('meet')
+        ->name('public.sports');
+    Route::get('meets/{meet}/news', [PortalController::class, 'news'])
+        ->whereNumber('meet')
+        ->name('public.news');
+    Route::get('meets/{meet}/contact', [PortalController::class, 'contact'])
+        ->whereNumber('meet')
+        ->name('public.contact');
     Route::get('meets/{meet}/matches/{match}/scoreboard', [PortalController::class, 'scoreboard'])
         ->whereNumber(['meet', 'match'])
         ->name('public.scoreboard');

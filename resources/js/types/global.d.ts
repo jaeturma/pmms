@@ -28,6 +28,8 @@ declare module '@inertiajs/core' {
             publicNav: {
                 meetId: number;
                 meetName: string;
+                venue: string | null;
+                schoolYear: string;
                 liveCount: number;
             } | null;
             [key: string]: unknown;

@@ -202,7 +202,7 @@ export function AppSidebar() {
 
     return (
         <Sidebar collapsible="icon">
-            <SidebarHeader>
+            <SidebarHeader className="p-3">
                 <SidebarMenu>
                     <SidebarMenuItem>
                         <SidebarMenuButton size="lg" asChild>
@@ -218,7 +218,7 @@ export function AppSidebar() {
                 <NavMain items={navItems} />
             </SidebarContent>
 
-            <SidebarFooter>
+            <SidebarFooter className="p-3">
                 <SidebarMeetCard />
             </SidebarFooter>
         </Sidebar>

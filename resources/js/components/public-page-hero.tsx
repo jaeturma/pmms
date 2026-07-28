@@ -14,7 +14,7 @@ type Props = {
  */
 export function PublicPageHero({ title, description, meta }: Props) {
     return (
-        <div className="bg-premium-hero -mx-4 overflow-hidden px-4 py-8 text-white sm:mx-0 sm:rounded-xl sm:px-8">
+        <div className="bg-premium-hero -mx-4 overflow-hidden px-4 py-10 text-white sm:mx-0 sm:rounded-xl sm:px-8 sm:py-14">
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
                 {title}
             </h1>

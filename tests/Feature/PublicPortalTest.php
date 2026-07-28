@@ -137,6 +137,8 @@ test('the public nav points at the most recently started published meet, with a 
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('publicNav.meetId', $latest->id)
             ->where('publicNav.meetName', $latest->name)
+            ->where('publicNav.venue', $latest->venue)
+            ->where('publicNav.schoolYear', $latest->school_year)
             ->where('publicNav.liveCount', 1));
 });
 

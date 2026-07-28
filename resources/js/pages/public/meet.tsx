@@ -169,17 +169,30 @@ export default function PublicMeet({
                                 change). */}
                             <div
                                 key={selectedDay}
-                                className="flex animate-card-in flex-col gap-2"
+                                className="flex animate-card-in flex-col gap-4 sm:gap-6"
                             >
                                 {venuesForDay.map((group) => (
                                     <section
                                         key={group.venue}
-                                        className="space-y-2"
+                                        className="rounded-xl border transition-[transform,box-shadow] duration-(--duration-base) ease-premium hover:-translate-y-0.5 hover:shadow-md"
                                     >
-                                        <h3 className="text-sm font-medium">
-                                            {group.venue}
-                                        </h3>
-                                        <div className="overflow-x-auto rounded-xl border">
+                                        {/* Same card shape `results.tsx`
+                                            already uses per event (border-b
+                                            header, bare `overflow-x-auto`
+                                            table body — the ancestor
+                                            already supplies the border,
+                                            per the audited convention in
+                                            `docs/ui-ux/shared-components.md`). */}
+                                        <div className="border-b p-4">
+                                            <h3 className="flex items-center gap-1.5 font-medium">
+                                                <MapPin
+                                                    aria-hidden="true"
+                                                    className="size-4 shrink-0 text-muted-foreground"
+                                                />
+                                                {group.venue}
+                                            </h3>
+                                        </div>
+                                        <div className="overflow-x-auto">
                                             <Table>
                                                 <TableHeader>
                                                     <TableRow>
@@ -223,11 +236,11 @@ export default function PublicMeet({
                 {venueGuide.length > 0 && (
                     <section className="flex flex-col gap-3">
                         <Heading variant="small" title="Venues" />
-                        <ul className="grid gap-2 sm:grid-cols-2">
+                        <ul className="grid gap-3 sm:grid-cols-2 sm:gap-4">
                             {venueGuide.map((venue) => (
                                 <li
                                     key={venue.name}
-                                    className="flex items-start gap-2 rounded-xl border p-3 text-sm"
+                                    className="flex items-start gap-2 rounded-xl border p-4 text-sm"
                                 >
                                     <MapPin
                                         aria-hidden="true"

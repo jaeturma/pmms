@@ -13,11 +13,11 @@ export function NavMain({ items = [] }: { items: NavItem[] }) {
     const { isCurrentUrl } = useCurrentUrl();
 
     return (
-        <SidebarGroup className="px-2 py-0">
-            <SidebarGroupLabel className="tracking-wide uppercase">
+        <SidebarGroup className="px-2 py-1">
+            <SidebarGroupLabel className="font-semibold tracking-wide uppercase">
                 Main Navigation
             </SidebarGroupLabel>
-            <SidebarMenu>
+            <SidebarMenu className="gap-1.5">
                 {items.map((item) => (
                     <SidebarMenuItem key={item.title}>
                         <SidebarMenuButton

@@ -232,7 +232,7 @@ export default function PublicScoreboard({
                         className={
                             fullscreen
                                 ? 'flex flex-1 flex-col items-center justify-center gap-8 bg-background p-8'
-                                : 'flex flex-col gap-4'
+                                : 'flex flex-col gap-4 sm:gap-6'
                         }
                     >
                         <LiveScoreDisplay

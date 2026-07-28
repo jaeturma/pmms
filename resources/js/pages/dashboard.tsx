@@ -191,13 +191,13 @@ const quickActions: Array<{
 function QuickActions() {
     return (
         <section className="flex flex-col gap-3">
-            <h2 className="text-base font-medium">Quick actions</h2>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <h2 className="text-base font-semibold">Quick actions</h2>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-6">
                 {quickActions.map((action) => (
                     <Button
                         key={action.label}
                         variant="outline"
-                        className="h-auto flex-col gap-2 py-4"
+                        className="h-auto flex-col gap-2 py-5"
                         asChild
                     >
                         <Link href={action.href}>
@@ -254,7 +254,7 @@ function EventsOverviewCard({ overview }: { overview: EventsOverview }) {
                     Events overview
                 </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5">
                 {overview.total === 0 ? (
                     <EmptyState
                         icon={CalendarDays}
@@ -262,7 +262,7 @@ function EventsOverviewCard({ overview }: { overview: EventsOverview }) {
                     />
                 ) : (
                     <>
-                        <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
+                        <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted">
                             {segments.map((segment) => (
                                 <div
                                     key={segment.key}
@@ -273,7 +273,7 @@ function EventsOverviewCard({ overview }: { overview: EventsOverview }) {
                                 />
                             ))}
                         </div>
-                        <dl className="grid grid-cols-3 gap-2 text-sm">
+                        <dl className="grid grid-cols-3 gap-3 text-sm">
                             {segments.map((segment) => (
                                 <div key={segment.key}>
                                     <dt className="flex items-center gap-1.5 text-muted-foreground">
@@ -365,13 +365,13 @@ function MeetOperations({ operations }: { operations: Operations }) {
     });
 
     return (
-        <section className="flex flex-col gap-4">
-            <h2 className="text-base font-medium">
+        <section className="flex flex-col gap-4 sm:gap-6">
+            <h2 className="text-base font-semibold">
                 Meet operations — {meet.name}
             </h2>
 
             {queues && (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4">
                     <Link href={resultsIndex()} className="block">
                         <StatCard
                             label="Results awaiting validation"
@@ -406,7 +406,7 @@ function MeetOperations({ operations }: { operations: Operations }) {
                 </div>
             )}
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2 md:gap-6">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between gap-2">
                         <CardTitle className="text-sm font-medium">
@@ -631,7 +631,7 @@ export default function Dashboard({
 
                 <div className="grid gap-6 md:grid-cols-2">
                     <section className="flex flex-col gap-3">
-                        <h2 className="text-base font-medium">
+                        <h2 className="text-base font-semibold">
                             Recent Activity
                         </h2>
                         {recentActivity.length === 0 ? (

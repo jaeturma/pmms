@@ -31,7 +31,10 @@ export function PublicAnnouncements({
             <Heading variant="small" title="Announcements" />
             <ul className="flex flex-col gap-3">
                 {announcements.map((announcement) => (
-                    <li key={announcement.id} className="rounded-xl border p-4">
+                    <li
+                        key={announcement.id}
+                        className="rounded-xl border p-4 transition-[transform,box-shadow] duration-(--duration-base) ease-premium hover:-translate-y-0.5 hover:shadow-md"
+                    >
                         <div className="flex items-start gap-2">
                             <Megaphone
                                 aria-hidden="true"

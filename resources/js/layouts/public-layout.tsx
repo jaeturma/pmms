@@ -7,14 +7,20 @@ import {
     Trophy,
 } from 'lucide-react';
 import type { PropsWithChildren } from 'react';
+import { useEffect, useState } from 'react';
 import AppLogoIcon from '@/components/app-logo-icon';
 import { LiveBadge } from '@/components/live-badge';
 import { PublicBottomNav } from '@/components/public-bottom-nav';
+import { PublicFooter } from '@/components/public-footer';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { dashboard, home, login } from '@/routes';
 import {
+    contact as publicContact,
     meet as publicMeet,
+    news as publicNews,
     results as publicResults,
+    sports as publicSports,
     tally as publicTally,
 } from '@/routes/public';
 
@@ -27,12 +33,38 @@ export default function PublicLayout({ children }: PropsWithChildren) {
     const { auth, publicNav } = page.props;
     const currentPath = page.url.split('?')[0];
 
+    // Shadow-on-scroll for the sticky header (WP-10-08) — only matters
+    // at `sm:` and above, where the header is actually `sticky` (WP-
+    // 10-02); below that it scrolls away with the page like any other
+    // element, so there's nothing to elevate. The scroll listener only
+    // ever toggles a boolean; the actual motion is a plain CSS
+    // `transition-shadow` reading the existing `--duration-base`/
+    // `--ease-premium` tokens, collapsed to instant under
+    // `prefers-reduced-motion` by the app-wide reset already in place.
+    const [scrolled, setScrolled] = useState(false);
+
+    useEffect(() => {
+        const onScroll = () => setScrolled(window.scrollY > 8);
+
+        onScroll();
+        window.addEventListener('scroll', onScroll, { passive: true });
+
+        return () => window.removeEventListener('scroll', onScroll);
+    }, []);
+
+    // New Sports/News/Contact pages (WP-10-07) live here and in the
+    // footer's quick-links column only — per the phase's resolved
+    // decision, never added to `PublicBottomNav` below, which keeps its
+    // own tuned 4-5-item one-thumb-reach mobile design untouched.
     const topNavItems = publicNav
         ? [
               { label: 'Home', href: home().url },
               { label: 'Schedule', href: publicMeet(publicNav.meetId).url },
               { label: 'Results', href: publicResults(publicNav.meetId).url },
               { label: 'Medal Tally', href: publicTally(publicNav.meetId).url },
+              { label: 'Sports', href: publicSports(publicNav.meetId).url },
+              { label: 'News', href: publicNews(publicNav.meetId).url },
+              { label: 'Contact', href: publicContact(publicNav.meetId).url },
           ]
         : [{ label: 'Home', href: home().url }];
 
@@ -79,7 +111,12 @@ export default function PublicLayout({ children }: PropsWithChildren) {
                 />
             </Head>
 
-            <header className="border-b">
+            <header
+                className={cn(
+                    'border-b bg-background transition-shadow duration-(--duration-base) ease-premium sm:sticky sm:top-0 sm:z-40',
+                    scrolled && 'sm:shadow-md',
+                )}
+            >
                 <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3">
                     <Link
                         href={home()}
@@ -111,7 +148,7 @@ export default function PublicLayout({ children }: PropsWithChildren) {
                                     key={item.label}
                                     variant={isActive ? 'secondary' : 'ghost'}
                                     size="sm"
-                                    className="shrink-0"
+                                    className="shrink-0 duration-(--duration-base) ease-premium"
                                     aria-current={isActive ? 'page' : undefined}
                                     asChild
                                 >
@@ -148,9 +185,12 @@ export default function PublicLayout({ children }: PropsWithChildren) {
                 {children}
             </main>
 
-            <footer className="hidden border-t px-4 py-6 text-center text-xs text-muted-foreground sm:block">
-                PMMS Division Edition — DepEd Schools Division Office
-            </footer>
+            <PublicFooter
+                meetName={publicNav?.meetName ?? null}
+                venue={publicNav?.venue ?? null}
+                schoolYear={publicNav?.schoolYear ?? null}
+                quickLinks={topNavItems}
+            />
 
             <PublicBottomNav items={bottomNavItems} currentPath={currentPath} />
         </div>

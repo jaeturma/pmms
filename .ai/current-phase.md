@@ -3671,3 +3671,399 @@ proof, and this caveat honestly rather than overclaiming full
 end-to-end confirmation. Not a new WP, no completion report — a direct
 operational action on explicit owner instruction following up on an
 already-documented, already-flagged item.
+
+## Phase 10 — Premium Portal Redesign (Arena-Inspired Layout & Composition)
+
+**Planned 2026-07-28**, via Claude Code's plan-mode workflow (not the
+usual freeform planning turn) — owner brought a large brief twice (the
+first draft was interrupted mid-investigation over real ambiguities;
+the second, refined draft explicitly locked in "keep existing PMMS
+colors/branding, UI enhancement only, never touch backend/business
+logic"). Real inspiration source: uicookies.com's "Arena" sports
+template — fetched and studied via `WebFetch` before planning (full-
+bleed hero + overlay tagline, sticky nav with a CTA, monospace live
+countdown, structured cards, three-column footer, generous grid
+rhythm) rather than guessed at from the name alone. An Explore subagent
+audited the admin side (confirmed already-modern shadcn sidebar-07
+shell, the near-identical `PageHeader`/`SearchBar`/`Table`/`EmptyState`/
+`ConfirmDialog`/`PaginationControls` pattern repeating across ~15-20
+resource pages — `PageHeader` alone has 34 usages per grep — and zero
+charting library anywhere). A Plan subagent then drafted an 11-WP
+breakdown, which I verified against real files (`page-header.tsx`,
+`team-logo.tsx`) before finalizing.
+
+**Five real scope decisions resolved via `AskUserQuestion` before
+writing the plan** (all five picked the recommended, lowest-risk
+option): Gallery deferred entirely (no photo/media model exists in
+PMMS, building one would be new backend); Rankings stays folded into
+the existing Medal Tally page (no separate route — `tally.tsx` already
+has the full municipality standings); footer/Contact show only real
+meet/venue data + quick links, no invented office-contact section
+(PMMS stores no division-office address/phone/email anywhere); the
+three new pages (Sports/News/Contact) go in the header nav + footer
+only, not the mobile bottom tab bar (keeps Phase 8.5-05's tuned
+4-5-item one-thumb-reach design intact); the hero keeps its exact
+existing gradient, just more breathing room — no new CSS accent, no
+new colors, since PMMS has no photo pipeline and stock imagery was
+explicitly excluded.
+
+**One real, previously-unaudited finding surfaced while planning**:
+`resources/js/components/team-logo.tsx` pairs a raw 8-color Tailwind
+palette (`bg-amber-500`, `bg-cyan-600`, etc.) with hardcoded
+`text-white`, unlike every other medal/status color in the app which
+pairs a base token with its own `-foreground` token. It's `aria-hidden`
+(decorative), so not a strict WCAG violation, but worth measuring with
+the same OKLCH→sRGB→ratio method `docs/ui-ux/accessibility-review.md`
+already proved twice — folded into the closing WP-10-11 rather than a
+separate WP.
+
+New scaffold created:
+`docs/phases/phase-10-premium-portal-redesign/{README,DESIGN-NOTES,
+CHECKLIST}.md` + 11 `WP-10-01` through `WP-10-11` files, matching every
+prior phase's exact structure. `docs/howtorun/ROADMAP.md` updated.
+`docs/reports/phase-10/` directory created for completion reports.
+**11 WPs**: 01 reference-mapping audit (docs only) → 02 public shell
+(sticky nav + real multi-column footer, replacing today's one-line
+footer) → 03 home hero/landing rhythm → 04 schedule/results card
+rhythm → 05 live scoreboard/countdown composition (shared with the
+internal operator console — must not drift toward a public look there)
+→ 06 medal tally rhythm → 07 new Sports/News/Contact pages (the only
+backend-touching WP — new routes/controller actions reusing
+`Meet::published()` scoping, `Sport`/`Announcement` models, zero new
+migrations) → 08 motion/interaction pass (plain CSS only, no Framer
+Motion — confirmed not installed) → 09 admin shared-component polish
+(elevate the shared primitives once, not ~20 pages individually) → 10
+admin sidebar/dashboard polish (already-modern shell, spacing only, no
+restructure) → 11 closing accessibility/contrast/compliance review.
+
+Zero new dependencies, zero new color tokens, zero changes to business
+logic/database/routes' authorization anywhere in this plan — matches
+every phase's own discipline.
+
+**WP-10-01 — Arena Reference Audit and Composition Mapping — done
+2026-07-28.** Documentation/audit only, as scoped — zero code changes
+(confirmed via `git diff --stat` against `app/`, `database/`, `routes/`,
+`resources/`, both lockfiles: all empty). Re-verified two of the plan's
+own claims directly against current source rather than trusting the
+planning session's memory: `resources/js/layouts/public-layout.tsx`'s
+header is confirmed `<header className="border-b">` (static, not
+sticky), and its footer is confirmed exactly one line, `hidden ...
+sm:block` (invisible on mobile) — nothing to elevate short of a rebuild,
+matching WP-10-02's scope. Also confirmed `resources/js/pages/public/
+meet.tsx`'s schedule renders as `<Table>` rows grouped by venue, not
+cards — a real gap distinct from `results.tsx`, which already has a
+card-like presentation via `PodiumDisplay` from Phase 8.5-08.
+
+Added a 14-row Arena-element → PMMS-current-state → status → closing-WP
+mapping table to `docs/ui-ux/premium-design-system.md` (new "WP-10-01"
+section). Result: every real gap row already has a home in an existing
+WP-10-02 through WP-10-07 — the plan needs no adjustment. Three rows are
+genuinely not-applicable rather than gaps: team W/D/L form badges (no
+such concept in PMMS), player cards (athlete profiles are permanently
+non-public per `docs/public-portal.md`'s privacy boundary), and stadium
+photography (no photo pipeline, same reason Gallery was deferred).
+
+Full quality gate green: Pint pass, PHPStan L7 0 errors, Pest 703/703
+(3,716 assertions, unchanged from Phase 9's close), ESLint clean,
+`tsc --noEmit` clean, `npm run build` succeeded with identical output
+(confirms zero frontend code changed). `prettier --check` flagged
+formatting drift on the doc but was deliberately left unfixed — this
+project's `format`/`format:check` scripts only cover `resources/`, never
+`docs/` (the WP-09-01 lesson), and a `--write` pass would reformat the
+entire 800+ line pre-existing file, not just the new section.
+
+Completion report: `docs/reports/phase-10/WP-10-01-completion.md`.
+Checklist updated. Not committed/pushed — awaiting explicit instruction,
+per standing rule.
+
+**WP-10-02 — Public Shell Rebuild: Sticky Nav and Real Footer — done
+2026-07-29.** Closed the two gaps WP-10-01's mapping flagged: header was
+static, footer was one invisible-on-mobile line. Header now
+`bg-background sm:sticky sm:top-0 sm:z-40` — sticky only at `sm:` and
+above, exactly where `PublicBottomNav` (mobile nav owner) is
+`sm:hidden`, so the two never compete for the same viewport at the same
+breakpoint. New `resources/js/components/public-footer.tsx`
+(`PublicFooter`) replaces the old one-liner with brand / "Current Meet"
+(name, venue, school year — each conditionally rendered, nothing
+invented) / "Quick Links" (reusing the same `topNavItems` array the
+header nav already builds, so the two can't drift apart) columns — no
+office-contact section, per the phase's already-resolved decision (PMMS
+stores no division-office address/phone/email anywhere). Kept
+`hidden ... sm:block` on the footer — preserving the original's own
+mobile-hidden choice, not a new one; mobile still relies on the bottom
+tab bar alone. `HandleInertiaRequests::publicNav()` gained additive
+`venue`/`schoolYear` fields off the same already-resolved `Meet` (no new
+query) — confirmed safe first by checking `PublicPortalTest`'s existing
+`publicNav` assertions are all positive `where()` checks, never a
+`missing()`-style closed-shape contract (the kind WP-08.5-08 broke and
+had to revert). Deliberately did NOT add a scroll-triggered shadow —
+that's WP-10-08's own scope. Full gate green (Pest 703/703, 3,720
+assertions, +4 from two new test assertions on the extended
+`publicNav`; Pint/PHPStan/ESLint/Prettier/tsc/build all clean). Chrome
+extension unavailable again this session — verified via source-level
+breakpoint inspection + passing Inertia feature tests, not a rendered
+screenshot, flagged honestly rather than overclaimed. Report:
+`docs/reports/phase-10/WP-10-02-completion.md`. Not committed/pushed —
+awaiting explicit instruction.
+
+**WP-10-03 — Home Hero and Landing Composition Elevation — done
+2026-07-29.** Confirmed `PublicPageHero` has exactly 3 consumers
+(`home.tsx`, `tally.tsx`, `athletics.tsx`) and that `tally.tsx`'s
+`?kiosk=1` mode never touches it (own inline banner) — so widening the
+shared hero's padding (`py-8` → `py-10 sm:py-14`, gradient/color/
+horizontal-padding untouched) is safe and intentional across all three,
+consistent with the phase's resolved hero decision ("same gradient,
+more breathing room," not home-only). `home.tsx` itself widened its own
+section gaps at `sm:` and above only (mobile untouched, so phone scroll
+length doesn't grow): outer wrapper `gap-8`→`gap-8 sm:gap-12`, empty-
+state wrapper `gap-6`→`gap-6 sm:gap-8`, the highlights row `gap-4`→
+`gap-4 sm:gap-6`, the municipalities section wrapper `gap-4`→
+`gap-4 sm:gap-6`, its grid `gap-4`→`gap-4 sm:gap-5`, each municipality
+card `p-4`→`p-4 sm:p-5`. Zero data/prop/route/business-logic change —
+grepped tests to confirm nothing asserts on class names, so this was
+safe to do freely. Full gate green (Pest 703/703, 3,720 assertions
+unchanged; Pint/PHPStan/ESLint/Prettier/tsc/build all clean). Chrome
+extension still unavailable — verified via source/class inspection only,
+flagged honestly. Report: `docs/reports/phase-10/WP-10-03-completion.md`.
+Not committed/pushed — awaiting explicit instruction.
+
+**WP-10-04 — Schedule and Results Layout Rhythm — done 2026-07-29.**
+Closed the exact gap WP-10-01 flagged: `meet.tsx`'s schedule had its
+venue heading sitting outside a bordered div wrapping only the table —
+not a card, unlike `results.tsx`'s per-event blocks (already a real
+card since WP-08.5-08). Restructured each schedule venue group into the
+same card shape results.tsx already uses: `rounded-xl border` section,
+`border-b p-4` header (venue name + the page's already-imported
+`MapPin` icon), bare `overflow-x-auto` table body — the exact "table
+inside a card" convention `docs/ui-ux/shared-components.md` already
+documented. Widened inter-card gaps at `sm:` and above on both pages
+(mobile unchanged): schedule's venue-card list `gap-2`→`gap-4
+sm:gap-6`; results.tsx's event-card list `gap-4`→`gap-4 sm:gap-6`; the
+Venues info-card list `gap-2`→`gap-3 sm:gap-4`, card padding `p-3`→
+`p-4`. Deliberately did NOT add per-card animation stagger (unlike
+home.tsx's fixed 3-card row) — both lists are unbounded length, where
+per-item delay scales badly; kept the existing single whole-list fade-in.
+Zero data/filter/route change. Full gate green (Pest 703/703, 3,720
+assertions unchanged; Pint/PHPStan/ESLint/Prettier/tsc/build all clean).
+Chrome extension still unavailable — verified via source/class
+inspection only, flagged honestly. Report:
+`docs/reports/phase-10/WP-10-04-completion.md`. Not committed/pushed —
+awaiting explicit instruction.
+
+**WP-10-05 — Live Scoreboard and Countdown Composition Refinement —
+done 2026-07-29.** Read `live-score-display.tsx` in full first — found
+its board internals (team panels, center clock "bug", gradient top
+strip, score/clock typography) were already largely solved by Phase
+8.5; the real gap was one level up: `OpeningCountdown` (the pre-match
+card) used a plain `rounded-2xl border-2 bg-card` shell with no
+gradient accent, while the live board it hands off to uses that exact
+shell *plus* a `h-1.5` gradient top strip — the two cards a visitor
+sees in sequence didn't match. Restructured `OpeningCountdown` to reuse
+the board's identical shell/gradient-strip classes — clock typography
+and every inner element byte-for-byte unchanged, only the outer
+container changed. Grepped both shared components' consumers first:
+confirmed `OpeningCountdown` has exactly one (`public/scoreboard.tsx`)
+and `LiveScoreDisplay` exactly two (`scoreboard.tsx`,
+`scoring/show.tsx`). Widened `scoreboard.tsx`'s non-fullscreen board
+wrapper gap at `sm:`+ only (`gap-4`→`gap-4 sm:gap-6`). Deliberately left
+untouched, per the WP's own explicit rules: `live-score-display.tsx`
+itself (no genuine gap found), `scoring/show.tsx`'s own `gap-4`
+wrapper (operator console must stay operator-dense, not drift toward
+the public portal's spacious look), and both the fullscreen and kiosk
+branches' spacing (rule: preserve full-screen mode exactly as today;
+kiosk was already `gap-8`). Full gate green (Pest 703/703, 3,720
+assertions unchanged — one transient `ViteException` failure on a
+first run turned out to be a concurrent-build/test manifest race, not
+a real regression; a clean sequential rerun passed clean;
+Pint/PHPStan/ESLint/Prettier/tsc/build all clean). Chrome extension
+still unavailable — verified via source/class inspection only, flagged
+honestly. Report: `docs/reports/phase-10/WP-10-05-completion.md`. Not
+committed/pushed — awaiting explicit instruction.
+
+**WP-10-06 — Medal Tally Layout Refinement — done 2026-07-29.** Read
+`public/tally.tsx`'s kiosk branch first — confirmed it already renders
+its ranking table at `text-lg` (every descendant cell, including the
+shared `MedalCells`/`MedalHeader`, inheriting that size since neither
+declares its own) — reused that exact proven technique at a more
+modest `text-base` step for the normal (non-kiosk) "Overall ranking"
+table, the page's headline element and this WP's explicit "large,
+spacious ranking presentation" target. Widened spacing at `sm:`/`md:`
+and above only (mobile unchanged): outer wrapper, data wrapper, stat-
+card row, the ranking/medal-distribution grid, and the top-by-points/
+medals-by-sport grid. Deliberately left the "School standings" table
+(labeled "Reference only") at ordinary size, and kiosk mode entirely
+untouched (already large/spacious, rule preserves it exactly). Grepped
+`tally/index.tsx` (admin) first and confirmed it's structurally
+independent with its own separate gap values and Table elements, and
+that no shared component file was modified — so admin inherits nothing
+from this change. `RankBadge` declares its own fixed `text-xs`/`size-6`,
+confirmed unaffected by the larger ancestor font, same fact that
+already made the kiosk table's own size step safe. Zero color/
+computation/kiosk change anywhere. Full gate green (Pest 703/703, 3,720
+assertions unchanged; Pint/PHPStan/ESLint/Prettier/tsc/build all
+clean — build run sequentially after tests this time, avoiding the
+concurrent-build/test manifest race flagged in WP-10-05). Chrome
+extension still unavailable — verified via source/class inspection
+only, flagged honestly. Report:
+`docs/reports/phase-10/WP-10-06-completion.md`. Not committed/pushed —
+awaiting explicit instruction.
+
+**WP-10-07 — New Public Pages: Sports, News, Contact — done 2026-07-29.**
+The phase's only backend-touching WP, kept minimal per its own rule:
+3 new read-only routes/controller actions, zero migrations, zero new
+dependencies. Confirmed `Meet::events()` (BelongsToMany via
+`meet_events`, already written to by `MeetController::syncEvents()`)
+as the real source for "sports contested in this meet" before writing
+anything. **Sports** (`/meets/{meet}/sports`): groups the meet's events
+by `sport_id`, each card shows name + real event count and links into
+`/results`/`/tally` pre-filtered by `sport_id` (both already accept
+it) — reused `sportIcon()` from `sports-medal-strip.tsx` (exported for
+this, zero behavior change for its existing caller) rather than
+duplicating icon logic. **News** (`/meets/{meet}/news`): full paginated
+`Announcement::published()` list (10/page), reusing
+`AnnouncementController::index()`'s exact `paginate()->withQueryString()
+->through()` idiom and the shared `PublicAnnouncements` component
+unmodified — the home page's 5-item preview's own "see all"
+destination. **Contact** (`/meets/{meet}/contact`): reuses
+`meetSummary()` exactly, zero new query — no office-contact section,
+per the phase's resolved decision; a new test asserts `missing()` on
+`contact_email`/`contact_phone`/`office_address` to enforce that
+decision in the suite, not just prose. All three land in the header
+nav only, which the footer's quick-links column already reuses
+verbatim (WP-10-02) — `PublicBottomNav` and `PublicMeetNav` deliberately
+untouched, per the resolved nav-placement decision. Confirmed the Vite
+Wayfinder plugin auto-generates `resources/js/routes/public/*` on
+`npm run build` — ran a build mid-WP to get the new route helpers
+before writing frontend code against them (this project's established
+"tests read the build manifest" gotcha bit the first test run too —
+rebuilt, reran clean). 11 new tests across 3 new files
+(`PublicSportsTest`/`PublicNewsTest`/`PublicContactTest`), matching the
+existing `PublicResultsTest`/`PublicAthleticsTest` conventions. Full
+gate green (Pest 714/714, 3,878 assertions — up from 703/3,720, the
++11/+158 are entirely this WP's own new tests; Pint/PHPStan/ESLint/
+Prettier/tsc/build all clean). Chrome extension still unavailable —
+verified via source inspection + passing tests only, flagged honestly.
+Report: `docs/reports/phase-10/WP-10-07-completion.md`. Not
+committed/pushed — awaiting explicit instruction.
+
+**WP-10-08 — Motion and Interaction Elevation Pass — done 2026-07-29.**
+Added shadow-on-scroll for the sticky header (`sm:`+ only, a small
+scroll-listener boolean + plain CSS `transition-shadow`), a hover-lift
+on schedule/results/sports/news cards (news via the shared
+`PublicAnnouncements` `<li>`, which also lifts home's announcement
+preview — confirmed intentional), and a nav-link hover-color fade —
+all reading `--ease-premium`/`--duration-base`. **Real finding, caught
+by verifying compiled CSS rather than trusting the class name**: bare
+`duration-base` compiles to NOTHING in Tailwind v4 (unlike
+`ease-premium`, which correctly generates from its custom `--ease-*`
+theme key) — `duration-*` already has a large built-in numeric scale
+that a named key doesn't hook into the same way, so every transition
+this WP added would have been silently instant (0s duration) had this
+shipped unverified. Fixed with the arbitrary-custom-property syntax
+`duration-(--duration-base)`, re-verified present in the rebuilt CSS.
+Also upgraded `home.tsx`'s municipality cards from a pre-existing bare,
+untokened `transition hover:shadow-md` to the same token-based
+treatment, for consistency. Confirmed via inspection that the existing
+global `prefers-reduced-motion` reset's `!important` transition-duration
+override covers every new class automatically — no per-component work
+needed. No new `@keyframes`, no new dependency, no color change. Full
+gate green (Pest 714/714 unchanged — pure CSS/motion, no test changes
+needed; Pint/PHPStan/ESLint/Prettier/tsc/build all clean, build run
+twice to catch and then confirm the `duration-base` fix). Chrome
+extension still unavailable — flagged more pointedly than usual since
+hover/scroll motion specifically benefits from an eventual live look.
+Report: `docs/reports/phase-10/WP-10-08-completion.md`. Not
+committed/pushed — awaiting explicit instruction.
+
+**WP-10-09 — Admin Shared-Component Visual Polish Pass — done
+2026-07-29.** Read all 5 named shared components first, grepped usage
+counts (`PageHeader` 34, admin-only; `EmptyState` 40, admin AND both
+public portal pages — confirmed the wider blast radius before editing
+it). Elevated only 2: `PageHeader`'s title `text-xl`→`text-2xl`,
+`space-y-0.5`→`space-y-1` (now matches the public portal's own
+`text-2xl` h1 scale); `EmptyState`'s padding `p-10`→`p-12`, icon
+`size-12`→`size-14`/`size-6`→`size-7`, `mb-4`→`mb-5`, title weight
+`font-medium`→`font-semibold`. **Deliberately left unchanged**:
+`SearchBar` (density is correct for a registry filter, not
+spaciousness), `ConfirmDialog` (already reuses `ui/dialog.tsx`'s
+reasonable `DialogTitle`, and that primitive is out of this WP's blast
+radius — used by every dialog app-wide), `PaginationControls` (already
+minimal; an internal margin/border risked double-spacing against ~18
+existing call sites this WP's own rule can't fully audit). The
+`*FormDialog` convention (per-page local components, not one shared
+file) was sampled via `AnnouncementFormDialog`, found already
+composing cleanly from `ui/dialog.tsx` — none touched, per the rule
+restricting changes to individual resource pages. Spot-checked 4 pages
+(`registry/schools.tsx` table-heavy, `announcements/index.tsx`
+dialog-form, `division/edit.tsx` full-page-form,
+`reports/medal-tally.tsx` print-relevant) — confirmed `app.css`'s
+`@media print` block only targets sidebar-shell selectors, never these
+two components, so print layout is unaffected. Full gate green (Pest
+714/714 unchanged — pure typography/spacing, no test changes needed;
+Pint/PHPStan/ESLint/Prettier/tsc/build all clean). Report:
+`docs/reports/phase-10/WP-10-09-completion.md`. Not committed/pushed —
+awaiting explicit instruction.
+
+**WP-10-10 — Admin Sidebar and Dashboard Visual Polish — done
+2026-07-29.** Read `ui/sidebar.tsx`'s `SidebarMenuButton` first and
+found it forces `group-data-[collapsible=icon]:p-2!` (`!important`) in
+collapsed mode — this ruled out a considered active-nav-item
+left-border accent (would need a compensating one-sided padding
+reduction the `!important` override would clobber, misaligning the
+icon); skipped rather than shipped with a real edge case. Instead:
+`app-sidebar.tsx`'s header/footer padding `p-2`→`p-3`;
+`nav-main.tsx`'s group wrapper `px-2 py-0`→`px-2 py-1`, its
+`SidebarGroupLabel` gained `font-semibold`, its `SidebarMenu` gap
+`gap-1`→`gap-1.5` — all via `className` overrides on the shared
+primitive's own prop, the primitive file itself untouched.
+`dashboard.tsx`: `QuickActions`/`MeetOperations`/"Recent Activity"
+headings `text-base font-medium`→`font-semibold` (one consistent
+decision across all three so none is left visibly inconsistent);
+widget internal gaps widened at `sm:`/`md:`+ only (QuickActions'
+button grid/padding, MeetOperations' section/queue/two-card grids,
+EventsOverviewCard's spacing/progress-bar height/legend gap). No
+charting library, no navigation-structure or role-gating change.
+**Admin-vs-public distinctness explicitly verified, not assumed**: read
+`.bg-premium-hero`'s actual CSS — it gradients FROM the same
+`--sidebar` navy token the admin sidebar fills with (a deliberate,
+pre-existing Phase 8.5-02 brand-token-reuse choice, not something to
+"fix"); what actually keeps the two shells distinct is structural (no
+public page has a sidebar, no admin page has a gradient hero), and this
+WP added zero new colors/gradients, so the distinction is unchanged.
+Full gate green (Pest 714/714 unchanged; Pint/PHPStan/ESLint/Prettier/
+tsc/build all clean). Report:
+`docs/reports/phase-10/WP-10-10-completion.md`. Not committed/pushed —
+awaiting explicit instruction.
+
+**WP-10-11 — Accessibility, Contrast, Responsive Review, and Phase
+Compliance Review — done 2026-07-29. This closes Phase 10 — Premium
+Portal Redesign, all 11 work packages.** Re-verified every WP-10-01
+through WP-10-10 claim directly against current source (not trusted
+from each report alone) — confirmed via `git diff main --stat` that
+`resources/css/app.css` was never touched anywhere in the phase (zero
+color-token changes, structurally), only 2 backend files touched total
+(both purely additive), and `public-bottom-nav.tsx`/`ui/sidebar.tsx`
+never appear in the diff, confirming both genuinely untouched as
+claimed. **Real finding, measured and fixed, not just documented**:
+`TeamLogo`'s 8-color palette (flagged unaudited since WP-10-01's own
+planning) failed WCAG AA contrast across ALL 8 colors when actually
+measured for the first time (2.15:1–4.40:1 with white text, all under
+4.5:1) — `aria-hidden` does not exempt this (only removes it from the
+assistive-tech tree, not from what a sighted low-vision user visually
+perceives). Fixed by moving every hue to its own 700-weight, the first
+uniform tier where all 8 pass (5.05:1–7.29:1) — same hue angles, just
+darker. Re-verified WP-10-08's reduced-motion coverage, the 3 new
+pages' + rebuilt shell's responsive behavior, and WP-10-10's admin-vs-
+public distinctness claim (re-read `.bg-premium-hero`'s actual CSS
+again independently) — all held. Full gate green: **714/714 tests,
+3,878 assertions** (unchanged — the contrast fix has no Pest-testable
+surface); `composer audit`/`npm audit --omit=dev` both clean. Wrote
+`docs/phases/phase-10-premium-portal-redesign/phase-10-compliance-
+review.md` (architecture conformance, per-WP verification, contrast
+tables, quality gate, diff-scope confirmation, findings,
+recommendation — COMPLIANT). Reports:
+`docs/reports/phase-10/WP-10-11-completion.md` and the compliance
+review above. **Not committed/pushed — awaiting explicit instruction.**
+**Phase 10 complete. No further phase currently scaffolded — next step
+is entirely the owner's call: review the compliance report, then decide
+on a commit/push for the whole Phase 10 tree.**

@@ -100,9 +100,10 @@ class HandleInertiaRequests extends Middleware
      * when no meet is currently active — the most recently started
      * published meet, so guest navigation still has somewhere to point.
      * Scoped through `Meet::published()` since this feeds guest-facing
-     * navigation, unlike the authenticated sidebar card.
+     * navigation, unlike the authenticated sidebar card. `venue`/
+     * `schoolYear` (WP-10-02) feed the public footer's meet-info column.
      *
-     * @return array{meetId: int, meetName: string, liveCount: int}|null
+     * @return array{meetId: int, meetName: string, venue: string|null, schoolYear: string, liveCount: int}|null
      */
     private function publicNav(): ?array
     {
@@ -116,6 +117,8 @@ class HandleInertiaRequests extends Middleware
         return [
             'meetId' => $meet->id,
             'meetName' => $meet->name,
+            'venue' => $meet->venue,
+            'schoolYear' => $meet->school_year,
             'liveCount' => ScoringSession::query()
                 ->where('status', '!=', ScoringSessionStatus::Ended->value)
                 ->whereHas('match', fn ($query) => $query->where('meet_id', $meet->id))

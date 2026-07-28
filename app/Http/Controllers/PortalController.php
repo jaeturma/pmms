@@ -420,6 +420,82 @@ class PortalController extends Controller
     }
 
     /**
+     * Sports contested in this meet (WP-10-07), each linking into
+     * `results`/`tally` pre-filtered by `sport_id` (both already accept
+     * it) — a real integration, not a static dead-end list. `Sport` has
+     * no description/image field, so the card grid shows only name and
+     * how many events this meet has in it. Unpublished meets 404.
+     */
+    public function sports(int $meet): Response
+    {
+        $meet = Meet::query()->published()->findOrFail($meet);
+
+        $sports = $meet->events()
+            ->with('sport:id,name')
+            ->get()
+            ->groupBy('sport_id')
+            ->map(fn (Collection $events): array => [
+                'id' => $events->first()->sport->id,
+                'name' => $events->first()->sport->name,
+                'event_count' => $events->count(),
+            ])
+            ->sortBy('name')
+            ->values()
+            ->all();
+
+        return Inertia::render('public/sports', [
+            'meet' => $this->meetSummary($meet),
+            'sports' => $sports,
+        ]);
+    }
+
+    /**
+     * Full, paginated list of this meet's published announcements (WP-
+     * 10-07) — the home page's own `publishedAnnouncements()` stays
+     * capped at a 5-item preview; this is the "see all" destination it
+     * links out to. Unpublished meets 404.
+     */
+    public function news(int $meet): Response
+    {
+        $meet = Meet::query()->published()->findOrFail($meet);
+
+        return Inertia::render('public/news', [
+            'meet' => $this->meetSummary($meet),
+            'announcements' => Announcement::query()
+                ->published()
+                ->where('meet_id', $meet->id)
+                ->orderByDesc('published_at')
+                ->orderByDesc('id')
+                ->paginate(10)
+                ->withQueryString()
+                ->through(fn (Announcement $announcement): array => [
+                    'id' => $announcement->id,
+                    'title' => $announcement->title,
+                    'body' => $announcement->body,
+                    'meet' => $meet->name,
+                    'published_at' => $announcement->published_at?->format('M j, Y g:i A'),
+                ]),
+        ]);
+    }
+
+    /**
+     * Meet/venue info and quick links only (WP-10-07) — the phase's own
+     * resolved decision: no office-contact section, since PMMS stores no
+     * division-office address/phone/email anywhere and nothing should be
+     * invented. Reuses `meetSummary()` exactly; no new query beyond the
+     * `Meet::published()` lookup every public route already does.
+     * Unpublished meets 404.
+     */
+    public function contact(int $meet): Response
+    {
+        $meet = Meet::query()->published()->findOrFail($meet);
+
+        return Inertia::render('public/contact', [
+            'meet' => $this->meetSummary($meet),
+        ]);
+    }
+
+    /**
      * Polling contract for the public scoreboard — the guest equivalent of
      * the internal `scoring.show` endpoint, scoped to published meets. No
      * Reverb channel for guests this WP; polling alone is the whole

@@ -70,6 +70,14 @@ already uses, just as a `count()` instead of a full row fetch. Guarded to
 `$user === null` so authenticated page loads never pay for the extra query,
 mirroring `currentMeet`'s own guard in the opposite direction.
 
+**Update (Phase 10, WP-10-02/WP-10-07):** the header nav (and the new
+multi-column `PublicFooter`'s quick-links column, which reuses the same
+nav-items array) now also lists Sports/News/Contact — real routes only,
+same rule this section already established. Per Phase 10's own resolved
+scope decision, these three go in the header nav and footer **only**,
+never `PublicBottomNav` — its tuned 4-5-item one-thumb-reach mobile
+design stays exactly as WP-08-09 built it.
+
 When no meet is published at all, `publicNav` is `null` and the header
 shows only "Home" — no nav links pointing nowhere. When there's a meet but
 no live match, no "Live now" badge is shown (an inactive indicator sitting
@@ -245,6 +253,28 @@ re-keyed as of WP5 (`docs/medal-tally.md`). See `docs/delegations.md`.
   `PublicAnnouncements` component: latest five on the portal home (general +
   per-meet, meet labeled), a meet's own on its meet page. Managed internally at
   `/announcements` (manager-only) — see `docs/announcements.md`.
+- `/meets/{meet}/sports` (`public.sports`, WP-10-07) — a card grid of the
+  sports actually contested in this meet (from the `Meet`↔`Event`
+  `meet_events` pivot, grouped by `sport_id`), each card showing the
+  sport's real event count and linking straight into `/results` and
+  `/tally` pre-filtered by `sport_id` (both routes already accept that
+  query param) — a real integration, not a static dead-end list. `Sport`
+  has no description/image field, so nothing beyond name and count is
+  shown. Resolved via `Meet::published()`, so unpublished meets 404.
+- `/meets/{meet}/news` (`public.news`, WP-10-07) — the full, paginated
+  list of this meet's published announcements (`Announcement::published()`,
+  10 per page), reusing the shared `PublicAnnouncements` component the
+  home page's 5-item preview already renders — this is that preview's
+  "see all" destination. Resolved via `Meet::published()`, so unpublished
+  meets 404.
+- `/meets/{meet}/contact` (`public.contact`, WP-10-07) — meet/venue info
+  (name, dates, school year, venue) plus quick links to every other
+  portal page for this meet. **No office-contact section** — PMMS stores
+  no division-office address/phone/email anywhere, and this WP's
+  resolved scope decision was to never invent one; the page reuses
+  `meetSummary()` exactly, with zero new query beyond the standard
+  `Meet::published()` lookup. Resolved via `Meet::published()`, so
+  unpublished meets 404.
 
 ## Live scoreboard (Phase 7, WP-07-08)
 
