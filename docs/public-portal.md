@@ -339,10 +339,20 @@ section nav) are 32px tall, under the 44px touch-target guideline — this
 matches the button-sizing convention used throughout the rest of the app and
 was not redesigned in this WP. Color contrast and dark/light theming were not
 re-audited here; they use the same design tokens already in place across
-Phases 1–3. Confirmed still the accepted convention (WP-08-14) for every
+Phases 1–3. **Update (WP-08.5-09): color contrast was finally actually
+measured**, not just assumed unchanged — see
+`docs/ui-ux/accessibility-review.md`'s "Color contrast audit" section for
+the real WCAG ratios and the two failures it found and fixed (a
+warning-banner text color and a medal-gold badge, both a "brand-hue text on
+a light tint" pattern that reads fine to the eye but measures under 4.5:1).
+Confirmed still the accepted convention (WP-08-14) for every
 public page added since this review — `public/scoreboard.tsx` (WP-07-08),
 `public/athletics.tsx` (WP-08-11), and the day-picker chips they reuse — same
-`size="sm"` pattern, not a new gap.
+`size="sm"` pattern, not a new gap. Re-confirmed again in WP-08.5-05 (Premium
+Mobile Sports Experience) specifically for the public filter `Select`
+triggers (`public/tally.tsx`, `public/results.tsx`) — 36px (`data-[size=default]`),
+already above this accepted 32px baseline, so no change was needed there
+either.
 
 Out of scope, per the WP: no new portal pages/features, no Lighthouse/CI
 tooling, no PWA/offline behavior, and no accessibility audit of the internal

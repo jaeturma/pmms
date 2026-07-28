@@ -1,5 +1,5 @@
-import { Head, router, usePage } from '@inertiajs/react';
-import { Award, Crown, Info, Medal } from 'lucide-react';
+import { Head, Link, router, usePage, usePoll } from '@inertiajs/react';
+import { Award, Crown, Info, Medal, Monitor, WifiOff } from 'lucide-react';
 import { useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import Heading from '@/components/heading';
@@ -7,6 +7,7 @@ import { MedalDistributionCard } from '@/components/medal-distribution-card';
 import { MedalCells, MedalHeader } from '@/components/medal-table-parts';
 import { MedalsBySportCard } from '@/components/medals-by-sport-card';
 import type { SportRow } from '@/components/medals-by-sport-card';
+import { PublicLoadingSkeleton } from '@/components/public-loading-skeleton';
 import { PublicMeetNav } from '@/components/public-meet-nav';
 import { PublicPageHero } from '@/components/public-page-hero';
 import { RankBadge } from '@/components/rank-badge';
@@ -31,6 +32,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useKioskMode } from '@/hooks/use-kiosk-mode';
 import { recentDescription } from '@/lib/utils';
 import { tally as publicTally } from '@/routes/public';
 
@@ -101,10 +103,32 @@ export default function PublicTally({
 }: Props) {
     const { division } = usePage().props;
     const areaLabel = division.areaLabel;
+    const kiosk = useKioskMode();
     const [showAllRankings, setShowAllRankings] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [kioskRefreshFailures, setKioskRefreshFailures] = useState(0);
     const visibleDistricts = showAllRankings
         ? districts
         : districts.slice(0, RANKING_PREVIEW_COUNT);
+
+    // Kiosk-only auto-refresh (WP-08.5-07) — this page has no live
+    // session to poll like the scoreboard; a genuine TV/LED-wall display
+    // still needs fresh standings without anyone touching it. A
+    // successful poll re-fetches every prop, including `generatedAt`
+    // (server-computed), so that alone is the "last refreshed" readout —
+    // no separate client-side timestamp needed, only failure tracking
+    // for the connection-status banner. `kiosk` is effectively fixed for
+    // this component's whole lifetime (it only changes across a fresh
+    // page load with a different URL), so capturing it once in
+    // `autoStart` is enough — no separate start/stop effect needed.
+    usePoll(
+        30000,
+        {
+            onSuccess: () => setKioskRefreshFailures(0),
+            onError: () => setKioskRefreshFailures((n) => n + 1),
+        },
+        { autoStart: kiosk },
+    );
 
     const applyFilters = (overrides: {
         sport_id?: string;
@@ -127,8 +151,115 @@ export default function PublicTally({
         router.get(publicTally(meet.id).url, params, {
             preserveState: true,
             preserveScroll: true,
+            onStart: () => setLoading(true),
+            onFinish: () => setLoading(false),
         });
     };
+
+    const kioskUrl = () => {
+        const params = new URLSearchParams(window.location.search);
+        params.set('kiosk', '1');
+
+        return `${window.location.pathname}?${params.toString()}`;
+    };
+
+    // TV/projector/LED-wall/kiosk rendering (WP-08.5-07, `?kiosk=1`): no
+    // nav, filters, or secondary sections (medals-by-sport, school
+    // standings) — a big screen should show one thing at a glance, the
+    // official ranking, at large text and full width. The 30s poll
+    // above supplies "auto-refresh"; `kioskRefreshFailures` supplies
+    // "connection status".
+    if (kiosk) {
+        return (
+            <>
+                <Head title={`Medal tally — ${meet.name}`} />
+                <div className="flex min-h-screen flex-col gap-6 p-6 sm:p-10 lg:p-16">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div>
+                            <p className="text-base font-medium text-muted-foreground">
+                                {meet.name}
+                            </p>
+                            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+                                Medal Tally & Rankings
+                            </h1>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                            As of {generatedAt}
+                        </p>
+                    </div>
+
+                    {kioskRefreshFailures >= 2 && (
+                        // Message text uses the inherited default
+                        // `foreground` color, not `text-warning` (WP-
+                        // 08.5-09) — see `live-score-display.tsx`'s
+                        // identical fix for the measured contrast
+                        // numbers; only the icon stays warning-colored.
+                        <div
+                            role="status"
+                            className="flex items-center justify-center gap-2 rounded-md bg-warning/10 px-3 py-2 text-sm"
+                        >
+                            <WifiOff
+                                aria-hidden="true"
+                                className="size-4 text-warning"
+                            />
+                            Connection lost — retrying automatically. Standings
+                            shown may be out of date.
+                        </div>
+                    )}
+
+                    {districts.length === 0 ? (
+                        <div className="flex flex-1 items-center justify-center">
+                            <EmptyState
+                                icon={Crown}
+                                title="No medals yet"
+                                description="Standings appear as soon as results are validated."
+                            />
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto rounded-2xl border-2">
+                            {/* `text-lg` on `Table` itself (its own base
+                                is `text-sm`) — every cell below,
+                                including the shared `MedalCells`/
+                                `MedalHeader`, inherits the larger size
+                                rather than needing its own override. */}
+                            <Table className="text-lg">
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="w-20">
+                                            Rank
+                                        </TableHead>
+                                        <TableHead>{areaLabel}</TableHead>
+                                        <MedalHeader />
+                                        <TableHead className="w-28 text-center">
+                                            Points
+                                        </TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {districts.map((row) => (
+                                        <TableRow key={row.district}>
+                                            <TableCell>
+                                                <RankBadge
+                                                    position={row.position}
+                                                />
+                                            </TableCell>
+                                            <TableCell className="font-semibold">
+                                                {row.district}
+                                            </TableCell>
+                                            <MedalCells row={row} />
+                                            <TableCell className="text-center font-semibold">
+                                                {row.points}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
+                </div>
+            </>
+        );
+    }
 
     return (
         <>
@@ -152,64 +283,81 @@ export default function PublicTally({
 
                 <PublicMeetNav meetId={meet.id} active="tally" />
 
-                <div className="flex flex-wrap gap-2">
-                    {sportOptions.length > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap gap-2">
+                        {sportOptions.length > 0 && (
+                            <Select
+                                value={String(filters.sport_id ?? 'all')}
+                                onValueChange={(value) =>
+                                    applyFilters({ sport_id: value })
+                                }
+                            >
+                                <SelectTrigger
+                                    className="w-56"
+                                    aria-label="Filter by sport"
+                                >
+                                    <SelectValue placeholder="All sports" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">
+                                        All sports
+                                    </SelectItem>
+                                    {sportOptions.map((option) => (
+                                        <SelectItem
+                                            key={option.id}
+                                            value={String(option.id)}
+                                        >
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
                         <Select
-                            value={String(filters.sport_id ?? 'all')}
+                            value={filters.age_division ?? 'all'}
                             onValueChange={(value) =>
-                                applyFilters({ sport_id: value })
+                                applyFilters({ age_division: value })
                             }
                         >
                             <SelectTrigger
-                                className="w-56"
-                                aria-label="Filter by sport"
+                                className="w-48"
+                                aria-label="Filter by division"
                             >
-                                <SelectValue placeholder="All sports" />
+                                <SelectValue placeholder="All divisions" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="all">All sports</SelectItem>
-                                {sportOptions.map((option) => (
+                                <SelectItem value="all">
+                                    All divisions
+                                </SelectItem>
+                                {ageDivisionOptions.map((option) => (
                                     <SelectItem
                                         key={option.id}
-                                        value={String(option.id)}
+                                        value={option.id}
                                     >
                                         {option.label}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
-                    )}
-                    <Select
-                        value={filters.age_division ?? 'all'}
-                        onValueChange={(value) =>
-                            applyFilters({ age_division: value })
-                        }
-                    >
-                        <SelectTrigger
-                            className="w-48"
-                            aria-label="Filter by division"
-                        >
-                            <SelectValue placeholder="All divisions" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All divisions</SelectItem>
-                            {ageDivisionOptions.map((option) => (
-                                <SelectItem key={option.id} value={option.id}>
-                                    {option.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    </div>
+                    <Button variant="outline" size="sm" asChild>
+                        <Link href={kioskUrl()}>
+                            <Monitor aria-hidden="true" />
+                            Kiosk / TV mode
+                        </Link>
+                    </Button>
                 </div>
 
-                {districts.length === 0 ? (
+                {loading ? (
+                    <PublicLoadingSkeleton rows={6} />
+                ) : districts.length === 0 ? (
                     <EmptyState
                         icon={Crown}
                         title="No medals yet"
                         description="Standings appear as soon as results are validated."
                     />
                 ) : (
-                    <>
+                    <div className="flex animate-card-in flex-col gap-6">
                         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                             <StatCard
                                 label="Total gold"
@@ -387,7 +535,7 @@ export default function PublicTally({
                                 </Table>
                             </div>
                         </section>
-                    </>
+                    </div>
                 )}
             </div>
         </>

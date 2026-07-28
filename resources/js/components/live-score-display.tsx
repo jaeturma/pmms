@@ -1,6 +1,7 @@
 import { Maximize2, Minimize2, WifiOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import { LiveBadge } from '@/components/live-badge';
 import { TeamLogo } from '@/components/team-logo';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -163,6 +164,35 @@ function TickingClock({
     return <>{formatClock(baseSeconds + ticks)}</>;
 }
 
+/**
+ * "Updated Xs ago" (WP-08.5-04's "last-updated time" requirement) — the
+ * same remount-a-ticker-from-zero technique as `RunningClock`, so no
+ * render ever reads the wall clock directly (the React Compiler's purity
+ * rule, per this file's own `useTicks` note). `key={at}` remounts the
+ * ticker back to 0 every time the caller passes a genuinely new
+ * timestamp (a successful poll or Echo push); while disconnected, the
+ * caller stops passing a new value, so this keeps counting up — the
+ * growing "ago" is itself part of the disconnected signal, not just the
+ * separate warning banner.
+ */
+function LastUpdated({ at }: { at: number | null }) {
+    if (at === null) {
+        return null;
+    }
+
+    return (
+        <span className="text-xs text-muted-foreground">
+            <TickingLastUpdated key={at} />
+        </span>
+    );
+}
+
+function TickingLastUpdated() {
+    const ticks = useTicks(true);
+
+    return <>Updated {ticks === 0 ? 'just now' : `${ticks}s ago`}</>;
+}
+
 function formatClock(totalSeconds: number): string {
     const seconds = Math.max(0, Math.floor(totalSeconds));
     const hrs = Math.floor(seconds / 3600);
@@ -277,10 +307,16 @@ function TeamPanel({
             <p className="w-full truncate text-lg font-medium text-muted-foreground">
                 {label}
             </p>
+            {/* `key={score}` remounts this element on every real score
+                change (same technique as `RunningClock`/`LastUpdated`
+                below), replaying `animate-score-pop` — WP-08.5-06's
+                "score-change emphasis." Plays once on first mount too,
+                which reads fine as part of the board's own entrance. */}
             <p
+                key={score}
                 className={cn(
-                    'font-bold tabular-nums',
-                    fullscreen ? 'text-9xl' : 'text-6xl',
+                    fullscreen ? 'text-score-lg' : 'text-score',
+                    'animate-score-pop',
                 )}
             >
                 {score}
@@ -319,8 +355,13 @@ function CenterPanel({
         >
             <p
                 className={cn(
-                    'font-mono font-bold tabular-nums',
-                    fullscreen ? 'text-6xl' : 'text-3xl',
+                    'text-clock',
+                    // Matches `.text-score`/`.text-score-lg`'s own `sm:`
+                    // step-up (WP-08.5-05) — a flat `text-6xl` clock in
+                    // fullscreen would also squeeze the two score panels
+                    // on a phone, since this center column is `auto`-
+                    // width and sizes to its own content.
+                    fullscreen ? 'text-4xl sm:text-6xl' : 'text-3xl',
                 )}
                 aria-label="Running time"
             >
@@ -494,6 +535,9 @@ export function LiveScoreDisplay({
     fullscreen,
     onToggleFullscreen,
     disconnected = false,
+    lastUpdatedAt = null,
+    showFullscreenToggle = true,
+    maxWidthClassName = 'max-w-5xl',
     participants,
 }: {
     session: LiveSession;
@@ -503,6 +547,20 @@ export function LiveScoreDisplay({
      * the score shown may be stale; the page keeps retrying on its own,
      * no user action needed. */
     disconnected?: boolean;
+    /** `Date.now()` at the caller's last successful poll or Echo push
+     * (WP-08.5-04) — when to omit, pass `null` rather than leaving it
+     * unset from a component that has no notion of freshness. */
+    lastUpdatedAt?: number | null;
+    /** Hide the manual full-screen toggle (WP-08.5-07's kiosk mode,
+     * where `fullscreen` is always forced on and there's no benefit —
+     * or expectation of anyone — clicking a toggle on an unattended
+     * TV/LED wall). Every other caller keeps the default. */
+    showFullscreenToggle?: boolean;
+    /** The board's cap on fullscreen width (WP-08.5-07) — the default
+     * `max-w-5xl` fits a normal browser window; a genuine 16:9 kiosk/TV
+     * display should fill much more of the frame, so kiosk mode passes
+     * a wider value (or `''` for no cap) instead. */
+    maxWidthClassName?: string;
     /** Boxing's real boxer photos — internal operator console only, never
      * present on the public scoreboard (photos are never public). */
     participants?: [Participant | null, Participant | null];
@@ -526,37 +584,57 @@ export function LiveScoreDisplay({
     return (
         <>
             <div className="flex items-center justify-between gap-2">
-                <Badge
-                    variant={
-                        session.status === 'ended'
-                            ? 'outline'
-                            : session.status === 'paused'
-                              ? 'secondary'
-                              : 'default'
-                    }
-                >
-                    {session.status_label}
-                </Badge>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onToggleFullscreen}
-                >
-                    {fullscreen ? (
-                        <Minimize2 aria-hidden="true" />
-                    ) : (
-                        <Maximize2 aria-hidden="true" />
+                {session.status === 'in_progress' ? (
+                    <LiveBadge label={session.status_label} />
+                ) : (
+                    <Badge
+                        variant={
+                            session.status === 'ended' ? 'outline' : 'secondary'
+                        }
+                    >
+                        {session.status_label}
+                    </Badge>
+                )}
+                <div className="flex items-center gap-3">
+                    <LastUpdated at={lastUpdatedAt} />
+                    {showFullscreenToggle && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={onToggleFullscreen}
+                        >
+                            {fullscreen ? (
+                                <Minimize2 aria-hidden="true" />
+                            ) : (
+                                <Maximize2 aria-hidden="true" />
+                            )}
+                            {fullscreen ? 'Exit full screen' : 'Full screen'}
+                        </Button>
                     )}
-                    {fullscreen ? 'Exit full screen' : 'Full screen'}
-                </Button>
+                </div>
             </div>
 
             {disconnected && (
+                // The message text no longer sets `text-warning` (WP-
+                // 08.5-09) — measured contrast of `--warning` text against
+                // this tinted background at only ~2.1:1 in light mode,
+                // well under WCAG AA's 4.5:1 (and `--warning-foreground`,
+                // the token that looks like the fix, actually measures
+                // ~1.05:1 in dark mode — it's designed to pair with a
+                // *solid* `bg-warning` fill, not this 10%-tint style).
+                // Leaving the text at the inherited default `foreground`
+                // color measures ~18:1 (light) / ~16:1 (dark) against this
+                // same tint — the ordinary body-text pairing is simply
+                // correct here; only the icon stays warning-colored
+                // (decorative, `aria-hidden`, no contrast requirement).
                 <div
                     role="status"
-                    className="flex items-center justify-center gap-2 rounded-md bg-warning/10 px-3 py-2 text-sm text-warning"
+                    className="flex items-center justify-center gap-2 rounded-md bg-warning/10 px-3 py-2 text-sm"
                 >
-                    <WifiOff aria-hidden="true" className="size-4" />
+                    <WifiOff
+                        aria-hidden="true"
+                        className="size-4 text-warning"
+                    />
                     Connection lost — retrying automatically. Scores shown may
                     be out of date.
                 </div>
@@ -567,7 +645,7 @@ export function LiveScoreDisplay({
                 aria-atomic="true"
                 className={cn(
                     'w-full overflow-hidden rounded-2xl border-2 bg-card shadow-sm',
-                    fullscreen && 'mx-auto max-w-5xl',
+                    fullscreen && cn('mx-auto', maxWidthClassName),
                 )}
             >
                 <div className="h-1.5 w-full bg-gradient-to-r from-sidebar to-primary" />

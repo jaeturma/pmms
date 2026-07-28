@@ -8,8 +8,8 @@ import {
 } from 'lucide-react';
 import type { PropsWithChildren } from 'react';
 import AppLogoIcon from '@/components/app-logo-icon';
+import { LiveBadge } from '@/components/live-badge';
 import { PublicBottomNav } from '@/components/public-bottom-nav';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { dashboard, home, login } from '@/routes';
 import {
@@ -63,6 +63,7 @@ export default function PublicLayout({ children }: PropsWithChildren) {
                             label: 'Live',
                             href: publicMeet(publicNav.meetId).url,
                             icon: Radio,
+                            live: true,
                         },
                     ]
                   : []),
@@ -122,21 +123,11 @@ export default function PublicLayout({ children }: PropsWithChildren) {
 
                     <div className="flex items-center gap-2">
                         {publicNav && publicNav.liveCount > 0 && (
-                            <Button
-                                asChild
-                                variant="outline"
-                                size="sm"
-                                className="border-destructive/30 text-destructive"
-                            >
+                            <Button asChild variant="ghost" size="sm">
                                 <Link href={publicMeet(publicNav.meetId).url}>
-                                    <Radio aria-hidden="true" />
-                                    Live now
-                                    <Badge
-                                        variant="destructive"
-                                        className="ml-0.5"
-                                    >
-                                        {publicNav.liveCount}
-                                    </Badge>
+                                    <LiveBadge
+                                        label={`Live now · ${publicNav.liveCount}`}
+                                    />
                                 </Link>
                             </Button>
                         )}

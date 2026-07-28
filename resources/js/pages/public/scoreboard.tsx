@@ -1,11 +1,14 @@
 import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft, Radio } from 'lucide-react';
+import { ArrowLeft, Monitor, Radio } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
+import { LiveBadge } from '@/components/live-badge';
 import type { LiveSession } from '@/components/live-score-display';
 import { LiveScoreDisplay } from '@/components/live-score-display';
+import { OpeningCountdown } from '@/components/opening-countdown';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useKioskMode } from '@/hooks/use-kiosk-mode';
 import { meet as publicMeet } from '@/routes/public';
 import { poll as pollScoreboard } from '@/routes/public/scoreboard';
 
@@ -27,6 +30,7 @@ type Props = {
         round_label: string;
         venue: string | null;
         scheduled_date: string | null;
+        scheduled_start_at: string | null;
     };
     session: LiveSession | null;
 };
@@ -36,8 +40,10 @@ export default function PublicScoreboard({
     match,
     session: initialSession,
 }: Props) {
+    const kiosk = useKioskMode();
     const [session, setSession] = useState(initialSession);
     const [pollFailures, setPollFailures] = useState(0);
+    const [lastUpdatedAt, setLastUpdatedAt] = useState(() => Date.now());
     const [fullscreen, setFullscreen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -53,6 +59,7 @@ export default function PublicScoreboard({
                 .then((data: { session: LiveSession | null }) => {
                     setSession(data.session);
                     setPollFailures(0);
+                    setLastUpdatedAt(Date.now());
                 })
                 .catch(() => {
                     // Polling retries on its own next tick — no user
@@ -85,6 +92,65 @@ export default function PublicScoreboard({
         }
     };
 
+    // TV/projector/LED-wall/kiosk rendering (WP-08.5-07, `?kiosk=1`): no
+    // back-link or breadcrumb chrome (`KioskLayout` already stripped the
+    // header/footer/bottom-nav around this), the board always at its
+    // largest size step, no manual fullscreen toggle (nothing to click
+    // on an unattended display), and a wider cap so the board fills more
+    // of a real 16:9 frame. The same polling/`disconnected`/
+    // `lastUpdatedAt` state above already gives the "auto-refresh" and
+    // "connection status" the Objective asks for — nothing new needed
+    // for that part.
+    if (kiosk) {
+        return (
+            <>
+                <Head title={`Live scoring — ${match.event}`} />
+                <div className="flex min-h-screen flex-col gap-8 p-6 sm:p-10 lg:p-16">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div>
+                            <p className="text-sm font-medium text-muted-foreground">
+                                {meet.name} · {match.round_label}
+                            </p>
+                            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                                {match.event}
+                            </h1>
+                        </div>
+                        <Badge variant="outline" className="text-sm">
+                            Live score — provisional, not the official result
+                        </Badge>
+                    </div>
+
+                    {session === null ? (
+                        <div className="flex flex-1 flex-col items-center justify-center gap-6">
+                            {match.scheduled_start_at && (
+                                <OpeningCountdown
+                                    startsAt={match.scheduled_start_at}
+                                />
+                            )}
+                            <EmptyState
+                                icon={Radio}
+                                title="No live session"
+                                description="Live scoring hasn't started for this match yet."
+                            />
+                        </div>
+                    ) : (
+                        <div className="flex flex-1 flex-col items-center justify-center gap-8">
+                            <LiveScoreDisplay
+                                session={session}
+                                fullscreen
+                                onToggleFullscreen={() => {}}
+                                disconnected={pollFailures >= 2}
+                                lastUpdatedAt={lastUpdatedAt}
+                                showFullscreenToggle={false}
+                                maxWidthClassName="max-w-[1600px]"
+                            />
+                        </div>
+                    )}
+                </div>
+            </>
+        );
+    }
+
     return (
         <>
             <Head title={`Live scoring — ${match.event}`} />
@@ -107,9 +173,7 @@ export default function PublicScoreboard({
                     <span aria-hidden="true">›</span>
                     <span>{match.round_label}</span>
                     {session !== null && session.status !== 'ended' && (
-                        <Badge variant="destructive" className="ml-1">
-                            Live now
-                        </Badge>
+                        <LiveBadge label="Live now" className="ml-1" />
                     )}
                     {(match.scheduled_date || match.venue) && (
                         <span className="w-full text-xs">
@@ -124,19 +188,44 @@ export default function PublicScoreboard({
                     Live score — provisional, not the official result
                 </Badge>
 
-                <Button variant="outline" size="sm" className="w-fit" asChild>
-                    <Link href={publicMeet(meet.id)}>
-                        <ArrowLeft aria-hidden="true" />
-                        Back to schedule
-                    </Link>
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-fit"
+                        asChild
+                    >
+                        <Link href={publicMeet(meet.id)}>
+                            <ArrowLeft aria-hidden="true" />
+                            Back to schedule
+                        </Link>
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-fit"
+                        asChild
+                    >
+                        <Link href={`${window.location.pathname}?kiosk=1`}>
+                            <Monitor aria-hidden="true" />
+                            Kiosk / TV mode
+                        </Link>
+                    </Button>
+                </div>
 
                 {session === null ? (
-                    <EmptyState
-                        icon={Radio}
-                        title="No live session"
-                        description="Live scoring hasn't started for this match yet."
-                    />
+                    <div className="flex flex-col items-center gap-6">
+                        {match.scheduled_start_at && (
+                            <OpeningCountdown
+                                startsAt={match.scheduled_start_at}
+                            />
+                        )}
+                        <EmptyState
+                            icon={Radio}
+                            title="No live session"
+                            description="Live scoring hasn't started for this match yet."
+                        />
+                    </div>
                 ) : (
                     <div
                         ref={containerRef}
@@ -151,6 +240,7 @@ export default function PublicScoreboard({
                             fullscreen={fullscreen}
                             onToggleFullscreen={toggleFullscreen}
                             disconnected={pollFailures >= 2}
+                            lastUpdatedAt={lastUpdatedAt}
                         />
                     </div>
                 )}

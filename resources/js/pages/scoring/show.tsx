@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
+import { LiveBadge } from '@/components/live-badge';
 import type { LiveSession, Participant } from '@/components/live-score-display';
 import {
     isBasketballState,
@@ -13,7 +14,6 @@ import {
     LiveScoreDisplay,
 } from '@/components/live-score-display';
 import { PageHeader } from '@/components/page-header';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -270,6 +270,7 @@ export default function ScoringBoard({
     const [session, setSession] = useState(initialSession);
     const [syncedSession, setSyncedSession] = useState(initialSession);
     const [pollFailures, setPollFailures] = useState(0);
+    const [lastUpdatedAt, setLastUpdatedAt] = useState(() => Date.now());
     const [fullscreen, setFullscreen] = useState(false);
     const [sideALabel, setSideALabel] = useState(suggestedLabels[0] ?? '');
     const [sideBLabel, setSideBLabel] = useState(suggestedLabels[1] ?? '');
@@ -297,6 +298,7 @@ export default function ScoringBoard({
                 .then((data: { session: Session | null }) => {
                     setSession(data.session);
                     setPollFailures(0);
+                    setLastUpdatedAt(Date.now());
                 })
                 .catch(() => {
                     // Polling retries on its own next tick — no user
@@ -315,6 +317,7 @@ export default function ScoringBoard({
         (payload) => {
             setSession(payload.session);
             setPollFailures(0);
+            setLastUpdatedAt(Date.now());
         },
         [channel],
     );
@@ -474,9 +477,7 @@ export default function ScoringBoard({
                     <span aria-hidden="true">›</span>
                     <span>{match.round_label}</span>
                     {isActive && (
-                        <Badge variant="destructive" className="ml-1">
-                            Live now
-                        </Badge>
+                        <LiveBadge label="Live now" className="ml-1" />
                     )}
                     {(match.scheduled_date || match.venue) && (
                         <span className="w-full text-xs">
@@ -579,6 +580,7 @@ export default function ScoringBoard({
                             fullscreen={fullscreen}
                             onToggleFullscreen={toggleFullscreen}
                             disconnected={pollFailures >= 2}
+                            lastUpdatedAt={lastUpdatedAt}
                             participants={participants}
                         />
 

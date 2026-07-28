@@ -108,3 +108,57 @@ against the code, not assumed):
 - **No re-audit of pages already covered by WP-04-06/WP-07-03** — this
   pass targeted only what's new or changed since those two reviews, to
   avoid duplicating work already done and documented.
+
+## Color contrast audit (WP-08.5-09)
+
+Color contrast had never actually been *measured* anywhere in this
+project before — every prior pass (this doc included, and
+`docs/public-portal.md`'s WP-04-06 section) explicitly deferred it,
+reasoning "same tokens already in place across Phases 1–3." WP-08.5-09's
+own Objective names "contrast" directly, so this pass computed real WCAG
+contrast ratios (OKLCH → linear sRGB → relative luminance → the standard
+`(L1+0.05)/(L2+0.05)` ratio) for every color pairing introduced or
+reused by Phase 8.5, rather than continuing to assume.
+
+**Two real failures found and fixed**, both a "brand-hue text directly
+on a light tint" pattern rather than the safer "solid brand-hue fill +
+dedicated `-foreground` text" pattern already used correctly elsewhere
+(`RankBadge`, `StatCard`'s tone map):
+
+- `text-warning` on `bg-warning/10` (the "connection lost" banner,
+  originally WP-08-10, reused by WP-08.5-04's public scoreboard and
+  WP-08.5-07's tally kiosk mode) — measured **~2.1:1** in light mode,
+  well under WCAG AA's 4.5:1 for text. The obvious-looking fix,
+  `text-warning-foreground`, is worse: it measures **~1.05:1** in dark
+  mode, because that token is designed to pair with a *solid*
+  `bg-warning` fill, not a 10%-opacity tint over a dark page background.
+  The actual fix: leave the message text at its inherited default
+  `foreground` color (already the app's baseline body-text pairing) —
+  measured **~18.3:1** (light) / **~16.5:1** (dark) against the same
+  tinted background. Only the icon stays warning-colored (decorative,
+  `aria-hidden`, no contrast requirement). Fixed in
+  `resources/js/components/live-score-display.tsx` and
+  `resources/js/pages/public/tally.tsx`.
+- `text-medal-gold` on a near-white background (the new "Meet
+  concluded" `Badge` on `public/home.tsx`'s closing-summary card,
+  WP-08.5-08) — measured **~1.89:1**. Fixed by switching to the
+  established-safe pairing, `bg-medal-gold text-medal-gold-foreground`
+  (a solid gold fill with its dedicated dark foreground token) —
+  measured **~8.5:1**.
+
+**Verified already sound** (measured, not assumed): `LiveBadge`'s
+`bg-destructive` fill with white text (**~4.76:1** light / **~10.1:1**
+dark — passes AA, if only just, in light mode); `StatCard`'s
+gold/silver/bronze tone map (`bg-medal-*/20` + the matching
+`-foreground` token, **~14:1**) — the pattern every other medal-colored
+component in this phase should keep following. The two remaining raw
+`text-medal-gold` usages left unchanged
+(`podium-display.tsx`'s and `home.tsx`'s Crown icons) are both
+decorative and `aria-hidden` — no text-contrast requirement applies.
+
+**Not fixed, flagged instead** — the same `text-warning`-on-tint pattern
+also exists in three admin-only usages (`resources/js/components/
+stat-card.tsx`'s `warning` tone, `resources/js/pages/dashboard.tsx`,
+`resources/js/pages/eligibility/index.tsx`'s "pending" badge) — outside
+this WP's public-portal scope, not touched, but worth a future pass
+since the underlying token pairing is identically wrong there.

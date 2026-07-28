@@ -6,6 +6,11 @@ export type BottomNavItem = {
     label: string;
     href: string;
     icon: LucideIcon;
+    /** Shows a small pulsing dot on the icon (WP-08.5-05) — for the
+     * "Live" tab only, reusing `LiveBadge`'s own pulse animation rather
+     * than a second one-off. The tab's own visible "Live" label already
+     * carries the meaning, so the dot stays `aria-hidden`. */
+    live?: boolean;
 };
 
 /**
@@ -42,7 +47,18 @@ export function PublicBottomNav({
                                     : 'text-muted-foreground',
                             )}
                         >
-                            <item.icon aria-hidden="true" className="size-5" />
+                            <span className="relative">
+                                <item.icon
+                                    aria-hidden="true"
+                                    className="size-5"
+                                />
+                                {item.live && (
+                                    <span
+                                        aria-hidden="true"
+                                        className="absolute -top-0.5 -right-0.5 size-2 animate-pulse-live rounded-full bg-destructive"
+                                    />
+                                )}
+                            </span>
                             {item.label}
                         </Link>
                     );

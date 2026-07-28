@@ -188,92 +188,103 @@ export default function PublicAthletics({
                                 ))}
                             </nav>
 
-                            {slots.length === 0 ? (
-                                <EmptyState
-                                    icon={CalendarDays}
-                                    title="No events on this day"
-                                    description="Choose another day above."
-                                />
-                            ) : (
-                                <ul className="flex flex-col gap-3">
-                                    {slots.map((slot) => (
-                                        <li
-                                            key={slot.id}
-                                            className="rounded-xl border p-4"
-                                        >
-                                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                                <div>
-                                                    <p className="font-medium">
-                                                        {slot.event}
-                                                    </p>
-                                                    <p className="text-sm text-muted-foreground">
-                                                        {slot.starts_at}–
-                                                        {slot.ends_at} ·{' '}
-                                                        {slot.venue}
-                                                    </p>
+                            {/* `key={selectedDay}` remounts this block on
+                                every day switch, replaying
+                                `animate-card-in` (WP-08.5-06's "tab
+                                transition" — see the identical pattern
+                                in `public/meet.tsx`). */}
+                            <div key={selectedDay} className="animate-card-in">
+                                {slots.length === 0 ? (
+                                    <EmptyState
+                                        icon={CalendarDays}
+                                        title="No events on this day"
+                                        description="Choose another day above."
+                                    />
+                                ) : (
+                                    <ul className="flex flex-col gap-3">
+                                        {slots.map((slot) => (
+                                            <li
+                                                key={slot.id}
+                                                className="rounded-xl border p-4"
+                                            >
+                                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                                    <div>
+                                                        <p className="font-medium">
+                                                            {slot.event}
+                                                        </p>
+                                                        <p className="text-sm text-muted-foreground">
+                                                            {slot.starts_at}–
+                                                            {slot.ends_at} ·{' '}
+                                                            {slot.venue}
+                                                        </p>
+                                                    </div>
+                                                    <Badge
+                                                        variant={
+                                                            statusBadge[
+                                                                slot.status
+                                                            ].variant
+                                                        }
+                                                    >
+                                                        {
+                                                            statusBadge[
+                                                                slot.status
+                                                            ].label
+                                                        }
+                                                    </Badge>
                                                 </div>
-                                                <Badge
-                                                    variant={
-                                                        statusBadge[slot.status]
-                                                            .variant
-                                                    }
-                                                >
-                                                    {
-                                                        statusBadge[slot.status]
-                                                            .label
-                                                    }
-                                                </Badge>
-                                            </div>
 
-                                            {slot.top_placements.length > 0 && (
-                                                <div className="mt-3 border-t pt-3">
-                                                    <p className="mb-1 text-xs text-muted-foreground">
-                                                        Official results
-                                                        {slot.official_as_of &&
-                                                            ` — as of ${slot.official_as_of}`}
-                                                    </p>
-                                                    <ol className="space-y-1 text-sm">
-                                                        {slot.top_placements.map(
-                                                            (placement) => (
-                                                                <li
-                                                                    key={
-                                                                        placement.rank
-                                                                    }
-                                                                    className="flex items-center justify-between gap-2"
-                                                                >
-                                                                    <span>
-                                                                        {
+                                                {slot.top_placements.length >
+                                                    0 && (
+                                                    <div className="mt-3 border-t pt-3">
+                                                        <p className="mb-1 text-xs text-muted-foreground">
+                                                            Official results
+                                                            {slot.official_as_of &&
+                                                                ` — as of ${slot.official_as_of}`}
+                                                        </p>
+                                                        <ol className="space-y-1 text-sm">
+                                                            {slot.top_placements.map(
+                                                                (placement) => (
+                                                                    <li
+                                                                        key={
                                                                             placement.rank
                                                                         }
-                                                                        .{' '}
-                                                                        {
-                                                                            placement.athlete
-                                                                        }{' '}
-                                                                        <span className="text-muted-foreground">
-                                                                            (
+                                                                        className="flex items-center justify-between gap-2"
+                                                                    >
+                                                                        <span>
                                                                             {
-                                                                                placement.school
+                                                                                placement.rank
                                                                             }
-                                                                            )
-                                                                        </span>
-                                                                    </span>
-                                                                    {placement.mark && (
-                                                                        <span className="font-medium tabular-nums">
+                                                                            .{' '}
                                                                             {
-                                                                                placement.mark
-                                                                            }
+                                                                                placement.athlete
+                                                                            }{' '}
+                                                                            <span className="text-muted-foreground">
+                                                                                (
+                                                                                {
+                                                                                    placement.school
+                                                                                }
+
+                                                                                )
+                                                                            </span>
                                                                         </span>
-                                                                    )}
-                                                                </li>
-                                                            ),
-                                                        )}
-                                                    </ol>
-                                                </div>
-                                            )}
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
+                                                                        {placement.mark && (
+                                                                            <span className="font-medium tabular-nums">
+                                                                                {
+                                                                                    placement.mark
+                                                                                }
+                                                                            </span>
+                                                                        )}
+                                                                    </li>
+                                                                ),
+                                                            )}
+                                                        </ol>
+                                                    </div>
+                                                )}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
                         </>
                     )}
                 </section>

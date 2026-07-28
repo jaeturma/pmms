@@ -72,6 +72,102 @@
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-ring: var(--sidebar-ring);
+
+    /* Motion tokens (Phase 8.5, WP-08.5-02) — the durations/easing every
+     * later WP's interactive motion (card entrance, tab transition,
+     * score highlight) should read from, instead of one-off values per
+     * component. `--ease-premium` is a gentle, decelerating curve (an
+     * "Apple-quality polish" easing, not a bouncy/playful one) matching
+     * the phase's stated visual direction. */
+    --ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
+    --duration-fast: 150ms;
+    --duration-base: 250ms;
+    --duration-slow: 400ms;
+
+    /* A restrained pulse for "this is happening right now" — the live
+     * indicator dot (`LiveBadge`) and any future live-state affordance.
+     * Deliberately a slow, low-amplitude opacity breathe, not a scale/
+     * flash — the motion guidelines explicitly warn against flashing.
+     * Disabled globally under prefers-reduced-motion, see `@layer base`
+     * below — every consumer gets that for free, no per-component work. */
+    --animate-pulse-live: pulse-live 2.4s var(--ease-premium) infinite;
+
+    /* Motion system (Phase 8.5, WP-08.5-06) — reads the tokens above
+     * rather than one-off durations, per WP-08.5-02's hand-off note.
+     * All three respect `prefers-reduced-motion` via the same global
+     * reset every other animation in this file already relies on. */
+
+    /* A single fade+rise on mount — card grids (municipality tiles,
+     * highlights row) and the content under a day/section switcher
+     * (this app's closest equivalent to a "tab," since there is no
+     * client-side Tabs primitive — switching days/sections is a real
+     * Inertia visit, not a client tab; this plays on every fresh mount
+     * of the content under it). */
+    --animate-card-in: card-in var(--duration-base) var(--ease-premium) both;
+
+    /* A brief scale pop for a running score digit changing value —
+     * paired with a `key={score}` remount (the same technique
+     * `RunningClock`/`LastUpdated` already use in
+     * `live-score-display.tsx`) so it replays on every real score
+     * change, not just once. */
+    --animate-score-pop: score-pop var(--duration-base) var(--ease-premium);
+
+    /* A slightly more pronounced one-time pop, reserved for a rank-1
+     * placement on an already-*validated* result
+     * (`public/results.tsx`) — never the live scoreboard, which
+     * structurally can't reach this animation (`LiveScoreDisplay` has
+     * no such treatment). This is the "winner celebration" gated to
+     * finalized data, not the full podium/medal-ceremony staging —
+     * that's WP-08.5-08's own dedicated scope. */
+    --animate-winner-in: winner-in var(--duration-slow) var(--ease-premium) both;
+}
+
+@keyframes pulse-live {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.4;
+    }
+}
+
+@keyframes card-in {
+    from {
+        opacity: 0;
+        transform: translateY(0.5rem);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes score-pop {
+    0% {
+        transform: scale(1);
+    }
+    40% {
+        transform: scale(1.08);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+@keyframes winner-in {
+    0% {
+        opacity: 0;
+        transform: scale(0.85);
+    }
+    60% {
+        opacity: 1;
+        transform: scale(1.05);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
 :root {
@@ -179,6 +275,64 @@
 
     body {
         @apply bg-background text-foreground;
+    }
+}
+
+/*
+ * Global reduced-motion baseline (Phase 8.5, WP-08.5-02) — a blanket kill
+ * switch for every animation/transition in the app, present *before* any
+ * of this phase's motion work ships. Every future `animate-*`/transition
+ * utility (this WP's `--animate-pulse-live` included) automatically
+ * respects the visitor's OS-level preference with zero per-component
+ * logic, rather than each new motion feature needing its own guard.
+ */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+@layer utilities {
+    /*
+     * The public portal's branded hero band — previously duplicated
+     * inline in `public-page-hero.tsx`'s className. Named here so any
+     * later WP (hero/branding, medal ceremony) reuses the exact same
+     * gradient instead of a slightly-different one-off.
+     */
+    .bg-premium-hero {
+        @apply bg-gradient-to-r from-sidebar to-primary;
+    }
+
+    /*
+     * Score/timer typography (Phase 8.5, WP-08.5-02) — the "big number"
+     * treatment for a live scoreboard, formalized so every board type
+     * and every later WP reads from the same two sizes instead of
+     * repeating `text-6xl font-bold tabular-nums` at each call site.
+     * Tabular numerals are load-bearing here: without them a scoreboard
+     * digit changing width (1 -> 11) visibly reflows the layout.
+     *
+     * WP-08.5-05 made both sizes responsive: a three-digit score at a
+     * flat `text-6xl` (60px) or `text-9xl` (128px) is too wide for a
+     * ~110px-wide team panel on a phone (the scoreboard's three-column
+     * grid divides the viewport three ways) — `sm:` restores the
+     * original fixed size for tablet/desktop/broadcast displays, where
+     * there's room for it.
+     */
+    .text-score {
+        @apply text-4xl font-bold tabular-nums sm:text-6xl;
+    }
+
+    .text-score-lg {
+        @apply text-6xl font-bold tabular-nums sm:text-9xl;
+    }
+
+    .text-clock {
+        @apply font-mono font-bold tabular-nums;
     }
 }
 

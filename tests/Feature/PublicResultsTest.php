@@ -66,7 +66,7 @@ test('public placements carry no sensitive or internal fields', function () {
                 ->missing('encoded_by')
                 ->missing('status'))
             ->has('results.0.placements.0', fn (AssertableInertia $placement) => $placement
-                ->hasAll(['rank', 'athlete', 'school', 'mark', 'is_tie'])
+                ->hasAll(['rank', 'athlete', 'school', 'delegation', 'mark', 'is_tie'])
                 ->missing('entry_id')
                 ->missing('entry')));
 });

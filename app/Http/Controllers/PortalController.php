@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AgeDivision;
+use App\Enums\MeetStatus;
 use App\Enums\ResultStatus;
 use App\Enums\ScoringSessionStatus;
 use App\Models\Announcement;
@@ -19,6 +20,7 @@ use App\Services\MedalTallyService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -35,14 +37,28 @@ class PortalController extends Controller
      * (Meet::scopeActive(), enforced by MeetController::activate()) —
      * this is deliberately not a list of meets.
      */
-    public function home(): Response
+    public function home(MedalTallyService $tally): Response
     {
         $meet = Meet::query()->published()->active()->first();
+
+        // Computed once and shared by `currentLeaders()`/`closingSummary()`
+        // below (WP-08.5-09) — both need the same district-points ranking;
+        // calling `MedalTallyService::standings()` a second time in the
+        // same request would just repeat its query and grouping for no
+        // reason.
+        $districtStandings = $meet === null ? null : collect($tally->standings($meet->id)['districts'])
+            ->sortByDesc('points')
+            ->values();
 
         return Inertia::render('public/home', [
             'meet' => $meet === null ? null : $this->meetSummary($meet),
             'municipalities' => $meet === null ? [] : $this->competingMunicipalities($meet),
             'announcements' => $this->publishedAnnouncements($meet?->id),
+            'liveMatches' => $meet === null ? [] : $this->liveMatches($meet),
+            'currentLeaders' => $districtStandings === null ? [] : $this->currentLeaders($districtStandings),
+            'upcomingEvents' => $meet === null ? [] : $this->upcomingEvents($meet),
+            'latestResult' => $meet === null ? null : $this->latestResult($meet),
+            'closingSummary' => $meet === null ? null : $this->closingSummary($meet, $districtStandings),
         ]);
     }
 
@@ -144,7 +160,8 @@ class PortalController extends Controller
             ->with([
                 'event.sport:id,name',
                 'placements.entry.athlete:id,first_name,last_name,school_id',
-                'placements.entry.athlete.school:id,name',
+                'placements.entry.athlete.school:id,name,district_id',
+                'placements.entry.athlete.school.district:id,name',
             ])
             ->orderByDesc('validated_at')
             ->orderByDesc('id')
@@ -169,6 +186,7 @@ class PortalController extends Controller
                             'rank' => $placement->rank,
                             'athlete' => $placement->entry->athlete->fullName(),
                             'school' => $placement->entry->athlete->school->name,
+                            'delegation' => $placement->entry->athlete->school->district->name,
                             'mark' => $placement->mark,
                             'is_tie' => $placement->is_tie,
                         ])
@@ -384,6 +402,13 @@ class PortalController extends Controller
                 'round_label' => $match->round_label,
                 'venue' => $match->schedule?->venue?->name,
                 'scheduled_date' => $match->schedule?->scheduled_date?->format('M j, Y'),
+                // ISO 8601, for the public scoreboard's opening countdown
+                // (WP-08.5-08) — the one real scheduled instant this
+                // match has, combining the slot's date and start time.
+                // `null` when the match has no schedule slot yet.
+                'scheduled_start_at' => $match->schedule === null ? null : Carbon::parse(
+                    $match->schedule->scheduled_date->toDateString().' '.$match->schedule->starts_at,
+                )->toIso8601String(),
             ],
             'session' => $session === null ? null : $session->toLivePayload(),
             // No `participants`/photo prop here, deliberately — athlete
@@ -507,6 +532,146 @@ class PortalController extends Controller
                 'nickname' => $municipality->nickname,
             ])
             ->all();
+    }
+
+    /**
+     * Top 3 municipalities by points (WP-08.5-03's "current leaders"
+     * entry) — the same weighting `tally()`'s "Top by points" widget
+     * already uses, derived from validated results only. Empty before any
+     * result is validated; never the official rank, same caveat as the
+     * tally page's own widget. Takes the already-sorted-by-points district
+     * standings from `home()` (WP-08.5-09) rather than querying
+     * `MedalTallyService` itself — `closingSummary()` below needs the
+     * exact same ranking, so `home()` computes it once and shares it.
+     *
+     * @param  Collection<int, array<string, mixed>>  $districtStandings
+     * @return array<int, array{district: string, points: int}>
+     */
+    private function currentLeaders(Collection $districtStandings): array
+    {
+        return $districtStandings
+            ->take(3)
+            ->map(fn (array $row): array => [
+                'district' => $row['district'],
+                'points' => $row['points'],
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * The meet's champion and final medal totals (WP-08.5-08's "closing
+     * summary") — `null` unless the meet has actually been marked
+     * `Completed` (the real terminal state, `App\Enums\MeetStatus`), so
+     * this never shows on an ongoing meet. Shares `home()`'s already-
+     * computed district standings with `currentLeaders()` above (WP-
+     * 08.5-09) rather than each independently recomputing the same
+     * `MedalTallyService::standings()` call within the same request.
+     *
+     * @param  Collection<int, array<string, mixed>>  $districtStandings
+     * @return array{champion: string, gold: int, silver: int, bronze: int, total: int}|null
+     */
+    private function closingSummary(Meet $meet, Collection $districtStandings): ?array
+    {
+        if ($meet->status !== MeetStatus::Completed) {
+            return null;
+        }
+
+        $champion = $districtStandings->first();
+
+        if ($champion === null) {
+            return null;
+        }
+
+        return [
+            'champion' => $champion['district'],
+            'gold' => $champion['gold'],
+            'silver' => $champion['silver'],
+            'bronze' => $champion['bronze'],
+            'total' => $champion['total'],
+        ];
+    }
+
+    /**
+     * The next few schedule slots that haven't finished yet (WP-08.5-03's
+     * "upcoming events" entry) — today's remaining slots plus future days,
+     * earliest first. A short preview list; the full schedule lives on
+     * the meet page.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function upcomingEvents(Meet $meet): array
+    {
+        $now = now();
+
+        return EventSchedule::query()
+            ->where('meet_id', $meet->id)
+            ->where(function ($query) use ($now) {
+                $query->where('scheduled_date', '>', $now->toDateString())
+                    ->orWhere(function ($query) use ($now) {
+                        $query->where('scheduled_date', $now->toDateString())
+                            ->where('ends_at', '>=', $now->format('H:i:s'));
+                    });
+            })
+            ->with(['venue:id,name', 'event.sport:id,name'])
+            ->orderBy('scheduled_date')
+            ->orderBy('starts_at')
+            ->limit(5)
+            ->get()
+            ->map(fn (EventSchedule $slot): array => [
+                'id' => $slot->id,
+                'date' => $slot->scheduled_date->format('M j'),
+                'starts_at' => substr($slot->starts_at, 0, 5),
+                'event' => sprintf('%s — %s', $slot->event->sport->name, $slot->event->name),
+                'venue' => $slot->venue->name,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * The most recently validated result (WP-08.5-03's "latest official
+     * result" entry), top 3 placements only — a preview; the full list
+     * lives on the results page. `null` before any result is validated.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function latestResult(Meet $meet): ?array
+    {
+        $result = EventResult::query()
+            ->where('meet_id', $meet->id)
+            ->where('status', ResultStatus::Validated->value)
+            ->with([
+                'event.sport:id,name',
+                'placements' => fn ($placements) => $placements->orderBy('rank')->limit(3),
+                'placements.entry.athlete:id,first_name,last_name,school_id',
+                'placements.entry.athlete.school:id,name,district_id',
+                'placements.entry.athlete.school.district:id,name',
+            ])
+            ->orderByDesc('validated_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if ($result === null) {
+            return null;
+        }
+
+        return [
+            'event' => sprintf('%s — %s', $result->event->sport->name, $result->event->name),
+            'official_as_of' => $result->validated_at?->format('M j, Y g:i A'),
+            'placements' => $result->placements
+                ->sortBy('rank')
+                ->map(fn (ResultPlacement $placement): array => [
+                    'rank' => $placement->rank,
+                    'athlete' => $placement->entry->athlete->fullName(),
+                    'school' => $placement->entry->athlete->school->name,
+                    'delegation' => $placement->entry->athlete->school->district->name,
+                    'mark' => $placement->mark,
+                    'is_tie' => $placement->is_tie,
+                ])
+                ->values()
+                ->all(),
+        ];
     }
 
     /**

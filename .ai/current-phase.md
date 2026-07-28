@@ -3171,3 +3171,355 @@ WP-08-01...").
   scaffolded at docs/phases/phase-09-post-deployment-support/ and ready
   to pick up on owner instruction, alongside the owner's commit decision
   for the Phase 8 tree.
+
+## Phase 8.5 — PMMS Premium Sports Experience
+
+Planned in a later session as a new phase
+(docs/phases/phase-08-5-premium-sports-experience/, 10 WPs), owner
+direction: "Olympic Games + FIFA Tournament Center + NBA Game Center +
+FIBA LiveStats + Apple-quality polish" — a distinct PMMS identity, not a
+copy of any of those brands' assets/layouts. This log fell out of sync
+with the actual work for WP-08.5-01/02 (done in a session that also did
+unrelated DdOPAA reference-dataset work and two ad-hoc feature commits —
+`78ce6af` single-active-meet landing page + school-districts layer,
+`d824cc9` broadcast-style scoreboard redesign — without updating this
+file); reconstructing from their completion reports
+(docs/reports/phase-08-5/) rather than re-describing work already done.
+
+- **WP-08.5-01 Premium Visual Direction and Experience Audit** — done.
+  Repository-wide audit against the premium visual direction, no code
+  changes (audit-only WP). Report:
+  docs/reports/phase-08-5/premium-experience-audit.md +
+  WP-08.5-01-completion.md.
+- **WP-08.5-02 PMMS Premium Sports Design System** — done. Token/
+  primitive foundation later WPs build on: named `.bg-premium-hero`
+  gradient, `.text-score`/`.text-score-lg`/`.text-clock` typography
+  utilities, motion tokens (`--ease-premium`, `--duration-fast/base/
+  slow`) plus `--animate-pulse-live` and a global
+  `prefers-reduced-motion: reduce` reset (new — didn't exist before), a
+  new `LiveBadge` component, and a `RankBadge` crown-icon upgrade for
+  rank 1. Applied to `public-page-hero.tsx`, `live-score-display.tsx`,
+  `public/meet.tsx`. Doc: docs/ui-ux/premium-design-system.md (extends,
+  doesn't replace, `docs/ui-ux/design-tokens.md`).
+- **WP-08.5-03 Public Portal Hero and Event Branding** — done
+  2026-07-28. Objective's five-item list ("live-now entry, current
+  leaders, upcoming events, latest official result, announcement strip")
+  checked against the actual portal home (`public/home.tsx` /
+  `PortalController::home()`): three already existed elsewhere in the
+  codebase and just weren't wired into the home page (live matches,
+  reused verbatim from the existing private `liveMatches()`; a top-by-
+  points leaderboard, reused via the existing `TopByPointsCard`; the
+  announcement strip, already present). Only "upcoming events" and
+  "latest official result" needed new backend queries — both added as
+  small, real-data-only, read-only private methods on
+  `PortalController` (`upcomingEvents()`: next 5 unfinished schedule
+  slots; `latestResult()`: most recently validated result, top 3
+  placements). Extracted `PublicLiveMatches`
+  (`resources/js/components/public-live-matches.tsx`) from
+  `public/meet.tsx`'s inline "Live now" markup on its second use (home
+  page), so the two can't drift — `meet.tsx` itself is pixel-identical
+  after the extraction. No route, migration, policy, or test fixture
+  touched — pure additive read queries plus frontend composition of
+  already-existing components. Full gate green: Pint PASS, PHPStan L7
+  PASS, ESLint clean, Prettier clean, `tsc --noEmit` clean, Pest
+  703/703 (3,715 assertions, unchanged — no test changes needed), `npm
+  run build` succeeded. Chrome extension unavailable this session too —
+  same standing gap as every WP since WP-08-05, no live-browser
+  verification, correctness checked by reading the rendered JSX and
+  reusing already-proven components instead. `CHECKLIST.md` also
+  corrected here: WP-08.5-01/02 were marked unchecked despite being done
+  (checklist never updated when they closed) — fixed alongside checking
+  off 03. Report: docs/reports/phase-08-5/WP-08.5-03-completion.md. Not
+  committed/pushed (this WP's changes sit on top of WP-08.5-02's own
+  still-uncommitted changes — HEAD unchanged at `d824cc9`).
+- **WP-08.5-04 Broadcast-Style Live Scoreboards** — done 2026-07-28.
+  Checked the Objective's checklist against the actual scoreboard code
+  instead of assuming a rebuild: full-screen mode, team logos/running
+  clock/boxing corners (prior session, `d824cc9`), `LiveBadge`/score-
+  clock typography (WP-08.5-02), Reverb (`useEcho`, operator console)
+  and 5s polling fallback, and the disconnected-state banner were all
+  already real. Two genuine gaps found and closed: both pages' own
+  breadcrumb-level "Live now" indicator (outside `LiveScoreDisplay`
+  itself) was still a plain destructive `Badge`, not `LiveBadge` — fixed
+  in `scoring/show.tsx` and `public/scoreboard.tsx`; and no "last
+  updated" time existed anywhere — added `LastUpdated`/
+  `TickingLastUpdated` to `live-score-display.tsx` (same remount-a-
+  ticker-from-zero technique as the existing `RunningClock`, so no
+  render reads the wall clock directly) plus a `lastUpdatedAt` state in
+  both consumer pages, bumped on poll success (both) and Echo push
+  (operator console only). Two Objective items deliberately not built,
+  documented rather than skipped silently: TV/LED layouts (WP-08.5-07's
+  own dedicated scope, already deferred to by name in this doc's
+  "Large-display scaling" section) and an athletics live scoreboard
+  (re-confirmed it doesn't exist as real data anywhere — no
+  `ScoreboardType::Athletics` case, same finding WP-08-11 originally
+  made). Frontend-only — no route/controller/model/migration/policy/
+  test fixture touched. Full gate green: Pest 703/703 (3,715 assertions,
+  unchanged), Pint/PHPStan/ESLint/Prettier/tsc/build all clean. Chrome
+  extension unavailable again this session, same standing gap. Doc:
+  `docs/ui-ux/premium-design-system.md` gained a "Last-updated time"
+  section and a "WP-08.5-04" wrap-up section. Report:
+  docs/reports/phase-08-5/WP-08.5-04-completion.md. Not committed/
+  pushed (sits atop WP-08.5-02/03's own uncommitted work — HEAD
+  unchanged at `d824cc9`).
+- **WP-08.5-05 Premium Mobile Sports Experience** — done 2026-07-28.
+  Checked the Objective's checklist against the real mobile chrome
+  instead of rebuilding it: bottom tab bar + safe-area padding
+  (WP-08-09), collapsed ranking preview (WP-08-09), the full responsive
+  pass (WP-08-14), and `gap-6`+ page spacing (already present everywhere,
+  not just the home page) were all already real. Two genuine gaps found
+  and closed: (1) `.text-score`/`.text-score-lg` were a flat
+  `text-6xl`/`text-9xl` — a 3-digit score at 60px/128px overflows a
+  phone-width (~110px) team panel in the scoreboard's 3-column grid; now
+  step up at `sm:` (640px), tablet/desktop/broadcast unchanged, only sub-
+  640px phones get smaller. `CenterPanel`'s fullscreen clock size got the
+  matching `sm:` step (that `auto`-width column would otherwise squeeze
+  the score panels further). (2) The two live-indicator spots WP-08.5-02
+  explicitly named as left for "05 mobile" — `public-layout.tsx`'s
+  header "Live now" button (now a single `LiveBadge` pill) and
+  `PublicBottomNav`'s "Live" tab (now a small pulsing dot overlay on its
+  icon, new optional `live?: boolean` on `BottomNavItem`, reuses the
+  existing `animate-pulse-live` keyframe). Checked-not-changed: touch-
+  target sizing on public filter `Select`s (already 36px, above the
+  app's accepted 32px baseline — `docs/public-portal.md` extended to say
+  so) and bundle size (no new dependency, both touched chunks grew
+  negligibly). Frontend-only — zero backend touched. Full gate green:
+  Pest 703/703 (3,715 assertions, unchanged), Pint/PHPStan/ESLint/
+  Prettier/tsc/build all clean. Chrome extension unavailable again this
+  session — the phone-width fix was verified by grid-column arithmetic,
+  not a live screenshot. Report:
+  docs/reports/phase-08-5/WP-08.5-05-completion.md. Not committed/
+  pushed (sits atop WP-08.5-02/03/04's own uncommitted work — HEAD
+  unchanged at `d824cc9`).
+- **WP-08.5-06 Motion and Interaction System** — done 2026-07-28. Read
+  directly off WP-08.5-02's own hand-off note (motion tokens
+  "tokenized but not yet consumed... left for WP-08.5-06"). Confirmed
+  before building: no client-side `Tabs` primitive exists anywhere (the
+  app's "tabs" are `PublicMeetNav`'s cross-page links + the day-selector
+  same-page-different-query nav); a `Skeleton` UI primitive already
+  existed but was unused on any public page. Added three new `@theme`
+  animations in `app.css` reading the existing tokens: `--animate-card-
+  in` (fade+rise, for card entrances and this app's "tab transition"
+  equivalent — cross-page nav remounts naturally, same-page day-switch
+  needed an explicit `key={selectedDay}` remount trick), `--animate-
+  score-pop` (brief scale pop on `TeamPanel`'s score, keyed on `score`
+  itself, same remount technique as `RunningClock`/`LastUpdated`), and
+  `--animate-winner-in` (fade+scale-bounce, gated by a new opt-in
+  `celebrate` prop on `RankBadge` so it only plays where the caller can
+  vouch the data is validated/finalized — applied to `public/results.tsx`
+  (which also gained real `RankBadge` usage, replacing a bare rank
+  numeral) and home's "Latest official result" card; deliberately not
+  the tally/dashboard `RankBadge` usage, which represents an ever-
+  shifting leaderboard not a decided outcome, and deliberately not full
+  podium staging — that stays WP-08.5-08's scope). New
+  `PublicLoadingSkeleton` component wraps the existing `Skeleton`
+  primitive; wired into `results.tsx`/`tally.tsx`'s filter-triggered
+  `router.get` calls via real `onStart`/`onFinish` state, not simulated.
+  All new animations inherit reduced-motion-safety for free from the
+  existing global reset (WP-08.5-02) — confirmed by inspection
+  (`animation-fill-mode: both` + near-zero duration under the reset
+  means no flash). Frontend-only, zero backend touched. Full gate green:
+  Pest 703/703 (3,715 assertions, unchanged), Pint/PHPStan/ESLint/
+  Prettier/tsc/build all clean. Chrome extension unavailable again this
+  session — every animation verified by reading CSS/remount mechanics,
+  not watched live; flagged as the hardest kind of gap to fully close
+  from code alone. Doc: `docs/ui-ux/premium-design-system.md` gained a
+  "WP-08.5-06" section. Report:
+  docs/reports/phase-08-5/WP-08.5-06-completion.md. Not committed/
+  pushed (sits atop WP-08.5-02..05's own uncommitted work — HEAD
+  unchanged at `d824cc9`).
+- **WP-08.5-07 Large Display LED Wall and Kiosk Modes** — done
+  2026-07-28. Every prior WP this phase had deferred this exact work by
+  name (WP-08.5-02/04/06 all said "no kiosk/TV route exists yet,
+  WP-08.5-07's scope"). Confirmed no kiosk/TV route or layout existed
+  anywhere. Chose a `?kiosk=1` query flag on the two existing routes
+  that already carry continuously-relevant real data
+  (`public/scoreboard.tsx`, `public/tally.tsx`) over a new dedicated
+  route — zero backend changes, same controller action/props either
+  way. Confirmed from `@inertiajs/react`'s compiled source that its
+  `layout` resolver option (`app.tsx`) receives the full page object
+  (not just the component name), which is what makes a query-flag-based
+  layout swap possible: added `KioskLayout`
+  (`resources/js/layouts/kiosk-layout.tsx`, a bare chrome-free shell —
+  no header/footer/bottom-nav) and a `useKioskMode()` hook
+  (`resources/js/hooks/use-kiosk-mode.ts`) for page-level branches.
+  Scoreboard kiosk mode: reuses the existing `fullscreen` styling but
+  forced permanently on (no toggle — real `requestFullscreen()` needs a
+  user gesture anyway, and an unattended TV has no one to click it);
+  `LiveScoreDisplay` gained `showFullscreenToggle`/`maxWidthClassName`
+  props for this. Tally kiosk mode: this page had zero polling before —
+  added a real 30s `usePoll()` (confirmed this Inertia-native hook
+  already existed in the installed version rather than hand-rolling
+  `setInterval`+`router.reload`), full untruncated ranking at larger
+  text (`text-lg` set once on `<Table>`, inherited by every cell
+  including shared `MedalCells`/`MedalHeader`), poll-failure connection-
+  status banner. Both got a "Kiosk / TV mode" discoverability link on
+  their normal page. Deliberately no fixed `aspect-ratio` box (would
+  letterbox on non-16:9 displays) — "safe margins" means generous
+  responsive padding instead. No private/admin data check needed since
+  both kiosk views reuse the exact same public-safe props as the normal
+  page. Frontend-only, zero backend touched. Full gate green: Pest
+  703/703 (3,715 assertions, unchanged), Pint/PHPStan/ESLint/Prettier/
+  tsc/build all clean. Chrome extension unavailable again this session —
+  flagged more pointedly than usual, since this is the first WP whose
+  entire subject (a large-display visual mode) has never been exercised
+  anywhere else in the app; a real device/browser check matters more
+  here than the routine note. Doc: `docs/ui-ux/premium-design-system.md`
+  gained a "WP-08.5-07" section. Report:
+  docs/reports/phase-08-5/WP-08.5-07-completion.md. Not committed/
+  pushed (sits atop WP-08.5-02..06's own uncommitted work — HEAD
+  unchanged at `d824cc9`).
+- **WP-08.5-08 Medal Ceremony and Event Presentation** — done
+  2026-07-28. Checked the Objective's list against the real data model
+  first: `public/results.tsx`/`latestResult()` just needed a
+  `delegation` field added per placement (the athlete's school's
+  municipality) to support a real podium; `EventMatch` has a genuine
+  optional `schedule` relation with a real date+time, unused by
+  `scoreboard()`'s payload before, giving real backing for an "opening
+  countdown"; `Meet` has a real terminal `MeetStatus::Completed` state
+  to gate a "closing summary" on (not inferred from dates). New
+  `PodiumDisplay` component (silver-gold-bronze staging, "Champion
+  delegation" callout from the real rank-1) used on both
+  `results.tsx` (replacing the flat rank table for ranks 1-3; 4+ still
+  gets a plain table, now with delegation) and `home.tsx`'s latest-
+  result card. New `OpeningCountdown` component (ticks down via a `now`
+  state value updated in an effect, not `Date.now()` read during
+  render — same purity rule as `live-score-display.tsx`'s own ticking
+  components) shown in the scoreboard's `session === null` empty state,
+  structurally exclusive with `LiveScoreDisplay` so it can never
+  compete with live-score authority. New `closingSummary()` controller
+  method (champion district + final medal totals, `null` unless
+  `Completed`) wired into `home()`. **Real course-correction this WP**:
+  first tried adding a raw `status` field to the shared `meetSummary()`
+  helper so `home.tsx` could detect "completed" — running the suite
+  immediately caught `PublicPortalTest`'s existing
+  `missing('status')` assertion (WP-04-06); reverted and used a
+  separate purpose-built `closingSummary` prop instead, keeping that
+  established public-safe-fields contract on the shared helper intact
+  rather than loosening it for one caller. Updated
+  `PublicResultsTest`'s strict placement-shape assertion to expect the
+  new `delegation` field (its own intended change, not a workaround).
+  Deliberately not built: a kiosk-mode variant of the podium view
+  (would re-open WP-08.5-07's scope) and podium treatment on
+  `public/athletics.tsx` (a full-day event list, wrong granularity for
+  a per-slot podium — `results.tsx`'s one-card-per-event is the right
+  fit). Full gate green: Pest 703/703 (3,716 assertions, +1 from the
+  updated test), Pint/PHPStan/ESLint/Prettier/tsc/build all clean.
+  Chrome extension unavailable again this session, same standing gap.
+  Doc: `docs/ui-ux/premium-design-system.md` gained a "WP-08.5-08"
+  section. Report:
+  docs/reports/phase-08-5/WP-08.5-08-completion.md. Not committed/
+  pushed (sits atop WP-08.5-02..07's own uncommitted work — HEAD
+  unchanged at `d824cc9`).
+- **WP-08.5-09 Public Portal Performance and Accessibility Polish** —
+  done 2026-07-28. Biggest finding was correcting a running assumption,
+  not confirming a bug: every WP-08.5-02..08 report flagged
+  `wayfinder-*.js` (~346.8kB/~109.2kB gzip) as "a bundle-size concern,
+  WP-08.5-09's problem" based on its name — actually inspecting the
+  built chunk found the bulk of it is `es-toolkit`, `@inertiajs/core`'s
+  own internal dependency, required by every Inertia page (confirmed
+  admin `dashboard.tsx` and public `home.tsx` share the identical
+  chunk) — a genuinely shared framework cost, downloaded once per
+  browser session and cached, not something route-generation controls.
+  Closed the flag as "investigated, not actually a problem" rather than
+  carrying it forward again. **One real bug found in this phase's own
+  code**: `home()` called `MedalTallyService::standings()` twice in one
+  request (once via `currentLeaders()`, once via `closingSummary()`) —
+  fixed by computing it once and sharing the collection between both
+  helpers (signatures changed to accept the pre-computed `Collection`
+  instead of calling the service themselves; output shape unchanged).
+  **Contrast had never actually been measured anywhere in this
+  project** (every prior pass deferred it, "same tokens as before") —
+  computed real WCAG ratios (OKLCH→sRGB→luminance→contrast) for every
+  color pairing this phase introduced. Found and fixed two real
+  failures: `text-warning` on `bg-warning/10` (the disconnected/
+  connection-lost banners, WP-08-10 pattern reused by WP-08.5-04/07)
+  measured ~2.1:1 light / and its seemingly-obvious fix
+  `text-warning-foreground` measured ~1.05:1 in dark mode (that token
+  pairs with a *solid* fill, not a tint) — actual fix: leave the
+  message text at the inherited default `foreground` color (~18:1/
+  ~16:1 measured), only the icon stays warning-colored; and
+  `text-medal-gold` on white (WP-08.5-08's "Meet concluded" badge)
+  measured ~1.89:1, fixed to the established-safe `bg-medal-gold
+  text-medal-gold-foreground` pairing (~8.5:1). Flagged-not-fixed: the
+  same warning-text bug exists in three admin-only usages
+  (`stat-card.tsx`, `dashboard.tsx`, `eligibility/index.tsx`) — out of
+  this WP's public-portal scope. Also hardened `OpeningCountdown`
+  against a malformed `startsAt` (`Number.isNaN` guard) and stopped its
+  interval once the countdown reaches zero instead of ticking forever.
+  Checked-already-satisfied: image optimization (no real images reach
+  the public portal — TeamLogo is CSS-only, boxing photos are operator-
+  only), lazy loading (Vite/Inertia already code-splits every page;
+  considered but did not add Inertia deferred-props for tally.tsx's
+  heavy sections — would be a new-capability addition, not a polish),
+  Reverb fallback (public pages never use Echo at all, confirmed via
+  grep), keyboard support and touch targets (nothing new since WP-08-14/
+  WP-08.5-05). Considered-not-added: `Cache-Control` response headers
+  on poll endpoints — no CDN/proxy in front of this single-machine
+  deployment for them to guard against. Full gate green: Pest 703/703
+  (3,716 assertions, unchanged), Pint/PHPStan/ESLint/Prettier/tsc/build
+  all clean. Chrome extension unavailable again this session — flagged
+  that the contrast fixes were verified with computed ratios, not a
+  screenshot, worth a real visual spot-check. Docs:
+  `docs/ui-ux/accessibility-review.md` gained a "Color contrast audit"
+  section; `docs/ui-ux/premium-design-system.md` gained a "WP-08.5-09"
+  section; `docs/public-portal.md`'s stale "not re-audited" contrast
+  note updated. Report:
+  docs/reports/phase-08-5/WP-08.5-09-completion.md. Not committed/
+  pushed (sits atop WP-08.5-02..08's own uncommitted work — HEAD
+  unchanged at `d824cc9`).
+- **WP-08.5-10 Premium Experience Final Review and Acceptance — done
+  2026-07-28. This closes Phase 8.5 (all 10 WPs).** Not new UI work —
+  the phase-closing compliance review, same template as Phase 5/7/8's
+  own closing reviews. New
+  docs/phases/phase-08-5-premium-sports-experience/phase-8.5-compliance-review.md:
+  architecture conformance table, result-integrity re-verification
+  (only one PHP file touched all phase — `PortalController.php` —
+  grepped for any write op: zero matches, every method read-only),
+  publication-safety re-verification (all 7 public methods scope
+  through `Meet::published()`, confirmed by grep), authorization
+  re-verification (zero Policy/route/Gate files touched all phase), a
+  final quality-gate run, and a table re-affirming all nine scoping
+  decisions raised across WP-08.5-02..09 (podium/Tabs/spacing
+  deferrals, the kiosk query-flag-not-new-route choice, the
+  `meetSummary()` course-correction, the wayfinder-bundle assumption
+  correction, etc.) are still implemented exactly as decided, not
+  silently reverted — spot-checked each against current code, not
+  trusted from the prior report alone. One real (Low) finding fixed
+  during the review itself: `public-page-hero.tsx` (WP-08.5-02) had
+  drifted Tailwind class ordering (Prettier's own plugin re-sorts it) —
+  fixed, zero visual/functional change; two unrelated files
+  (`registry/school-districts.tsx`/`schools.tsx`) also flagged by
+  Prettier but confirmed untouched by any Phase 8.5 WP, correctly left
+  alone. **Corrected a test-count claim while writing this**: the
+  695→703 test jump is the intervening DdOPAA initiative's own
+  additions, not Phase 8.5's — this phase (frontend-only, reusing
+  existing routes) added zero new tests, only +1 assertion
+  (WP-08.5-08's own deliberate `PublicResultsTest` update). Final gate:
+  Pint PASS, PHPStan L7 PASS (0 errors), Pest PASS 703/703 (3,716
+  assertions, unchanged from WP-08.5-09's close), ESLint/Prettier/tsc
+  PASS, `npm run build` PASS, `composer audit` 0 advisories, `npm audit
+  --omit=dev` 0 vulnerabilities. Re-checked both standing environment
+  gaps one last time: Chrome extension still unavailable (every one of
+  9 WPs this phase had zero live browser verification — named as the
+  one real gap, honestly, not glossed over, and flagged more pointedly
+  for kiosk mode specifically since it's the one genuinely new visual
+  mode this phase introduced); pmms.app still HTTP 200, not
+  re-investigated whether it's serving the real app or Laragon's
+  placeholder (same Apache vhost issue open since Phase 8's WP-08-05,
+  not touched unilaterally, same reasoning every WP since). Recommendation:
+  Phase 8.5 is complete and internally consistent — real data
+  throughout, Phase 3's result-integrity core and every authorization
+  rule completely untouched, zero new dependencies/routes/migrations,
+  green gate, two real bugs actually found and fixed this phase (not
+  assumed clean) — but a real device/browser QA pass (or restored
+  Chrome extension connectivity) remains the recommended next step
+  before treating the phase's visual work as fully signed off, ahead of
+  any commit decision. Report:
+  docs/reports/phase-08-5/WP-08.5-10-completion.md written; `CHECKLIST.md`
+  WP-08.5-10 checked off (**all 10 Phase 8.5 WPs now complete**). Not
+  committed/pushed — HEAD unchanged at `d824cc9`. Phase 9 — Post-
+  Deployment Support is already scaffolded at
+  docs/phases/phase-09-post-deployment-support/ and ready to pick up on
+  owner instruction, alongside the owner's commit decision for the
+  Phase 8.5 tree.

@@ -1,11 +1,25 @@
 import { Head, Link } from '@inertiajs/react';
-import { Award, CalendarDays, Crown, Flag, MapPin, Users } from 'lucide-react';
+import {
+    Award,
+    CalendarClock,
+    CalendarDays,
+    Crown,
+    Flag,
+    MapPin,
+    Medal,
+    Users,
+} from 'lucide-react';
 import { EmptyState } from '@/components/empty-state';
+import { PodiumDisplay } from '@/components/podium-display';
 import { PublicAnnouncements } from '@/components/public-announcements';
+import { PublicLiveMatches } from '@/components/public-live-matches';
+import type { LiveMatch } from '@/components/public-live-matches';
 import { PublicPageHero } from '@/components/public-page-hero';
 import { TeamLogo } from '@/components/team-logo';
+import { TopByPointsCard } from '@/components/top-by-points-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     meet as publicMeet,
     results as publicResults,
@@ -36,16 +50,62 @@ type Municipality = {
     nickname: string | null;
 };
 
+type Leader = {
+    district: string;
+    points: number;
+};
+
+type UpcomingEvent = {
+    id: number;
+    date: string;
+    starts_at: string;
+    event: string;
+    venue: string;
+};
+
+type ResultPlacement = {
+    rank: number;
+    athlete: string;
+    school: string;
+    delegation: string;
+    mark: string | null;
+    is_tie: boolean;
+};
+
+type LatestResult = {
+    event: string;
+    official_as_of: string | null;
+    placements: ResultPlacement[];
+};
+
+type ClosingSummary = {
+    champion: string;
+    gold: number;
+    silver: number;
+    bronze: number;
+    total: number;
+};
+
 type Props = {
     meet: PublicMeet | null;
     municipalities: Municipality[];
     announcements: Announcement[];
+    liveMatches: LiveMatch[];
+    currentLeaders: Leader[];
+    upcomingEvents: UpcomingEvent[];
+    latestResult: LatestResult | null;
+    closingSummary: ClosingSummary | null;
 };
 
 export default function PublicHome({
     meet,
     municipalities,
     announcements,
+    liveMatches,
+    currentLeaders,
+    upcomingEvents,
+    latestResult,
+    closingSummary,
 }: Props) {
     if (meet === null) {
         return (
@@ -104,6 +164,43 @@ export default function PublicHome({
                     }
                 />
 
+                {closingSummary && (
+                    <Card className="animate-card-in border-medal-gold/40 bg-medal-gold/5">
+                        <CardContent className="flex flex-wrap items-center gap-4 pt-6">
+                            <Crown
+                                aria-hidden="true"
+                                className="size-10 shrink-0 text-medal-gold"
+                            />
+                            <div className="flex-1">
+                                {/* `bg-medal-gold text-medal-gold-foreground`
+                                    — the same solid-fill pairing
+                                    `RankBadge` already uses, not gold
+                                    text on a light background (WP-08.5-09:
+                                    `--medal-gold`'s lightness is high
+                                    enough that gold-on-white reads poorly;
+                                    the dedicated `-foreground` token exists
+                                    exactly to pair with a gold fill). */}
+                                <Badge className="mb-1 bg-medal-gold text-medal-gold-foreground">
+                                    Meet concluded
+                                </Badge>
+                                <p className="text-lg font-semibold">
+                                    Champion: {closingSummary.champion}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                    {closingSummary.gold} gold ·{' '}
+                                    {closingSummary.silver} silver ·{' '}
+                                    {closingSummary.bronze} bronze ·{' '}
+                                    {closingSummary.total} total medals
+                                </p>
+                            </div>
+                            <Medal
+                                aria-hidden="true"
+                                className="size-8 shrink-0 text-muted-foreground"
+                            />
+                        </CardContent>
+                    </Card>
+                )}
+
                 <div className="flex flex-wrap gap-3">
                     <Button size="lg" asChild>
                         <Link href={publicMeet(meet.id)}>
@@ -124,6 +221,98 @@ export default function PublicHome({
                         </Link>
                     </Button>
                 </div>
+
+                <PublicAnnouncements announcements={announcements} />
+
+                <PublicLiveMatches meetId={meet.id} matches={liveMatches} />
+
+                <section className="grid gap-4 lg:grid-cols-3">
+                    <div className="animate-card-in">
+                        <TopByPointsCard
+                            rows={currentLeaders}
+                            areaLabel="district"
+                        />
+                    </div>
+
+                    <Card
+                        className="animate-card-in"
+                        style={{ animationDelay: '80ms' }}
+                    >
+                        <CardHeader>
+                            <CardTitle className="text-sm font-medium">
+                                Upcoming events
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {upcomingEvents.length === 0 ? (
+                                <EmptyState
+                                    icon={CalendarClock}
+                                    title="Nothing scheduled next"
+                                />
+                            ) : (
+                                <ul className="space-y-3">
+                                    {upcomingEvents.map((event) => (
+                                        <li
+                                            key={event.id}
+                                            className="flex items-start gap-2 text-sm"
+                                        >
+                                            <CalendarClock
+                                                aria-hidden="true"
+                                                className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                                            />
+                                            <span>
+                                                <span className="block font-medium">
+                                                    {event.event}
+                                                </span>
+                                                <span className="text-xs text-muted-foreground">
+                                                    {event.date},{' '}
+                                                    {event.starts_at} ·{' '}
+                                                    {event.venue}
+                                                </span>
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Card
+                        className="animate-card-in"
+                        style={{ animationDelay: '160ms' }}
+                    >
+                        <CardHeader>
+                            <CardTitle className="text-sm font-medium">
+                                Latest official result
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {latestResult === null ? (
+                                <EmptyState
+                                    icon={Award}
+                                    title="No results yet"
+                                />
+                            ) : (
+                                <div className="space-y-1">
+                                    <div>
+                                        <p className="text-sm font-medium">
+                                            {latestResult.event}
+                                        </p>
+                                        {latestResult.official_as_of && (
+                                            <p className="text-xs text-muted-foreground">
+                                                Official as of{' '}
+                                                {latestResult.official_as_of}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <PodiumDisplay
+                                        placements={latestResult.placements}
+                                    />
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </section>
 
                 <section className="flex flex-1 flex-col gap-4">
                     <div className="flex items-center gap-2">
@@ -149,10 +338,13 @@ export default function PublicHome({
                         />
                     ) : (
                         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                            {municipalities.map((municipality) => (
+                            {municipalities.map((municipality, i) => (
                                 <div
                                     key={municipality.id}
-                                    className="flex flex-col items-center gap-2 rounded-xl border p-4 text-center transition hover:shadow-md"
+                                    className="flex animate-card-in flex-col items-center gap-2 rounded-xl border p-4 text-center transition hover:shadow-md"
+                                    style={{
+                                        animationDelay: `${Math.min(i, 12) * 30}ms`,
+                                    }}
                                 >
                                     <TeamLogo
                                         name={municipality.name}
@@ -173,8 +365,6 @@ export default function PublicHome({
                         </div>
                     )}
                 </section>
-
-                <PublicAnnouncements announcements={announcements} />
             </div>
         </>
     );
