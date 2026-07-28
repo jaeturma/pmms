@@ -114,27 +114,31 @@ of these are secrets, all are already documented at their source:
 
 ## Escalation and support
 
-**Template — fill in with real names/contacts before turnover is
+**"Who to contact" — fill in with real names/contacts before turnover is
 considered complete.** This project did not fabricate contacts here; a
-placeholder is more honest than a guess.
+placeholder is more honest than a guess. **"How" is filled in for the two
+categories WP-09-01 built a real workflow for** — see
+[`docs/support-workflow.md`](support-workflow.md).
 
 | Issue type | Who to contact | How |
 |---|---|---|
 | App is down / won't load | _[fill in]_ | _[fill in]_ |
 | Database problem / need a restore | _[fill in — should have `scripts\restore-database.ps1` access]_ | _[fill in]_ |
-| Need a new account promoted to a higher role | _[fill in — needs console/tinker access, see "Known limitations" above]_ | _[fill in]_ |
-| A bug in the app itself | _[fill in — the developer/team maintaining the codebase]_ | _[fill in]_ |
-| A request for a new feature or a scope change | _[fill in — whoever owns the product decision]_ | _[fill in]_ |
+| Need a new account promoted to a higher role | _[fill in — needs console/tinker access, see "Known limitations" above]_ | File a **Support request** GitHub issue — see [`docs/support-workflow.md`](support-workflow.md) |
+| A bug in the app itself | _[fill in — the developer/team maintaining the codebase]_ | File a **Bug report** GitHub issue — see [`docs/support-workflow.md`](support-workflow.md) |
+| A request for a new feature or a scope change | _[fill in — whoever owns the product decision]_ | _[fill in — a product/business decision, not a GitHub issue category this workflow decides]_ |
 
 ## Routine maintenance checklist
 
 Nothing here needs daily attention — PMMS runs one meet at a time for one
 Division. A reasonable cadence:
 
-- **Weekly (while a meet is being prepared or is active):** confirm the
-  backup Scheduled Task actually ran last night (`Get-ScheduledTask -
-  TaskName 'PMMS Database Backup' | Get-ScheduledTaskInfo`) and that a
-  new file appeared under `storage/app/private/backups/database/`.
+- **Weekly (while a meet is being prepared or is active):** run
+  `docs/monitoring.md`'s three-point health check (`/up`, the app log,
+  both Scheduled Tasks) — `powershell -File scripts\health-check.ps1`
+  runs all three in one pass. Also confirm a new file appeared under
+  `storage/app/private/backups/database/` (the health check confirms
+  the backup *task* ran; it doesn't check the backup file itself).
 - **Monthly, or before/after anything network-facing changes:**
   `composer audit` and `npm audit --omit=dev` from the codebase root —
   both were clean as of WP-06-03; re-run periodically since new
@@ -157,6 +161,11 @@ Division. A reasonable cadence:
 - `docs/manuals/` — day-to-day usage, per role.
 - `docs/backup-restore.md` — the backup/restore procedure this doc's
   maintenance checklist and escalation table both reference.
+- `docs/support-workflow.md` — how a bug report or support request
+  actually moves from filed to closed (WP-09-01), referenced by this
+  doc's escalation table above.
+- `docs/monitoring.md` — the three-point health-check routine (WP-09-02)
+  this doc's maintenance checklist runs weekly.
 - `docs/training-outline.md` — an agenda for walking Division staff
   through the system using the manuals as material.
 - `.ai/current-phase.md` — the complete work-package history behind

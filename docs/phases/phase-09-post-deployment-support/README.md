@@ -1,12 +1,18 @@
-# Phase 8 — Post-Deployment Support
+# Phase 9 — Post-Deployment Support
 
 **Status:** Planned 2026-07-27 — pending owner approval. Execution has not
 started. This directory did not exist before this plan — the roadmap
 (`docs/howtorun/ROADMAP-UPDATE.md`) only ever named the phase
-("Post-Deployment Support," renamed from the original Phase 7 slot to make
-room for Live Scoring), with no scope written down anywhere. Scoped fresh
-from two rounds of owner Q&A 2026-07-27, the same approach every phase since
-Phase 6 has used.
+("Post-Deployment Support," bumped from the original Phase 7 slot to make
+room for Live Scoring, then bumped again to Phase 9 once Phase 8 — UI/UX
+Implementation and Visual Alignment — and Phase 8.5 — Premium Sports
+Experience — were both inserted ahead of it), with no scope written down
+anywhere. Scoped fresh from two rounds of owner Q&A 2026-07-27, the same
+approach every phase since Phase 6 has used. (This directory's own prose —
+README/CHECKLIST/DESIGN-NOTES and all three WP files — still called itself
+"Phase 8"/`WP-08-0X` internally until this pass corrected it; only the
+filenames, `WP-09-0X-*.md`, had already been renamed to match the final
+Phase 9 slot.)
 
 ## Goal
 
@@ -37,7 +43,7 @@ adds no new application code.
 
 - `.github/` does not currently exist in this repo — Phase 1 removed the
   starter kit's own `.github/` (CI workflows/PR templates not written for
-  this project) early on. WP-08-01 reintroduces `.github/` deliberately and
+  this project) early on. WP-09-01 reintroduces `.github/` deliberately and
   narrowly: **issue templates only**, never GitHub Actions/CI workflows —
   that stays out of scope here the same way it has in every phase since
   Phase 1.
@@ -50,7 +56,7 @@ adds no new application code.
   `health: '/up'`) already exists and needs no new code — this phase's job
   is documenting how/when to check it, not building it.
 - No new dependency, no new migration, no new `app/` code is expected from
-  this phase — if a real bug surfaces during WP-08-01/02 that genuinely
+  this phase — if a real bug surfaces during WP-09-01/02 that genuinely
   needs a code fix, it gets logged as a GitHub Issue and fixed as its own
   scoped follow-up, not folded silently into this phase's diff (mirrors how
   WP-06-03/04 handled real findings they *did* fix inline — those were
@@ -72,25 +78,25 @@ adds no new application code.
 
 | WP | Title |
 |---|---|
-| WP-08-01 | Bug & Support Workflow |
-| WP-08-02 | Monitoring & Health-Check Routine |
-| WP-08-03 | Phase 8 Compliance Review & Acceptance |
+| WP-09-01 | Bug & Support Workflow |
+| WP-09-02 | Monitoring & Health-Check Routine |
+| WP-09-03 | Phase 9 Compliance Review & Acceptance |
 
 Three WPs — deliberately small, matching the phase's actual scope. Sequence
-is loose between WP-08-01/02 (neither depends on the other's output) but
-both must land before WP-08-03 closes the phase.
+is loose between WP-09-01/02 (neither depends on the other's output) but
+both must land before WP-09-03 closes the phase.
 
 ## Visual Checkpoints
 
-1. **After WP-08-01:** a real GitHub issue can be filed against
+1. **After WP-09-01:** a real GitHub issue can be filed against
    `github.com/jaeturma/pmms` using the new templates, and the documented
    triage → label → fix → close workflow is followable end to end by
    reading it alone.
-2. **After WP-08-02:** the monitoring checklist can be run start to finish
+2. **After WP-09-02:** the monitoring checklist can be run start to finish
    against the real running app and correctly reports the app is healthy
    and both scheduled tasks are active.
-3. **After WP-08-03:** full quality gate green, compliance review filed,
-   Phase 8 closed.
+3. **After WP-09-03:** full quality gate green, compliance review filed,
+   Phase 9 closed.
 
 ## Exclusions (deferred or explicitly out of scope)
 
@@ -101,6 +107,6 @@ automation beyond issue templates; any new product feature; Flutter; AI.
 
 ## Completion
 
-Phase 8 completes via WP-08-03 (full quality gate + compliance review),
+Phase 9 completes via WP-09-03 (full quality gate + compliance review),
 mirroring WP-03-11/WP-04-11/WP-05-08/WP-07-03/WP-06-09. The review report
 goes to this directory; the WP log lives in `.ai/current-phase.md`.

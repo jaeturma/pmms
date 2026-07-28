@@ -1,0 +1,37 @@
+name: Support request
+description: Something you need done that the app doesn't self-serve today (e.g. a role promotion).
+labels: ["support", "needs-triage"]
+body:
+  - type: textarea
+    id: what-needed
+    attributes:
+      label: What do you need done?
+      description: >-
+        E.g. "Promote my account to Delegation Officer for Municipality X" —
+        see docs/manuals/admin-manual.md §2 for why this isn't self-service
+        today.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why do you need this?
+      description: Brief context so whoever triages this understands the request.
+    validations:
+      required: true
+  - type: dropdown
+    id: urgency
+    attributes:
+      label: Urgency
+      options:
+        - Routine (no specific deadline)
+        - Needed before a specific date (say when, below)
+        - Blocking an active meet right now
+    validations:
+      required: true
+  - type: input
+    id: deadline
+    attributes:
+      label: If there's a specific date this is needed by, state it here
+    validations:
+      required: false

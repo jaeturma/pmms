@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: I have a question about how to use PMMS
+    url: https://github.com/jaeturma/pmms/tree/main/docs/manuals
+    about: Check the role-based manual first — most "how do I..." questions are already answered there.

@@ -1,8 +1,8 @@
-# WP-08-03 — Phase 8 Compliance Review & Acceptance
+# WP-09-03 — Phase 9 Compliance Review & Acceptance
 
 ## Purpose
-Close Phase 8 the same way Phase 3, 4, 5, 6, and 7 each closed: confirm
-WP-08-01 and WP-08-02 delivered what they claimed, the quality gate is
+Close Phase 9 the same way Phase 3, 4, 5, 6, 7, and 8 each closed: confirm
+WP-09-01 and WP-09-02 delivered what they claimed, the quality gate is
 green, and nothing else in the app regressed along the way.
 
 ## Tasks
@@ -14,7 +14,7 @@ green, and nothing else in the app regressed along the way.
 - Do not commit or push changes.
 
 ## Scope
-- Verify WP-08-01 and WP-08-02 actually delivered: issue templates exist
+- Verify WP-09-01 and WP-09-02 actually delivered: issue templates exist
   and are usable, `docs/support-workflow.md` and `docs/monitoring.md` are
   present and accurate against the real repo/app, `docs/turnover.md`
   correctly cross-references both.
@@ -26,19 +26,19 @@ green, and nothing else in the app regressed along the way.
   process/documentation only, per README's Grounding section) — a diff
   against `main` should show only `.github/`, `docs/`, and possibly
   `scripts/health-check.ps1`.
-- Produce `phase-8-compliance-review.md` in this directory, same format as
+- Produce `phase-9-compliance-review.md` in this directory, same format as
   `phase-6-compliance-review.md`/`phase-7-compliance-review.md`: verdict,
   evidence for each WP, any remaining open items.
-- Update `.ai/current-phase.md` and `CHECKLIST.md` to reflect Phase 8
+- Update `.ai/current-phase.md` and `CHECKLIST.md` to reflect Phase 9
   complete.
 
 ## Out of Scope
 Fixing anything genuinely out of this phase's scope — a real application
 bug found while exercising the new workflow gets filed as its own GitHub
-Issue (via WP-08-01's own workflow), not fixed here.
+Issue (via WP-09-01's own workflow), not fixed here.
 
 ## Deliverables
-- `phase-8-compliance-review.md`
+- `phase-9-compliance-review.md`
 - Updated `.ai/current-phase.md`, `CHECKLIST.md`
 - Completion report
 - Git status summary
@@ -62,5 +62,5 @@ Include:
 7. Recommended next step (owner's commit/push decision)
 
 Next:
-Phase 8 complete — owner review of the compliance report, then commit/push
-decision for the Phase 8 tree.
+Phase 9 complete — owner review of the compliance report, then commit/push
+decision for the Phase 9 tree.

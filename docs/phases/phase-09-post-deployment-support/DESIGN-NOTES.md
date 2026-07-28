@@ -1,4 +1,4 @@
-# Phase 8 Design Notes
+# Phase 9 Design Notes
 
 - **GitHub Issues is the tracker, not a new in-app or markdown system.**
   The owner chose this specifically over a `docs/support/issues.md`-style
@@ -7,7 +7,7 @@
   git, since they're config, not the issues themselves).
 - **`.github/` is reintroduced narrowly.** Phase 1 removed the starter
   kit's own `.github/` early on (CI workflows and PR templates that were
-  never written for this project). WP-08-01 adds back only
+  never written for this project). WP-09-01 adds back only
   `.github/ISSUE_TEMPLATE/*.yml` (or `.md`) files — no
   `.github/workflows/` (GitHub Actions/CI), which stays out of scope the
   same way it has since Phase 1. If CI is ever wanted, that's its own
@@ -39,7 +39,7 @@
      documented in `docs/backup-restore.md`/`docs/deployment.md`, just not
      yet pulled into one combined routine a person actually follows on a
      cadence.
-- **No new dependency, no new migration.** If WP-08-01/02 happen to
+- **No new dependency, no new migration.** If WP-09-01/02 happen to
   surface a real application bug while exercising these flows (unlikely,
   but possible), it gets filed as a GitHub Issue via the very workflow
   being built, not silently fixed inline — this phase's own diff should

@@ -1,4 +1,4 @@
-# WP-08-01 — Bug & Support Workflow
+# WP-09-01 — Bug & Support Workflow
 
 ## Purpose
 Give the Division a real, documented way to report and track a bug or a
@@ -68,4 +68,4 @@ Include:
 7. Recommended next work package
 
 Next:
-WP-08-02 — Monitoring & Health-Check Routine
+WP-09-02 — Monitoring & Health-Check Routine

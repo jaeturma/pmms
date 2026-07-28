@@ -1,0 +1,48 @@
+name: Bug report
+description: Something that used to work, or should work per the manuals, doesn't.
+labels: ["bug", "needs-triage"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe what you saw, as specifically as you can.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen instead?
+      description: What should have happened per the manuals or normal use?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the exact steps, in order, that lead to the problem.
+      placeholder: |
+        1. Go to ...
+        2. Click on ...
+        3. See error
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Which role were you signed in as?
+      options:
+        - Administrator
+        - Meet Organizer
+        - Delegation Officer
+        - Viewer
+        - Not signed in (public portal)
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots or error text (if available)
+      description: Paste any error message shown on screen, or drag in a screenshot.
+    validations:
+      required: false

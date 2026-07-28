@@ -1,4 +1,4 @@
-# WP-08-02 — Monitoring & Health-Check Routine
+# WP-09-02 — Monitoring & Health-Check Routine
 
 ## Purpose
 A documented, repeatable **manual** routine to confirm the app is up and
@@ -65,4 +65,4 @@ Include:
 7. Recommended next work package
 
 Next:
-WP-08-03 — Phase 8 Compliance Review & Acceptance
+WP-09-03 — Phase 9 Compliance Review & Acceptance

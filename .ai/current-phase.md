@@ -3523,3 +3523,117 @@ file); reconstructing from their completion reports
   docs/phases/phase-09-post-deployment-support/ and ready to pick up on
   owner instruction, alongside the owner's commit decision for the
   Phase 8.5 tree.
+
+## Phase 9 — Post-Deployment Support
+
+**Note before WP-09-01 started**: the whole directory
+(`docs/phases/phase-09-post-deployment-support/README.md`,
+`CHECKLIST.md`, `DESIGN-NOTES.md`, and all three `WP-09-0X-*.md` files)
+still called itself "Phase 8"/`WP-08-0X` internally — a leftover from
+before Phase 8 (UI/UX) and Phase 8.5 (Premium Sports Experience) were
+both inserted ahead of this phase's slot, bumping it to Phase 9. Only
+the filenames had already been renamed to `WP-09-0X`; the prose inside
+hadn't. Fixed first (Phase 9/`WP-09-0X` throughout, two intentional
+historical references in README's own renumbering explanation left
+as-is) before starting any real work.
+
+- **WP-09-01 Bug & Support Workflow** — done 2026-07-28. New
+  `.github/ISSUE_TEMPLATE/` (didn't exist — Phase 1 removed the starter
+  kit's own copy early on): `bug_report.yml` and `support_request.yml`
+  (structured GitHub issue forms, not classic markdown templates — the
+  field lists in the WP's own scope mapped naturally to typed
+  textarea/dropdown fields), plus `config.yml` (blank issues disabled,
+  one contact link pointing "I have a question" at `docs/manuals/`).
+  New `docs/support-workflow.md`: labels
+  (`bug`/`support`/`needs-triage`/`blocking`, no finer severity scale —
+  proportionate to one Division running one meet at a time), the
+  triage decision tree, and an explicit "what this deliberately doesn't
+  do" (no CI, no bot, no SLA, no automated notifications). Updated
+  `docs/turnover.md`'s escalation table: the "How" column now points at
+  the new workflow for the two rows this WP actually built templates
+  for (role promotion → Support request, app bug → Bug report); the
+  other three rows (app down, database problem, feature/scope request)
+  stay `_[fill in]_` honestly — genuinely different categories. Bug
+  report's "which role" dropdown uses the real `UserRole` enum labels
+  (Administrator/Meet Organizer/Delegation Officer/Viewer) plus "not
+  signed in"; Support request's role-promotion example cites the real
+  documented limitation in `docs/manuals/admin-manual.md` §2. **One
+  real mid-task correction**: an early pass ran Prettier directly on
+  `docs/turnover.md`, which reformatted the *entire* pre-existing file
+  (Markdown table/emphasis style, plus an awkward line break inside a
+  code span) — caught it, confirmed `package.json`'s `format`/
+  `format:check` scripts don't even cover `docs/` (only `resources/`),
+  reverted, reapplied only the two intended edits by hand. Zero
+  application code touched (`git diff --stat` against `app/`/
+  `database/`/`routes/`/`composer.*`/`package.*` all empty) — exactly
+  as scoped, a pure docs/GitHub-config WP. Full gate green: Pest
+  703/703 (3,716 assertions, unchanged), Pint/PHPStan/ESLint/Prettier/
+  tsc/build all clean (build produced identical chunk hashes, confirming
+  zero frontend change); all three new YAML files validated with
+  `js-yaml`, not just eyeballed. Report:
+  docs/reports/phase-09/WP-09-01-completion.md. Not committed/pushed.
+- **WP-09-02 Monitoring & Health-Check Routine** — done 2026-07-28.
+  New `docs/monitoring.md` (the three-point check: `/up`, log skim,
+  both Phase 6 Scheduled Tasks) and `scripts/health-check.ps1` (a
+  read-only one-shot script, reuses `backup-database.ps1`'s
+  `Read-EnvValue` pattern for `APP_URL`). **Actually proved the
+  checklist against the real running app**, per this WP's own explicit
+  acceptance criterion, not just documented: `/up` genuinely returns
+  200 with the real "Application up" page (worth noting — pmms.app is
+  serving the real app now, not Laragon's placeholder that earlier
+  phases' reports flagged); `Get-ScheduledTask -TaskName "PMMS*"`
+  returned **zero matches** — neither the backup nor queue-worker task
+  is currently registered on this machine, despite WP-06-02/06-07
+  building the installers. Checked why rather than assuming a
+  regression: both install scripts explicitly document themselves as
+  "a one-time setup... the server administrator runs it once,
+  deliberately" — this dev machine just never had that step run (or
+  WP-06-07's own end-to-end proof, using `queue:work --once` directly,
+  was cleaned up afterward). Deliberately did NOT install the two
+  Scheduled Tasks unilaterally on the owner's real machine — flagged as
+  a real action item for production cutover instead of silently
+  running installer scripts that touch OS-level state outside the
+  repo. Log skim found 11 `.ERROR:` lines — 10 are `testing.ERROR:`
+  (Pest test-run noise, this app logs to the same file regardless of
+  `APP_ENV`) and one real historical `local.ERROR: SQLSTATE[HY000]
+  [2002]` (MySQL momentarily unreachable at 2026-07-27 15:59:54) —
+  confirmed via `php artisan db:show` that the DB is reachable now, so
+  this is stale noise the log (never rotated) still holds, not a
+  current problem; this "match exists vs. match is current" distinction
+  became a documented nuance in `docs/monitoring.md`. Updated
+  `docs/turnover.md`'s "Routine maintenance checklist" to point at the
+  new combined routine instead of just its old partial backup-task-only
+  check. Zero application code touched. Full gate green: Pest 703/703
+  unchanged, Pint/PHPStan/ESLint/Prettier/tsc/build all clean (build
+  produced identical chunk hashes). Report:
+  docs/reports/phase-09/WP-09-02-completion.md. Not committed/pushed.
+- **WP-09-03 Phase 9 Compliance Review & Acceptance — done 2026-07-28.
+  This closes Phase 9 (all 3 WPs).** Not new work — the phase-closing
+  review, same format as phase-6/phase-7's own. New
+  docs/phases/phase-09-post-deployment-support/phase-9-compliance-review.md:
+  architecture conformance table, deliverable re-verification (re-parsed
+  all 3 YAML issue templates, **re-ran `scripts/health-check.ps1`
+  against the real app** rather than trusting WP-09-02's own run —
+  identical result: `/up` passes, same historical log line still
+  present, both Scheduled Tasks still unregistered), a final quality
+  gate, a diff-scope confirmation (`git diff --stat` against app/
+  database/routes/composer.*/package.*/Policies all empty — the
+  phase's own "docs/config only" scope held completely), findings/
+  dispositions, and a recommendation. Full gate green: Pest 703/703
+  (3,716 assertions, unchanged from WP-09-02's close),
+  Pint/PHPStan/ESLint/Prettier/tsc/build all clean, `composer audit`/
+  `npm audit --omit=dev` both clean. pmms.app re-confirmed genuinely
+  serving the real app (HTTP 200, real "Application up" page). Two real
+  findings carried forward as open items, not fixed by this review
+  (consistent with every prior phase's closing review not unilaterally
+  fixing environment gaps found while verifying): the two Scheduled
+  Tasks still unregistered on this dev machine (expected pre-go-live,
+  a real production-cutover action item using tooling that already
+  exists) and one historical, confirmed-harmless log error still
+  sitting in the unrotated log tail. Report:
+  docs/reports/phase-09/WP-09-03-completion.md written; `CHECKLIST.md`
+  WP-09-03 checked off (**all 3 Phase 9 WPs now complete**). Not
+  committed/pushed. No further phase is currently scaffolded beyond
+  Phase 9 — next is entirely the owner's call (real production go-live,
+  a genuine UAT/pilot session using WP-06-06's materials, or something
+  else), alongside the commit/push decision for the Phase 9 tree.
