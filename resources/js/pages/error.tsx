@@ -40,9 +40,9 @@ export default function ErrorPage({ status, title, message }: Props) {
     };
 
     return (
-        <div className="flex min-h-svh items-center justify-center p-6">
+        <div className="flex min-h-svh items-center justify-center p-6 sm:p-10">
             <Head title={title ?? fallback.title} />
-            <div className="w-full max-w-md">
+            <div className="w-full max-w-md animate-card-in sm:max-w-lg">
                 <EmptyState
                     icon={fallback.icon}
                     title={title ?? fallback.title}

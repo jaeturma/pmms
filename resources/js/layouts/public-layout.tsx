@@ -16,10 +16,15 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { dashboard, home, login } from '@/routes';
 import {
+    about as publicAbout,
     contact as publicContact,
+    faqs as publicFaqs,
+    gallery as publicGallery,
     meet as publicMeet,
     news as publicNews,
+    rankings as publicRankings,
     results as publicResults,
+    search as publicSearch,
     sports as publicSports,
     tally as publicTally,
 } from '@/routes/public';
@@ -52,19 +57,25 @@ export default function PublicLayout({ children }: PropsWithChildren) {
         return () => window.removeEventListener('scroll', onScroll);
     }, []);
 
-    // New Sports/News/Contact pages (WP-10-07) live here and in the
-    // footer's quick-links column only — per the phase's resolved
-    // decision, never added to `PublicBottomNav` below, which keeps its
-    // own tuned 4-5-item one-thumb-reach mobile design untouched.
+    // New Sports/News/Contact pages (WP-10-07) and Rankings/Gallery/
+    // About/FAQs/Search (WP-11-08) live here and in the footer's quick-
+    // links column only — per the phase's resolved decision, never
+    // added to `PublicBottomNav` below, which keeps its own tuned 4-5-
+    // item one-thumb-reach mobile design untouched.
     const topNavItems = publicNav
         ? [
               { label: 'Home', href: home().url },
               { label: 'Schedule', href: publicMeet(publicNav.meetId).url },
               { label: 'Results', href: publicResults(publicNav.meetId).url },
               { label: 'Medal Tally', href: publicTally(publicNav.meetId).url },
+              { label: 'Rankings', href: publicRankings(publicNav.meetId).url },
               { label: 'Sports', href: publicSports(publicNav.meetId).url },
+              { label: 'Gallery', href: publicGallery(publicNav.meetId).url },
               { label: 'News', href: publicNews(publicNav.meetId).url },
+              { label: 'About', href: publicAbout(publicNav.meetId).url },
+              { label: 'FAQs', href: publicFaqs(publicNav.meetId).url },
               { label: 'Contact', href: publicContact(publicNav.meetId).url },
+              { label: 'Search', href: publicSearch(publicNav.meetId).url },
           ]
         : [{ label: 'Home', href: home().url }];
 

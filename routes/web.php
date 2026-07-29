@@ -42,18 +42,33 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('meets/{meet}/tally', [PortalController::class, 'tally'])
         ->whereNumber('meet')
         ->name('public.tally');
+    Route::get('meets/{meet}/rankings', [PortalController::class, 'rankings'])
+        ->whereNumber('meet')
+        ->name('public.rankings');
     Route::get('meets/{meet}/athletics', [PortalController::class, 'athletics'])
         ->whereNumber('meet')
         ->name('public.athletics');
     Route::get('meets/{meet}/sports', [PortalController::class, 'sports'])
         ->whereNumber('meet')
         ->name('public.sports');
+    Route::get('meets/{meet}/gallery', [PortalController::class, 'gallery'])
+        ->whereNumber('meet')
+        ->name('public.gallery');
     Route::get('meets/{meet}/news', [PortalController::class, 'news'])
         ->whereNumber('meet')
         ->name('public.news');
     Route::get('meets/{meet}/contact', [PortalController::class, 'contact'])
         ->whereNumber('meet')
         ->name('public.contact');
+    Route::get('meets/{meet}/about', [PortalController::class, 'about'])
+        ->whereNumber('meet')
+        ->name('public.about');
+    Route::get('meets/{meet}/faqs', [PortalController::class, 'faqs'])
+        ->whereNumber('meet')
+        ->name('public.faqs');
+    Route::get('meets/{meet}/search', [PortalController::class, 'search'])
+        ->whereNumber('meet')
+        ->name('public.search');
     Route::get('meets/{meet}/matches/{match}/scoreboard', [PortalController::class, 'scoreboard'])
         ->whereNumber(['meet', 'match'])
         ->name('public.scoreboard');

@@ -147,3 +147,20 @@ WP-08-01/02/03/04 already found, see their completion reports):
 - "Export report" (the pre-existing CSV download route,
   `reports.tally.download`, not previously linked from this page) added
   next to the existing "Printable report" link.
+
+## Standalone Rankings page (Phase 11, WP-11-02)
+
+`/meets/{meet}/rankings` (`public.rankings`) — a separate public page
+showing the exact same district/municipality standings the tally
+page's own "Overall ranking" table renders, via `PortalController::
+rankings()` calling `MedalTallyService::standings($meet->id)`
+unfiltered (no sport/age-division filter, no new computation). Phase 10
+originally folded this into Medal Tally rather than giving it its own
+route; the owner reversed that call in Phase 11. Unlike the tally
+page's 8-row mobile preview (WP-08-09), Rankings shows every district
+row at once — this page's whole purpose is the full standings, not a
+preview. `public/tally.tsx` links to it via a "Full rankings" button
+next to the existing "Kiosk / TV mode" button; `public/rankings.tsx`
+links back to Medal Tally for the fuller sport/school breakdown.
+Reachable from the header nav/footer once WP-11-08 wires it in — not
+yet linked there as of this WP.

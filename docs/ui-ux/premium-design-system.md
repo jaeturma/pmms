@@ -1417,4 +1417,50 @@ This closes Phase 10 — Premium Portal Redesign. Awaiting owner review of
 the compliance report, then a commit/push decision for the whole Phase
 10 tree.
 
+## WP-11-01 — Public Portal Completion Gap Audit
+
+Phase 11's opening WP, closing the gap between the owner's original
+Arena brief (which lists Gallery, Rankings, About, FAQs, Search, and 404
+among the pages to redesign) and what Phase 10 actually shipped
+(deferred Gallery and a separate Rankings route; never built About/
+FAQs/Search; 404 untouched beyond its already-correct WP-04-06
+functional fix).
+
+**Re-fetched the Arena reference directly** (`WebFetch`,
+uicookies.com/demo/theme/arena/, 2026-07-29) rather than trusting Phase
+10's notes from memory. Confirmed the real finding this WP exists to
+record: **the reference has no separate Gallery, About, FAQ, Search, or
+404 page at all.** It is a single-page template — every header/footer
+nav item (`Fixtures`, `Results`, `Squad`, `News`, `Membership`, `Buy
+Tickets`) is an in-page anchor (`#section`), not a distinct URL. This
+matches WP-10-01's own mapping, which never listed those five page
+types because they were never present to catalogue. Consequently, this
+phase cannot clone a literal Arena "gallery page" or "FAQ page" — it
+applies Arena's general design *language* (card grid at a consistent
+aspect ratio, generous grid rhythm, structured section headers, the
+three-column footer WP-10-02 already built) to each new page instead,
+exactly as Phase 10 already did for News/Sports/Contact (also not
+literal Arena pages).
+
+| Target page | Arena language applied | PMMS today | Status | Closes in |
+|---|---|---|---|---|
+| Rankings | Card/table rhythm (same as Medal Tally's existing table) | Ranking data lives only inside `tally.tsx`'s "Overall ranking" table, no standalone route | Real gap — data exists (`MedalTallyService::standings()`), only a new destination is needed | WP-11-02 |
+| Gallery | Structured card grid, consistent aspect ratio | No `Photo`/media model anywhere in the schema; no gallery route | Real gap, but bounded — no real photography exists to show; resolved as sport-identity tiles from real `Meet::events()` data, not fabricated photos | WP-11-03 |
+| About | Structured section header + info card (same shape as Contact) | `Division::current()` (`name`/`type`/`areaLabel()`) and `meetSummary()` both exist and are unused for this purpose; no about route | Real gap — real data exists, just not assembled into a page | WP-11-04 |
+| FAQs | Structured section rhythm, accordion list | No FAQ content or route anywhere | Real gap — needs new (real-data-grounded) content, not just a wiring job | WP-11-05 |
+| Search | Card-grid grouped results | No search route; individual pages (`results.tsx`, `news.tsx`) each have their own narrow filter, no cross-content search | Real gap — must be built to the exact same privacy boundary every other public route already enforces | WP-11-06 |
+| 404 | Spacing/typography rhythm only | `error.tsx` already functionally correct (WP-04-06: `PublicLayout`, "Back to portal home" link) | Partial — visual pass only, no functional gap | WP-11-07 |
+
+No row in this table is "not applicable" the way three of WP-10-01's
+rows were (team-form badges, player cards, stadium photography all had
+no real PMMS analogue at all) — every target page here has a real,
+buildable PMMS equivalent, just not yet built. The Migration Plan this
+WP produces is therefore unchanged from README.md's own WP-11-02
+through WP-11-09 breakdown: each row above maps one-to-one to an
+existing later WP, confirming the phase's plan needs no adjustment
+before WP-11-02 starts.
+
+This closes WP-11-01 — docs-only, zero code changes. See
+`docs/reports/phase-11/WP-11-01-completion.md` for the full report.
+
 No new routes, migrations, dependencies, colors, or components.

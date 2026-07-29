@@ -1,5 +1,13 @@
 import { Head, Link, router, usePage, usePoll } from '@inertiajs/react';
-import { Award, Crown, Info, Medal, Monitor, WifiOff } from 'lucide-react';
+import {
+    Award,
+    Crown,
+    Info,
+    ListOrdered,
+    Medal,
+    Monitor,
+    WifiOff,
+} from 'lucide-react';
 import { useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import Heading from '@/components/heading';
@@ -34,7 +42,10 @@ import {
 } from '@/components/ui/table';
 import { useKioskMode } from '@/hooks/use-kiosk-mode';
 import { recentDescription } from '@/lib/utils';
-import { tally as publicTally } from '@/routes/public';
+import {
+    rankings as publicRankings,
+    tally as publicTally,
+} from '@/routes/public';
 
 /** Collapsed ranking table row count (WP-08-09) — a phone shouldn't get
  * the full standings dumped on it by default; "View full ranking"
@@ -340,12 +351,20 @@ export default function PublicTally({
                             </SelectContent>
                         </Select>
                     </div>
-                    <Button variant="outline" size="sm" asChild>
-                        <Link href={kioskUrl()}>
-                            <Monitor aria-hidden="true" />
-                            Kiosk / TV mode
-                        </Link>
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" size="sm" asChild>
+                            <Link href={publicRankings(meet.id)}>
+                                <ListOrdered aria-hidden="true" />
+                                Full rankings
+                            </Link>
+                        </Button>
+                        <Button variant="outline" size="sm" asChild>
+                            <Link href={kioskUrl()}>
+                                <Monitor aria-hidden="true" />
+                                Kiosk / TV mode
+                            </Link>
+                        </Button>
+                    </div>
                 </div>
 
                 {loading ? (

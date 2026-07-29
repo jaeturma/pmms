@@ -33,6 +33,18 @@ Public controllers (`PortalController`) build their own minimal prop arrays —
 never reuse an internal page's props. Tests assert public-safe props with
 `missing()` checks, not UI inspection.
 
+**Confirmed unchanged by Search (Phase 11, WP-11-06):** the cross-content
+search at `/meets/{meet}/search` queries several tables in one request instead
+of one, but returns nothing beyond what's listed above — schools (name only,
+and only schools with real participation in this meet), sports/events (name +
+real event count, only those actually contested in this meet), published
+announcement titles, and validated result placements (the exact same
+rank/athlete-name/school-name/mark quadruple already public on `/results`).
+Every group is independently scoped through `Meet::published()` plus its own
+meet-relevant filter (`participatingSchoolIds()`, `contestedSports()`,
+`Announcement::published()`, validated-only `ResultPlacement`) — this is a new
+entry point onto the same boundary, not a widening of it.
+
 ## Routing & layout
 
 - Public routes are guest routes (no `auth` middleware) under
@@ -77,6 +89,19 @@ same rule this section already established. Per Phase 10's own resolved
 scope decision, these three go in the header nav and footer **only**,
 never `PublicBottomNav` — its tuned 4-5-item one-thumb-reach mobile
 design stays exactly as WP-08-09 built it.
+
+**Update (Phase 11, WP-11-08):** the same shared `topNavItems` array
+(read by both the header nav and `PublicFooter`'s quick-links column —
+no second array introduced) now also lists Rankings, Gallery, About,
+FAQs, and Search — the five pages WP-11-02 through WP-11-06 built.
+Order: Home, Schedule, Results, Medal Tally, Rankings, Sports, Gallery,
+News, About, FAQs, Contact, Search. Same rule as every prior new-page
+WP: these five go in the header nav and footer **only**, never
+`PublicBottomNav`, which is unchanged (still reads from its own
+separate `bottomNavItems` array, never `topNavItems`). The header nav's
+existing `overflow-x-auto` (needed even before this WP, since the nav
+was already wider than some viewports) accommodates the larger item
+count without any new wrapping/scrolling behavior.
 
 When no meet is published at all, `publicNav` is `null` and the header
 shows only "Home" — no nav links pointing nowhere. When there's a meet but
@@ -267,6 +292,58 @@ re-keyed as of WP5 (`docs/medal-tally.md`). See `docs/delegations.md`.
   home page's 5-item preview already renders — this is that preview's
   "see all" destination. Resolved via `Meet::published()`, so unpublished
   meets 404.
+- `/meets/{meet}/gallery` (`public.gallery`, WP-11-03) — a static,
+  non-photographic gallery of sport-identity tiles (icon + name + real
+  event count). PMMS has no photo/media model or upload pipeline
+  anywhere, and fabricating stock "event photos" would misrepresent
+  real DepEd content, so this reuses `sports()`'s exact same
+  `contestedSports()` data (extracted as a shared private helper on
+  this WP, so both pages read from one query) at a distinct,
+  aspect-square gallery-tile presentation instead of `sports.tsx`'s
+  horizontal list-card — same two destinations (`results`/`tally`
+  pre-filtered by `sport_id`). Resolved via `Meet::published()`, so
+  unpublished meets 404.
+- `/meets/{meet}/rankings` (`public.rankings`, WP-11-02) — a standalone
+  page showing the full district/municipality standings
+  `MedalTallyService::standings()` already computes for the public
+  medal tally, given its own route (Phase 10 had folded this into the
+  tally page; the owner asked for a separate one in Phase 11). No new
+  computation, no sport/age filter — see `docs/medal-tally.md` for
+  detail. Linked from `/meets/{meet}/tally`; not yet in the header nav/
+  footer (pending WP-11-08). Resolved via `Meet::published()`, so
+  unpublished meets 404.
+- `/meets/{meet}/about` (`public.about`, WP-11-04) — the Division
+  running the meet (`Division::current()`'s `name`/`type`/`areaLabel`,
+  read from the already-global shared Inertia `division` prop, same as
+  `tally.tsx`) plus real participation counts: competing municipalities
+  and sports contested (both reusing `competingMunicipalities()`/
+  `contestedSports()` exactly), and a distinct-schools count derived
+  from this meet's registered athletes' own `school_id` (Division
+  initiative: the athlete's home school, not the delegation's). No
+  office/history/mission copy invented anywhere. Resolved via
+  `Meet::published()`, so unpublished meets 404.
+- `/meets/{meet}/faqs` (`public.faqs`, WP-11-05) — common questions
+  about how the portal works, rendered via the new shadcn `Accordion`
+  primitive (`@radix-ui/react-accordion`, added this WP —
+  `resources/js/components/ui/accordion.tsx`). Question text is
+  written copy, but every factual answer traces to real data
+  (`meetSummary()`, reused exactly) or already-documented behavior
+  (this doc's own publication/validation/live-provisional rules,
+  `tally.tsx`'s rank-order disclaimer) — nothing invented, and no new
+  fact hardcoded that could go stale independently of the real
+  behavior it describes. Resolved via `Meet::published()`, so
+  unpublished meets 404.
+- `/meets/{meet}/search` (`public.search`, WP-11-06) — a query box
+  returning grouped, public-safe matches across this meet: schools
+  (only those with real participation — `participatingSchoolIds()`,
+  shared with `about()`), sports/events (`contestedSports()`, shared
+  with `sports()`/`gallery()`), published announcement titles, and
+  **validated** result placements matched by athlete name or school
+  name (the same rank/athlete/school/mark fields already public on
+  `/results` — no birthdate/LRN/grade-level/contact/guardian data).
+  Plain `LIKE`/`whereHas` queries only, no search-index dependency. An
+  empty query runs no query at all. Resolved via `Meet::published()`,
+  so unpublished meets 404.
 - `/meets/{meet}/contact` (`public.contact`, WP-10-07) — meet/venue info
   (name, dates, school year, venue) plus quick links to every other
   portal page for this meet. **No office-contact section** — PMMS stores
@@ -343,6 +420,14 @@ for every portal page; `<title>` per page and a portal-wide meta description.
   (`home()`); authenticated users keep `AppLayout` and "Back to dashboard".
   Added a dedicated 404 title/message ("Page not found" / references the
   meet-publication possibility) alongside the existing 403 copy.
+  **Update (Phase 11, WP-11-07):** visual-only pass, this functional
+  behavior unchanged — the outer wrapper gained responsive padding
+  (`p-6 sm:p-10`), the centered card widened slightly at `sm:`
+  (`max-w-md sm:max-w-lg`), and a fade/rise entrance
+  (`animate-card-in`, respects the existing global `prefers-reduced-
+  motion` reset) — matching the spacing/motion discipline every other
+  page in Phase 10/11 already has. `EmptyState` itself was already
+  elevated in WP-10-09; not touched again here.
 - No portal-wide meta description — added one on `PublicLayout` via `<Head>`
   (merges with each page's own `<Head title>`).
 - The day-selector chip row on the meet page (`public/meet.tsx`) had no

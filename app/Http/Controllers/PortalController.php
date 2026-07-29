@@ -7,6 +7,7 @@ use App\Enums\MeetStatus;
 use App\Enums\ResultStatus;
 use App\Enums\ScoringSessionStatus;
 use App\Models\Announcement;
+use App\Models\Athlete;
 use App\Models\Delegation;
 use App\Models\District;
 use App\Models\EventMatch;
@@ -14,6 +15,7 @@ use App\Models\EventResult;
 use App\Models\EventSchedule;
 use App\Models\Meet;
 use App\Models\ResultPlacement;
+use App\Models\School;
 use App\Models\ScoringSession;
 use App\Models\Sport;
 use App\Services\MedalTallyService;
@@ -249,6 +251,26 @@ class PortalController extends Controller
     }
 
     /**
+     * Standalone rankings page (WP-11-02): the exact same
+     * MedalTallyService::standings() data tally()'s own "Overall
+     * ranking" table already renders, given its own destination and a
+     * full, untruncated presentation — no sport/age filter, no new
+     * computation. Phase 10 originally folded Rankings into Medal
+     * Tally; the owner asked for a separate route in Phase 11 instead.
+     * Unpublished meets 404.
+     */
+    public function rankings(int $meet, MedalTallyService $tally): Response
+    {
+        $meet = Meet::query()->published()->findOrFail($meet);
+
+        return Inertia::render('public/rankings', [
+            'meet' => $this->meetSummary($meet),
+            'districts' => $tally->standings($meet->id)['districts'],
+            'generatedAt' => now()->toDayDateTimeString(),
+        ]);
+    }
+
+    /**
      * Public Athletics event listing (WP-08-10 flagged, WP-08-11):
      * deliberately a real-data-only "shell," not a live scoreboard.
      * `App\Enums\ScoreboardType` has no Athletics case and no scoring
@@ -430,7 +452,45 @@ class PortalController extends Controller
     {
         $meet = Meet::query()->published()->findOrFail($meet);
 
-        $sports = $meet->events()
+        return Inertia::render('public/sports', [
+            'meet' => $this->meetSummary($meet),
+            'sports' => $this->contestedSports($meet),
+        ]);
+    }
+
+    /**
+     * Static gallery page (WP-11-03): sport-identity tiles, not
+     * photographs — PMMS has no photo/media model or upload pipeline
+     * anywhere, and fabricating stock/placeholder "event photos" would
+     * misrepresent real DepEd content, so this reuses the exact same
+     * real, already-contested-sports data `sports()` shows, just at a
+     * gallery-style card presentation (`docs/phases/phase-11-public-
+     * portal-completion/DESIGN-NOTES.md`). Same two destinations
+     * (`results`/`tally` pre-filtered by `sport_id`) as the Sports
+     * page — this is a different visual presentation of the same real
+     * integration, not a new data source. Unpublished meets 404.
+     */
+    public function gallery(int $meet): Response
+    {
+        $meet = Meet::query()->published()->findOrFail($meet);
+
+        return Inertia::render('public/gallery', [
+            'meet' => $this->meetSummary($meet),
+            'sports' => $this->contestedSports($meet),
+        ]);
+    }
+
+    /**
+     * The meet's actually-contested sports, one row per sport with its
+     * real event count — shared by `sports()` (WP-10-07) and `gallery()`
+     * (WP-11-03) so both pages read from one query instead of each
+     * re-deriving the same grouping.
+     *
+     * @return array<int, array{id: int, name: string, event_count: int}>
+     */
+    private function contestedSports(Meet $meet): array
+    {
+        return $meet->events()
             ->with('sport:id,name')
             ->get()
             ->groupBy('sport_id')
@@ -442,11 +502,6 @@ class PortalController extends Controller
             ->sortBy('name')
             ->values()
             ->all();
-
-        return Inertia::render('public/sports', [
-            'meet' => $this->meetSummary($meet),
-            'sports' => $sports,
-        ]);
     }
 
     /**
@@ -492,6 +547,187 @@ class PortalController extends Controller
 
         return Inertia::render('public/contact', [
             'meet' => $this->meetSummary($meet),
+        ]);
+    }
+
+    /**
+     * About page (WP-11-04): the Division running the meet and the
+     * meet's own real participation counts — no office/history/mission
+     * copy invented anywhere. `Division::current()`'s name/type/
+     * areaLabel is already a global shared Inertia prop
+     * (`HandleInertiaRequests::share()`), so this page reads it the
+     * same way `tally.tsx` already does rather than passing it again as
+     * a page-specific prop. Municipality and sport counts reuse the
+     * exact same `competingMunicipalities()`/`contestedSports()` data
+     * `home()`/`sports()` already compute; the school count is the one
+     * genuinely new (but trivial, single-query) aggregate this WP adds
+     * — distinct schools among this meet's registered athletes,
+     * counted from the athlete's own `school_id` (Division initiative:
+     * the athlete's home school, not the delegation's, same source
+     * `docs/medal-tally.md`'s school-level grouping already uses).
+     * Unpublished meets 404.
+     */
+    public function about(int $meet): Response
+    {
+        $meet = Meet::query()->published()->findOrFail($meet);
+
+        return Inertia::render('public/about', [
+            'meet' => $this->meetSummary($meet),
+            'municipalityCount' => count($this->competingMunicipalities($meet)),
+            'schoolCount' => $this->participatingSchoolIds($meet)->count(),
+            'sportCount' => count($this->contestedSports($meet)),
+        ]);
+    }
+
+    /**
+     * Distinct school IDs actually participating in this meet, derived
+     * from the athlete's own `school_id` (Division initiative: the
+     * athlete's home school, not the delegation's — same source
+     * `MedalTallyService`/`docs/medal-tally.md` already use). Shared by
+     * `about()`'s school count (WP-11-04) and `search()`'s school-name
+     * matching (WP-11-06), so a school search can never surface a
+     * school with no real participation in this meet.
+     *
+     * @return Collection<int, int>
+     */
+    private function participatingSchoolIds(Meet $meet): Collection
+    {
+        return Athlete::query()
+            ->whereHas('delegation', fn ($query) => $query->where('meet_id', $meet->id))
+            ->distinct()
+            ->pluck('school_id');
+    }
+
+    /**
+     * FAQs page (WP-11-05): common questions about how the portal
+     * works. Question copy is written text (like any section heading),
+     * but every factual claim traces to real data — `meetSummary()`,
+     * reused exactly, the same dates/venue/status every other page
+     * already shows — or already-documented behavior (`docs/public-
+     * portal.md`'s publication/validation/live-provisional rules,
+     * `tally.tsx`'s own rank-order disclaimer). Nothing hardcoded
+     * beyond what's true right now. Unpublished meets 404.
+     */
+    public function faqs(int $meet): Response
+    {
+        $meet = Meet::query()->published()->findOrFail($meet);
+
+        return Inertia::render('public/faqs', [
+            'meet' => $this->meetSummary($meet),
+        ]);
+    }
+
+    /**
+     * Cross-content search (WP-11-06): the exact same privacy boundary
+     * every existing public route already enforces, just applied to a
+     * new entry point that queries several tables at once instead of
+     * one. Plain `LIKE`/`whereHas` queries only — no search-index
+     * dependency, matching this phase's own "no new dependency" rule.
+     * An empty query runs no query at all (every group empty). Every
+     * group is independently scoped to this meet:
+     * - Schools: only schools with real participation in this meet
+     *   (`participatingSchoolIds()`, shared with `about()`) — never the
+     *   whole system-wide school catalog.
+     * - Sports: reuses `contestedSports()` (shared with `sports()`/
+     *   `gallery()`) filtered by name — never the whole sport catalog.
+     * - Announcements: `Announcement::published()` for this meet only —
+     *   same scope `news()` already uses.
+     * - Result placements: **validated** results for this meet only,
+     *   matched by athlete name or school name — the exact same
+     *   rank/athlete/school/mark triple already public on `/results`,
+     *   never any athlete field beyond that (no birthdate, LRN, grade
+     *   level, contact/guardian info). Unpublished meets 404.
+     */
+    public function search(Request $request, int $meet): Response
+    {
+        $meet = Meet::query()->published()->findOrFail($meet);
+
+        $term = trim($request->string('q')->toString());
+
+        if ($term === '') {
+            return Inertia::render('public/search', [
+                'meet' => $this->meetSummary($meet),
+                'query' => '',
+                'schools' => [],
+                'sports' => [],
+                'announcements' => [],
+                'placements' => [],
+            ]);
+        }
+
+        $schools = School::query()
+            ->whereIn('id', $this->participatingSchoolIds($meet))
+            ->where('name', 'like', "%{$term}%")
+            ->orderBy('name')
+            ->limit(10)
+            ->get(['id', 'name'])
+            ->map(fn (School $school): array => ['id' => $school->id, 'name' => $school->name])
+            ->all();
+
+        $sports = collect($this->contestedSports($meet))
+            ->filter(fn (array $sport): bool => str_contains(strtolower($sport['name']), strtolower($term)))
+            ->values()
+            ->all();
+
+        $announcements = Announcement::query()
+            ->published()
+            ->where('meet_id', $meet->id)
+            ->where('title', 'like', "%{$term}%")
+            ->orderByDesc('published_at')
+            ->orderByDesc('id')
+            ->limit(10)
+            ->get()
+            ->map(fn (Announcement $announcement): array => [
+                'id' => $announcement->id,
+                'title' => $announcement->title,
+                'published_at' => $announcement->published_at?->format('M j, Y g:i A'),
+            ])
+            ->all();
+
+        $placements = ResultPlacement::query()
+            ->whereHas('result', fn ($query) => $query
+                ->where('meet_id', $meet->id)
+                ->where('status', ResultStatus::Validated->value))
+            ->where(function ($query) use ($term) {
+                $query->whereHas('entry.athlete', fn ($athlete) => $athlete
+                    ->where('first_name', 'like', "%{$term}%")
+                    ->orWhere('last_name', 'like', "%{$term}%"))
+                    ->orWhereHas('entry.athlete.school', fn ($school) => $school
+                        ->where('name', 'like', "%{$term}%"));
+            })
+            ->with([
+                'result.event.sport:id,name',
+                'entry.athlete:id,first_name,last_name,school_id',
+                'entry.athlete.school:id,name,district_id',
+                'entry.athlete.school.district:id,name',
+            ])
+            ->orderBy('rank')
+            ->limit(20)
+            ->get()
+            ->map(fn (ResultPlacement $placement): array => [
+                'event' => sprintf(
+                    '%s — %s',
+                    $placement->result->event->sport->name,
+                    $placement->result->event->name,
+                ),
+                'sport_id' => $placement->result->event->sport->id,
+                'rank' => $placement->rank,
+                'athlete' => $placement->entry->athlete->fullName(),
+                'school' => $placement->entry->athlete->school->name,
+                'delegation' => $placement->entry->athlete->school->district->name,
+                'mark' => $placement->mark,
+                'is_tie' => $placement->is_tie,
+            ])
+            ->values()
+            ->all();
+
+        return Inertia::render('public/search', [
+            'meet' => $this->meetSummary($meet),
+            'query' => $term,
+            'schools' => $schools,
+            'sports' => $sports,
+            'announcements' => $announcements,
+            'placements' => $placements,
         ]);
     }
 
