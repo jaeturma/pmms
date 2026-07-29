@@ -473,3 +473,167 @@ Out of scope, per the WP: no new portal pages/features, no Lighthouse/CI
 tooling, no PWA/offline behavior, and no accessibility audit of the internal
 (authenticated) app beyond the shared `error`/`EmptyState` components touched
 above (those fixes are backward-compatible improvements, not a redesign).
+
+## Sport mini portals (Phase 12)
+
+A separate, permanent, meet-agnostic URL per sport (`/basketball`,
+`/volleyball`, ... 12 total — `App\Enums\SportPortalSlug`), distinct
+from every other public route in this app (which are all
+`/meets/{meet}/...`). Resolves to whichever meet is currently active +
+published (`Meet::published()->active()->first()`, the same resolution
+`home()` already uses) — not a new concept, just a new entry point onto
+it. `{sportSlug}` is constrained via `whereIn(SportPortalSlug::values())`
+on the route, so it can never intercept any other top-level route.
+
+**Sections**: Live Now (reuses `LiveScoreDisplay` exactly, polled via a
+dedicated `{sportSlug}/poll` JSON endpoint — the featured match can
+change between polls, unlike the single-match `public.scoreboard`),
+Today's/Completed/Upcoming Games (`EventMatch` + `EventSchedule`,
+competitor names from the latest `ScoringSession`'s labels once one
+exists, falling back to the two registered entries' schools before any
+live scoring starts — the same real-data pattern
+`ScoringSessionController::board()`'s "suggested labels" already uses),
+and Venue Information (`Venue.name`/`.address`, directions via a
+generated Google Maps search link — no stored geo field, no embedded
+map).
+
+**Standings, Leading Scorers, and a real Tournament Bracket all render
+an honest "not available yet" state, for every sport** — no team win/
+loss aggregation, per-athlete point attribution during live scoring, or
+bracket-tree data exists anywhere in this schema (`docs/phases/phase-12-
+lightweight-sport-mini-portals/DATA-CONTRACT-MAP.md` §D/E/F). This was
+presented to the owner as a real, load-bearing gap (not silently
+fabricated or silently dropped) and resolved this way — the same
+approach `public/athletics.tsx` already uses for its own real data gap.
+
+Frontend-only presentational config (`resources/js/config/sport-
+portals.ts`) mirrors the backend enum's 12 slugs with per-sport
+terminology/scoring-type labels for later WPs (generalizing beyond
+basketball, sport-specific exceptions) to consume — not yet wired into
+the shell itself this WP.
+
+Not yet linked from the header nav/footer or `PublicBottomNav` — a
+smaller, later decision (`docs/phases/phase-12-lightweight-sport-mini-
+portals/DESIGN-NOTES.md`), not blocking this WP.
+
+**Validated end-to-end for Basketball (WP-12-03)**, the brief's own
+pilot sport: zero/one/multiple simultaneous live matches, the 10-item
+game-list cap (proven with 12 candidate matches, not just asserted),
+an active-but-unpublished meet correctly treated as no active meet at
+all (the same `Meet::published()` guard every other public route
+already enforces), and a live session's real Basketball `sport_state`
+(fouls) and `board_type` flowing through to `LiveScoreDisplay`
+unchanged. The page's content wrapper also picked up the same
+`animate-card-in` entrance treatment every other public page already
+has (a one-class addition, inherits reduced-motion safety for free from
+the existing global reset) — the only actual code change this WP made
+beyond tests.
+
+**Generalized to the remaining 11 sports (WP-12-04)**: no per-sport
+duplicated page — every one of the 12 routes composes from the exact
+same `sport-portal.tsx`/shared components, resolving its own real
+`Sport` row independently. `resources/js/config/sport-portals.ts`'s
+per-sport `terminology.game` value is now actually consumed: the
+Today's/Upcoming/Completed section headings read "Games" for
+Basketball, "Matches" for Volleyball, "Bouts" for Boxing, etc. (a new
+`pluralize()`/`capitalize()` pair in `resources/js/lib/utils.ts`, not a
+full grammar engine — handles exactly the four real terminology values
+this config uses). Proved genericity with a dataset test across all 11
+new sports (own-sport resolution + cross-sport isolation, the same
+proof WP-12-02 first established for Basketball alone) plus a
+dedicated board-type dataset test confirming `ScoreboardType::
+forSport()`'s existing Basketball/Boxing/Softball-Baseball/Generic
+split holds correctly through this new route for every sport, not just
+assumed. `scoringType`/`supportsStandings`/etc. in the config remain
+unconsumed this WP (real per-sport score-shape adaptation is WP-12-05's
+own scope for the four sports that don't fit the generic team-score
+list shape: Athletics, Swimming, Boxing, Chess).
+
+**Sport-specific exceptions closed (WP-12-05)**: investigation found
+Athletics and Swimming genuinely don't fit the generic `EventMatch`-
+based shape at all — confirmed against `athletics()` (above), which
+already reads schedule/results without ever touching `EventMatch`; in
+real usage neither sport has any `EventMatch` rows. `sportPortalData()`
+now branches for these two (`individualEventSportPortalData()`): Today's/
+Upcoming events come from real `EventSchedule` slots (no fabricated
+competitor — no "vs" line at all until a result exists), Completed
+events come from validated `EventResult`'s top placement (real athlete
+name, school, and mark — `SportPortalGame`'s new `mark` field, since an
+individual event's one real result is a mark, not a two-sided score).
+Live Now needs no special-casing for these two: the existing
+`EventMatch` query naturally finds nothing for a sport that has none.
+**Boxing and Chess needed no functional change** — both are genuinely
+head-to-head (2 entries), so the generic match-based shape already fits
+correctly; Boxing's dedicated `ScoreboardType::Boxing` round-history
+display was verified end-to-end (not just assumed) with its own test,
+and Chess's existing null-score-when-no-session behavior was verified
+to never fabricate a result.
+
+**Visibility-aware polling added (WP-12-06)**: a new, reusable
+`usePageVisible()` hook (`resources/js/hooks/use-page-visible.ts`,
+`document.visibilityState`-based) pauses polling while the browser tab
+is hidden and resumes it when visible again — every existing poll in
+this app (`tally.tsx`'s kiosk mode, `scoreboard.tsx`) ran continuously
+with no such pausing before this. `SportPortalLiveNowCard`'s existing
+7s fetch-based poll (brief §9's 5-10s band) now gates on it directly;
+`sport-portal.tsx` gained a new 45s background `router.reload({ only:
+[...] })` refresh for the Today's/Completed/Upcoming/Venues props
+(the brief's own 30s-5min band, one shared interval rather than four
+separate timers), gated the same way. Neither refresh ever touches a
+different sport's data — each page instance only knows its own
+`sportSlug`/props. **Honest limitation**: this project has zero
+frontend-unit-testing infrastructure (no Vitest/Jest/Testing Library,
+confirmed via `package.json` — only Pest/PHP tests exist anywhere),
+and this WP's own "no new dependency" rule rules out adding one just to
+simulate a `visibilitychange` event — the pause/resume behavior is
+verified by direct source-code review (a ~15-line hook plus two
+`useEffect`s whose cleanup already handles the pause/resume correctly)
+rather than an automated test, stated plainly rather than silently
+skipped or fabricated.
+
+**Accessibility and loading/error-state sweep (WP-12-07)**: re-checked
+every icon across all 4 sport-portal components + the page for
+`aria-hidden` (none new since WP-12-03's original sweep), heading
+hierarchy (h1 via `PublicPageHero`, h2 per section via the shared
+`Heading` component — unchanged), and confirmed zero color/CSS changes
+anywhere in the whole phase (`git diff main --stat -- resources/css/
+app.css` empty). Every section already has a real empty state
+(`EmptyState`/`SportPortalUnavailable`); Live Now's existing
+`disconnected` banner (reused from `scoreboard.tsx`'s own established
+pattern) is its error state; the new background game-list refresh
+(WP-12-06) fails silently and non-blockingly by Inertia's own default
+`onError` no-op (verified via `@inertiajs/core`'s source, not assumed)
+— confirming "every section fails independently" holds without new
+code. **One real fix considered and declined**: wrapping the Live Now
+card's live/no-live swap in an `aria-live` region so screen readers
+announce the transition — investigated, but `LiveScoreDisplay` already
+owns its own tightly-scoped `aria-live="polite" aria-atomic="true"`
+region internally (verified: `scoreboard.tsx`, this codebase's
+established precedent, does **not** wrap its own equivalent swap in an
+outer live region either). Adding one here would risk a real regression
+— nested `aria-atomic` live regions can cause the entire outer region
+to be re-announced in full on every internal score tick, far noisier
+than the existing internal one alone. Declined in favor of staying
+consistent with the proven precedent rather than inventing new,
+unverified accessibility behavior.
+
+**SEO metadata and required documentation (WP-12-08)**: every sport-portal
+route now has a real, distinct `<Head>` title (unchanged, already real),
+a real meta description built from the same on-page sport/meet data (never
+fabricated), and an absolute canonical URL
+(`route('public.sport-portal', $slug)`, resolved through `APP_URL`, added
+to `PortalController::sportPortal()`'s existing response). **Real finding,
+verified against `@inertiajs/core`'s actual compiled source before
+shipping**: Inertia's Head manager only dedupes elements that share an
+explicit `head-key` prop — without one, the new per-page description would
+not have overridden `PublicLayout`'s existing portal-wide description
+(WP-04-06), it would have rendered as a second, competing `<meta
+name="description">` tag alongside it. Fixed by giving both the layout's
+default and each sport-portal page's own description/canonical a shared,
+stable `head-key` (`"description"`/`"canonical"`) — the first use of
+`head-key` anywhere in this codebase. No Open Graph/Twitter Card metadata
+was added: nothing in this application has ever set any, so the brief's
+own "if already supported" condition on social-preview metadata does not
+apply, and building one from scratch (plus the preview images it implies)
+is outside this WP's scope. The brief's own required documentation set
+(§16) was written to `docs/public-sport-portals/`.

@@ -116,7 +116,15 @@ export default function PublicLayout({ children }: PropsWithChildren) {
     return (
         <div className="flex min-h-screen flex-col bg-background text-foreground">
             <Head>
+                {/* `head-key` makes this dedupe against (and be overridden
+                    by) any page-level `<meta name="description">` with the
+                    same key — e.g. the sport-portal pages (WP-12-08).
+                    Inertia's Head manager only dedupes elements that share
+                    an explicit `head-key`; without one, this and a page's
+                    own description would both render as separate, competing
+                    meta tags instead of the page's replacing this default. */}
                 <meta
+                    head-key="description"
                     name="description"
                     content="Provincial Meet portal: published schedules, official validated results, live medal tally, and announcements — no account needed."
                 />

@@ -13,3 +13,4 @@
 - Phase 9 — Post-Deployment Support
 - Phase 10 — Premium Portal Redesign (Arena-Inspired Layout & Composition)
 - Phase 11 — Public Portal Completion (Rankings, Gallery, About, FAQs, Search, 404)
+- Phase 12 — Lightweight Sport Mini Portals

@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\SportPortalSlug;
 use App\Http\Controllers\AccreditationController;
 use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\AthleteController;
@@ -75,6 +76,16 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('meets/{meet}/matches/{match}/scoreboard/poll', [PortalController::class, 'scoreboardPoll'])
         ->whereNumber(['meet', 'match'])
         ->name('public.scoreboard.poll');
+
+    // Phase 12: permanent, meet-agnostic sport-portal routes
+    // (`/basketball`, etc.) — constrained to the 12 known slugs so this
+    // can never intercept any other top-level route.
+    Route::get('{sportSlug}/poll', [PortalController::class, 'sportPortalPoll'])
+        ->whereIn('sportSlug', SportPortalSlug::values())
+        ->name('public.sport-portal.poll');
+    Route::get('{sportSlug}', [PortalController::class, 'sportPortal'])
+        ->whereIn('sportSlug', SportPortalSlug::values())
+        ->name('public.sport-portal');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {

@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AgeDivision;
+use App\Enums\MatchStatus;
 use App\Enums\MeetStatus;
 use App\Enums\ResultStatus;
 use App\Enums\ScoringSessionStatus;
+use App\Enums\SportPortalSlug;
 use App\Models\Announcement;
 use App\Models\Athlete;
 use App\Models\Delegation;
@@ -18,6 +20,7 @@ use App\Models\ResultPlacement;
 use App\Models\School;
 use App\Models\ScoringSession;
 use App\Models\Sport;
+use App\Models\Venue;
 use App\Services\MedalTallyService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -729,6 +732,386 @@ class PortalController extends Controller
             'announcements' => $announcements,
             'placements' => $placements,
         ]);
+    }
+
+    /**
+     * Lightweight sport mini portal (Phase 12): a permanent, meet-
+     * agnostic URL per sport (`/basketball`) resolving to whichever
+     * meet is currently active + published — the same resolution
+     * `home()` already uses, not a new concept. Standings, Leading
+     * Scorers, and a real Tournament Bracket all render an honest
+     * "not available yet" state on the frontend (per-sport config) —
+     * no team win/loss aggregation, per-athlete point attribution, or
+     * bracket-tree data exists anywhere in this schema (`docs/phases/
+     * phase-12-lightweight-sport-mini-portals/DATA-CONTRACT-MAP.md`
+     * §D/E/F), and none is fabricated here. `$sportSlug` is
+     * constrained by the route's own `whereIn`, so `SportPortalSlug::
+     * from()` never throws on an unknown value in practice.
+     */
+    public function sportPortal(string $sportSlug): Response
+    {
+        $slug = SportPortalSlug::from($sportSlug);
+        $sport = Sport::query()->where('name', $slug->sportName())->first();
+        $meet = Meet::query()->published()->active()->first();
+
+        $base = [
+            'sport' => ['slug' => $slug->value, 'name' => $slug->sportName()],
+            'meet' => $meet === null ? null : $this->meetSummary($meet),
+            // WP-12-08 (brief §12): a real, stable canonical URL per sport
+            // route — `route()` resolves through `APP_URL`, so this is an
+            // absolute URL, not a relative path.
+            'canonicalUrl' => route('public.sport-portal', $slug->value),
+        ];
+
+        if ($sport === null || $meet === null) {
+            return Inertia::render('public/sport-portal', [
+                ...$base,
+                'liveNow' => null,
+                'otherLiveCount' => 0,
+                'todayGames' => [],
+                'completedGames' => [],
+                'upcomingGames' => [],
+                'venues' => [],
+            ]);
+        }
+
+        [$liveNow, $otherLiveCount, $todayGames, $completedGames, $upcomingGames, $venues]
+            = $this->sportPortalData($meet, $sport);
+
+        return Inertia::render('public/sport-portal', [
+            ...$base,
+            'liveNow' => $liveNow,
+            'otherLiveCount' => $otherLiveCount,
+            'todayGames' => $todayGames,
+            'completedGames' => $completedGames,
+            'upcomingGames' => $upcomingGames,
+            'venues' => $venues,
+        ]);
+    }
+
+    /**
+     * Polling contract for the sport portal's Live Now section. The
+     * featured match can change between polls (a different match may
+     * go live) unlike the single-match public scoreboard, so this
+     * re-resolves fresh each time rather than tracking one match id.
+     */
+    public function sportPortalPoll(string $sportSlug): JsonResponse
+    {
+        $slug = SportPortalSlug::from($sportSlug);
+        $sport = Sport::query()->where('name', $slug->sportName())->first();
+        $meet = Meet::query()->published()->active()->first();
+
+        if ($sport === null || $meet === null) {
+            return response()->json(['liveNow' => null, 'otherLiveCount' => 0]);
+        }
+
+        [$liveNow, $otherLiveCount] = $this->sportPortalLiveNow($meet, $sport);
+
+        return response()->json(['liveNow' => $liveNow, 'otherLiveCount' => $otherLiveCount]);
+    }
+
+    /**
+     * Athletics and Swimming (Phase 12, WP-12-05) are individual, heat/
+     * event-based disciplines with no real `EventMatch` concept at all
+     * — confirmed against `athletics()` above, which already reads
+     * schedule/results this same way and never touches `EventMatch`.
+     * Every other sport (including Boxing and Chess, both genuinely
+     * head-to-head) fits the generic match-based shape correctly.
+     */
+    private const INDIVIDUAL_EVENT_SPORTS = ['Athletics', 'Swimming'];
+
+    /**
+     * @return array{0: array<string, mixed>|null, 1: int, 2: array<int, array<string, mixed>>, 3: array<int, array<string, mixed>>, 4: array<int, array<string, mixed>>, 5: array<int, array<string, mixed>>}
+     */
+    private function sportPortalData(Meet $meet, Sport $sport): array
+    {
+        if (in_array($sport->name, self::INDIVIDUAL_EVENT_SPORTS, true)) {
+            return $this->individualEventSportPortalData($meet, $sport);
+        }
+
+        $matches = EventMatch::query()
+            ->where('meet_id', $meet->id)
+            ->whereHas('event', fn ($query) => $query->where('sport_id', $sport->id))
+            ->with([
+                'event:id,sport_id,name,gender,age_division',
+                'schedule:id,scheduled_date,starts_at,ends_at,venue_id',
+                'schedule.venue:id,name,address',
+                'entries.athlete:id,school_id',
+                'entries.athlete.school:id,name',
+            ])
+            ->get();
+
+        $sessionsByMatch = ScoringSession::query()
+            ->whereIn('match_id', $matches->pluck('id'))
+            ->orderByDesc('id')
+            ->get()
+            ->unique('match_id')
+            ->keyBy('match_id');
+
+        $today = today()->toDateString();
+
+        $scheduled = $matches->filter(
+            fn (EventMatch $match): bool => $match->status === MatchStatus::Scheduled && $match->schedule !== null,
+        );
+
+        $todayGames = $scheduled
+            ->filter(fn (EventMatch $match): bool => $match->schedule->scheduled_date->toDateString() === $today)
+            ->sortBy(fn (EventMatch $match): string => $match->schedule->starts_at)
+            ->take(10)
+            ->map(fn (EventMatch $match): array => $this->sportPortalGameRow($match, $sessionsByMatch->get($match->id)))
+            ->values()
+            ->all();
+
+        $upcomingGames = $scheduled
+            ->filter(fn (EventMatch $match): bool => $match->schedule->scheduled_date->toDateString() > $today)
+            ->sortBy(fn (EventMatch $match): string => $match->schedule->scheduled_date->toDateString().' '.$match->schedule->starts_at)
+            ->take(10)
+            ->map(fn (EventMatch $match): array => $this->sportPortalGameRow($match, $sessionsByMatch->get($match->id)))
+            ->values()
+            ->all();
+
+        $completedGames = $matches
+            ->filter(fn (EventMatch $match): bool => in_array($match->status, [MatchStatus::Completed, MatchStatus::Walkover], true))
+            ->sortByDesc(fn (EventMatch $match) => $match->updated_at)
+            ->take(10)
+            ->map(fn (EventMatch $match): array => $this->sportPortalGameRow($match, $sessionsByMatch->get($match->id)))
+            ->values()
+            ->all();
+
+        $venues = $matches
+            ->map(fn (EventMatch $match): ?Venue => $match->schedule?->venue)
+            ->filter()
+            ->unique('id')
+            ->sortBy('name')
+            ->map(fn (Venue $venue): array => [
+                'id' => $venue->id,
+                'name' => $venue->name,
+                'address' => $venue->address,
+                'directions_url' => $this->mapsSearchUrl($venue->name, $venue->address),
+            ])
+            ->values()
+            ->all();
+
+        [$liveNow, $otherLiveCount] = $this->sportPortalLiveNow($meet, $sport);
+
+        return [$liveNow, $otherLiveCount, $todayGames, $completedGames, $upcomingGames, $venues];
+    }
+
+    /**
+     * The featured live match for this sport in this meet, plus a
+     * count of any other simultaneously-live matches — a lighter,
+     * standalone query (not derived from `sportPortalData()`'s already-
+     * loaded matches) so the polling endpoint doesn't have to re-fetch
+     * every match/schedule/entry just to check what's live.
+     *
+     * @return array{0: array<string, mixed>|null, 1: int}
+     */
+    private function sportPortalLiveNow(Meet $meet, Sport $sport): array
+    {
+        $liveSessions = ScoringSession::query()
+            ->where('status', '!=', ScoringSessionStatus::Ended->value)
+            ->whereHas('match', fn ($query) => $query
+                ->where('meet_id', $meet->id)
+                ->whereHas('event', fn ($event) => $event->where('sport_id', $sport->id)))
+            ->with([
+                'match.event:id,sport_id,name,gender,age_division',
+                'match.schedule.venue:id,name',
+            ])
+            ->orderBy('id')
+            ->get();
+
+        if ($liveSessions->isEmpty()) {
+            return [null, 0];
+        }
+
+        $featured = $liveSessions->first();
+        $match = $featured->match;
+
+        return [
+            [
+                'match_id' => $match->id,
+                'round_label' => $match->round_label,
+                'category' => sprintf('%s %s', $match->event->gender->label(), $match->event->age_division->label()),
+                'venue' => $match->schedule?->venue?->name,
+                'session' => $featured->toLivePayload(),
+            ],
+            $liveSessions->count() - 1,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function sportPortalGameRow(EventMatch $match, ?ScoringSession $session): array
+    {
+        [$sideA, $sideB] = $this->matchCompetitors($match, $session);
+
+        return [
+            'id' => $match->id,
+            'round_label' => $match->round_label,
+            'status' => $match->status->value,
+            'status_label' => $match->status->label(),
+            'category' => sprintf('%s %s', $match->event->gender->label(), $match->event->age_division->label()),
+            'venue' => $match->schedule?->venue?->name,
+            'scheduled_date' => $match->schedule?->scheduled_date?->format('M j, Y'),
+            'starts_at' => $match->schedule === null ? null : substr($match->schedule->starts_at, 0, 5),
+            'side_a' => $sideA,
+            'side_b' => $sideB,
+            'score_a' => $session?->score_a,
+            'score_b' => $session?->score_b,
+            'mark' => null,
+        ];
+    }
+
+    /**
+     * Athletics/Swimming's own data path (WP-12-05) — real
+     * `EventSchedule`/`EventResult` rows, the exact same source
+     * `athletics()` already reads, never `EventMatch`/`ScoringSession`
+     * (neither exists for these two sports in real usage). Live Now
+     * needs no special-casing here: `sportPortalLiveNow()`'s `EventMatch`
+     * query naturally finds nothing for a sport that has none.
+     *
+     * @return array{0: null, 1: int, 2: array<int, array<string, mixed>>, 3: array<int, array<string, mixed>>, 4: array<int, array<string, mixed>>, 5: array<int, array<string, mixed>>}
+     */
+    private function individualEventSportPortalData(Meet $meet, Sport $sport): array
+    {
+        $slots = EventSchedule::query()
+            ->where('meet_id', $meet->id)
+            ->whereHas('event', fn ($query) => $query->where('sport_id', $sport->id))
+            ->with(['venue:id,name,address', 'event:id,name,gender,age_division'])
+            ->get();
+
+        $results = EventResult::query()
+            ->where('meet_id', $meet->id)
+            ->where('status', ResultStatus::Validated->value)
+            ->whereHas('event', fn ($query) => $query->where('sport_id', $sport->id))
+            ->with([
+                'placements' => fn ($placements) => $placements->orderBy('rank')->limit(1),
+                'placements.entry.athlete:id,first_name,last_name,school_id',
+                'placements.entry.athlete.school:id,name',
+            ])
+            ->get()
+            ->keyBy('event_id');
+
+        $today = today()->toDateString();
+
+        $completedSlots = $slots->filter(fn (EventSchedule $slot): bool => $results->has($slot->event_id));
+        $unresolvedSlots = $slots->filter(fn (EventSchedule $slot): bool => ! $results->has($slot->event_id));
+
+        $todayGames = $unresolvedSlots
+            ->filter(fn (EventSchedule $slot): bool => $slot->scheduled_date->toDateString() === $today)
+            ->sortBy(fn (EventSchedule $slot): string => $slot->starts_at)
+            ->take(10)
+            ->map(fn (EventSchedule $slot): array => $this->individualEventGameRow($slot, null))
+            ->values()
+            ->all();
+
+        $upcomingGames = $unresolvedSlots
+            ->filter(fn (EventSchedule $slot): bool => $slot->scheduled_date->toDateString() > $today)
+            ->sortBy(fn (EventSchedule $slot): string => $slot->scheduled_date->toDateString().' '.$slot->starts_at)
+            ->take(10)
+            ->map(fn (EventSchedule $slot): array => $this->individualEventGameRow($slot, null))
+            ->values()
+            ->all();
+
+        $completedGames = $completedSlots
+            ->sortByDesc(fn (EventSchedule $slot) => $results->get($slot->event_id)->validated_at)
+            ->take(10)
+            ->map(fn (EventSchedule $slot): array => $this->individualEventGameRow($slot, $results->get($slot->event_id)))
+            ->values()
+            ->all();
+
+        $venues = $slots
+            ->map(fn (EventSchedule $slot): ?Venue => $slot->venue)
+            ->filter()
+            ->unique('id')
+            ->sortBy('name')
+            ->map(fn (Venue $venue): array => [
+                'id' => $venue->id,
+                'name' => $venue->name,
+                'address' => $venue->address,
+                'directions_url' => $this->mapsSearchUrl($venue->name, $venue->address),
+            ])
+            ->values()
+            ->all();
+
+        return [null, 0, $todayGames, $completedGames, $upcomingGames, $venues];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function individualEventGameRow(EventSchedule $slot, ?EventResult $result): array
+    {
+        $winner = null;
+        $mark = null;
+
+        $placement = $result?->placements->first();
+
+        if ($placement !== null) {
+            $winner = sprintf(
+                '1st: %s (%s)',
+                $placement->entry->athlete->fullName(),
+                $placement->entry->athlete->school->name,
+            );
+            $mark = $placement->mark;
+        }
+
+        return [
+            'id' => $slot->id,
+            'round_label' => $slot->event->name,
+            'status' => $result !== null ? 'completed' : 'scheduled',
+            'status_label' => $result !== null ? 'Completed' : 'Scheduled',
+            'category' => sprintf('%s %s', $slot->event->gender->label(), $slot->event->age_division->label()),
+            'venue' => $slot->venue?->name,
+            'scheduled_date' => $slot->scheduled_date->format('M j, Y'),
+            'starts_at' => substr($slot->starts_at, 0, 5),
+            'side_a' => $winner,
+            'side_b' => null,
+            'score_a' => null,
+            'score_b' => null,
+            'mark' => $mark,
+        ];
+    }
+
+    /**
+     * The match's two competitor labels — the live/final session's own
+     * labels once one exists (the authoritative, actually-entered
+     * names), falling back to the two registered entries' schools
+     * before any scoring session starts (the same real-data "suggested
+     * labels" pattern `ScoringSessionController::board()` already
+     * established, never fabricated).
+     *
+     * @return array{0: string|null, 1: string|null}
+     */
+    private function matchCompetitors(EventMatch $match, ?ScoringSession $session): array
+    {
+        if ($session !== null) {
+            return [$session->side_a_label, $session->side_b_label];
+        }
+
+        $entries = $match->entries;
+
+        if ($entries->count() === 2) {
+            return [
+                $entries[0]->athlete->school->name,
+                $entries[1]->athlete->school->name,
+            ];
+        }
+
+        return [null, null];
+    }
+
+    /**
+     * A generic external map-search link built from real venue name/
+     * address text — no stored geo field exists on `Venue`, and the
+     * brief's own rule is no heavy embedded map anyway.
+     */
+    private function mapsSearchUrl(string $name, ?string $address): string
+    {
+        $query = $address === null ? $name : "{$name}, {$address}";
+
+        return 'https://www.google.com/maps/search/?api=1&query='.urlencode($query);
     }
 
     /**
