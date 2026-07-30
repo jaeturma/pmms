@@ -1,0 +1,45 @@
+import { Head, Link } from '@inertiajs/react';
+import { Trophy } from 'lucide-react';
+import { results as publicResults, tally as publicTally } from '@/routes/public';
+import { PortalEmptyState } from '@/apps/portal/components/empty-state';
+import { PortalHero } from '@/apps/portal/components/hero';
+import type { PortalContestedSport, PortalMeetSummary } from '@/apps/portal/types';
+
+type Props = {
+    meet: PortalMeetSummary;
+    sports: PortalContestedSport[];
+};
+
+export default function PortalSports({ meet, sports }: Props) {
+    return (
+        <>
+            <Head title={`Sports — ${meet.name}`} />
+            <div className="flex flex-col gap-6">
+                <PortalHero eyebrow="Sports" title={meet.name} description="Every sport contested at this meet." />
+
+                {sports.length === 0 ? (
+                    <PortalEmptyState icon={Trophy} title="No sports registered yet" />
+                ) : (
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        {sports.map((sport) => (
+                            <div key={sport.id} className="portal-animate-in rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4">
+                                <p className="font-semibold">{sport.name}</p>
+                                <p className="text-sm text-[var(--portal-muted-foreground)]">
+                                    {sport.event_count} event{sport.event_count === 1 ? '' : 's'}
+                                </p>
+                                <div className="mt-3 flex gap-3 text-sm">
+                                    <Link href={publicResults(meet.id, { query: { sport_id: sport.id } }).url} className="text-[var(--portal-accent)] hover:underline">
+                                        Results
+                                    </Link>
+                                    <Link href={publicTally(meet.id, { query: { sport_id: sport.id } }).url} className="text-[var(--portal-accent)] hover:underline">
+                                        Medal tally
+                                    </Link>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </>
+    );
+}

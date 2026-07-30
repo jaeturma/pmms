@@ -11,7 +11,7 @@ test('guests can view the gallery page for a published meet; unpublished meets 4
     $this->get("/meets/{$meet->id}/gallery")
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('public/gallery')
+            ->component('portal/gallery')
             ->where('meet.name', $meet->name));
 
     $hidden = Meet::factory()->active()->create();

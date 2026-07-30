@@ -9,7 +9,7 @@ test('guests can view the contact page for a published meet; unpublished meets 4
     $this->get("/meets/{$meet->id}/contact")
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('public/contact')
+            ->component('portal/contact')
             ->where('meet.name', $meet->name)
             ->where('meet.venue', 'Division Sports Complex')
             ->where('meet.school_year', $meet->school_year));

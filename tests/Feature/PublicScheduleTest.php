@@ -12,7 +12,7 @@ test('guests can view a published meet page; unpublished meets 404', function ()
     $this->get("/meets/{$published->id}")
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('public/meet')
+            ->component('portal/schedule')
             ->where('meet.name', $published->name));
 
     $this->get("/meets/{$hidden->id}")->assertNotFound();

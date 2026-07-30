@@ -37,6 +37,12 @@ return [
 
         'paths' => [
             resource_path('js/pages'),
+            // The strictly separated portal tree — pages are addressed
+            // as `portal/{name}` and stored at the matching
+            // `apps/portal/pages/portal/{name}.tsx` path, so this base
+            // path plus the component name resolves correctly without
+            // any special-casing here.
+            resource_path('js/apps/portal/pages'),
         ],
 
         'extensions' => [

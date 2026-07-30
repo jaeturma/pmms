@@ -27,7 +27,7 @@ test('guests can view validated results of a published meet', function () {
     $this->get("/meets/{$meet->id}/results")
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('public/results')
+            ->component('portal/results')
             ->has('results', 1)
             ->where('results.0.placements.0.rank', 1)
             ->where('results.0.placements.0.athlete', $placement->entry->athlete->fullName())

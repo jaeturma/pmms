@@ -46,7 +46,7 @@ test('guests can view the public rankings page; unpublished meets 404', function
     $this->get("/meets/{$meet->id}/rankings")
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('public/rankings')
+            ->component('portal/standings')
             ->where('meet.name', $meet->name)
             ->has('districts', 0)
             ->has('generatedAt'));

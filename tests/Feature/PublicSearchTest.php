@@ -19,7 +19,7 @@ test('guests can view the search page for a published meet; unpublished meets 40
     $this->get("/meets/{$meet->id}/search")
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('public/search')
+            ->component('portal/search')
             ->where('query', '')
             ->has('schools', 0)
             ->has('sports', 0)

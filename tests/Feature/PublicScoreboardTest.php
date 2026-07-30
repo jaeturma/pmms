@@ -28,7 +28,7 @@ test('guests can view the public scoreboard for a published meet; unpublished me
     $this->get("/meets/{$meet->id}/matches/{$match->id}/scoreboard")
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('public/scoreboard')
+            ->component('portal/scoreboard')
             ->where('session', null));
 
     $hidden = Meet::factory()->active()->create();

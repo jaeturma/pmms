@@ -1,0 +1,258 @@
+import { Head, Link } from '@inertiajs/react';
+import { Award, CalendarClock, CalendarDays, Crown, Flag, MapPin, Radio, Users } from 'lucide-react';
+import { meet as publicMeet, results as publicResults, tally as publicTally } from '@/routes/public';
+import { PortalButton } from '@/apps/portal/components/button';
+import { PortalEmptyState } from '@/apps/portal/components/empty-state';
+import { PortalHero } from '@/apps/portal/components/hero';
+import { PortalSectionHeader } from '@/apps/portal/components/section-header';
+import { PortalStandingsTable } from '@/apps/portal/components/standings-table';
+import type {
+    PortalAnnouncement,
+    PortalClosingSummary,
+    PortalLatestResult,
+    PortalLeader,
+    PortalLiveMatch,
+    PortalMeetSummary,
+    PortalMunicipality,
+    PortalUpcomingEvent,
+} from '@/apps/portal/types';
+
+type Props = {
+    meet: PortalMeetSummary | null;
+    municipalities: PortalMunicipality[];
+    announcements: PortalAnnouncement[];
+    liveMatches: PortalLiveMatch[];
+    currentLeaders: PortalLeader[];
+    upcomingEvents: PortalUpcomingEvent[];
+    latestResult: PortalLatestResult | null;
+    closingSummary: PortalClosingSummary | null;
+};
+
+export default function PortalHome({
+    meet,
+    municipalities,
+    announcements,
+    liveMatches,
+    currentLeaders,
+    upcomingEvents,
+    latestResult,
+    closingSummary,
+}: Props) {
+    if (meet === null) {
+        return (
+            <>
+                <Head title="Provincial Meet" />
+                <div className="flex min-h-[60vh] flex-col gap-8">
+                    <PortalHero
+                        title="Provincial Meet"
+                        description="Schedules, results, and medal standings of the Schools Division Office athletic meets."
+                    />
+                    <PortalEmptyState
+                        icon={Flag}
+                        title="No meet is active right now"
+                        description="Check back here once the next meet is underway."
+                    />
+                </div>
+            </>
+        );
+    }
+
+    return (
+        <>
+            <Head title={meet.name} />
+            <div className="flex flex-col gap-10">
+                <PortalHero
+                    eyebrow={meet.status_label}
+                    title={meet.name}
+                    description="Schedules, results, and medal standings of the Schools Division Office athletic meet."
+                    meta={
+                        <>
+                            <span>SY {meet.school_year}</span>
+                            <span className="flex items-center gap-1.5">
+                                <CalendarDays aria-hidden="true" className="size-4" />
+                                {meet.starts_at} – {meet.ends_at}
+                            </span>
+                            {meet.venue && (
+                                <span className="flex items-center gap-1.5">
+                                    <MapPin aria-hidden="true" className="size-4" />
+                                    {meet.venue}
+                                </span>
+                            )}
+                        </>
+                    }
+                    actions={
+                        <>
+                            <PortalButton asChild size="lg">
+                                <Link href={publicMeet(meet.id).url}>View schedule</Link>
+                            </PortalButton>
+                            <PortalButton asChild size="lg" variant="outline" className="border-white/40 text-[var(--portal-ink-foreground)] hover:bg-white/10">
+                                <Link href={publicResults(meet.id).url}>Results</Link>
+                            </PortalButton>
+                            <PortalButton asChild size="lg" variant="outline" className="border-white/40 text-[var(--portal-ink-foreground)] hover:bg-white/10">
+                                <Link href={publicTally(meet.id).url}>Medal tally</Link>
+                            </PortalButton>
+                        </>
+                    }
+                />
+
+                {closingSummary && (
+                    <div className="portal-animate-in flex flex-wrap items-center gap-4 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-5">
+                        <Crown aria-hidden="true" className="size-10 shrink-0 text-[var(--portal-accent)]" />
+                        <div className="flex-1">
+                            <p className="text-xs font-semibold tracking-wide text-[var(--portal-accent)] uppercase">Meet concluded</p>
+                            <p className="text-lg font-semibold">Champion: {closingSummary.champion}</p>
+                            <p className="text-sm text-[var(--portal-muted-foreground)]">
+                                {closingSummary.gold} gold · {closingSummary.silver} silver · {closingSummary.bronze} bronze ·{' '}
+                                {closingSummary.total} total medals
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                <section className="space-y-3">
+                    <PortalSectionHeader title="Announcements" />
+                    {announcements.length === 0 ? (
+                        <PortalEmptyState icon={CalendarClock} title="No announcements yet" />
+                    ) : (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            {announcements.map((announcement) => (
+                                <div
+                                    key={announcement.id}
+                                    className="rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4"
+                                >
+                                    <p className="text-sm font-medium">{announcement.title}</p>
+                                    <p className="mt-1 line-clamp-2 text-sm text-[var(--portal-muted-foreground)]">{announcement.body}</p>
+                                    {announcement.published_at && (
+                                        <p className="mt-2 text-xs text-[var(--portal-muted-foreground)]">{announcement.published_at}</p>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </section>
+
+                <section className="space-y-3">
+                    <PortalSectionHeader
+                        title="Live now"
+                        action={
+                            liveMatches.length > 0 && (
+                                <span className="flex items-center gap-1.5 text-sm font-medium text-[var(--portal-live)]">
+                                    <Radio aria-hidden="true" className="size-4" />
+                                    {liveMatches.length} live
+                                </span>
+                            )
+                        }
+                    />
+                    {liveMatches.length === 0 ? (
+                        <PortalEmptyState icon={Radio} title="Nothing live right now" />
+                    ) : (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            {liveMatches.map((match) => (
+                                <Link
+                                    key={match.match_id}
+                                    href={publicMeet(meet.id).url}
+                                    className="portal-animate-in rounded-[var(--portal-radius)] border border-[var(--portal-live)]/30 bg-[var(--portal-surface)] p-4 transition-colors hover:bg-[var(--portal-muted)]"
+                                >
+                                    <p className="text-xs font-semibold text-[var(--portal-live)] uppercase">{match.status_label}</p>
+                                    <p className="mt-1 text-sm font-medium">{match.event}</p>
+                                    <p className="mt-1 flex items-center justify-between text-sm">
+                                        <span>{match.side_a_label ?? 'TBD'}</span>
+                                        <span className="font-bold tabular-nums">
+                                            {match.score_a ?? 0} – {match.score_b ?? 0}
+                                        </span>
+                                        <span>{match.side_b_label ?? 'TBD'}</span>
+                                    </p>
+                                </Link>
+                            ))}
+                        </div>
+                    )}
+                </section>
+
+                <section className="grid gap-6 lg:grid-cols-3">
+                    <div className="space-y-3">
+                        <PortalSectionHeader title="Current leaders" />
+                        <PortalStandingsTable
+                            rows={currentLeaders.map((leader) => ({ label: leader.district, points: leader.points }))}
+                            unavailableTitle="No standings yet"
+                            unavailableDescription="Leaders appear once results are validated."
+                        />
+                    </div>
+
+                    <div className="space-y-3">
+                        <PortalSectionHeader title="Upcoming events" />
+                        {upcomingEvents.length === 0 ? (
+                            <PortalEmptyState icon={CalendarClock} title="Nothing scheduled next" />
+                        ) : (
+                            <ul className="space-y-2">
+                                {upcomingEvents.map((event) => (
+                                    <li
+                                        key={event.id}
+                                        className="rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-3 text-sm"
+                                    >
+                                        <p className="font-medium">{event.event}</p>
+                                        <p className="text-xs text-[var(--portal-muted-foreground)]">
+                                            {event.date}, {event.starts_at} · {event.venue}
+                                        </p>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+
+                    <div className="space-y-3">
+                        <PortalSectionHeader title="Latest official result" />
+                        {latestResult === null ? (
+                            <PortalEmptyState icon={Award} title="No results yet" />
+                        ) : (
+                            <div className="space-y-2 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-3">
+                                <p className="text-sm font-medium">{latestResult.event}</p>
+                                {latestResult.official_as_of && (
+                                    <p className="text-xs text-[var(--portal-muted-foreground)]">Official as of {latestResult.official_as_of}</p>
+                                )}
+                                <ol className="space-y-1 text-sm">
+                                    {latestResult.placements.map((placement) => (
+                                        <li key={placement.rank} className="flex justify-between gap-2">
+                                            <span>
+                                                {placement.rank}. {placement.athlete}
+                                            </span>
+                                            <span className="text-[var(--portal-muted-foreground)]">{placement.school}</span>
+                                        </li>
+                                    ))}
+                                </ol>
+                            </div>
+                        )}
+                    </div>
+                </section>
+
+                <section className="space-y-3">
+                    <PortalSectionHeader
+                        title="Competing municipalities"
+                        action={municipalities.length > 0 && <span className="text-sm text-[var(--portal-muted-foreground)]">{municipalities.length}</span>}
+                    />
+                    {municipalities.length === 0 ? (
+                        <PortalEmptyState icon={Users} title="No delegations registered yet" />
+                    ) : (
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+                            {municipalities.map((municipality) => (
+                                <div
+                                    key={municipality.id}
+                                    className="portal-animate-in flex flex-col items-center gap-2 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4 text-center"
+                                >
+                                    <span className="flex size-12 items-center justify-center rounded-full bg-[var(--portal-accent-soft)] text-sm font-semibold text-[var(--portal-accent)]">
+                                        {municipality.name.slice(0, 2).toUpperCase()}
+                                    </span>
+                                    <div>
+                                        <p className="text-sm leading-snug font-medium">{municipality.name}</p>
+                                        {municipality.nickname && (
+                                            <p className="text-xs text-[var(--portal-muted-foreground)]">"{municipality.nickname}"</p>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </section>
+            </div>
+        </>
+    );
+}

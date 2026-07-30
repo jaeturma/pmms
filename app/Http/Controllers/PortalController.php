@@ -55,7 +55,7 @@ class PortalController extends Controller
             ->sortByDesc('points')
             ->values();
 
-        return Inertia::render('public/home', [
+        return Inertia::render('portal/home', [
             'meet' => $meet === null ? null : $this->meetSummary($meet),
             'municipalities' => $meet === null ? [] : $this->competingMunicipalities($meet),
             'announcements' => $this->publishedAnnouncements($meet?->id),
@@ -95,7 +95,7 @@ class PortalController extends Controller
             default => $days->first(),
         };
 
-        return Inertia::render('public/meet', [
+        return Inertia::render('portal/schedule', [
             'meet' => $this->meetSummary($meet),
             'announcements' => $this->publishedAnnouncements($meet->id),
             'hasAthletics' => $slots->contains(fn (EventSchedule $slot): bool => $slot->event->sport->name === 'Athletics'),
@@ -172,7 +172,7 @@ class PortalController extends Controller
             ->orderByDesc('id')
             ->get();
 
-        return Inertia::render('public/results', [
+        return Inertia::render('portal/results', [
             'meet' => $this->meetSummary($meet),
             'results' => $results
                 ->map(fn (EventResult $result): array => [
@@ -223,7 +223,7 @@ class PortalController extends Controller
 
         $districts = collect($standings['districts']);
 
-        return Inertia::render('public/tally', [
+        return Inertia::render('portal/tally', [
             'meet' => $this->meetSummary($meet),
             'schools' => $standings['schools'],
             'districts' => $standings['districts'],
@@ -266,7 +266,7 @@ class PortalController extends Controller
     {
         $meet = Meet::query()->published()->findOrFail($meet);
 
-        return Inertia::render('public/rankings', [
+        return Inertia::render('portal/standings', [
             'meet' => $this->meetSummary($meet),
             'districts' => $tally->standings($meet->id)['districts'],
             'generatedAt' => now()->toDayDateTimeString(),
@@ -345,7 +345,7 @@ class PortalController extends Controller
                 'total' => $carry['total'] + $row['total'],
             ], ['gold' => 0, 'silver' => 0, 'bronze' => 0, 'total' => 0]);
 
-        return Inertia::render('public/athletics', [
+        return Inertia::render('portal/athletics', [
             'meet' => $this->meetSummary($meet),
             'days' => $days
                 ->map(fn (string $day): array => [
@@ -417,7 +417,7 @@ class PortalController extends Controller
 
         $session = $match->scoringSessions()->latest('id')->first();
 
-        return Inertia::render('public/scoreboard', [
+        return Inertia::render('portal/scoreboard', [
             'meet' => $this->meetSummary($meet),
             'match' => [
                 'id' => $match->id,
@@ -455,7 +455,7 @@ class PortalController extends Controller
     {
         $meet = Meet::query()->published()->findOrFail($meet);
 
-        return Inertia::render('public/sports', [
+        return Inertia::render('portal/sports', [
             'meet' => $this->meetSummary($meet),
             'sports' => $this->contestedSports($meet),
         ]);
@@ -477,7 +477,7 @@ class PortalController extends Controller
     {
         $meet = Meet::query()->published()->findOrFail($meet);
 
-        return Inertia::render('public/gallery', [
+        return Inertia::render('portal/gallery', [
             'meet' => $this->meetSummary($meet),
             'sports' => $this->contestedSports($meet),
         ]);
@@ -517,7 +517,7 @@ class PortalController extends Controller
     {
         $meet = Meet::query()->published()->findOrFail($meet);
 
-        return Inertia::render('public/news', [
+        return Inertia::render('portal/news', [
             'meet' => $this->meetSummary($meet),
             'announcements' => Announcement::query()
                 ->published()
@@ -548,7 +548,7 @@ class PortalController extends Controller
     {
         $meet = Meet::query()->published()->findOrFail($meet);
 
-        return Inertia::render('public/contact', [
+        return Inertia::render('portal/contact', [
             'meet' => $this->meetSummary($meet),
         ]);
     }
@@ -574,7 +574,7 @@ class PortalController extends Controller
     {
         $meet = Meet::query()->published()->findOrFail($meet);
 
-        return Inertia::render('public/about', [
+        return Inertia::render('portal/about', [
             'meet' => $this->meetSummary($meet),
             'municipalityCount' => count($this->competingMunicipalities($meet)),
             'schoolCount' => $this->participatingSchoolIds($meet)->count(),
@@ -615,7 +615,7 @@ class PortalController extends Controller
     {
         $meet = Meet::query()->published()->findOrFail($meet);
 
-        return Inertia::render('public/faqs', [
+        return Inertia::render('portal/faqs', [
             'meet' => $this->meetSummary($meet),
         ]);
     }
@@ -648,7 +648,7 @@ class PortalController extends Controller
         $term = trim($request->string('q')->toString());
 
         if ($term === '') {
-            return Inertia::render('public/search', [
+            return Inertia::render('portal/search', [
                 'meet' => $this->meetSummary($meet),
                 'query' => '',
                 'schools' => [],
@@ -724,7 +724,7 @@ class PortalController extends Controller
             ->values()
             ->all();
 
-        return Inertia::render('public/search', [
+        return Inertia::render('portal/search', [
             'meet' => $this->meetSummary($meet),
             'query' => $term,
             'schools' => $schools,
@@ -764,7 +764,7 @@ class PortalController extends Controller
         ];
 
         if ($sport === null || $meet === null) {
-            return Inertia::render('public/sport-portal', [
+            return Inertia::render('portal/sport-portal', [
                 ...$base,
                 'liveNow' => null,
                 'otherLiveCount' => 0,
@@ -778,7 +778,7 @@ class PortalController extends Controller
         [$liveNow, $otherLiveCount, $todayGames, $completedGames, $upcomingGames, $venues]
             = $this->sportPortalData($meet, $sport);
 
-        return Inertia::render('public/sport-portal', [
+        return Inertia::render('portal/sport-portal', [
             ...$base,
             'liveNow' => $liveNow,
             'otherLiveCount' => $otherLiveCount,

@@ -50,7 +50,7 @@ test('guests can view the public tally; unpublished meets 404', function () {
     $this->get("/meets/{$meet->id}/tally")
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('public/tally')
+            ->component('portal/tally')
             ->has('schools', 0)
             ->has('districts', 0));
 

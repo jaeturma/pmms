@@ -1,0 +1,65 @@
+import { useEffect, useState } from 'react';
+import { cn } from '@/apps/portal/lib/utils';
+import type { PortalLiveNow } from '@/apps/portal/types';
+
+type PortalLiveScoreCardProps = {
+    liveNow: PortalLiveNow;
+    className?: string;
+};
+
+function formatClock(totalSeconds: number): string {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+export function PortalLiveScoreCard({ liveNow, className }: PortalLiveScoreCardProps) {
+    const { session } = liveNow;
+    const [elapsed, setElapsed] = useState(session.elapsed_seconds);
+
+    useEffect(() => {
+        setElapsed(session.elapsed_seconds);
+
+        if (!session.clock_running) {
+            return;
+        }
+
+        const interval = setInterval(() => setElapsed((value) => value + 1), 1000);
+
+        return () => clearInterval(interval);
+    }, [session.elapsed_seconds, session.clock_running]);
+
+    return (
+        <div
+            className={cn(
+                'portal-animate-in overflow-hidden rounded-[var(--portal-radius)] border border-[var(--portal-live)]/30 bg-[var(--portal-surface)] text-[var(--portal-surface-foreground)]',
+                className,
+            )}
+        >
+            <div className="flex items-center justify-between gap-2 bg-[var(--portal-live)] px-4 py-2 text-[var(--portal-live-foreground)]">
+                <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase">
+                    <span aria-hidden="true" className="portal-live-dot size-2 rounded-full bg-current" />
+                    Live
+                </span>
+                <span className="text-xs">{liveNow.category}</span>
+            </div>
+
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-5">
+                <p className="truncate text-sm font-medium">{session.side_a_label ?? 'TBD'}</p>
+                <p className="text-2xl font-bold tabular-nums sm:text-4xl">
+                    {session.score_a ?? 0}
+                    <span className="mx-1 text-[var(--portal-muted-foreground)]">–</span>
+                    {session.score_b ?? 0}
+                </p>
+                <p className="truncate text-right text-sm font-medium">{session.side_b_label ?? 'TBD'}</p>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 border-t border-[var(--portal-border)] px-4 py-2 text-xs text-[var(--portal-muted-foreground)]">
+                <span>{session.period_label ?? session.status_label}</span>
+                {session.started_at && <span className="font-mono tabular-nums">{formatClock(elapsed)}</span>}
+                {liveNow.venue && <span>{liveNow.venue}</span>}
+            </div>
+        </div>
+    );
+}

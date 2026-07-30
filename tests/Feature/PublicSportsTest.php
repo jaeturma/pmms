@@ -11,7 +11,7 @@ test('guests can view the sports page for a published meet; unpublished meets 40
     $this->get("/meets/{$meet->id}/sports")
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('public/sports')
+            ->component('portal/sports')
             ->where('meet.name', $meet->name));
 
     $hidden = Meet::factory()->active()->create();

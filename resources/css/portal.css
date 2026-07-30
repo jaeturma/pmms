@@ -1,0 +1,138 @@
+/*
+ * Design tokens for the strictly-separated public portal
+ * (resources/js/apps/portal). A deliberately distinct palette and
+ * component-class layer from the legacy public theme in `app.css`
+ * (`--primary`/`--sidebar` royal-blue-and-navy, `.bg-premium-hero`,
+ * medal tokens) — nothing here reads from or writes to those
+ * variables, so the two themes can never bleed into each other.
+ * Scoped under `.pmms-portal` (applied by `PortalLayout`) rather than
+ * `:root`, so it never affects the admin app or the legacy public
+ * pages that remain unmigrated.
+ */
+
+.pmms-portal {
+    --portal-bg: oklch(0.99 0.003 95);
+    --portal-fg: oklch(0.2 0.02 150);
+    --portal-surface: oklch(1 0 0);
+    --portal-surface-foreground: oklch(0.2 0.02 150);
+    --portal-muted: oklch(0.96 0.01 150);
+    --portal-muted-foreground: oklch(0.48 0.02 150);
+    --portal-border: oklch(0.9 0.015 150);
+
+    --portal-accent: oklch(0.55 0.14 165);
+    --portal-accent-foreground: oklch(0.99 0 0);
+    --portal-accent-soft: oklch(0.94 0.05 165);
+
+    --portal-ink: oklch(0.22 0.03 200);
+    --portal-ink-foreground: oklch(0.99 0 0);
+
+    --portal-live: oklch(0.58 0.21 25);
+    --portal-live-foreground: oklch(0.99 0 0);
+
+    --portal-warning: oklch(0.78 0.14 80);
+    --portal-warning-foreground: oklch(0.25 0.05 80);
+
+    --portal-danger: oklch(0.55 0.22 25);
+    --portal-danger-foreground: oklch(0.99 0 0);
+
+    --portal-radius: 0.75rem;
+    --portal-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+    .pmms-portal {
+        --portal-bg: oklch(0.16 0.015 200);
+        --portal-fg: oklch(0.96 0.005 150);
+        --portal-surface: oklch(0.21 0.018 200);
+        --portal-surface-foreground: oklch(0.96 0.005 150);
+        --portal-muted: oklch(0.26 0.018 200);
+        --portal-muted-foreground: oklch(0.72 0.01 150);
+        --portal-border: oklch(0.32 0.02 200);
+
+        --portal-accent: oklch(0.68 0.14 165);
+        --portal-accent-foreground: oklch(0.15 0.02 165);
+        --portal-accent-soft: oklch(0.3 0.05 165);
+
+        --portal-ink: oklch(0.94 0.01 200);
+        --portal-ink-foreground: oklch(0.16 0.02 200);
+
+        --portal-live: oklch(0.66 0.2 25);
+        --portal-live-foreground: oklch(0.15 0 0);
+    }
+}
+
+:root[data-theme='dark'] .pmms-portal {
+    --portal-bg: oklch(0.16 0.015 200);
+    --portal-fg: oklch(0.96 0.005 150);
+    --portal-surface: oklch(0.21 0.018 200);
+    --portal-surface-foreground: oklch(0.96 0.005 150);
+    --portal-muted: oklch(0.26 0.018 200);
+    --portal-muted-foreground: oklch(0.72 0.01 150);
+    --portal-border: oklch(0.32 0.02 200);
+    --portal-accent: oklch(0.68 0.14 165);
+    --portal-accent-foreground: oklch(0.15 0.02 165);
+    --portal-accent-soft: oklch(0.3 0.05 165);
+    --portal-ink: oklch(0.94 0.01 200);
+    --portal-ink-foreground: oklch(0.16 0.02 200);
+    --portal-live: oklch(0.66 0.2 25);
+    --portal-live-foreground: oklch(0.15 0 0);
+}
+
+:root[data-theme='light'] .pmms-portal {
+    --portal-bg: oklch(0.99 0.003 95);
+    --portal-fg: oklch(0.2 0.02 150);
+    --portal-surface: oklch(1 0 0);
+    --portal-surface-foreground: oklch(0.2 0.02 150);
+    --portal-muted: oklch(0.96 0.01 150);
+    --portal-muted-foreground: oklch(0.48 0.02 150);
+    --portal-border: oklch(0.9 0.015 150);
+    --portal-accent: oklch(0.55 0.14 165);
+    --portal-accent-foreground: oklch(0.99 0 0);
+    --portal-accent-soft: oklch(0.94 0.05 165);
+    --portal-ink: oklch(0.22 0.03 200);
+    --portal-ink-foreground: oklch(0.99 0 0);
+    --portal-live: oklch(0.58 0.21 25);
+    --portal-live-foreground: oklch(0.99 0 0);
+}
+
+.pmms-portal {
+    background-color: var(--portal-bg);
+    color: var(--portal-fg);
+}
+
+@keyframes portal-pulse-live {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.45;
+    }
+}
+
+@keyframes portal-fade-up {
+    from {
+        opacity: 0;
+        transform: translateY(0.5rem);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.pmms-portal .portal-animate-in {
+    animation: portal-fade-up 250ms var(--portal-ease) both;
+}
+
+.pmms-portal .portal-live-dot {
+    animation: portal-pulse-live 2.4s var(--portal-ease) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pmms-portal .portal-animate-in,
+    .pmms-portal .portal-live-dot {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+    }
+}

@@ -15,7 +15,7 @@ test('guests can view the about page for a published meet; unpublished meets 404
     $this->get("/meets/{$meet->id}/about")
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('public/about')
+            ->component('portal/about')
             ->where('meet.name', $meet->name)
             ->where('municipalityCount', 0)
             ->where('schoolCount', 0)

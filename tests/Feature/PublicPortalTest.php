@@ -14,7 +14,7 @@ test('guests can view the portal home without authentication', function () {
     $this->get('/')
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('public/home')
+            ->component('portal/home')
             ->where('meet', null)
             ->has('municipalities', 0));
 });

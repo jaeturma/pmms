@@ -9,7 +9,7 @@ test('guests can view the faqs page for a published meet; unpublished meets 404'
     $this->get("/meets/{$meet->id}/faqs")
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('public/faqs')
+            ->component('portal/faqs')
             ->where('meet.name', $meet->name)
             ->has('meet.starts_at')
             ->has('meet.ends_at')

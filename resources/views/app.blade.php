@@ -36,8 +36,20 @@
 
         @fonts
 
+        @php
+            // The strictly separated portal tree lives under
+            // `resources/js/apps/portal/pages`, addressed as
+            // `portal/{name}` — everything else still resolves under
+            // the legacy `resources/js/pages`. Mirrors the same split
+            // `resources/js/app.tsx`'s own `resolvePage()` uses, and
+            // `config/inertia.php`'s `pages.paths`.
+            $pageComponentPath = str_starts_with($page['component'], 'portal/')
+                ? "resources/js/apps/portal/pages/{$page['component']}.tsx"
+                : "resources/js/pages/{$page['component']}.tsx";
+        @endphp
+
         @viteReactRefresh
-        @vite(['resources/css/app.css', 'resources/js/app.tsx', "resources/js/pages/{$page['component']}.tsx"])
+        @vite(['resources/css/app.css', 'resources/js/app.tsx', $pageComponentPath])
         <x-inertia::head>
             <title>{{ config('app.name', 'Laravel') }}</title>
         </x-inertia::head>

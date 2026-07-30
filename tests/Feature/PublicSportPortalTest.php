@@ -52,7 +52,7 @@ test('guests can view a sport portal for the active meet; unknown slugs 404', fu
     $this->get('/basketball')
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('public/sport-portal')
+            ->component('portal/sport-portal')
             ->where('sport.slug', 'basketball')
             ->where('sport.name', 'Basketball')
             ->where('canonicalUrl', url('/basketball'))
@@ -73,7 +73,7 @@ test('with no active meet, the portal shows an empty state instead of erroring',
     $this->get('/basketball')
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('public/sport-portal')
+            ->component('portal/sport-portal')
             ->where('canonicalUrl', url('/basketball'))
             ->where('meet', null)
             ->where('liveNow', null));
@@ -332,7 +332,7 @@ test('every sport portal resolves its own real sport, isolated from every other 
     $this->get("/{$slug}")
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('public/sport-portal')
+            ->component('portal/sport-portal')
             ->where('sport.slug', $slug)
             ->where('sport.name', $sportName)
             ->where('canonicalUrl', url("/{$slug}"))
@@ -417,7 +417,7 @@ test('Athletics/Swimming events use real schedule/result data, never a fabricate
     $this->get("/{$slug}")
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('public/sport-portal')
+            ->component('portal/sport-portal')
             ->where('liveNow', null)
             ->where('otherLiveCount', 0)
             ->has('upcomingGames', 1)
