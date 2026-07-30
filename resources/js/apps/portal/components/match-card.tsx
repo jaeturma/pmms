@@ -1,5 +1,6 @@
 import { Clock, MapPin } from 'lucide-react';
 import { cn } from '@/apps/portal/lib/utils';
+import { MunicipalityCrest, MunicipalityWatermark } from '@/apps/portal/components/municipality-crest';
 import type { PortalGame } from '@/apps/portal/types';
 
 type PortalMatchCardProps = {
@@ -20,19 +21,27 @@ export function PortalMatchCard({ game, showScore = false, className }: PortalMa
     return (
         <div
             className={cn(
-                'portal-animate-in rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4 text-[var(--portal-surface-foreground)]',
+                'portal-animate-in relative overflow-hidden rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4 text-[var(--portal-surface-foreground)]',
                 className,
             )}
         >
-            <div className="flex items-center justify-between gap-2">
+            {game.side_a && <MunicipalityWatermark name={game.side_a} className="-top-4 -right-4 size-24 text-5xl" />}
+
+            <div className="relative flex items-center justify-between gap-2">
                 <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', toneClass)}>{game.status_label}</span>
                 {game.round_label && <span className="text-xs text-[var(--portal-muted-foreground)]">{game.round_label}</span>}
             </div>
 
-            <div className="mt-3 flex items-center justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{game.side_a ?? 'TBD'}</p>
-                    <p className="truncate text-sm font-medium text-[var(--portal-muted-foreground)]">{game.side_b ?? 'TBD'}</p>
+            <div className="relative mt-3 flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1 space-y-1.5">
+                    <span className="flex min-w-0 items-center gap-2">
+                        {game.side_a && <MunicipalityCrest name={game.side_a} size="sm" />}
+                        <span className="truncate text-sm font-medium">{game.side_a ?? 'TBD'}</span>
+                    </span>
+                    <span className="flex min-w-0 items-center gap-2">
+                        {game.side_b && <MunicipalityCrest name={game.side_b} size="sm" />}
+                        <span className="truncate text-sm font-medium text-[var(--portal-muted-foreground)]">{game.side_b ?? 'TBD'}</span>
+                    </span>
                 </div>
                 {showScore && (game.score_a !== null || game.score_b !== null) && (
                     <div className="text-right tabular-nums">
@@ -43,7 +52,7 @@ export function PortalMatchCard({ game, showScore = false, className }: PortalMa
                 {game.mark && <p className="text-sm font-semibold text-[var(--portal-accent)]">{game.mark}</p>}
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--portal-muted-foreground)]">
+            <div className="relative mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--portal-muted-foreground)]">
                 <span>{game.category}</span>
                 {game.scheduled_date && (
                     <span className="flex items-center gap-1">

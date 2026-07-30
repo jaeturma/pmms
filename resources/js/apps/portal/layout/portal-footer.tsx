@@ -21,7 +21,7 @@ export function PortalFooter() {
 
     return (
         <footer className="border-t border-[var(--portal-border)] bg-[var(--portal-surface)] text-[var(--portal-surface-foreground)]">
-            <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+            <div className="w-full px-4 py-8 sm:px-6 lg:px-10 xl:px-16 2xl:px-24">
                 <div className="flex flex-col gap-6 sm:flex-row sm:justify-between">
                     <div>
                         <Link href={home().url} className="text-sm font-bold">

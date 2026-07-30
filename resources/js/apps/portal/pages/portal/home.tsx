@@ -156,13 +156,19 @@ export default function PortalHome({
                                 >
                                     <p className="text-xs font-semibold text-[var(--portal-live)] uppercase">{match.status_label}</p>
                                     <p className="mt-1 text-sm font-medium">{match.event}</p>
-                                    <p className="mt-1 flex items-center justify-between text-sm">
-                                        <span>{match.side_a_label ?? 'TBD'}</span>
-                                        <span className="font-bold tabular-nums">
+                                    <div className="mt-2 flex items-center justify-between gap-2 text-sm">
+                                        <span className="flex min-w-0 items-center gap-2">
+                                            {match.side_a_label && <MunicipalityCrest name={match.side_a_label} size="sm" />}
+                                            <span className="truncate">{match.side_a_label ?? 'TBD'}</span>
+                                        </span>
+                                        <span className="shrink-0 font-bold tabular-nums">
                                             {match.score_a ?? 0} – {match.score_b ?? 0}
                                         </span>
-                                        <span>{match.side_b_label ?? 'TBD'}</span>
-                                    </p>
+                                        <span className="flex min-w-0 items-center justify-end gap-2">
+                                            <span className="truncate">{match.side_b_label ?? 'TBD'}</span>
+                                            {match.side_b_label && <MunicipalityCrest name={match.side_b_label} size="sm" />}
+                                        </span>
+                                    </div>
                                 </Link>
                             ))}
                         </div>

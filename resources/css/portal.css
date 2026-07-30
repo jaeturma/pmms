@@ -18,7 +18,7 @@
  */
 
 .pmms-portal {
-    --portal-bg: oklch(0.98 0.012 90);
+    --portal-bg: oklch(0.93 0.022 90);
     --portal-fg: oklch(0.24 0.06 258);
     --portal-surface: oklch(1 0 0);
     --portal-surface-foreground: oklch(0.24 0.06 258);
@@ -55,9 +55,9 @@
 
     --portal-gradient-page: linear-gradient(
         160deg,
-        oklch(0.98 0.02 90) 0%,
-        oklch(0.985 0.008 258) 45%,
-        oklch(0.98 0.015 25) 100%
+        oklch(0.92 0.035 90) 0%,
+        oklch(0.93 0.02 258) 45%,
+        oklch(0.91 0.03 25) 100%
     );
     --portal-gradient-hero: linear-gradient(
         135deg,
@@ -122,7 +122,7 @@
 }
 
 :root[data-theme='light'] .pmms-portal {
-    --portal-bg: oklch(0.98 0.012 90);
+    --portal-bg: oklch(0.93 0.022 90);
     --portal-fg: oklch(0.24 0.06 258);
     --portal-surface: oklch(1 0 0);
     --portal-surface-foreground: oklch(0.24 0.06 258);
@@ -140,7 +140,7 @@
     --portal-maroon-soft: oklch(0.94 0.04 25);
     --portal-live: oklch(0.55 0.19 25);
     --portal-live-foreground: oklch(0.99 0 0);
-    --portal-gradient-page: linear-gradient(160deg, oklch(0.98 0.02 90) 0%, oklch(0.985 0.008 258) 45%, oklch(0.98 0.015 25) 100%);
+    --portal-gradient-page: linear-gradient(160deg, oklch(0.92 0.035 90) 0%, oklch(0.93 0.02 258) 45%, oklch(0.91 0.03 25) 100%);
     --portal-gradient-hero: linear-gradient(135deg, oklch(0.24 0.09 258) 0%, oklch(0.3 0.1 258) 45%, oklch(0.36 0.13 25) 100%);
 }
 

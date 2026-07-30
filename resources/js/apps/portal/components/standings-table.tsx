@@ -1,5 +1,6 @@
 import { Trophy } from 'lucide-react';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
+import { MunicipalityCrest } from '@/apps/portal/components/municipality-crest';
 
 type PortalStandingsRow = {
     label: string;
@@ -52,7 +53,12 @@ export function PortalStandingsTable({
                     {rows.map((row, index) => (
                         <tr key={row.label}>
                             <td className="px-4 py-2 tabular-nums">{index + 1}</td>
-                            <td className="px-4 py-2">{row.label}</td>
+                            <td className="px-4 py-2">
+                                <span className="flex items-center gap-2">
+                                    <MunicipalityCrest name={row.label} size="sm" />
+                                    {row.label}
+                                </span>
+                            </td>
                             {showMedals && (
                                 <>
                                     <td className="px-4 py-2 text-right tabular-nums">{row.gold}</td>

@@ -63,7 +63,7 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
 
     return (
         <header className="sticky top-0 z-40 border-b border-[var(--portal-border)] bg-[var(--portal-surface)]/95 backdrop-blur">
-            <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+            <div className="flex h-16 w-full items-center justify-between gap-4 px-4 sm:px-6 lg:px-10 xl:px-16 2xl:px-24">
                 <Link href={home().url} className="flex items-center gap-2 text-base font-bold text-[var(--portal-fg)]">
                     <span className="flex size-8 items-center justify-center rounded-[calc(var(--portal-radius)-0.25rem)] bg-[var(--portal-accent)] text-sm text-[var(--portal-accent-foreground)]">
                         PM
