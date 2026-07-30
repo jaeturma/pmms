@@ -19,9 +19,11 @@ export function PortalVenueInformation({ venues }: PortalVenueInformationProps) 
                     href={venue.directions_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex items-start gap-2 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-3 text-sm transition-colors hover:bg-[var(--portal-muted)]"
+                    className="flex items-center gap-3 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-3 text-sm transition-colors hover:bg-[var(--portal-muted)]"
                 >
-                    <MapPin aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-[var(--portal-accent)]" />
+                    <span className="portal-icon-badge size-11 shrink-0 bg-[var(--portal-ink-soft)] text-[var(--portal-ink)]">
+                        <MapPin aria-hidden="true" className="size-5" />
+                    </span>
                     <span>
                         <span className="block font-medium">{venue.name}</span>
                         {venue.address && <span className="text-xs text-[var(--portal-muted-foreground)]">{venue.address}</span>}

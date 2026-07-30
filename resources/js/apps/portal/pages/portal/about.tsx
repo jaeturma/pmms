@@ -24,18 +24,24 @@ export default function PortalAbout({ meet, municipalityCount, schoolCount, spor
                 <PortalHero eyebrow="About" title={meet.name} description={`Organized by ${props.division.name} (${props.division.areaLabel}).`} />
 
                 <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    <div className="flex flex-col items-center gap-1 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-5 text-center">
-                        <Users aria-hidden="true" className="size-6 text-[var(--portal-accent)]" />
+                    <div className="flex flex-col items-center gap-2 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-5 text-center">
+                        <span className="portal-icon-badge size-16 bg-[var(--portal-accent-soft)] text-[var(--portal-accent)]">
+                            <Users aria-hidden="true" className="size-8" />
+                        </span>
                         <p className="text-2xl font-bold tabular-nums">{municipalityCount}</p>
                         <p className="text-xs text-[var(--portal-muted-foreground)]">Competing municipalities</p>
                     </div>
-                    <div className="flex flex-col items-center gap-1 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-5 text-center">
-                        <School aria-hidden="true" className="size-6 text-[var(--portal-accent)]" />
+                    <div className="flex flex-col items-center gap-2 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-5 text-center">
+                        <span className="portal-icon-badge size-16 bg-[var(--portal-ink-soft)] text-[var(--portal-ink)]">
+                            <School aria-hidden="true" className="size-8" />
+                        </span>
                         <p className="text-2xl font-bold tabular-nums">{schoolCount}</p>
                         <p className="text-xs text-[var(--portal-muted-foreground)]">Participating schools</p>
                     </div>
-                    <div className="flex flex-col items-center gap-1 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-5 text-center">
-                        <Trophy aria-hidden="true" className="size-6 text-[var(--portal-accent)]" />
+                    <div className="flex flex-col items-center gap-2 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-5 text-center">
+                        <span className="portal-icon-badge size-16 bg-[var(--portal-maroon-soft)] text-[var(--portal-maroon)]">
+                            <Trophy aria-hidden="true" className="size-8" />
+                        </span>
                         <p className="text-2xl font-bold tabular-nums">{sportCount}</p>
                         <p className="text-xs text-[var(--portal-muted-foreground)]">Sports contested</p>
                     </div>

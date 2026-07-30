@@ -4,6 +4,7 @@ import { meet as publicMeet, results as publicResults, tally as publicTally } fr
 import { PortalButton } from '@/apps/portal/components/button';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { PortalHero } from '@/apps/portal/components/hero';
+import { MunicipalityCrest } from '@/apps/portal/components/municipality-crest';
 import { PortalSectionHeader } from '@/apps/portal/components/section-header';
 import { PortalStandingsTable } from '@/apps/portal/components/standings-table';
 import type {
@@ -236,11 +237,9 @@ export default function PortalHome({
                             {municipalities.map((municipality) => (
                                 <div
                                     key={municipality.id}
-                                    className="portal-animate-in flex flex-col items-center gap-2 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4 text-center"
+                                    className="portal-animate-in flex flex-col items-center gap-2 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4 text-center transition-transform hover:-translate-y-0.5"
                                 >
-                                    <span className="flex size-12 items-center justify-center rounded-full bg-[var(--portal-accent-soft)] text-sm font-semibold text-[var(--portal-accent)]">
-                                        {municipality.name.slice(0, 2).toUpperCase()}
-                                    </span>
+                                    <MunicipalityCrest name={municipality.name} size="lg" />
                                     <div>
                                         <p className="text-sm leading-snug font-medium">{municipality.name}</p>
                                         {municipality.nickname && (

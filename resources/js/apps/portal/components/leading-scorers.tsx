@@ -16,6 +16,7 @@ export function PortalLeadingScorers({ rows }: PortalLeadingScorersProps) {
         return (
             <PortalEmptyState
                 icon={Medal}
+                tone="maroon"
                 title="Leading scorers not available"
                 description="No per-athlete scoring data exists for this sport yet."
             />

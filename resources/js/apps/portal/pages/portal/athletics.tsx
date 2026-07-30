@@ -4,6 +4,7 @@ import { athletics as publicAthletics } from '@/routes/public';
 import { PortalDaySwitcher } from '@/apps/portal/components/day-switcher';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { PortalHero } from '@/apps/portal/components/hero';
+import { PortalMedalTotalsRow } from '@/apps/portal/components/medal-totals';
 import { PortalSectionHeader } from '@/apps/portal/components/section-header';
 import type { PortalAthleticsSlot, PortalDay, PortalMeetSummary, PortalMedalTotals } from '@/apps/portal/types';
 
@@ -34,14 +35,7 @@ export default function PortalAthletics({ meet, days, selectedDay, medalTotals, 
             <div className="flex flex-col gap-6">
                 <PortalHero eyebrow="Athletics" title={meet.name} description="Real schedule and, once validated, top-3 placements — no live per-athlete tracking." />
 
-                <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    {(['gold', 'silver', 'bronze', 'total'] as const).map((key) => (
-                        <div key={key} className="rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4 text-center">
-                            <p className="text-2xl font-bold tabular-nums">{medalTotals[key]}</p>
-                            <p className="text-xs text-[var(--portal-muted-foreground)] capitalize">{key}</p>
-                        </div>
-                    ))}
-                </section>
+                <PortalMedalTotalsRow totals={medalTotals} />
 
                 {selectedDay && (
                     <PortalSectionHeader title="Events by day" action={<PortalDaySwitcher days={days} selected={selectedDay} baseUrl={publicAthletics(meet.id).url} />} />

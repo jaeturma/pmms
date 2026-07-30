@@ -24,7 +24,7 @@ export function PortalStandingsTable({
     unavailableDescription = 'No standings data exists for this sport yet.',
 }: PortalStandingsTableProps) {
     if (rows === null || rows.length === 0) {
-        return <PortalEmptyState icon={Trophy} title={unavailableTitle} description={unavailableDescription} />;
+        return <PortalEmptyState icon={Trophy} tone="ink" title={unavailableTitle} description={unavailableDescription} />;
     }
 
     const showMedals = rows[0].gold !== undefined;

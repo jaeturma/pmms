@@ -14,7 +14,7 @@ export function PortalHero({ eyebrow, title, description, meta, actions, classNa
     return (
         <section
             className={cn(
-                'portal-animate-in rounded-[var(--portal-radius)] bg-[var(--portal-ink)] px-6 py-10 text-[var(--portal-ink-foreground)] sm:px-10 sm:py-14',
+                'portal-hero-gradient portal-animate-in relative overflow-hidden rounded-[var(--portal-radius)] border-b-4 border-[var(--portal-accent)] px-6 py-10 text-[var(--portal-ink-foreground)] sm:px-10 sm:py-14',
                 className,
             )}
         >

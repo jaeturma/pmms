@@ -1,6 +1,7 @@
 import { Head, router } from '@inertiajs/react';
 import { tally as publicTally } from '@/routes/public';
 import { PortalHero } from '@/apps/portal/components/hero';
+import { PortalMedalTotalsRow } from '@/apps/portal/components/medal-totals';
 import { PortalSectionHeader } from '@/apps/portal/components/section-header';
 import { PortalSelect } from '@/apps/portal/components/select';
 import { PortalStandingsTable } from '@/apps/portal/components/standings-table';
@@ -46,14 +47,7 @@ export default function PortalTally({ meet, schools, districts, totals, bySport,
             <div className="flex flex-col gap-6">
                 <PortalHero eyebrow="Medal tally" title={meet.name} description={`Standings derived from validated results only. Generated ${generatedAt}.`} />
 
-                <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    {(['gold', 'silver', 'bronze', 'total'] as const).map((key) => (
-                        <div key={key} className="rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4 text-center">
-                            <p className="text-2xl font-bold tabular-nums">{totals[key]}</p>
-                            <p className="text-xs text-[var(--portal-muted-foreground)] capitalize">{key}</p>
-                        </div>
-                    ))}
-                </section>
+                <PortalMedalTotalsRow totals={totals} />
 
                 <PortalSectionHeader
                     title="Overall standings"
