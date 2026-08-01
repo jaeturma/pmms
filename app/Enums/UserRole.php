@@ -7,6 +7,7 @@ enum UserRole: string
     case Admin = 'admin';
     case Organizer = 'organizer';
     case DelegationOfficer = 'delegation_officer';
+    case TechnicalOfficial = 'technical_official';
     case Viewer = 'viewer';
 
     public function label(): string
@@ -15,6 +16,7 @@ enum UserRole: string
             self::Admin => 'Administrator',
             self::Organizer => 'Meet Organizer',
             self::DelegationOfficer => 'Delegation Officer',
+            self::TechnicalOfficial => 'Technical Official',
             self::Viewer => 'Viewer',
         };
     }

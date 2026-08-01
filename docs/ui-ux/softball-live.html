@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DdOPAA Live Softball</title>
+  <meta name="description" content="Responsive lightweight live softball event interface for DdOPAA Provincial Meet." />
+  <style>
+    :root{
+      --blue:#073b99;
+      --blue2:#0c56d8;
+      --blue3:#eaf2ff;
+      --red:#e92323;
+      --green:#2c7a2d;
+      --green2:#47953a;
+      --gold:#f4bf13;
+      --ink:#111827;
+      --muted:#64748b;
+      --line:#dce4ef;
+      --surface:#ffffff;
+      --bg:#f6f8fc;
+      --shadow:0 8px 26px rgba(15,23,42,.08);
+      --radius:14px;
+    }
+
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{
+      margin:0;
+      background:
+        radial-gradient(circle at 0% 0%,rgba(12,86,216,.05),transparent 28%),
+        linear-gradient(180deg,#fbfcff 0%,var(--bg) 100%);
+      color:var(--ink);
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    }
+
+    a{text-decoration:none;color:inherit}
+    button{font:inherit}
+    .container{width:min(1480px,calc(100% - 36px));margin-inline:auto}
+    .card{
+      background:var(--surface);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+
+    /* Header */
+    .topbar{
+      position:sticky;top:0;z-index:50;
+      background:rgba(255,255,255,.96);
+      backdrop-filter:blur(14px);
+      border-bottom:1px solid var(--line);
+    }
+    .nav{
+      min-height:84px;
+      display:flex;align-items:center;gap:24px;
+    }
+    .brand{display:flex;align-items:center;gap:12px;min-width:300px}
+    .brand-logo{
+      width:60px;height:60px;border-radius:50%;
+      display:grid;place-items:center;text-align:center;
+      color:#fff;font-size:11px;font-weight:950;
+      background:conic-gradient(from 210deg,var(--red),var(--gold),var(--blue),var(--red));
+      box-shadow:inset 0 0 0 6px #fff,0 4px 14px rgba(7,59,153,.18);
+    }
+    .brand h1{margin:0;color:var(--blue);font-size:24px;letter-spacing:-.5px}
+    .brand small{color:var(--blue);font-weight:650}
+    .nav-links{display:flex;align-items:center;justify-content:center;gap:6px;flex:1}
+    .nav-link{
+      position:relative;min-height:84px;padding:0 14px;
+      display:flex;align-items:center;gap:8px;
+      color:#15305d;font-size:14px;font-weight:800;white-space:nowrap;
+    }
+    .nav-link:hover,.nav-link.active{color:var(--blue2)}
+    .nav-link.active::after{
+      content:"";position:absolute;left:10px;right:10px;bottom:0;height:3px;
+      background:var(--red);border-radius:3px 3px 0 0;
+    }
+    .nav-icon{font-size:20px}
+    .live-mini{background:var(--red);color:#fff;border-radius:4px;padding:2px 5px;font-size:9px;font-weight:950}
+    .view-btn{
+      border:0;border-radius:9px;padding:13px 17px;
+      background:linear-gradient(135deg,var(--blue),var(--blue2));
+      color:#fff;font-weight:800;box-shadow:0 5px 14px rgba(7,59,153,.18);
+    }
+    .mobile-menu{display:none}
+
+    /* Event header */
+    .event-strip{padding:19px 0 12px}
+    .crumbs{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    .sport-title{display:flex;align-items:center;gap:10px;color:var(--blue);font-size:21px;font-weight:950}
+    .sport-ball{font-size:26px}
+    .crumb{font-weight:750;color:#16284c}
+    .chev{color:#61769b}
+    .live-badge{
+      display:inline-flex;align-items:center;gap:5px;
+      padding:5px 10px;border-radius:6px;
+      background:var(--red);color:#fff;font-size:12px;font-weight:950;
+    }
+    .event-meta{
+      display:flex;align-items:center;gap:24px;flex-wrap:wrap;
+      margin-top:10px;color:#435b84;font-size:14px;font-weight:650;
+    }
+    .meta-item{display:flex;gap:8px;align-items:center}
+    .meta-sep{width:1px;height:20px;background:var(--line)}
+
+    /* Main */
+    .main-grid{
+      display:grid;grid-template-columns:minmax(0,2.15fr) minmax(340px,.95fr);
+      gap:20px;padding-bottom:25px;
+    }
+
+    /* Scoreboard */
+    .scoreboard{
+      padding:16px 12px 12px;
+      background:
+        linear-gradient(180deg,rgba(255,255,255,.96),rgba(255,255,255,.99)),
+        repeating-linear-gradient(120deg,rgba(7,59,153,.035) 0 1px,transparent 1px 19px);
+    }
+    .score-top{
+      display:grid;grid-template-columns:1fr 200px 1fr;gap:28px;align-items:center;
+      padding:4px 34px 8px;
+    }
+    .team{
+      display:grid;grid-template-columns:105px 1fr;gap:18px;align-items:center;
+    }
+    .team.away{grid-template-columns:1fr 105px;text-align:right}
+    .logo{
+      width:105px;height:105px;border-radius:50%;
+      display:grid;place-items:center;text-align:center;
+      border:4px solid #fff;box-shadow:0 0 0 2px var(--line),0 6px 16px rgba(0,0,0,.08);
+      color:#fff;font-size:18px;font-weight:950;
+    }
+    .logo.home{background:linear-gradient(135deg,#27823b,#f6c62f,#cc2d2d)}
+    .logo.away{background:linear-gradient(135deg,#174ea6,#f4f7fb,#1c5fbd);color:#06367f}
+    .score{font-size:86px;line-height:.95;font-weight:950;letter-spacing:-5px}
+    .team-name{font-size:23px;font-weight:950;text-transform:uppercase;margin-top:8px}
+    .team-city{color:#43577e;font-weight:650}
+    .inning-box{
+      border:1px solid #cdd8e9;border-radius:9px;background:#fff;overflow:hidden;text-align:center;
+    }
+    .inning-title{
+      padding:8px;background:linear-gradient(180deg,var(--blue2),var(--blue));
+      color:#fff;font-size:18px;font-weight:900;
+    }
+    .diamond{
+      position:relative;width:92px;height:70px;margin:14px auto 4px;
+    }
+    .base{
+      position:absolute;width:30px;height:30px;transform:rotate(45deg);
+      background:#e3e8ef;border-radius:3px;box-shadow:0 2px 5px rgba(0,0,0,.07);
+    }
+    .base.first{right:5px;bottom:5px;background:var(--green)}
+    .base.second{left:31px;top:0}
+    .base.third{left:5px;bottom:5px;background:var(--green)}
+    .count-line{padding:0 0 12px;font-size:17px;font-weight:850;color:#1e2e51}
+    .count-line span{padding:0 9px}
+    .count-box{
+      margin:2px auto 10px;
+      width:min(460px,calc(100% - 40px));
+      border:1px solid var(--line);border-radius:9px;
+      display:grid;grid-template-columns:repeat(3,1fr);overflow:hidden;
+    }
+    .count-cell{padding:8px 12px;text-align:center;border-right:1px solid var(--line)}
+    .count-cell:last-child{border-right:0}
+    .count-label{font-size:12px;font-weight:900;color:#1d3562;margin-bottom:7px}
+    .dots{display:flex;justify-content:center;gap:8px}
+    .dot{width:19px;height:19px;border-radius:50%;border:2px solid #c9d3e1;background:#fff}
+    .dot.ball.on{background:#279541;border-color:#279541}
+    .dot.strike.on{background:#ffc813;border-color:#ffc813}
+    .dot.out.on{background:#e51d2a;border-color:#e51d2a}
+
+    .innings-wrap{padding:0 0 2px}
+    .innings-table{
+      width:100%;border-collapse:separate;border-spacing:0;
+      border:1px solid var(--line);border-radius:9px;overflow:hidden;
+      font-size:13px;
+    }
+    .innings-table th,.innings-table td{
+      padding:10px;text-align:center;border-right:1px solid var(--line);border-bottom:1px solid var(--line);
+    }
+    .innings-table th:last-child,.innings-table td:last-child{border-right:0}
+    .innings-table tr:last-child td{border-bottom:0}
+    .innings-table thead th{background:linear-gradient(180deg,var(--blue2),var(--blue));color:#fff;font-size:12px}
+    .innings-table td:first-child,.innings-table th:first-child{text-align:left;padding-left:32px;font-weight:850;width:240px}
+    .innings-table td:nth-last-child(-n+3){font-weight:900}
+    .legend{text-align:center;padding:8px 0 0;color:#455a80;font-size:12px}
+
+    /* Play by play */
+    .section-title{
+      padding:10px 16px;color:#fff;font-size:16px;font-weight:900;text-transform:uppercase;
+      background:linear-gradient(180deg,var(--blue2),var(--blue));
+    }
+    .play-row{
+      display:grid;grid-template-columns:82px 36px 1fr 85px;gap:12px;align-items:center;
+      padding:10px 16px;border-bottom:1px solid var(--line);
+    }
+    .play-row.highlight{background:linear-gradient(90deg,#fff7dc,#fffdf6)}
+    .inning-time strong{display:block;font-size:12px}
+    .inning-time small{color:#435a80;font-size:10px}
+    .play-icon{font-size:21px}
+    .play-desc strong{display:block;font-size:13px}
+    .play-desc small{color:#374d73;font-size:11px}
+    .play-score{text-align:right;color:var(--green);font-size:18px;font-weight:950}
+    .panel-footer{text-align:center;padding:12px;color:var(--blue2);font-weight:850}
+
+    /* Sidebar */
+    .sidebar{display:grid;gap:16px;align-content:start}
+    .blue-title{
+      background:linear-gradient(180deg,var(--blue2),var(--blue));color:#fff;
+      padding:9px 15px;font-size:14px;font-weight:900;text-transform:uppercase;
+    }
+    .comparison-head{
+      display:grid;grid-template-columns:1fr 1fr;padding:9px 18px 7px;font-size:13px;font-weight:900;
+    }
+    .comparison-head span:first-child{color:var(--green)}
+    .comparison-head span:last-child{text-align:right;color:var(--blue2)}
+    .comparison-table{
+      width:calc(100% - 30px);margin:0 15px 13px;border-collapse:collapse;font-size:12px;
+    }
+    .comparison-table td{padding:7px;border-top:1px solid var(--line);text-align:center}
+    .comparison-table td:first-child,.comparison-table td:last-child{font-size:14px;font-weight:900;width:30%}
+    .comparison-table td:nth-child(2){text-transform:uppercase;font-size:11px;color:#31476e}
+
+    .performer-head{display:grid;grid-template-columns:1fr 1fr}
+    .performer-head div{padding:8px;text-align:center;color:#fff;font-size:12px;font-weight:900}
+    .performer-head div:first-child{background:var(--green2)}
+    .performer-head div:last-child{background:var(--blue2)}
+    .performers{display:grid;grid-template-columns:1fr 1fr}
+    .performer-col{padding:6px 12px 8px}
+    .performer-col:first-child{border-right:1px solid var(--line)}
+    .performer{
+      display:grid;grid-template-columns:48px 1fr;gap:9px;align-items:center;
+      padding:8px 0;border-bottom:1px solid #edf1f6;
+    }
+    .performer:last-child{border-bottom:0}
+    .avatar{
+      width:46px;height:46px;border-radius:50%;
+      display:grid;place-items:end center;overflow:hidden;font-size:26px;
+      border:2px solid #fff;box-shadow:0 0 0 1px var(--line);
+      background:linear-gradient(145deg,#f2c59d,#87502f);
+    }
+    .performer strong{display:block;font-size:11px}
+    .performer small{font-size:10px;color:#31496f;font-weight:650}
+    .scan-bar{
+      border-top:1px solid var(--line);padding:9px 12px;
+      display:flex;justify-content:space-between;align-items:center;
+      color:#334a70;font-size:11px;font-weight:750;
+    }
+    .qr{
+      width:34px;height:34px;
+      background:
+        repeating-linear-gradient(0deg,#111 0 2px,#fff 2px 4px),
+        repeating-linear-gradient(90deg,#111 0 2px,#fff 2px 4px);
+      border:3px solid #fff;box-shadow:0 0 0 1px #111;
+    }
+
+    .pitchers{display:grid;grid-template-columns:1fr 1fr}
+    .pitcher-col{padding:10px 14px}
+    .pitcher-col:first-child{border-right:1px solid var(--line)}
+    .pitcher-team{font-size:12px;font-weight:900;margin-bottom:6px}
+    .pitcher-team.home{color:var(--green)}
+    .pitcher-team.away{color:var(--blue2)}
+    .pitcher{
+      display:grid;grid-template-columns:48px 1fr;gap:9px;align-items:center;
+    }
+    .pitcher strong{display:block;font-size:11px}
+    .pitcher small{display:block;font-size:10px;color:#3e5479;line-height:1.55}
+
+    /* Footer */
+    .footer{
+      background:linear-gradient(180deg,#0751c8,#063b9c);
+      color:#fff;border-top:1px solid rgba(255,255,255,.2);
+    }
+    .footer-inner{
+      min-height:72px;display:grid;grid-template-columns:1fr 1fr 1fr;align-items:center;gap:20px;
+      font-size:13px;
+    }
+    .motto{font-weight:900;color:#ffd429}
+    .sync{text-align:center}
+    .footer-meta{text-align:right}
+
+    @media (max-width:1120px){
+      .nav-links{display:none}
+      .mobile-menu{display:block;margin-left:auto;border:1px solid var(--line);background:#fff;border-radius:8px;padding:10px 12px}
+      .view-btn{display:none}
+      .main-grid{grid-template-columns:1fr}
+      .sidebar{grid-template-columns:1fr 1fr}
+      .score-top{grid-template-columns:1fr 180px 1fr}
+      .score{font-size:70px}
+    }
+
+    @media (max-width:760px){
+      .container{width:min(100% - 20px,1480px)}
+      .nav{min-height:70px}
+      .brand{min-width:auto}
+      .brand-logo{width:46px;height:46px}
+      .brand h1{font-size:17px}
+      .brand small{display:none}
+      .crumbs{gap:7px}
+      .crumb:nth-of-type(n+2),.chev:nth-of-type(n+2){display:none}
+      .event-meta{gap:10px;font-size:12px}
+      .meta-sep{display:none}
+      .score-top{grid-template-columns:1fr 105px 1fr;gap:8px;padding:2px 4px 8px}
+      .team,.team.away{display:flex;flex-direction:column;gap:7px;text-align:center}
+      .team.away{flex-direction:column-reverse}
+      .logo{width:64px;height:64px;font-size:12px}
+      .score{font-size:53px;letter-spacing:-2px}
+      .team-name{font-size:13px}
+      .team-city{font-size:11px}
+      .inning-title{font-size:12px;padding:7px 3px}
+      .inning-box{border-radius:7px}
+      .diamond{transform:scale(.72);margin:3px auto -6px}
+      .count-line{font-size:12px;padding-bottom:7px}
+      .count-box{width:100%;margin-top:4px}
+      .count-cell{padding:7px 4px}
+      .dot{width:14px;height:14px}
+      .innings-wrap{overflow-x:auto}
+      .innings-table{min-width:720px}
+      .play-row{grid-template-columns:63px 26px 1fr 58px;padding-inline:10px}
+      .play-desc small{display:none}
+      .sidebar{grid-template-columns:1fr}
+      .footer-inner{grid-template-columns:1fr;text-align:center;padding:15px 0}
+      .footer-meta{text-align:center}
+    }
+  </style>
+</head>
+<body>
+<header class="topbar">
+  <div class="container nav">
+    <a class="brand" href="#">
+      <div class="brand-logo">DdO<br>PM</div>
+      <div>
+        <h1>PROVINCIAL MEET 2025</h1>
+        <small>Stronger Together. Champions Forever!</small>
+      </div>
+    </a>
+
+    <nav class="nav-links" aria-label="Primary navigation">
+      <a class="nav-link" href="#"><span class="nav-icon">⌂</span>HOME</a>
+      <a class="nav-link" href="#"><span class="nav-icon">▣</span>SCHEDULE</a>
+      <a class="nav-link" href="#"><span class="nav-icon">♕</span>RESULTS</a>
+      <a class="nav-link active" href="#"><span class="live-mini">LIVE</span>LIVE SCORES</a>
+      <a class="nav-link" href="#"><span class="nav-icon">◁</span>NEWS & ANNOUNCEMENTS</a>
+      <a class="nav-link" href="#"><span class="nav-icon">▧</span>GALLERIES</a>
+    </nav>
+
+    <button class="mobile-menu" aria-label="Open menu">☰</button>
+    <button class="view-btn">👥 Public View⌄</button>
+  </div>
+</header>
+
+<section class="event-strip">
+  <div class="container">
+    <div class="crumbs">
+      <div class="sport-title"><span class="sport-ball">🥎</span>SOFTBALL</div>
+      <span class="chev">›</span>
+      <span class="crumb">Boys Secondary</span>
+      <span class="chev">›</span>
+      <span class="crumb">Elimination Round</span>
+      <span class="live-badge">LIVE NOW</span>
+    </div>
+    <div class="event-meta">
+      <span class="meta-item">▣ May 14, 2025</span><span class="meta-sep"></span>
+      <span class="meta-item">◷ 10:15 AM</span><span class="meta-sep"></span>
+      <span class="meta-item">⌖ Softball Field</span>
+    </div>
+  </div>
+</section>
+
+<main class="container main-grid">
+  <section>
+    <article class="card scoreboard">
+      <div class="score-top">
+        <div class="team">
+          <div class="logo home">MNHS</div>
+          <div>
+            <div class="score">7</div>
+            <div class="team-name">Mabini NHS</div>
+            <div class="team-city">Mabini</div>
+          </div>
+        </div>
+
+        <div class="inning-box">
+          <div class="inning-title">TOP OF 5TH</div>
+          <div class="diamond" aria-label="Runners on first and third base">
+            <span class="base second"></span>
+            <span class="base first"></span>
+            <span class="base third"></span>
+          </div>
+          <div class="count-line"><span>1 - 2</span>|<span>1 OUT</span></div>
+        </div>
+
+        <div class="team away">
+          <div>
+            <div class="score">3</div>
+            <div class="team-name">Montevista NHS</div>
+            <div class="team-city">Montevista</div>
+          </div>
+          <div class="logo away">MON</div>
+        </div>
+      </div>
+
+      <div class="count-box">
+        <div class="count-cell">
+          <div class="count-label">BALLS</div>
+          <div class="dots"><span class="dot ball on"></span><span class="dot ball"></span><span class="dot ball"></span></div>
+        </div>
+        <div class="count-cell">
+          <div class="count-label">STRIKES</div>
+          <div class="dots"><span class="dot strike on"></span><span class="dot strike on"></span><span class="dot strike"></span></div>
+        </div>
+        <div class="count-cell">
+          <div class="count-label">OUTS</div>
+          <div class="dots"><span class="dot out on"></span><span class="dot out"></span><span class="dot out"></span></div>
+        </div>
+      </div>
+
+      <div class="innings-wrap">
+        <table class="innings-table" aria-label="Softball innings score">
+          <thead>
+            <tr><th>TEAM</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>R</th><th>H</th><th>E</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Mabini NHS</td><td>2</td><td>0</td><td>1</td><td>4</td><td>–</td><td>–</td><td>–</td><td>7</td><td>8</td><td>1</td></tr>
+            <tr><td>Montevista NHS</td><td>0</td><td>1</td><td>0</td><td>2</td><td>–</td><td>–</td><td>–</td><td>3</td><td>5</td><td>2</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="legend">R - Runs &nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp; H - Hits &nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp; E - Errors</div>
+    </article>
+
+    <article class="card" style="margin-top:14px">
+      <div class="section-title">Live Play by Play</div>
+
+      <div class="play-row highlight">
+        <div class="inning-time"><strong>Top 5th</strong><small>10:27 AM</small></div>
+        <div class="play-icon">⚔️</div>
+        <div class="play-desc"><strong>#12 Juan Dela Cruz singles to right field.</strong><small>Runner advances to first base.</small></div>
+        <div class="play-score">7 - 3</div>
+      </div>
+
+      <div class="play-row">
+        <div class="inning-time"><strong>Top 5th</strong><small>10:25 AM</small></div>
+        <div class="play-icon">⚔️</div>
+        <div class="play-desc"><strong>#7 Mark Santos walks.</strong><small>Runner on first base.</small></div>
+        <div class="play-score">7 - 3</div>
+      </div>
+
+      <div class="play-row">
+        <div class="inning-time"><strong>Top 5th</strong><small>10:22 AM</small></div>
+        <div class="play-icon">⚔️</div>
+        <div class="play-desc"><strong>#15 Carlo Reyes strikes out swinging.</strong><small>1 out.</small></div>
+        <div class="play-score" style="color:var(--blue2)">7 - 3</div>
+      </div>
+
+      <div class="play-row">
+        <div class="inning-time"><strong>Bottom 4th</strong><small>10:18 AM</small></div>
+        <div class="play-icon">⚔️</div>
+        <div class="play-desc"><strong>#10 Kevin Garcia doubles to left center.</strong><small>Runner on second base.</small></div>
+        <div class="play-score" style="color:var(--blue2)">7 - 3</div>
+      </div>
+
+      <div class="play-row">
+        <div class="inning-time"><strong>Bottom 4th</strong><small>10:16 AM</small></div>
+        <div class="play-icon">⚔️</div>
+        <div class="play-desc"><strong>#8 Miguel Antonio singles up the middle.</strong><small>Runner advances to first base.</small></div>
+        <div class="play-score" style="color:var(--blue2)">7 - 3</div>
+      </div>
+
+      <div class="panel-footer">VIEW FULL PLAY BY PLAY &nbsp; →</div>
+    </article>
+  </section>
+
+  <aside class="sidebar">
+    <article class="card">
+      <div class="blue-title">Team Comparison</div>
+      <div class="comparison-head"><span>MABINI NHS</span><span>MONTEVISTA NHS</span></div>
+      <table class="comparison-table">
+        <tr><td>7</td><td>Runs</td><td>3</td></tr>
+        <tr><td>8</td><td>Hits</td><td>5</td></tr>
+        <tr><td>1</td><td>Errors</td><td>2</td></tr>
+        <tr><td>5</td><td>Walks</td><td>3</td></tr>
+        <tr><td>6</td><td>Strikeouts</td><td>4</td></tr>
+        <tr><td>2</td><td>Stolen Bases</td><td>1</td></tr>
+        <tr><td>.400</td><td>Batting Avg</td><td>.263</td></tr>
+        <tr><td>.750</td><td>Slugging %</td><td>.500</td></tr>
+      </table>
+    </article>
+
+    <article class="card">
+      <div class="blue-title">Top Performers</div>
+      <div class="performer-head"><div>MABINI NHS</div><div>MONTEVISTA NHS</div></div>
+      <div class="performers">
+        <div class="performer-col">
+          <div class="performer"><div class="avatar">👤</div><div><strong>#12 Juan Dela Cruz</strong><small>2-3, 2 RBI, 1 2B</small></div></div>
+          <div class="performer"><div class="avatar">👤</div><div><strong>#7 Mark Santos</strong><small>1-2, 1 RBI, 1 BB</small></div></div>
+          <div class="performer"><div class="avatar">👤</div><div><strong>#15 Carlo Reyes</strong><small>3.0 IP, 2 H, 1 R, 3 K</small></div></div>
+        </div>
+        <div class="performer-col">
+          <div class="performer"><div class="avatar">👤</div><div><strong>#10 Kevin Garcia</strong><small>2-3, 1 RBI, 1 2B</small></div></div>
+          <div class="performer"><div class="avatar">👤</div><div><strong>#8 Miguel Antonio</strong><small>1-2, 1 R, 1 BB</small></div></div>
+          <div class="performer"><div class="avatar">👤</div><div><strong>#11 Paolo Mendoza</strong><small>2.1 IP, 6 H, 5 R, 2 K</small></div></div>
+        </div>
+      </div>
+      <div class="scan-bar"><span>Swipe or scan for full statistics</span><span class="qr" aria-hidden="true"></span></div>
+    </article>
+
+    <article class="card">
+      <div class="blue-title">Current Pitcher</div>
+      <div class="pitchers">
+        <div class="pitcher-col">
+          <div class="pitcher-team home">MABINI NHS</div>
+          <div class="pitcher"><div class="avatar">👤</div><div><strong>#15 Carlo Reyes</strong><small>RHP | 3.0 IP, 2 H, 1 R, 3 K<br>Pitches: 48</small></div></div>
+        </div>
+        <div class="pitcher-col">
+          <div class="pitcher-team away">MONTEVISTA NHS</div>
+          <div class="pitcher"><div class="avatar">👤</div><div><strong>#11 Paolo Mendoza</strong><small>RHP | 2.1 IP, 6 H, 5 R, 2 K<br>Pitches: 52</small></div></div>
+        </div>
+      </div>
+    </article>
+  </aside>
+</main>
+
+<footer class="footer">
+  <div class="container footer-inner">
+    <div class="motto">🏆 &nbsp; ONE MEET. ONE SPIRIT. ONE CHAMPION.</div>
+    <div class="sync">ⓘ &nbsp; All games are updated in real time.</div>
+    <div class="footer-meta">Provincial Meet 2025 &nbsp; | &nbsp; DepEd Division &nbsp; ◉</div>
+  </div>
+</footer>
+
+<script>
+  // Lightweight demonstration data.
+  // Replace with your Laravel/Inertia data source.
+  const liveGame = {
+    homeScore: 7,
+    awayScore: 3,
+    inning: "TOP OF 5TH",
+    balls: 1,
+    strikes: 2,
+    outs: 1
+  };
+
+  // Recommended update strategy:
+  // 1. Poll only when the game status is LIVE.
+  // 2. Pause polling when document.hidden is true.
+  // 3. Update only changed fields.
+  // 4. Use a 5–10 second interval for public display pages.
+  //
+  // Example:
+  // setInterval(async () => {
+  //   if (document.hidden) return;
+  //   const response = await fetch('/api/public/softball/games/123/live');
+  //   const data = await response.json();
+  //   updateLiveGame(data);
+  // }, 8000);
+</script>
+</body>
+</html>

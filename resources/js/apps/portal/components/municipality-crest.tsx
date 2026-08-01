@@ -2,16 +2,23 @@ import { cn } from '@/apps/portal/lib/utils';
 
 type MunicipalityCrestProps = {
     name: string;
+    logoUrl?: string | null;
     size?: 'sm' | 'md' | 'lg';
+    /** 'circle' (default) — the usual ringed badge, used for rankings/
+     * standings/home. 'square' drops the circular crop and the ring
+     * outline entirely, for both the real-logo image and the initials
+     * placeholder — used on the live scoreboards and the emphasized
+     * ranking tables, where a plain square tile reads better than a
+     * ringed circle. */
+    shape?: 'circle' | 'square';
     className?: string;
 };
 
-/** A visible, on-brand stand-in for a real municipality logo. PMMS has
- * no logo-upload infrastructure or stored image for any municipality
- * (no DB column, no uploaded file, anywhere) — this deterministically
- * picks one of the Division's own colors per municipality name, so
- * every crest still reads as branded rather than a generic gray
- * placeholder, until real logo uploads exist. */
+/** A visible, on-brand stand-in for a real municipality logo. Renders the
+ * admin-uploaded crest (District::logo, served by `districts.logo`) when
+ * `logoUrl` is given; falls back to a deterministic initials badge —
+ * picking one of the Division's own colors per municipality name — for
+ * every municipality that hasn't had a crest uploaded yet. */
 const TONES = [
     { bg: 'var(--portal-accent)', fg: 'var(--portal-accent-foreground)', ring: 'var(--portal-accent)' },
     { bg: 'var(--portal-ink)', fg: 'var(--portal-ink-foreground)', ring: 'var(--portal-ink)' },
@@ -48,17 +55,40 @@ const sizeClasses: Record<NonNullable<MunicipalityCrestProps['size']>, string> =
     lg: 'size-20 text-2xl sm:size-24 sm:text-3xl ring-2',
 };
 
-export function MunicipalityCrest({ name, size = 'md', className }: MunicipalityCrestProps) {
+export function MunicipalityCrest({ name, logoUrl, size = 'md', shape = 'circle', className }: MunicipalityCrestProps) {
+    if (logoUrl) {
+        return (
+            <img
+                src={logoUrl}
+                alt={`${name} crest`}
+                className={cn(
+                    sizeClasses[size],
+                    'shrink-0 object-cover',
+                    shape === 'circle'
+                        ? 'rounded-full shadow-md ring-2 ring-offset-2 ring-offset-[var(--portal-surface)]'
+                        : 'ring-0',
+                    className,
+                )}
+                style={shape === 'circle' ? { ['--tw-ring-color' as string]: 'var(--portal-border)' } : undefined}
+            />
+        );
+    }
+
     const tone = crestToneFor(name);
 
     return (
         <span
             className={cn(
-                'portal-icon-badge shrink-0 font-bold shadow-md ring-offset-2 ring-offset-[var(--portal-surface)]',
                 sizeClasses[size],
+                'inline-flex shrink-0 items-center justify-center font-bold shadow-md ring-offset-2 ring-offset-[var(--portal-surface)]',
+                shape === 'circle' ? 'rounded-full' : 'rounded-none ring-0',
                 className,
             )}
-            style={{ backgroundColor: tone.bg, color: tone.fg, ['--tw-ring-color' as string]: tone.ring }}
+            style={{
+                backgroundColor: tone.bg,
+                color: tone.fg,
+                ...(shape === 'circle' ? { ['--tw-ring-color' as string]: tone.ring } : {}),
+            }}
             aria-hidden="true"
         >
             {initialsFor(name)}

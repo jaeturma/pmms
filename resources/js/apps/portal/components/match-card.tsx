@@ -1,12 +1,17 @@
+import { Link } from '@inertiajs/react';
 import { Clock, MapPin } from 'lucide-react';
-import { cn } from '@/apps/portal/lib/utils';
 import { MunicipalityCrest, MunicipalityWatermark } from '@/apps/portal/components/municipality-crest';
+import { cn } from '@/apps/portal/lib/utils';
 import type { PortalGame } from '@/apps/portal/types';
 
 type PortalMatchCardProps = {
     game: PortalGame;
     showScore?: boolean;
     className?: string;
+    /** When set, the whole card becomes a link (e.g. to that game's
+     * result/play-by-play detail) — omitted, the card stays a plain,
+     * unlinked summary (today's/upcoming games). */
+    href?: string;
 };
 
 const statusToneClasses: Record<string, string> = {
@@ -15,13 +20,16 @@ const statusToneClasses: Record<string, string> = {
     scheduled: 'bg-[var(--portal-accent-soft)] text-[var(--portal-accent)]',
 };
 
-export function PortalMatchCard({ game, showScore = false, className }: PortalMatchCardProps) {
+export function PortalMatchCard({ game, showScore = false, className, href }: PortalMatchCardProps) {
     const toneClass = statusToneClasses[game.status] ?? statusToneClasses.scheduled;
+    const Container = href ? Link : 'div';
 
     return (
-        <div
+        <Container
+            {...(href ? { href } : {})}
             className={cn(
                 'portal-animate-in relative overflow-hidden rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4 text-[var(--portal-surface-foreground)]',
+                href && 'block transition-colors hover:border-[var(--portal-accent)] hover:bg-[var(--portal-muted)]',
                 className,
             )}
         >
@@ -68,6 +76,6 @@ export function PortalMatchCard({ game, showScore = false, className }: PortalMa
                     </span>
                 )}
             </div>
-        </div>
+        </Container>
     );
 }

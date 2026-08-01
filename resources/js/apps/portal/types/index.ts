@@ -10,6 +10,7 @@ export type PortalMeetSummary = {
     name: string;
     school_year: string;
     starts_at: string;
+    starts_at_iso: string;
     ends_at: string;
     venue: string | null;
     status_label: string;
@@ -27,6 +28,7 @@ export type PortalMunicipality = {
     id: number;
     name: string;
     nickname: string | null;
+    logo_url: string | null;
 };
 
 export type PortalLeader = {
@@ -97,6 +99,19 @@ export type PortalGame = {
     mark: string | null;
 };
 
+export type PortalPlayByPlayEntry = {
+    id: number;
+    description: string;
+    score_a: number;
+    score_b: number;
+    created_at: string | null;
+};
+
+export type PortalAthleteParticipant = {
+    name: string;
+    sports_photo_url: string | null;
+};
+
 export type PortalLiveSession = {
     id: number;
     match_id: number;
@@ -104,12 +119,17 @@ export type PortalLiveSession = {
     status_label: string;
     side_a_label: string | null;
     side_b_label: string | null;
+    side_a_logo_url: string | null;
+    side_b_logo_url: string | null;
+    side_a_athlete: PortalAthleteParticipant | null;
+    side_b_athlete: PortalAthleteParticipant | null;
     score_a: number | null;
     score_b: number | null;
     period_label: string | null;
     status_note: string | null;
     board_type: string;
     sport_state: Record<string, unknown> | null;
+    playByPlay: PortalPlayByPlayEntry[];
     started_at: string | null;
     elapsed_seconds: number;
     clock_running: boolean;
@@ -120,6 +140,8 @@ export type PortalLiveNow = {
     round_label: string | null;
     category: string;
     venue: string | null;
+    scheduled_date: string | null;
+    starts_at: string | null;
     session: PortalLiveSession;
 };
 
@@ -183,6 +205,8 @@ export type PortalAgeDivisionOption = {
 
 export type PortalStandingRow = {
     district: string;
+    district_id?: number;
+    logo_url?: string | null;
     gold: number;
     silver: number;
     bronze: number;
@@ -265,7 +289,10 @@ export type PortalMatchSummary = {
     sport: string;
     category: string;
     round_label: string | null;
+    status: string;
+    status_label: string;
     venue: string | null;
     scheduled_date: string | null;
+    starts_at: string | null;
     scheduled_start_at: string | null;
 };

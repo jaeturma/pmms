@@ -104,3 +104,49 @@ test('sports without events can be deleted', function () {
 
     expect(AuditLog::query()->where('action', 'sport.deleted')->exists())->toBeTrue();
 });
+
+test('the sports catalog lists technical official options and current assignments', function () {
+    $sport = Sport::factory()->create();
+    $official = User::factory()->technicalOfficial()->create();
+    $sport->technicalOfficials()->attach($official);
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->get('/sports')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('sports.data.0.technical_officials.0.id', $official->id)
+            ->has('technicalOfficialOptions', 1));
+});
+
+test('organizers can assign technical officials to a sport', function () {
+    $sport = Sport::factory()->create();
+    $official = User::factory()->technicalOfficial()->create();
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->put("/sports/{$sport->id}/technical-officials", ['user_ids' => [$official->id]])
+        ->assertRedirect();
+
+    expect($sport->technicalOfficials()->whereKey($official->id)->exists())->toBeTrue()
+        ->and(AuditLog::query()->where('action', 'sport.technical_officials_updated')->exists())->toBeTrue();
+});
+
+test('assigning technical officials rejects a user id that is not a technical official', function () {
+    $sport = Sport::factory()->create();
+    $notAnOfficial = User::factory()->delegationOfficer()->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put("/sports/{$sport->id}/technical-officials", ['user_ids' => [$notAnOfficial->id]])
+        ->assertSessionHasErrors('user_ids.0');
+
+    expect($sport->technicalOfficials()->count())->toBe(0);
+});
+
+test('viewers and delegation officers cannot assign technical officials', function (User $user) {
+    $sport = Sport::factory()->create();
+
+    $this->actingAs($user)
+        ->put("/sports/{$sport->id}/technical-officials", ['user_ids' => []])
+        ->assertForbidden();
+})->with([
+    'viewer' => fn () => User::factory()->create(),
+    'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+]);

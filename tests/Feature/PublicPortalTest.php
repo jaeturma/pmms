@@ -37,7 +37,7 @@ test('portal meet props carry public-safe fields only', function () {
     $this->get('/')
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('meet', fn (AssertableInertia $meet) => $meet
-                ->hasAll(['id', 'name', 'school_year', 'starts_at', 'ends_at', 'venue', 'status_label'])
+                ->hasAll(['id', 'name', 'school_year', 'starts_at', 'starts_at_iso', 'ends_at', 'venue', 'status_label'])
                 ->missing('is_published')
                 ->missing('is_active')
                 ->missing('status')));

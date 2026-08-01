@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\MatchStatus;
+use App\Enums\ScoringSessionStatus;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
@@ -103,6 +104,74 @@ test('a delegation officer can view their own delegation\'s match but not anothe
         ->assertForbidden();
 });
 
+test('a technical official can view a match in their assigned sport but not another sport', function () {
+    $match = basketballMatch();
+    $otherSportMatch = boxingMatch();
+
+    $official = User::factory()->technicalOfficial()->create();
+    $official->sports()->attach($match->event->sport_id);
+
+    $this->actingAs($official)
+        ->get("/matches/{$match->id}/scoring-session")
+        ->assertOk()
+        ->assertJson(['session' => null]);
+
+    $this->actingAs($official)
+        ->get("/matches/{$otherSportMatch->id}/scoring-session")
+        ->assertForbidden();
+});
+
+test('a technical official can run a full basketball scoring session for their assigned sport', function () {
+    $match = basketballMatch();
+    $official = User::factory()->technicalOfficial()->create();
+    $official->sports()->attach($match->event->sport_id);
+
+    $this->actingAs($official)
+        ->get("/matches/{$match->id}/scoreboard")
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page->where('canManage', true));
+
+    $this->actingAs($official)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'A', 'side_b_label' => 'B'])
+        ->assertRedirect();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    $this->actingAs($official)
+        ->patch("/scoring-sessions/{$session->id}/score", ['type' => 'point', 'side' => 'a', 'delta' => 2])
+        ->assertRedirect();
+
+    $this->actingAs($official)
+        ->patch("/scoring-sessions/{$session->id}/foul", ['action' => 'add', 'side' => 'a'])
+        ->assertRedirect();
+
+    $this->actingAs($official)
+        ->patch("/scoring-sessions/{$session->id}/end", [])
+        ->assertRedirect();
+
+    $session->refresh();
+
+    expect($session->score_a)->toBe(2)
+        ->and($session->sport_state['fouls_a'])->toBe(1)
+        ->and($session->status)->toBe(ScoringSessionStatus::Ended);
+});
+
+test('a technical official cannot run scoring for a match outside their assigned sport', function () {
+    $basketball = basketballMatch();
+    $boxing = boxingMatch();
+
+    $official = User::factory()->technicalOfficial()->create();
+    $official->sports()->attach($basketball->event->sport_id);
+
+    $this->actingAs($official)
+        ->post("/matches/{$boxing->id}/scoring-sessions", ['side_a_label' => 'A', 'side_b_label' => 'B'])
+        ->assertForbidden();
+
+    $this->actingAs($official)
+        ->get("/matches/{$boxing->id}/scoreboard")
+        ->assertForbidden();
+});
+
 test('non-managers cannot start, score, or end a scoring session', function (User $user) {
     $match = EventMatch::factory()->create();
 
@@ -122,6 +191,7 @@ test('non-managers cannot start, score, or end a scoring session', function (Use
 })->with([
     'viewer' => fn () => User::factory()->create(),
     'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+    'technical official not assigned to this match\'s sport' => fn () => User::factory()->technicalOfficial()->create(),
 ]);
 
 test('a session can only be started for a scheduled match', function () {
@@ -569,6 +639,56 @@ test('starting a session for a boxing match initializes an empty round history a
     expect($session->toLivePayload())->toMatchArray([
         'board_type' => 'boxing',
         'sport_state' => ['rounds' => []],
+    ]);
+});
+
+test('the live payload resolves each corner\'s athlete and sports photo for a two-entry individual bout', function () {
+    $match = boxingMatch();
+    $entryA = confirmedEntryForScoringSession($match);
+    $entryB = confirmedEntryForScoringSession($match);
+    $match->entries()->attach([$entryA->id, $entryB->id]);
+
+    $sportsPhoto = FileUpload::factory()->create();
+    $entryA->athlete->forceFill(['sports_photo_upload_id' => $sportsPhoto->id])->save();
+
+    $session = ScoringSession::factory()->create(['match_id' => $match->id]);
+
+    $payload = $session->toLivePayload();
+
+    expect($payload['side_a_athlete'])->toBe([
+        'name' => $entryA->athlete->fullName(),
+        'sports_photo_url' => route('athletes.sports-photo', $entryA->athlete),
+    ])->and($payload['side_b_athlete'])->toBe([
+        'name' => $entryB->athlete->fullName(),
+        'sports_photo_url' => null,
+    ]);
+});
+
+test('the live payload leaves side athletes null when the bout has other than two entries', function () {
+    $match = boxingMatch();
+    $entryA = confirmedEntryForScoringSession($match);
+    $match->entries()->attach($entryA->id);
+
+    $session = ScoringSession::factory()->create(['match_id' => $match->id]);
+
+    expect($session->toLivePayload())->toMatchArray([
+        'side_a_athlete' => null,
+        'side_b_athlete' => null,
+    ]);
+});
+
+test('the live payload leaves side athletes null for a team event even with two entries', function () {
+    $match = basketballMatch();
+    $match->event()->update(['is_team_event' => true]);
+    $entryA = confirmedEntryForScoringSession($match);
+    $entryB = confirmedEntryForScoringSession($match);
+    $match->entries()->attach([$entryA->id, $entryB->id]);
+
+    $session = ScoringSession::factory()->create(['match_id' => $match->id]);
+
+    expect($session->toLivePayload())->toMatchArray([
+        'side_a_athlete' => null,
+        'side_b_athlete' => null,
     ]);
 });
 

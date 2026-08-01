@@ -120,6 +120,8 @@ class ScoringSession extends Model
      */
     public function toLivePayload(): array
     {
+        [$sideAAthlete, $sideBAthlete] = $this->athleteParticipants();
+
         return [
             'id' => $this->id,
             'match_id' => $this->match_id,
@@ -127,6 +129,10 @@ class ScoringSession extends Model
             'status_label' => $this->status->label(),
             'side_a_label' => $this->side_a_label,
             'side_b_label' => $this->side_b_label,
+            'side_a_logo_url' => $this->districtLogoUrl($this->side_a_label),
+            'side_b_logo_url' => $this->districtLogoUrl($this->side_b_label),
+            'side_a_athlete' => $sideAAthlete,
+            'side_b_athlete' => $sideBAthlete,
             'score_a' => $this->score_a,
             'score_b' => $this->score_b,
             'period_label' => $this->period_label,
@@ -138,6 +144,59 @@ class ScoringSession extends Model
             'elapsed_seconds' => $this->activeElapsedSeconds(),
             'clock_running' => $this->status === ScoringSessionStatus::InProgress,
         ];
+    }
+
+    /**
+     * A side's real crest, matched by name — `side_a_label`/`side_b_label`
+     * are freeform text entered when the session started (never an FK to
+     * `District`), but they're conventionally a delegation's
+     * `registrantName()`, which for a Province division IS the
+     * municipality's own name. A City division's school-named side, or
+     * any label that doesn't match a district, simply gets no logo here —
+     * `MunicipalityCrest` already falls back to its initials badge.
+     */
+    private function districtLogoUrl(?string $label): ?string
+    {
+        if ($label === null || $label === '') {
+            return null;
+        }
+
+        return District::query()->where('name', $label)->first()?->logoUrl();
+    }
+
+    /**
+     * The two individual athletes fighting this bout, keyed positionally
+     * to side A/side B — same convention `ScoringSessionController::
+     * matchParticipants()` already uses for the operator console. Only
+     * meaningful for a one-on-one individual event (boxing today); a team
+     * event's `match.entries` is a full roster, not two corners, so this
+     * intentionally returns `[null, null]` unless there are exactly two.
+     * `side_a_label`/`side_b_label` stay the free-text display line
+     * regardless — this only adds the athlete's name/sports photo on top
+     * of it when one can be resolved.
+     *
+     * @return array{0: array{name: string, sports_photo_url: ?string}|null, 1: array{name: string, sports_photo_url: ?string}|null}
+     */
+    private function athleteParticipants(): array
+    {
+        $this->loadMissing('match.event', 'match.entries.athlete');
+
+        if ($this->match->event->is_team_event) {
+            return [null, null];
+        }
+
+        $entries = $this->match->entries;
+
+        if ($entries->count() !== 2) {
+            return [null, null];
+        }
+
+        $describe = fn (Entry $entry): array => [
+            'name' => $entry->athlete->fullName(),
+            'sports_photo_url' => $entry->athlete->sportsPhotoUrl(),
+        ];
+
+        return [$describe($entries[0]), $describe($entries[1])];
     }
 
     /**

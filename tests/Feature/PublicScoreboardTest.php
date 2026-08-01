@@ -3,7 +3,9 @@
 use App\Enums\MatchStatus;
 use App\Models\Event;
 use App\Models\EventMatch;
+use App\Models\EventResult;
 use App\Models\Meet;
+use App\Models\ResultPlacement;
 use App\Models\ScoringSession;
 use App\Models\Sport;
 use Inertia\Testing\AssertableInertia;
@@ -113,6 +115,64 @@ test('the public scoreboard never exposes participant photos, even for a boxing 
     $this->get("/meets/{$meet->id}/matches/{$match->id}/scoreboard")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->missing('participants'));
+});
+
+test('a completed match that never used live scoring falls back to its event\'s validated official result', function () {
+    $meet = Meet::factory()->active()->published()->create();
+    $event = Event::factory()->create();
+    $match = EventMatch::factory()->create([
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+        'status' => MatchStatus::Completed,
+    ]);
+
+    $result = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $event->id]);
+    $placement = ResultPlacement::factory()->create([
+        'event_result_id' => $result->id,
+        'rank' => 1,
+        'mark' => '2:14.3',
+    ]);
+
+    $this->get("/meets/{$meet->id}/matches/{$match->id}/scoreboard")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('session', null)
+            ->where('match.status', 'completed')
+            ->where('officialResult.placements.0.rank', 1)
+            ->where('officialResult.placements.0.athlete', $placement->entry->athlete->fullName())
+            ->where('officialResult.placements.0.mark', '2:14.3'));
+});
+
+test('a completed match shows no official result when its event has no validated result yet', function () {
+    $meet = Meet::factory()->active()->published()->create();
+    $match = EventMatch::factory()->create([
+        'meet_id' => $meet->id,
+        'status' => MatchStatus::Completed,
+    ]);
+
+    $this->get("/meets/{$meet->id}/matches/{$match->id}/scoreboard")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('session', null)
+            ->where('officialResult', null));
+});
+
+test('a match with a scoring session never falls back to the event\'s official result, even once ended', function () {
+    $meet = Meet::factory()->active()->published()->create();
+    $event = Event::factory()->create();
+    $match = EventMatch::factory()->create([
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+        'status' => MatchStatus::Completed,
+    ]);
+
+    ScoringSession::factory()->ended()->create(['match_id' => $match->id, 'score_a' => 54, 'score_b' => 49]);
+
+    $result = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $event->id]);
+    ResultPlacement::factory()->create(['event_result_id' => $result->id]);
+
+    $this->get("/meets/{$meet->id}/matches/{$match->id}/scoreboard")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('session.score_a', 54)
+            ->where('officialResult', null));
 });
 
 test('the public scoreboard poll endpoint returns the same read-only payload', function () {

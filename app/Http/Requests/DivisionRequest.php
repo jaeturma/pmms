@@ -18,6 +18,8 @@ class DivisionRequest extends FormRequest
     {
         $rules = [
             'name' => ['required', 'string', 'max:160'],
+            'logo' => ['nullable', 'image', 'max:2048'],
+            'remove_logo' => ['nullable', 'boolean'],
         ];
 
         if (! Division::current()->typeIsLocked()) {

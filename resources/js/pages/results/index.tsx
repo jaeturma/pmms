@@ -91,6 +91,11 @@ type Props = {
     encodedEventKeys: string[];
     entryOptions: EntryOption[];
     canManage: boolean;
+    /** Superset of `canManage` — also true for a Technical Official
+     * viewing/encoding results for their own assigned sport (Phase 16).
+     * Governs the encode form and the "Edit" action; validate/correct/
+     * delete stay gated on `canManage` alone. */
+    canEncode: boolean;
 };
 
 function EncodeDialog({
@@ -442,6 +447,7 @@ export default function Results({
     encodedEventKeys,
     entryOptions,
     canManage,
+    canEncode,
 }: Props) {
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<Result | null>(null);
@@ -501,12 +507,12 @@ export default function Results({
                 <PageHeader
                     title="Results"
                     description={
-                        canManage
+                        canEncode
                             ? 'Encode standings, then validate them to make them official.'
                             : 'Validated results per meet event.'
                     }
                     actions={
-                        canManage &&
+                        canEncode &&
                         activeMeets.length > 0 && (
                             <Button onClick={openCreate}>
                                 <Plus />
@@ -572,7 +578,7 @@ export default function Results({
                         icon={Award}
                         title="No results found"
                         description={
-                            canManage
+                            canEncode
                                 ? 'Encode an event standing to get started.'
                                 : 'Validated event results will appear here.'
                         }
@@ -613,7 +619,7 @@ export default function Results({
                                         >
                                             {result.status_label}
                                         </Badge>
-                                        {canManage &&
+                                        {canEncode &&
                                             result.status === 'encoded' && (
                                                 <>
                                                     <Button
@@ -625,51 +631,55 @@ export default function Results({
                                                     >
                                                         Edit
                                                     </Button>
-                                                    <ConfirmDialog
-                                                        trigger={
-                                                            <Button size="sm">
-                                                                Validate
-                                                            </Button>
-                                                        }
-                                                        title="Validate result?"
-                                                        description="Validation makes this standing official and locks it. Corrections afterwards require a reason and are audited."
-                                                        confirmLabel="Validate"
-                                                        onConfirm={() =>
-                                                            router.patch(
-                                                                validate(
-                                                                    result.id,
-                                                                ).url,
-                                                                {},
-                                                                {
-                                                                    preserveScroll: true,
-                                                                },
-                                                            )
-                                                        }
-                                                    />
-                                                    <ConfirmDialog
-                                                        trigger={
-                                                            <Button
-                                                                variant="destructive"
-                                                                size="sm"
-                                                            >
-                                                                Delete
-                                                            </Button>
-                                                        }
-                                                        title="Delete result?"
-                                                        description="This removes the encoded standing. Validated results cannot be deleted."
-                                                        confirmLabel="Delete"
-                                                        destructive
-                                                        onConfirm={() =>
-                                                            router.delete(
-                                                                destroy(
-                                                                    result.id,
-                                                                ).url,
-                                                                {
-                                                                    preserveScroll: true,
-                                                                },
-                                                            )
-                                                        }
-                                                    />
+                                                    {canManage && (
+                                                        <>
+                                                            <ConfirmDialog
+                                                                trigger={
+                                                                    <Button size="sm">
+                                                                        Validate
+                                                                    </Button>
+                                                                }
+                                                                title="Validate result?"
+                                                                description="Validation makes this standing official and locks it. Corrections afterwards require a reason and are audited."
+                                                                confirmLabel="Validate"
+                                                                onConfirm={() =>
+                                                                    router.patch(
+                                                                        validate(
+                                                                            result.id,
+                                                                        ).url,
+                                                                        {},
+                                                                        {
+                                                                            preserveScroll: true,
+                                                                        },
+                                                                    )
+                                                                }
+                                                            />
+                                                            <ConfirmDialog
+                                                                trigger={
+                                                                    <Button
+                                                                        variant="destructive"
+                                                                        size="sm"
+                                                                    >
+                                                                        Delete
+                                                                    </Button>
+                                                                }
+                                                                title="Delete result?"
+                                                                description="This removes the encoded standing. Validated results cannot be deleted."
+                                                                confirmLabel="Delete"
+                                                                destructive
+                                                                onConfirm={() =>
+                                                                    router.delete(
+                                                                        destroy(
+                                                                            result.id,
+                                                                        ).url,
+                                                                        {
+                                                                            preserveScroll: true,
+                                                                        },
+                                                                    )
+                                                                }
+                                                            />
+                                                        </>
+                                                    )}
                                                 </>
                                             )}
                                         {result.status === 'validated' && (
@@ -756,7 +766,7 @@ export default function Results({
                 />
             </div>
 
-            {canManage && (
+            {canEncode && (
                 <EncodeDialog
                     key={editing?.id ?? 'create'}
                     result={editing}

@@ -14,7 +14,6 @@ use App\Services\AuditLogger;
 use App\Services\FileUploadService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -130,12 +129,10 @@ class PersonnelController extends Controller
 
         $person = new Personnel($request->safe()->except(['photo']));
 
-        $photo = $request->file('photo');
-
-        if ($photo instanceof UploadedFile) {
+        if ($request->hasFile('photo')) {
             /** @var User $user */
             $user = $request->user();
-            $person->photo_upload_id = $this->uploads->store($photo, $user)->id;
+            $person->photo_upload_id = $this->uploads->store($request->file('photo'), $user, 'photo')->id;
         }
 
         $person->save();
@@ -163,13 +160,12 @@ class PersonnelController extends Controller
         $personnel->fill($request->safe()->except(['photo', 'delegation_id']));
 
         $oldPhoto = null;
-        $photo = $request->file('photo');
 
-        if ($photo instanceof UploadedFile) {
+        if ($request->hasFile('photo')) {
             /** @var User $user */
             $user = $request->user();
             $oldPhoto = $personnel->photo;
-            $personnel->photo_upload_id = $this->uploads->store($photo, $user)->id;
+            $personnel->photo_upload_id = $this->uploads->store($request->file('photo'), $user, 'photo')->id;
         }
 
         $personnel->save();

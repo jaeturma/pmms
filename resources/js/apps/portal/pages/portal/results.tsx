@@ -1,11 +1,12 @@
 import { Head, router } from '@inertiajs/react';
 import { Award } from 'lucide-react';
-import { results as publicResults } from '@/routes/public';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { PortalHero } from '@/apps/portal/components/hero';
+import { PortalResultPlacements } from '@/apps/portal/components/result-placements';
 import { PortalSectionHeader } from '@/apps/portal/components/section-header';
 import { PortalSelect } from '@/apps/portal/components/select';
 import type { PortalMeetSummary, PortalResultRow, PortalSportOption } from '@/apps/portal/types';
+import { results as publicResults } from '@/routes/public';
 
 type Props = {
     meet: PortalMeetSummary;
@@ -44,29 +45,11 @@ export default function PortalResults({ meet, results, filters, sportOptions }: 
                 ) : (
                     <div className="space-y-4">
                         {results.map((result) => (
-                            <div key={result.id} className="portal-animate-in rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4">
-                                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                                    <p className="font-semibold">{result.event}</p>
-                                    {result.official_as_of && (
-                                        <p className="text-xs text-[var(--portal-muted-foreground)]">Official as of {result.official_as_of}</p>
-                                    )}
-                                </div>
-                                <ol className="mt-3 space-y-1.5 text-sm">
-                                    {result.placements.map((placement) => (
-                                        <li key={placement.rank} className="flex flex-wrap items-baseline justify-between gap-2">
-                                            <span>
-                                                <span className="mr-2 font-semibold tabular-nums">{placement.rank}.</span>
-                                                {placement.athlete}
-                                                {placement.is_tie && <span className="ml-1 text-xs text-[var(--portal-muted-foreground)]">(tie)</span>}
-                                            </span>
-                                            <span className="text-[var(--portal-muted-foreground)]">
-                                                {placement.school} · {placement.delegation}
-                                                {placement.mark && <span className="ml-2 font-medium text-[var(--portal-fg)]">{placement.mark}</span>}
-                                            </span>
-                                        </li>
-                                    ))}
-                                </ol>
-                            </div>
+                            <PortalResultPlacements
+                                key={result.id}
+                                result={result}
+                                className="portal-animate-in rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4"
+                            />
                         ))}
                     </div>
                 )}

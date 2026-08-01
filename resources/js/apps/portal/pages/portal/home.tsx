@@ -1,10 +1,12 @@
-import { Head, Link } from '@inertiajs/react';
-import { Award, CalendarClock, CalendarDays, Crown, Flag, MapPin, Radio, Users } from 'lucide-react';
-import { meet as publicMeet, results as publicResults, tally as publicTally } from '@/routes/public';
+import { Head, Link, usePage } from '@inertiajs/react';
+import { Award, CalendarClock, CalendarDays, Crown, Dumbbell, Flag, Images, MapPin, Radio, Trophy, Users } from 'lucide-react';
 import { PortalButton } from '@/apps/portal/components/button';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { PortalHero } from '@/apps/portal/components/hero';
+import { PortalLandingHero } from '@/apps/portal/components/landing-hero';
 import { MunicipalityCrest } from '@/apps/portal/components/municipality-crest';
+import { PortalQuickNav } from '@/apps/portal/components/quick-nav';
+import type { PortalQuickNavItem } from '@/apps/portal/components/quick-nav';
 import { PortalSectionHeader } from '@/apps/portal/components/section-header';
 import { PortalStandingsTable } from '@/apps/portal/components/standings-table';
 import type {
@@ -17,6 +19,8 @@ import type {
     PortalMunicipality,
     PortalUpcomingEvent,
 } from '@/apps/portal/types';
+import { home } from '@/routes';
+import { gallery as publicGallery, meet as publicMeet, results as publicResults, sports as publicSports, tally as publicTally } from '@/routes/public';
 
 type Props = {
     meet: PortalMeetSummary | null;
@@ -39,6 +43,8 @@ export default function PortalHome({
     latestResult,
     closingSummary,
 }: Props) {
+    const { props } = usePage<{ division: { logoUrl: string | null } }>();
+
     if (meet === null) {
         return (
             <>
@@ -58,14 +64,26 @@ export default function PortalHome({
         );
     }
 
+    const quickNavItems: PortalQuickNavItem[] = [
+        { label: 'Schedule', href: publicMeet(meet.id).url, icon: CalendarDays },
+        { label: 'Results', href: publicResults(meet.id).url, icon: Award },
+        { label: 'Medal Tally', href: publicTally(meet.id).url, icon: Trophy },
+        { label: 'Municipalities', href: `${home().url}#municipalities`, icon: Users },
+        { label: 'Sports', href: publicSports(meet.id).url, icon: Dumbbell },
+        { label: 'Gallery', href: publicGallery(meet.id).url, icon: Images },
+        { label: 'Live Now', href: `${home().url}#live-now`, icon: Radio, live: liveMatches.length > 0 },
+    ];
+
     return (
         <>
             <Head title={meet.name} />
             <div className="flex flex-col gap-10">
-                <PortalHero
+                <PortalLandingHero
                     eyebrow={meet.status_label}
                     title={meet.name}
                     description="Schedules, results, and medal standings of the Schools Division Office athletic meet."
+                    startsAtIso={meet.starts_at_iso}
+                    divisionLogoUrl={props.division.logoUrl}
                     meta={
                         <>
                             <span>SY {meet.school_year}</span>
@@ -95,6 +113,8 @@ export default function PortalHome({
                         </>
                     }
                 />
+
+                <PortalQuickNav items={quickNavItems} />
 
                 {closingSummary && (
                     <div className="portal-animate-in flex flex-wrap items-center gap-4 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-5">
@@ -132,7 +152,7 @@ export default function PortalHome({
                     )}
                 </section>
 
-                <section className="space-y-3">
+                <section id="live-now" className="scroll-mt-20 space-y-3">
                     <PortalSectionHeader
                         title="Live now"
                         action={
@@ -231,7 +251,7 @@ export default function PortalHome({
                     </div>
                 </section>
 
-                <section className="space-y-3">
+                <section id="municipalities" className="scroll-mt-20 space-y-3">
                     <PortalSectionHeader
                         title="Competing municipalities"
                         action={municipalities.length > 0 && <span className="text-sm text-[var(--portal-muted-foreground)]">{municipalities.length}</span>}
@@ -245,7 +265,7 @@ export default function PortalHome({
                                     key={municipality.id}
                                     className="portal-animate-in flex flex-col items-center gap-2 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4 text-center transition-transform hover:-translate-y-0.5"
                                 >
-                                    <MunicipalityCrest name={municipality.name} size="lg" />
+                                    <MunicipalityCrest name={municipality.name} logoUrl={municipality.logo_url} size="lg" />
                                     <div>
                                         <p className="text-sm leading-snug font-medium">{municipality.name}</p>
                                         {municipality.nickname && (

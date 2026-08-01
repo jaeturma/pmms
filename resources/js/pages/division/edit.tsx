@@ -17,6 +17,8 @@ import {
 } from '@/components/ui/select';
 import { edit, update } from '@/routes/division';
 
+const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024;
+
 type DivisionType = 'city' | 'province';
 
 type Props = {
@@ -24,19 +26,29 @@ type Props = {
         type: DivisionType;
         name: string;
         areaLabel: string;
+        logo_url: string | null;
     };
     typeLocked: boolean;
 };
 
 export default function DivisionEdit({ division, typeLocked }: Props) {
-    const { data, setData, patch, processing, errors } = useForm({
+    const { data, setData, post, processing, errors, setError, clearErrors } = useForm<{
+        _method: string;
+        name: string;
+        type: DivisionType;
+        logo: File | null;
+        remove_logo: boolean;
+    }>({
+        _method: 'patch',
         name: division.name,
         type: division.type,
+        logo: null,
+        remove_logo: false,
     });
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        patch(update().url, { preserveScroll: true });
+        post(update().url, { preserveScroll: true });
     };
 
     return (
@@ -107,6 +119,72 @@ export default function DivisionEdit({ division, typeLocked }: Props) {
                                 </span>
                                 . Individual schools remain visible in standings
                                 either way.
+                            </p>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="division-logo">
+                                Site logo (optional, max 2MB)
+                            </Label>
+                            {division.logo_url && !data.logo && !data.remove_logo && (
+                                <div className="flex items-center gap-3">
+                                    <img
+                                        src={division.logo_url}
+                                        alt=""
+                                        className="size-12 rounded-full border object-cover"
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                            setData('remove_logo', true)
+                                        }
+                                    >
+                                        Remove
+                                    </Button>
+                                </div>
+                            )}
+                            {data.remove_logo && (
+                                <p className="text-sm text-muted-foreground">
+                                    The current logo will be removed on save.{' '}
+                                    <button
+                                        type="button"
+                                        className="underline"
+                                        onClick={() =>
+                                            setData('remove_logo', false)
+                                        }
+                                    >
+                                        Undo
+                                    </button>
+                                </p>
+                            )}
+                            <Input
+                                id="division-logo"
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0] ?? null;
+
+                                    if (file && file.size > MAX_LOGO_SIZE_BYTES) {
+                                        setError('logo', 'The logo must not be larger than 2MB.');
+                                        e.target.value = '';
+
+                                        return;
+                                    }
+
+                                    clearErrors('logo');
+                                    setData((current) => ({
+                                        ...current,
+                                        logo: file,
+                                        remove_logo: false,
+                                    }));
+                                }}
+                            />
+                            <InputError message={errors.logo} />
+                            <p className="text-sm text-muted-foreground">
+                                Shown in the public portal header in place of
+                                the default mark.
                             </p>
                         </div>
 

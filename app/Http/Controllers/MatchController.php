@@ -30,14 +30,21 @@ class MatchController extends Controller
 
     /**
      * Match list, mirroring entry visibility: managers see all, officers
-     * only matches involving their delegation, viewers none.
+     * only matches involving their delegation, viewers none. A Technical
+     * Official is a different kind of scoped access (their assigned
+     * sport(s), not a delegation) and doesn't go through Entry's viewAny
+     * gate at all — they have no business seeing the Entries page this
+     * gate also protects, only the matches for the sport they run scoring
+     * for.
      */
     public function index(Request $request): Response
     {
-        Gate::authorize('viewAny', Entry::class);
-
         /** @var User $user */
         $user = $request->user();
+
+        if ($user->role !== UserRole::TechnicalOfficial) {
+            Gate::authorize('viewAny', Entry::class);
+        }
 
         $meetId = $request->integer('meet_id');
         $eventId = $request->integer('event_id');
@@ -58,6 +65,13 @@ class MatchController extends Controller
             $query->whereHas(
                 'entries.delegation.officers',
                 fn ($officers) => $officers->whereKey($user->getKey()),
+            );
+        }
+
+        if ($user->role === UserRole::TechnicalOfficial) {
+            $query->whereHas(
+                'event',
+                fn ($events) => $events->whereIn('sport_id', $user->sports()->pluck('sports.id')),
             );
         }
 

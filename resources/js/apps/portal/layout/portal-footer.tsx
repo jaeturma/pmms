@@ -1,4 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
+import type { PortalNavShared } from '@/apps/portal/types';
 import { home } from '@/routes';
 import {
     about as publicAbout,
@@ -9,7 +10,6 @@ import {
     results as publicResults,
     tally as publicTally,
 } from '@/routes/public';
-import type { PortalNavShared } from '@/apps/portal/types';
 
 type PortalFooterPageProps = {
     publicNav: PortalNavShared;
@@ -20,50 +20,67 @@ export function PortalFooter() {
     const nav = props.publicNav;
 
     return (
-        <footer className="border-t border-[var(--portal-border)] bg-[var(--portal-surface)] text-[var(--portal-surface-foreground)]">
-            <div className="w-full px-4 py-8 sm:px-6 lg:px-10 xl:px-16 2xl:px-24">
-                <div className="flex flex-col gap-6 sm:flex-row sm:justify-between">
-                    <div>
-                        <Link href={home().url} className="text-sm font-bold">
-                            {nav?.meetName ?? 'Provincial Meet Portal'}
-                        </Link>
-                        {nav && (
-                            <p className="mt-1 text-xs text-[var(--portal-muted-foreground)]">
-                                SY {nav.schoolYear}
-                                {nav.venue && ` · ${nav.venue}`}
-                            </p>
-                        )}
-                    </div>
+        <footer className="border-t border-[var(--portal-border)] bg-[var(--portal-ink)] text-[var(--portal-ink-foreground)]">
+            <div className="w-full px-4 py-5 sm:px-6 lg:px-10 xl:px-16 2xl:px-24">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <Link href={home().url} className="text-sm font-bold">
+                        {nav?.meetName ?? 'Provincial Meet Portal'}
+                    </Link>
 
                     {nav && (
-                        <nav className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:flex sm:flex-wrap" aria-label="Footer">
-                            <Link href={publicMeet(nav.meetId).url} className="text-[var(--portal-muted-foreground)] hover:text-[var(--portal-fg)]">
+                        <nav
+                            className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:flex sm:flex-wrap"
+                            aria-label="Footer"
+                        >
+                            <Link
+                                href={publicMeet(nav.meetId).url}
+                                className="text-[var(--portal-ink-foreground)]/70 hover:text-[var(--portal-ink-foreground)]"
+                            >
                                 Schedule
                             </Link>
-                            <Link href={publicResults(nav.meetId).url} className="text-[var(--portal-muted-foreground)] hover:text-[var(--portal-fg)]">
+                            <Link
+                                href={publicResults(nav.meetId).url}
+                                className="text-[var(--portal-ink-foreground)]/70 hover:text-[var(--portal-ink-foreground)]"
+                            >
                                 Results
                             </Link>
-                            <Link href={publicTally(nav.meetId).url} className="text-[var(--portal-muted-foreground)] hover:text-[var(--portal-fg)]">
+                            <Link
+                                href={publicTally(nav.meetId).url}
+                                className="text-[var(--portal-ink-foreground)]/70 hover:text-[var(--portal-ink-foreground)]"
+                            >
                                 Medal tally
                             </Link>
-                            <Link href={publicRankings(nav.meetId).url} className="text-[var(--portal-muted-foreground)] hover:text-[var(--portal-fg)]">
+                            <Link
+                                href={publicRankings(nav.meetId).url}
+                                className="text-[var(--portal-ink-foreground)]/70 hover:text-[var(--portal-ink-foreground)]"
+                            >
                                 Standings
                             </Link>
-                            <Link href={publicNews(nav.meetId).url} className="text-[var(--portal-muted-foreground)] hover:text-[var(--portal-fg)]">
+                            <Link
+                                href={publicNews(nav.meetId).url}
+                                className="text-[var(--portal-ink-foreground)]/70 hover:text-[var(--portal-ink-foreground)]"
+                            >
                                 News
                             </Link>
-                            <Link href={publicAbout(nav.meetId).url} className="text-[var(--portal-muted-foreground)] hover:text-[var(--portal-fg)]">
+                            <Link
+                                href={publicAbout(nav.meetId).url}
+                                className="text-[var(--portal-ink-foreground)]/70 hover:text-[var(--portal-ink-foreground)]"
+                            >
                                 About
                             </Link>
-                            <Link href={publicFaqs(nav.meetId).url} className="text-[var(--portal-muted-foreground)] hover:text-[var(--portal-fg)]">
+                            <Link
+                                href={publicFaqs(nav.meetId).url}
+                                className="text-[var(--portal-ink-foreground)]/70 hover:text-[var(--portal-ink-foreground)]"
+                            >
                                 FAQs
                             </Link>
                         </nav>
                     )}
                 </div>
 
-                <p className="mt-6 text-xs text-[var(--portal-muted-foreground)]">
-                    &copy; {new Date().getFullYear()} Schools Division Office. All rights reserved.
+                <p className="mt-4 text-xs text-[var(--portal-ink-foreground)]/70">
+                    &copy; {new Date().getFullYear()} Schools Division Office.
+                    All rights reserved.
                 </p>
             </div>
         </footer>

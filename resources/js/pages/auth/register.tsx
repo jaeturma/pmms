@@ -1,6 +1,7 @@
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, usePage } from '@inertiajs/react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
+import RecaptchaWidget from '@/components/recaptcha-widget';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +15,8 @@ type Props = {
 };
 
 export default function Register({ passwordRules }: Props) {
+    const { recaptcha } = usePage().props;
+
     return (
         <>
             <Head title="Register" />
@@ -89,6 +92,15 @@ export default function Register({ passwordRules }: Props) {
                                     message={errors.password_confirmation}
                                 />
                             </div>
+
+                            {recaptcha?.enabled && recaptcha.siteKey && (
+                                <div>
+                                    <RecaptchaWidget
+                                        siteKey={recaptcha.siteKey}
+                                    />
+                                    <InputError message={errors.recaptcha} />
+                                </div>
+                            )}
 
                             <Button
                                 type="submit"

@@ -29,10 +29,11 @@ use Inertia\Response;
  * updates, or implies an EventResult/ResultPlacement — the only path to
  * an official result is still Phase 3's encode->validate flow, completely
  * untouched by this controller. Viewing/authorization mirrors the
- * "Matches — list" rule exactly (docs/authorization.md): Admin/Organizer
- * any match, Delegation Officer their own delegation's matches only,
- * Viewer never. Mutations reuse the same role:admin,organizer gate match
- * management already uses.
+ * "Matches — list" rule (docs/authorization.md): Admin/Organizer any
+ * match, Delegation Officer their own delegation's matches only, Viewer
+ * never. Mutations are Admin/Organizer (any match) or a Technical
+ * Official scoped to their own assigned sport (see `canManage()`) — a
+ * Technical Official gains no other meet-data-management permission.
  */
 class ScoringSessionController extends Controller
 {
@@ -63,6 +64,9 @@ class ScoringSessionController extends Controller
     public function board(Request $request, EventMatch $match): Response
     {
         $this->authorizeView($request, $match);
+
+        /** @var User $user */
+        $user = $request->user();
 
         $match->loadMissing([
             'meet:id,name',
@@ -95,7 +99,7 @@ class ScoringSessionController extends Controller
             'suggestedBoardType' => ScoreboardType::forSport($match->event->sport->name)->value,
             'session' => $session === null ? null : $session->toLivePayload(),
             'channel' => "match.{$match->id}.scoring",
-            'canManage' => Gate::allows('manage-meet-data'),
+            'canManage' => $this->canManage($user, $match),
             'participants' => $this->matchParticipants($entries),
         ]);
     }
@@ -106,6 +110,8 @@ class ScoringSessionController extends Controller
      */
     public function store(Request $request, EventMatch $match): RedirectResponse
     {
+        $this->authorizeManage($request, $match);
+
         if ($match->status !== MatchStatus::Scheduled) {
             throw ValidationException::withMessages([
                 'match_id' => __('Live scoring can only start for a scheduled match.'),
@@ -175,6 +181,7 @@ class ScoringSessionController extends Controller
      */
     public function score(Request $request, ScoringSession $session): RedirectResponse
     {
+        $this->authorizeManageSession($request, $session);
         $this->assertActive($session);
 
         $data = $request->validate([
@@ -220,6 +227,7 @@ class ScoringSessionController extends Controller
      */
     public function period(Request $request, ScoringSession $session): RedirectResponse
     {
+        $this->authorizeManageSession($request, $session);
         $this->assertActive($session);
 
         $data = $request->validate([
@@ -251,6 +259,7 @@ class ScoringSessionController extends Controller
 
     public function pause(Request $request, ScoringSession $session): RedirectResponse
     {
+        $this->authorizeManageSession($request, $session);
         $this->assertActive($session);
 
         $session->forceFill(['status' => ScoringSessionStatus::Paused])->save();
@@ -262,6 +271,8 @@ class ScoringSessionController extends Controller
 
     public function resume(Request $request, ScoringSession $session): RedirectResponse
     {
+        $this->authorizeManageSession($request, $session);
+
         if ($session->status !== ScoringSessionStatus::Paused) {
             throw ValidationException::withMessages([
                 'status' => __('Only a paused session can be resumed.'),
@@ -282,6 +293,7 @@ class ScoringSessionController extends Controller
      */
     public function end(Request $request, ScoringSession $session): RedirectResponse
     {
+        $this->authorizeManageSession($request, $session);
         $this->assertActive($session);
 
         /** @var User $user */
@@ -316,6 +328,7 @@ class ScoringSessionController extends Controller
      */
     public function foul(Request $request, ScoringSession $session): RedirectResponse
     {
+        $this->authorizeManageSession($request, $session);
         $this->assertActive($session);
         $this->assertBasketball($session);
 
@@ -368,6 +381,7 @@ class ScoringSessionController extends Controller
      */
     public function round(Request $request, ScoringSession $session): RedirectResponse
     {
+        $this->authorizeManageSession($request, $session);
         $this->assertActive($session);
         $this->assertBoxing($session);
 
@@ -414,6 +428,7 @@ class ScoringSessionController extends Controller
      */
     public function count(Request $request, ScoringSession $session): RedirectResponse
     {
+        $this->authorizeManageSession($request, $session);
         $this->assertActive($session);
         $this->assertSoftballBaseball($session);
 
@@ -458,6 +473,7 @@ class ScoringSessionController extends Controller
      */
     public function inningRun(Request $request, ScoringSession $session): RedirectResponse
     {
+        $this->authorizeManageSession($request, $session);
         $this->assertActive($session);
         $this->assertSoftballBaseball($session);
 
@@ -619,14 +635,23 @@ class ScoringSessionController extends Controller
     }
 
     /**
-     * Mirrors the "Matches — list" authorization row exactly.
+     * Mirrors the "Matches — list" authorization row, plus a Technical
+     * Official scoped to their own assigned sport (view and manage use
+     * the identical scope here — a Technical Official has no reason to
+     * see a match outside the sport they're allowed to run scoring for).
      */
     private function authorizeView(Request $request, EventMatch $match): void
     {
-        Gate::authorize('viewAny', Entry::class);
-
         /** @var User $user */
         $user = $request->user();
+
+        if ($user->role === UserRole::TechnicalOfficial) {
+            abort_unless($this->canManage($user, $match), 403);
+
+            return;
+        }
+
+        Gate::authorize('viewAny', Entry::class);
 
         if ($user->role !== UserRole::DelegationOfficer) {
             return;
@@ -639,6 +664,55 @@ class ScoringSessionController extends Controller
         if (! $isOwnMatch) {
             abort(403);
         }
+    }
+
+    /**
+     * Admin/Organizer may manage any match's scoring; a Technical Official
+     * only a match whose sport is one they're assigned to (`User::sports()`).
+     * Shared by `board()`'s `canManage` flag, `authorizeView()`'s Technical
+     * Official branch, and every mutating action's own authorization check
+     * below — one definition of "who may run this match's scoreboard."
+     */
+    private function canManage(User $user, EventMatch $match): bool
+    {
+        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+            return true;
+        }
+
+        if ($user->role !== UserRole::TechnicalOfficial) {
+            return false;
+        }
+
+        // Deliberately not `loadMissing('event:id,sport_id')`: restricting
+        // columns here would poison the relation cache for callers (like
+        // `board()`) that load `event` more fully afterward — `loadMissing`
+        // is a no-op once a relation is marked loaded, regardless of which
+        // columns it was loaded with. A plain access either reuses an
+        // already-fully-loaded `event` or lazy-loads the full row once.
+        return $user->sports()->whereKey($match->event->sport_id)->exists();
+    }
+
+    /**
+     * Authorization for a mutating action given the match directly
+     * (`store()`, which doesn't yet have a `ScoringSession`).
+     */
+    private function authorizeManage(Request $request, EventMatch $match): void
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        abort_unless($this->canManage($user, $match), 403);
+    }
+
+    /**
+     * Same as `authorizeManage()`, for the actions that take an existing
+     * `ScoringSession` rather than the `EventMatch` itself.
+     */
+    private function authorizeManageSession(Request $request, ScoringSession $session): void
+    {
+        $session->loadMissing('match.event');
+
+        $this->authorizeManage($request, $session->match);
     }
 
     /**

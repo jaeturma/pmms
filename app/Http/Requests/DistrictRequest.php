@@ -26,6 +26,8 @@ class DistrictRequest extends FormRequest
                     ->ignore($district instanceof District ? $district->id : null),
             ],
             'nickname' => ['nullable', 'string', 'max:60'],
+            'logo' => ['nullable', 'image', 'max:2048'],
+            'remove_logo' => ['nullable', 'boolean'],
         ];
     }
 }

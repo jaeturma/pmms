@@ -20,8 +20,10 @@ export default function PortalStandings({ meet, districts, generatedAt }: Props)
                 <PortalSectionHeader title="District ranking" />
                 <PortalStandingsTable
                     nameLabel="District"
+                    emphasized
                     rows={districts.map((row) => ({
                         label: row.district,
+                        logoUrl: row.logo_url,
                         gold: row.gold,
                         silver: row.silver,
                         bronze: row.bronze,

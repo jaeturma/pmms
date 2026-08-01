@@ -17,6 +17,7 @@ declare module '@inertiajs/core' {
                 type: 'city' | 'province';
                 name: string;
                 areaLabel: string;
+                logoUrl: string | null;
             };
             currentMeet: {
                 name: string;
@@ -31,6 +32,10 @@ declare module '@inertiajs/core' {
                 venue: string | null;
                 schoolYear: string;
                 liveCount: number;
+            } | null;
+            recaptcha: {
+                enabled: boolean;
+                siteKey: string | null;
             } | null;
             [key: string]: unknown;
         };

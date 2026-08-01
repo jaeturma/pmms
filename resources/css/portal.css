@@ -189,9 +189,79 @@
     animation: portal-pulse-live 2.4s var(--portal-ease) infinite;
 }
 
+@keyframes portal-torch-flicker {
+    0%,
+    100% {
+        transform: scale(1) skewX(0deg);
+    }
+    50% {
+        transform: scale(1.035) skewX(-1deg);
+    }
+}
+
+.pmms-portal .portal-torch-flame {
+    animation: portal-torch-flicker 3.2s ease-in-out infinite;
+}
+
+.pmms-portal .portal-torch-flame-2 {
+    animation-duration: 2.6s;
+    animation-delay: -0.4s;
+}
+
+.pmms-portal .portal-torch-flame-3 {
+    animation-duration: 2.9s;
+    animation-delay: -1s;
+}
+
+@keyframes portal-hero-blob-float {
+    0%,
+    100% {
+        transform: translate(0, 0) scale(1);
+    }
+    50% {
+        transform: translate(3%, -4%) scale(1.06);
+    }
+}
+
+.pmms-portal .portal-hero-blob {
+    animation: portal-hero-blob-float 20s var(--portal-ease) infinite;
+}
+
+@keyframes portal-hero-orbit-spin {
+    from {
+        transform: translate(-50%, -50%) rotate(0deg);
+    }
+    to {
+        transform: translate(-50%, -50%) rotate(360deg);
+    }
+}
+
+.pmms-portal .portal-hero-orbit {
+    animation: portal-hero-orbit-spin 90s linear infinite;
+}
+
+@keyframes portal-fade-up-lg {
+    from {
+        opacity: 0;
+        transform: translateY(1.25rem);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.pmms-portal .portal-hero-in {
+    animation: portal-fade-up-lg 700ms var(--portal-ease) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .pmms-portal .portal-animate-in,
-    .pmms-portal .portal-live-dot {
+    .pmms-portal .portal-live-dot,
+    .pmms-portal .portal-torch-flame,
+    .pmms-portal .portal-hero-blob,
+    .pmms-portal .portal-hero-orbit,
+    .pmms-portal .portal-hero-in {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
     }

@@ -38,12 +38,15 @@ import {
     update,
 } from '@/routes/districts';
 
+const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024;
+
 type District = {
     id: number;
     name: string;
     nickname: string | null;
     active: boolean;
     schools_count: number;
+    logo_url: string | null;
 };
 
 type Props = {
@@ -63,9 +66,18 @@ function DistrictFormDialog({
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
-    const { data, setData, post, put, processing, errors, reset } = useForm({
+    const { data, setData, post, processing, errors, reset, setError, clearErrors } = useForm<{
+        _method?: string;
+        name: string;
+        nickname: string;
+        logo: File | null;
+        remove_logo: boolean;
+    }>({
+        ...(district ? { _method: 'put' } : {}),
         name: district?.name ?? '',
         nickname: district?.nickname ?? '',
+        logo: null,
+        remove_logo: false,
     });
 
     const submit = (e: FormEvent) => {
@@ -80,7 +92,7 @@ function DistrictFormDialog({
         };
 
         if (district) {
-            put(update(district.id).url, options);
+            post(update(district.id).url, options);
         } else {
             post(store().url, options);
         }
@@ -120,6 +132,63 @@ function DistrictFormDialog({
                             placeholder="e.g. Tigers"
                         />
                         <InputError message={errors.nickname} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="district-logo">
+                            Crest / logo (optional, max 2MB)
+                        </Label>
+                        {district?.logo_url && !data.logo && !data.remove_logo && (
+                            <div className="flex items-center gap-3">
+                                <img
+                                    src={district.logo_url}
+                                    alt=""
+                                    className="size-12 rounded-full border object-cover"
+                                />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setData('remove_logo', true)}
+                                >
+                                    Remove
+                                </Button>
+                            </div>
+                        )}
+                        {data.remove_logo && (
+                            <p className="text-sm text-muted-foreground">
+                                The current crest will be removed on save.{' '}
+                                <button
+                                    type="button"
+                                    className="underline"
+                                    onClick={() => setData('remove_logo', false)}
+                                >
+                                    Undo
+                                </button>
+                            </p>
+                        )}
+                        <Input
+                            id="district-logo"
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                                const file = e.target.files?.[0] ?? null;
+
+                                if (file && file.size > MAX_LOGO_SIZE_BYTES) {
+                                    setError('logo', 'The logo must not be larger than 2MB.');
+                                    e.target.value = '';
+
+                                    return;
+                                }
+
+                                clearErrors('logo');
+                                setData((current) => ({
+                                    ...current,
+                                    logo: file,
+                                    remove_logo: false,
+                                }));
+                            }}
+                        />
+                        <InputError message={errors.logo} />
                     </div>
                     <DialogFooter>
                         <Button type="submit" disabled={processing}>
@@ -208,7 +277,16 @@ export default function Districts({ districts, filters, canManage }: Props) {
                                 {districts.data.map((district) => (
                                     <TableRow key={district.id}>
                                         <TableCell className="font-medium">
-                                            {district.name}
+                                            <div className="flex items-center gap-2">
+                                                {district.logo_url ? (
+                                                    <img
+                                                        src={district.logo_url}
+                                                        alt=""
+                                                        className="size-6 rounded-full border object-cover"
+                                                    />
+                                                ) : null}
+                                                {district.name}
+                                            </div>
                                         </TableCell>
                                         <TableCell className="text-muted-foreground">
                                             {district.nickname ?? '—'}

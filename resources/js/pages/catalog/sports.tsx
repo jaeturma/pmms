@@ -11,6 +11,7 @@ import type { Paginated } from '@/components/pagination-controls';
 import { SearchBar } from '@/components/search-bar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogContent,
@@ -34,19 +35,33 @@ import {
     index,
     restore,
     store,
+    technicalOfficials as syncTechnicalOfficials,
     update,
 } from '@/routes/sports';
+
+type TechnicalOfficial = {
+    id: number;
+    name: string;
+};
 
 type Sport = {
     id: number;
     name: string;
     active: boolean;
     events_count: number;
+    technical_officials: TechnicalOfficial[];
+};
+
+type TechnicalOfficialOption = {
+    id: number;
+    name: string;
+    email: string;
 };
 
 type Props = {
     sports: Paginated<Sport>;
     filters: { search: string };
+    technicalOfficialOptions: TechnicalOfficialOption[];
     canManage: boolean;
 };
 
@@ -111,9 +126,107 @@ function SportFormDialog({
     );
 }
 
-export default function Sports({ sports, filters, canManage }: Props) {
+function TechnicalOfficialsDialog({
+    sport,
+    technicalOfficialOptions,
+    open,
+    onOpenChange,
+}: {
+    sport: Sport;
+    technicalOfficialOptions: TechnicalOfficialOption[];
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+}) {
+    const [selected, setSelected] = useState<number[]>(
+        sport.technical_officials.map((official) => official.id),
+    );
+    const [processing, setProcessing] = useState(false);
+
+    const toggle = (id: number, checked: boolean) => {
+        setSelected((current) =>
+            checked
+                ? [...current, id]
+                : current.filter((value) => value !== id),
+        );
+    };
+
+    const save = () => {
+        setProcessing(true);
+        router.put(
+            syncTechnicalOfficials(sport.id).url,
+            { user_ids: selected },
+            {
+                preserveScroll: true,
+                onSuccess: () => onOpenChange(false),
+                onFinish: () => setProcessing(false),
+            },
+        );
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>
+                        Technical officials for {sport.name}
+                    </DialogTitle>
+                </DialogHeader>
+                {technicalOfficialOptions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                        No user accounts have the Technical Official role yet.
+                    </p>
+                ) : (
+                    <div className="max-h-72 space-y-2 overflow-y-auto pr-2">
+                        {technicalOfficialOptions.map((option) => (
+                            <div
+                                key={option.id}
+                                className="flex items-center gap-2"
+                            >
+                                <Checkbox
+                                    id={`technical-official-${option.id}`}
+                                    checked={selected.includes(option.id)}
+                                    onCheckedChange={(checked) =>
+                                        toggle(option.id, checked === true)
+                                    }
+                                />
+                                <Label
+                                    htmlFor={`technical-official-${option.id}`}
+                                    className="font-normal"
+                                >
+                                    {option.name}
+                                    <span className="text-muted-foreground">
+                                        {' '}
+                                        ({option.email})
+                                    </span>
+                                </Label>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                <DialogFooter>
+                    <Button
+                        onClick={save}
+                        disabled={
+                            processing || technicalOfficialOptions.length === 0
+                        }
+                    >
+                        Save technical officials
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+export default function Sports({
+    sports,
+    filters,
+    technicalOfficialOptions,
+    canManage,
+}: Props) {
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<Sport | null>(null);
+    const [officialsSport, setOfficialsSport] = useState<Sport | null>(null);
 
     const openCreate = () => {
         setEditing(null);
@@ -167,6 +280,7 @@ export default function Sports({ sports, filters, canManage }: Props) {
                                     <TableHead>Name</TableHead>
                                     <TableHead>Events</TableHead>
                                     <TableHead>Status</TableHead>
+                                    <TableHead>Technical officials</TableHead>
                                     {canManage && (
                                         <TableHead className="text-right">
                                             Actions
@@ -195,6 +309,34 @@ export default function Sports({ sports, filters, canManage }: Props) {
                                                     ? 'Active'
                                                     : 'Archived'}
                                             </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            {canManage ? (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        setOfficialsSport(sport)
+                                                    }
+                                                >
+                                                    {sport.technical_officials
+                                                        .length === 0
+                                                        ? 'Assign'
+                                                        : `${sport.technical_officials.length} assigned`}
+                                                </Button>
+                                            ) : sport.technical_officials
+                                                  .length === 0 ? (
+                                                <span className="text-muted-foreground">
+                                                    None assigned
+                                                </span>
+                                            ) : (
+                                                sport.technical_officials
+                                                    .map(
+                                                        (official) =>
+                                                            official.name,
+                                                    )
+                                                    .join(', ')
+                                            )}
                                         </TableCell>
                                         {canManage && (
                                             <TableCell className="text-right">
@@ -301,6 +443,16 @@ export default function Sports({ sports, filters, canManage }: Props) {
                 open={formOpen}
                 onOpenChange={setFormOpen}
             />
+
+            {officialsSport && (
+                <TechnicalOfficialsDialog
+                    key={officialsSport.id}
+                    sport={officialsSport}
+                    technicalOfficialOptions={technicalOfficialOptions}
+                    open={officialsSport !== null}
+                    onOpenChange={(open) => !open && setOfficialsSport(null)}
+                />
+            )}
         </>
     );
 }

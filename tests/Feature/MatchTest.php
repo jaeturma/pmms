@@ -60,6 +60,24 @@ test('viewers cannot see matches; officers only their own delegation\'s', functi
             ->where('canManage', true));
 });
 
+test('a technical official only sees matches for their assigned sport, and cannot manage any', function () {
+    $ownSportMatch = EventMatch::factory()->create();
+    $otherSportMatch = EventMatch::factory()->create();
+
+    $official = User::factory()->technicalOfficial()->create();
+    $official->sports()->attach($ownSportMatch->event->sport_id);
+
+    $this->actingAs($official)
+        ->get('/matches')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('matches.data', 1)
+            ->where('matches.data.0.id', $ownSportMatch->id)
+            ->where('canManage', false));
+
+    expect($otherSportMatch->id)->not->toBe($ownSportMatch->id);
+});
+
 test('managers can create a match for an event in the meet', function () {
     $meet = Meet::factory()->active()->create();
     $event = Event::factory()->create();

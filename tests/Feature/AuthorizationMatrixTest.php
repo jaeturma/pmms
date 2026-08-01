@@ -29,18 +29,24 @@ function forbiddenActor(string $role): User
 {
     return match ($role) {
         'delegation officer' => User::factory()->delegationOfficer()->create(),
+        'technical official' => User::factory()->technicalOfficial()->create(),
         default => User::factory()->create(),
     };
 }
 
-test('meet-data management is denied to viewers and delegation officers', function (string $role, array $case) {
+/**
+ * A Technical Official is scoped only to live scoring for their assigned
+ * sport (see ScoringSessionTest.php for that behavior) — every action
+ * below is still denied to them, same as a viewer or delegation officer.
+ */
+test('meet-data management is denied to viewers, delegation officers, and technical officials', function (string $role, array $case) {
     [$method, $uri] = $case;
 
     $this->actingAs(forbiddenActor($role))
         ->{$method}($uri)
         ->assertForbidden();
 })
-    ->with(['viewer', 'delegation officer'])
+    ->with(['viewer', 'delegation officer', 'technical official'])
     ->with([
         'district create' => fn (): array => ['post', '/districts'],
         'district update' => fn (): array => ['put', '/districts/'.District::factory()->create()->id],
@@ -57,6 +63,7 @@ test('meet-data management is denied to viewers and delegation officers', functi
         'sport archive' => fn (): array => ['patch', '/sports/'.Sport::factory()->create()->id.'/archive'],
         'sport restore' => fn (): array => ['patch', '/sports/'.Sport::factory()->create()->id.'/restore'],
         'sport delete' => fn (): array => ['delete', '/sports/'.Sport::factory()->create()->id],
+        'sport technical officials' => fn (): array => ['put', '/sports/'.Sport::factory()->create()->id.'/technical-officials'],
         'event create' => fn (): array => ['post', '/events'],
         'event update' => fn (): array => ['put', '/events/'.Event::factory()->create()->id],
         'event archive' => fn (): array => ['patch', '/events/'.Event::factory()->create()->id.'/archive'],
@@ -89,8 +96,13 @@ test('meet-data management is denied to viewers and delegation officers', functi
         'match participants' => fn (): array => ['put', '/matches/'.EventMatch::factory()->create()->id.'/participants'],
         'match status' => fn (): array => ['patch', '/matches/'.EventMatch::factory()->create()->id.'/status'],
         'match delete' => fn (): array => ['delete', '/matches/'.EventMatch::factory()->create()->id],
-        'result encode' => fn (): array => ['post', '/results'],
-        'result update' => fn (): array => ['put', '/results/'.EventResult::factory()->create()->id],
+        // Not 'result encode'/'result update': since Phase 16 those are
+        // no longer flatly forbidden for a technical official (allowed
+        // for their own assigned sport) — this shared sweep sends no
+        // body, which would 422 rather than 403 for that role and break
+        // the assertion below. Viewer/delegation-officer coverage for
+        // those two actions, and the technical-official scoping nuance,
+        // both live in ResultTest.php instead.
         'result validate' => fn (): array => ['patch', '/results/'.EventResult::factory()->create()->id.'/validate'],
         'result correct' => fn (): array => ['patch', '/results/'.EventResult::factory()->validated()->create()->id.'/correct'],
         'result delete' => fn (): array => ['delete', '/results/'.EventResult::factory()->create()->id],

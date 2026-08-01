@@ -5,12 +5,16 @@ namespace App\Actions\Fortify;
 use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
 use App\Models\User;
+use App\Services\RecaptchaVerifier;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 use Laravel\Fortify\Contracts\CreatesNewUsers;
 
 class CreateNewUser implements CreatesNewUsers
 {
     use PasswordValidationRules, ProfileValidationRules;
+
+    public function __construct(private readonly RecaptchaVerifier $recaptcha) {}
 
     /**
      * Validate and create a newly registered user.
@@ -23,6 +27,17 @@ class CreateNewUser implements CreatesNewUsers
             ...$this->profileRules(),
             'password' => $this->passwordRules(),
         ])->validate();
+
+        // Same reCAPTCHA check as the login pipeline
+        // (`App\Actions\Fortify\EnsureRecaptchaIsValid`) — registration
+        // doesn't go through Fortify's pipeline mechanism, so it's a
+        // direct check here instead, but the same no-op-unless-ready
+        // `RecaptchaVerifier::passes()` behavior applies.
+        if (! $this->recaptcha->passes($input['g-recaptcha-response'] ?? null)) {
+            throw ValidationException::withMessages([
+                'recaptcha' => [__('Please complete the reCAPTCHA challenge.')],
+            ]);
+        }
 
         return User::create([
             'name' => $input['name'],

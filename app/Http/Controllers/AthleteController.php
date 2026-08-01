@@ -13,7 +13,6 @@ use App\Services\AuditLogger;
 use App\Services\FileUploadService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -117,6 +116,7 @@ class AthleteController extends Controller
                 'photo_url' => $athlete->photo_upload_id === null
                     ? null
                     : route('athletes.photo', $athlete),
+                'sports_photo_url' => $athlete->sportsPhotoUrl(),
                 'can_update' => Gate::allows('update', $athlete),
             ],
         ]);
@@ -138,6 +138,21 @@ class AthleteController extends Controller
     }
 
     /**
+     * Serve the athlete's sports/action photo — same authorization as the
+     * registry photo above.
+     */
+    public function sportsPhoto(Athlete $athlete): HttpResponse
+    {
+        Gate::authorize('view', $athlete);
+
+        $upload = $athlete->sportsPhoto;
+
+        abort_if($upload === null, 404);
+
+        return Storage::disk($upload->disk)->response($upload->path, $upload->original_name);
+    }
+
+    /**
      * Register an athlete under a delegation.
      */
     public function store(AthleteRequest $request): RedirectResponse
@@ -146,14 +161,17 @@ class AthleteController extends Controller
 
         Gate::authorize('create', [Athlete::class, $delegation]);
 
-        $athlete = new Athlete($request->safe()->except(['photo']));
+        $athlete = new Athlete($request->safe()->except(['photo', 'sports_photo']));
 
-        $photo = $request->file('photo');
+        /** @var User $user */
+        $user = $request->user();
 
-        if ($photo instanceof UploadedFile) {
-            /** @var User $user */
-            $user = $request->user();
-            $athlete->photo_upload_id = $this->uploads->store($photo, $user)->id;
+        if ($request->hasFile('photo')) {
+            $athlete->photo_upload_id = $this->uploads->store($request->file('photo'), $user, 'photo')->id;
+        }
+
+        if ($request->hasFile('sports_photo')) {
+            $athlete->sports_photo_upload_id = $this->uploads->store($request->file('sports_photo'), $user, 'sports_photo')->id;
         }
 
         $athlete->save();
@@ -176,22 +194,32 @@ class AthleteController extends Controller
     {
         Gate::authorize('update', $athlete);
 
-        $athlete->fill($request->safe()->except(['photo', 'delegation_id']));
+        $athlete->fill($request->safe()->except(['photo', 'sports_photo', 'delegation_id']));
+
+        /** @var User $user */
+        $user = $request->user();
 
         $oldPhoto = null;
-        $photo = $request->file('photo');
+        $oldSportsPhoto = null;
 
-        if ($photo instanceof UploadedFile) {
-            /** @var User $user */
-            $user = $request->user();
+        if ($request->hasFile('photo')) {
             $oldPhoto = $athlete->photo;
-            $athlete->photo_upload_id = $this->uploads->store($photo, $user)->id;
+            $athlete->photo_upload_id = $this->uploads->store($request->file('photo'), $user, 'photo')->id;
+        }
+
+        if ($request->hasFile('sports_photo')) {
+            $oldSportsPhoto = $athlete->sportsPhoto;
+            $athlete->sports_photo_upload_id = $this->uploads->store($request->file('sports_photo'), $user, 'sports_photo')->id;
         }
 
         $athlete->save();
 
         if ($oldPhoto !== null) {
             $this->uploads->delete($oldPhoto);
+        }
+
+        if ($oldSportsPhoto !== null) {
+            $this->uploads->delete($oldSportsPhoto);
         }
 
         $this->audit->record('athlete.updated', $athlete, ['name' => $athlete->fullName()]);
@@ -210,11 +238,16 @@ class AthleteController extends Controller
 
         $name = $athlete->fullName();
         $photo = $athlete->photo;
+        $sportsPhoto = $athlete->sportsPhoto;
 
         $athlete->delete();
 
         if ($photo !== null) {
             $this->uploads->delete($photo);
+        }
+
+        if ($sportsPhoto !== null) {
+            $this->uploads->delete($sportsPhoto);
         }
 
         $this->audit->record('athlete.deleted', $athlete, ['name' => $name]);

@@ -27,6 +27,7 @@ use App\Http\Controllers\SchoolController;
 use App\Http\Controllers\SchoolDistrictController;
 use App\Http\Controllers\ScoringSessionController;
 use App\Http\Controllers\SportController;
+use App\Http\Controllers\SystemSettingsController;
 use App\Http\Controllers\TallyController;
 use App\Http\Controllers\VenueController;
 use Illuminate\Support\Facades\Route;
@@ -34,6 +35,8 @@ use Illuminate\Support\Facades\Route;
 // Public portal — guest routes, throttled, published data only.
 Route::middleware('throttle:60,1')->group(function () {
     Route::get('/', [PortalController::class, 'home'])->name('home');
+    Route::get('districts/{district}/logo', [DistrictController::class, 'logo'])->name('districts.logo');
+    Route::get('division/logo', [DivisionController::class, 'logo'])->name('division.logo');
     Route::get('meets/{meet}', [PortalController::class, 'meet'])
         ->whereNumber('meet')
         ->name('public.meet');
@@ -118,6 +121,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('athletes', [AthleteController::class, 'index'])->name('athletes.index');
     Route::get('athletes/{athlete}', [AthleteController::class, 'show'])->name('athletes.show');
     Route::get('athletes/{athlete}/photo', [AthleteController::class, 'photo'])->name('athletes.photo');
+    Route::get('athletes/{athlete}/sports-photo', [AthleteController::class, 'sportsPhoto'])->name('athletes.sports-photo');
     Route::post('athletes', [AthleteController::class, 'store'])->name('athletes.store');
     Route::put('athletes/{athlete}', [AthleteController::class, 'update'])->name('athletes.update');
     Route::delete('athletes/{athlete}', [AthleteController::class, 'destroy'])->name('athletes.destroy');
@@ -185,6 +189,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('can:administer')
         ->name('division.update');
 
+    Route::get('system-settings', [SystemSettingsController::class, 'edit'])
+        ->middleware('can:administer')
+        ->name('system-settings.edit');
+    Route::put('system-settings', [SystemSettingsController::class, 'update'])
+        ->middleware('can:administer')
+        ->name('system-settings.update');
+
     Route::middleware('role:admin,organizer')->group(function () {
         Route::post('districts', [DistrictController::class, 'store'])->name('districts.store');
         Route::put('districts/{district}', [DistrictController::class, 'update'])->name('districts.update');
@@ -208,6 +219,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('sports/{sport}', [SportController::class, 'update'])->name('sports.update');
         Route::patch('sports/{sport}/archive', [SportController::class, 'archive'])->name('sports.archive');
         Route::patch('sports/{sport}/restore', [SportController::class, 'restore'])->name('sports.restore');
+        Route::put('sports/{sport}/technical-officials', [SportController::class, 'syncTechnicalOfficials'])->name('sports.technical-officials');
         Route::delete('sports/{sport}', [SportController::class, 'destroy'])->name('sports.destroy');
 
         Route::post('events', [EventController::class, 'store'])->name('events.store');
@@ -248,17 +260,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('matches/{match}/status', [MatchController::class, 'updateStatus'])->name('matches.status');
         Route::delete('matches/{match}', [MatchController::class, 'destroy'])->name('matches.destroy');
 
-        Route::post('matches/{match}/scoring-sessions', [ScoringSessionController::class, 'store'])->name('scoring.start');
-        Route::patch('scoring-sessions/{session}/score', [ScoringSessionController::class, 'score'])->name('scoring.score');
-        Route::patch('scoring-sessions/{session}/period', [ScoringSessionController::class, 'period'])->name('scoring.period');
-        Route::patch('scoring-sessions/{session}/pause', [ScoringSessionController::class, 'pause'])->name('scoring.pause');
-        Route::patch('scoring-sessions/{session}/resume', [ScoringSessionController::class, 'resume'])->name('scoring.resume');
-        Route::patch('scoring-sessions/{session}/end', [ScoringSessionController::class, 'end'])->name('scoring.end');
-        Route::patch('scoring-sessions/{session}/foul', [ScoringSessionController::class, 'foul'])->name('scoring.foul');
-        Route::patch('scoring-sessions/{session}/round', [ScoringSessionController::class, 'round'])->name('scoring.round');
-        Route::patch('scoring-sessions/{session}/count', [ScoringSessionController::class, 'count'])->name('scoring.count');
-        Route::patch('scoring-sessions/{session}/inning-run', [ScoringSessionController::class, 'inningRun'])->name('scoring.inning-run');
-
         Route::patch('protests/{protest}/review', [ProtestController::class, 'review'])->name('protests.review');
         Route::patch('protests/{protest}/decide', [ProtestController::class, 'decide'])->name('protests.decide');
 
@@ -276,11 +277,38 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('incidents/{incident}/reopen', [IncidentController::class, 'reopen'])->name('incidents.reopen');
         Route::delete('incidents/{incident}', [IncidentController::class, 'destroy'])->name('incidents.destroy');
 
-        Route::post('results', [ResultController::class, 'store'])->name('results.store');
-        Route::put('results/{result}', [ResultController::class, 'update'])->name('results.update');
         Route::patch('results/{result}/validate', [ResultController::class, 'validateResult'])->name('results.validate');
         Route::patch('results/{result}/correct', [ResultController::class, 'correct'])->name('results.correct');
         Route::delete('results/{result}', [ResultController::class, 'destroy'])->name('results.destroy');
+    });
+
+    // Live scoring mutations are their own role group, not folded into the
+    // block above: a Technical Official may run the scoreboard but must not
+    // gain any of that block's other meet-data-management permissions.
+    // Per-match/session sport scoping (not just this coarse role check)
+    // happens inside ScoringSessionController itself.
+    Route::middleware('role:admin,organizer,technical_official')->group(function () {
+        Route::post('matches/{match}/scoring-sessions', [ScoringSessionController::class, 'store'])->name('scoring.start');
+        Route::patch('scoring-sessions/{session}/score', [ScoringSessionController::class, 'score'])->name('scoring.score');
+        Route::patch('scoring-sessions/{session}/period', [ScoringSessionController::class, 'period'])->name('scoring.period');
+        Route::patch('scoring-sessions/{session}/pause', [ScoringSessionController::class, 'pause'])->name('scoring.pause');
+        Route::patch('scoring-sessions/{session}/resume', [ScoringSessionController::class, 'resume'])->name('scoring.resume');
+        Route::patch('scoring-sessions/{session}/end', [ScoringSessionController::class, 'end'])->name('scoring.end');
+        Route::patch('scoring-sessions/{session}/foul', [ScoringSessionController::class, 'foul'])->name('scoring.foul');
+        Route::patch('scoring-sessions/{session}/round', [ScoringSessionController::class, 'round'])->name('scoring.round');
+        Route::patch('scoring-sessions/{session}/count', [ScoringSessionController::class, 'count'])->name('scoring.count');
+        Route::patch('scoring-sessions/{session}/inning-run', [ScoringSessionController::class, 'inningRun'])->name('scoring.inning-run');
+    });
+
+    // A Technical Official may encode a result directly for their own
+    // sport (Phase 16) — validating, correcting, or deleting a result
+    // stays a manager decision (the block above), so encode and validate
+    // are deliberately two different route groups even though they're
+    // both on ResultController, mirroring the existing encode≠validate
+    // separation already built into that controller.
+    Route::middleware('role:admin,organizer,technical_official')->group(function () {
+        Route::post('results', [ResultController::class, 'store'])->name('results.store');
+        Route::put('results/{result}', [ResultController::class, 'update'])->name('results.update');
     });
 });
 

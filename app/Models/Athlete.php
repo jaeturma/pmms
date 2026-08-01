@@ -24,6 +24,7 @@ use Illuminate\Support\Carbon;
  * @property string $lrn
  * @property int $grade_level
  * @property int|null $photo_upload_id
+ * @property int|null $sports_photo_upload_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -74,6 +75,29 @@ class Athlete extends Model
     public function photo(): BelongsTo
     {
         return $this->belongsTo(FileUpload::class, 'photo_upload_id');
+    }
+
+    /**
+     * The action/competition photo used on live scoreboards (e.g. a boxing
+     * bout's corner display) — distinct from `photo`, the registry/ID-card
+     * portrait. Both are optional and independently replaceable.
+     *
+     * @return BelongsTo<FileUpload, $this>
+     */
+    public function sportsPhoto(): BelongsTo
+    {
+        return $this->belongsTo(FileUpload::class, 'sports_photo_upload_id');
+    }
+
+    /**
+     * The single source of truth every consumer (live scoreboards) should
+     * call rather than re-deriving the `sports_photo_upload_id === null`
+     * check and `route()` call themselves — same shape as
+     * `District::logoUrl()`.
+     */
+    public function sportsPhotoUrl(): ?string
+    {
+        return $this->sports_photo_upload_id === null ? null : route('athletes.sports-photo', $this);
     }
 
     public function fullName(): string

@@ -17,6 +17,7 @@ type Athlete = {
     school: string;
     meet: string;
     photo_url: string | null;
+    sports_photo_url: string | null;
     can_update: boolean;
 };
 
@@ -74,24 +75,45 @@ export default function AthleteShow({ athlete }: Props) {
                         </CardContent>
                     </Card>
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Photo</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {athlete.photo_url ? (
-                                <img
-                                    src={athlete.photo_url}
-                                    alt={`Photo of ${fullName}`}
-                                    className="max-h-64 w-full rounded-lg object-contain"
-                                />
-                            ) : (
-                                <p className="text-sm text-muted-foreground">
-                                    No photo on file.
-                                </p>
-                            )}
-                        </CardContent>
-                    </Card>
+                    <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-1">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Profile photo</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {athlete.photo_url ? (
+                                    <img
+                                        src={athlete.photo_url}
+                                        alt={`Profile photo of ${fullName}`}
+                                        className="max-h-64 w-full rounded-lg object-contain"
+                                    />
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">
+                                        No profile photo on file.
+                                    </p>
+                                )}
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Sports photo</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {athlete.sports_photo_url ? (
+                                    <img
+                                        src={athlete.sports_photo_url}
+                                        alt={`Sports photo of ${fullName}`}
+                                        className="max-h-64 w-full rounded-lg object-contain"
+                                    />
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">
+                                        No sports photo on file.
+                                    </p>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
                 </div>
             </div>
         </>

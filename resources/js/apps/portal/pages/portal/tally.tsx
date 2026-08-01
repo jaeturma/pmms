@@ -70,7 +70,8 @@ export default function PortalTally({ meet, schools, districts, totals, bySport,
                 />
                 <PortalStandingsTable
                     nameLabel="District"
-                    rows={districts.map((row) => ({ label: row.district, gold: row.gold, silver: row.silver, bronze: row.bronze, total: row.total }))}
+                    emphasized
+                    rows={districts.map((row) => ({ label: row.district, logoUrl: row.logo_url, gold: row.gold, silver: row.silver, bronze: row.bronze, total: row.total }))}
                 />
 
                 <PortalSectionHeader title="School standings" />

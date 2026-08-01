@@ -1,7 +1,8 @@
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, usePage } from '@inertiajs/react';
 import InputError from '@/components/input-error';
 import PasskeyVerify from '@/components/passkey-verify';
 import PasswordInput from '@/components/password-input';
+import RecaptchaWidget from '@/components/recaptcha-widget';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -18,6 +19,8 @@ type Props = {
 };
 
 export default function Login({ status, canResetPassword }: Props) {
+    const { recaptcha } = usePage().props;
+
     return (
         <>
             <Head title="Log in" />
@@ -79,6 +82,15 @@ export default function Login({ status, canResetPassword }: Props) {
                                 />
                                 <Label htmlFor="remember">Remember me</Label>
                             </div>
+
+                            {recaptcha?.enabled && recaptcha.siteKey && (
+                                <div>
+                                    <RecaptchaWidget
+                                        siteKey={recaptcha.siteKey}
+                                    />
+                                    <InputError message={errors.recaptcha} />
+                                </div>
+                            )}
 
                             <Button
                                 type="submit"

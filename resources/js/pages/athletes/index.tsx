@@ -86,6 +86,7 @@ function AthleteFormDialog({
         lrn: string;
         grade_level: string;
         photo: File | null;
+        sports_photo: File | null;
     }>({
         delegation_id: '',
         school_id: '',
@@ -96,6 +97,7 @@ function AthleteFormDialog({
         lrn: '',
         grade_level: '',
         photo: null,
+        sports_photo: null,
     });
 
     const schoolOptions = data.delegation_id
@@ -295,22 +297,41 @@ function AthleteFormDialog({
                                 <InputError message={errors.grade_level} />
                             </div>
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="athlete-photo">
-                                Photo (optional)
-                            </Label>
-                            <Input
-                                id="athlete-photo"
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) =>
-                                    setData(
-                                        'photo',
-                                        e.target.files?.[0] ?? null,
-                                    )
-                                }
-                            />
-                            <InputError message={errors.photo} />
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="athlete-photo">
+                                    Profile photo (optional)
+                                </Label>
+                                <Input
+                                    id="athlete-photo"
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) =>
+                                        setData(
+                                            'photo',
+                                            e.target.files?.[0] ?? null,
+                                        )
+                                    }
+                                />
+                                <InputError message={errors.photo} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="athlete-sports-photo">
+                                    Sports photo (optional)
+                                </Label>
+                                <Input
+                                    id="athlete-sports-photo"
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) =>
+                                        setData(
+                                            'sports_photo',
+                                            e.target.files?.[0] ?? null,
+                                        )
+                                    }
+                                />
+                                <InputError message={errors.sports_photo} />
+                            </div>
                         </div>
                         <DialogFooter>
                             <Button type="submit" disabled={processing}>
@@ -428,7 +449,7 @@ export default function Athletes({
                                                                 </Button>
                                                             }
                                                             title="Remove athlete?"
-                                                            description="This permanently removes the athlete's record and photo."
+                                                            description="This permanently removes the athlete's record and photos."
                                                             confirmLabel="Remove"
                                                             destructive
                                                             onConfirm={() =>

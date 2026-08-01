@@ -12,6 +12,7 @@ use App\Models\Meet;
 use App\Models\ResultPlacement;
 use App\Models\School;
 use App\Models\ScoringSession;
+use App\Models\Sport;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 
@@ -103,6 +104,31 @@ test('unvalidated results are visible to managers only', function () {
                 ->where('results.data.0.id', $validated->id)
                 ->where('canManage', false));
     }
+});
+
+test('a technical official sees encoded results for their own sport only, plus all validated results', function () {
+    $ownSport = Sport::factory()->create();
+    $otherSport = Sport::factory()->create();
+    $ownEvent = Event::factory()->create(['sport_id' => $ownSport->id]);
+    $otherEvent = Event::factory()->create(['sport_id' => $otherSport->id]);
+
+    $ownEncoded = EventResult::factory()->create(['event_id' => $ownEvent->id]);
+    EventResult::factory()->create(['event_id' => $otherEvent->id]);
+    $validated = EventResult::factory()->validated()->create();
+
+    $official = User::factory()->technicalOfficial()->create();
+    $official->sports()->attach($ownSport->id);
+
+    $this->actingAs($official)
+        ->get('/results')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('results.data', 2)
+            ->where('results.data.0.id', $validated->id)
+            ->where('results.data.1.id', $ownEncoded->id)
+            ->where('canManage', false)
+            ->where('canEncode', true)
+            ->where('encodedEventKeys', ["{$ownEncoded->meet_id}-{$ownEncoded->event_id}"]));
 });
 
 test('managers can encode a result for an active meet', function () {
@@ -380,6 +406,66 @@ test('viewers and delegation officers cannot manage results', function (User $us
     'viewer' => fn () => User::factory()->create(),
     'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
 ]);
+
+test('a technical official can encode and update a result for their own sport, but not validate, correct, or delete it', function () {
+    ['meet' => $meet, 'event' => $event, 'entries' => $entries] = resultFixture();
+
+    $official = User::factory()->technicalOfficial()->create();
+    $official->sports()->attach($event->sport_id);
+
+    $this->actingAs($official)
+        ->post('/results', [
+            'meet_id' => $meet->id,
+            'event_id' => $event->id,
+            'placements' => [
+                ['entry_id' => $entries[0]->id, 'rank' => 1, 'mark' => null, 'is_tie' => false],
+                ['entry_id' => $entries[1]->id, 'rank' => 2, 'mark' => null, 'is_tie' => false],
+            ],
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $result = EventResult::query()->firstOrFail();
+
+    expect($result->status)->toBe(ResultStatus::Encoded)
+        ->and($result->encoded_by)->toBe($official->id);
+
+    $this->actingAs($official)
+        ->put("/results/{$result->id}", [
+            'meet_id' => $meet->id,
+            'event_id' => $event->id,
+            'placements' => [
+                ['entry_id' => $entries[0]->id, 'rank' => 1, 'mark' => 'updated', 'is_tie' => false],
+                ['entry_id' => $entries[1]->id, 'rank' => 2, 'mark' => null, 'is_tie' => false],
+            ],
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($official)->patch("/results/{$result->id}/validate")->assertForbidden();
+    $this->actingAs($official)->patch("/results/{$result->id}/correct", ['reason' => 'needs a second look'])->assertForbidden();
+    $this->actingAs($official)->delete("/results/{$result->id}")->assertForbidden();
+});
+
+test('a technical official cannot encode a result for a sport they are not assigned to', function () {
+    ['meet' => $meet, 'event' => $event, 'entries' => $entries] = resultFixture();
+
+    // Deliberately not attached to $event's sport.
+    $official = User::factory()->technicalOfficial()->create();
+
+    $this->actingAs($official)
+        ->post('/results', [
+            'meet_id' => $meet->id,
+            'event_id' => $event->id,
+            'placements' => [
+                ['entry_id' => $entries[0]->id, 'rank' => 1, 'mark' => null, 'is_tie' => false],
+                ['entry_id' => $entries[1]->id, 'rank' => 2, 'mark' => null, 'is_tie' => false],
+            ],
+        ])
+        ->assertForbidden();
+
+    expect(EventResult::query()->count())->toBe(0);
+});
 
 test('entries with recorded placements cannot be deleted', function () {
     $placement = ResultPlacement::factory()->create();

@@ -82,6 +82,10 @@ class MedalTallyService
                     // below — always the municipality name, never the
                     // finer-grained school district.
                     'municipality' => $school->district->name,
+                    // Carried through so the rollup below can attach each
+                    // municipality's real crest (`District::logoUrl()`)
+                    // without a second name-matched lookup.
+                    'municipality_id' => $school->district_id,
                     'district' => $showSchoolDistrict ? $school->schoolDistrict->name : $school->district->name,
                     ...$this->medals($group),
                 ];
@@ -96,6 +100,7 @@ class MedalTallyService
 
                 return [
                     'district' => $district,
+                    'district_id' => $group->first()['municipality_id'],
                     'gold' => $gold,
                     'silver' => $silver,
                     'bronze' => $bronze,

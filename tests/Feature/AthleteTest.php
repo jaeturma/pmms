@@ -237,6 +237,83 @@ test('the athlete photo is served to authorized users only', function () {
         ->assertForbidden();
 });
 
+test('an athlete can be registered with a sports photo, independent of the profile photo', function () {
+    Storage::fake('local');
+    $delegation = Delegation::factory()->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/athletes', [
+            ...validAthletePayload($delegation),
+            'photo' => UploadedFile::fake()->image('profile.jpg'),
+            'sports_photo' => UploadedFile::fake()->image('action.jpg'),
+        ])
+        ->assertRedirect();
+
+    $athlete = Athlete::query()->sole();
+
+    expect($athlete->photo_upload_id)->not->toBeNull()
+        ->and($athlete->sports_photo_upload_id)->not->toBeNull()
+        ->and($athlete->photo_upload_id)->not->toBe($athlete->sports_photo_upload_id);
+
+    Storage::disk('local')->assertExists($athlete->photo->path);
+    Storage::disk('local')->assertExists($athlete->sportsPhoto->path);
+});
+
+test('the athlete sports photo is served to authorized users only', function () {
+    Storage::fake('local');
+    $delegation = Delegation::factory()->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/athletes', [
+            ...validAthletePayload($delegation),
+            'sports_photo' => UploadedFile::fake()->image('action.jpg'),
+        ]);
+
+    $athlete = Athlete::query()->sole();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get("/athletes/{$athlete->id}/sports-photo")
+        ->assertOk();
+
+    $this->actingAs(User::factory()->delegationOfficer()->create())
+        ->get("/athletes/{$athlete->id}/sports-photo")
+        ->assertForbidden();
+});
+
+test('updating and deleting an athlete cleans up the sports photo too', function () {
+    Storage::fake('local');
+    $delegation = Delegation::factory()->create();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->post('/athletes', [
+        ...validAthletePayload($delegation),
+        'sports_photo' => UploadedFile::fake()->image('action.jpg'),
+    ]);
+
+    $athlete = Athlete::query()->sole();
+    $originalUpload = $athlete->sportsPhoto;
+
+    $this->actingAs($admin)
+        ->put("/athletes/{$athlete->id}", [
+            ...validAthletePayload($delegation),
+            'sports_photo' => UploadedFile::fake()->image('replacement.jpg'),
+        ])
+        ->assertRedirect();
+
+    $athlete->refresh();
+
+    expect($athlete->sports_photo_upload_id)->not->toBe($originalUpload->id);
+    $this->assertDatabaseMissing('file_uploads', ['id' => $originalUpload->id]);
+
+    $replacementUpload = $athlete->sportsPhoto;
+
+    $this->actingAs($admin)
+        ->delete("/athletes/{$athlete->id}")
+        ->assertRedirect();
+
+    $this->assertDatabaseMissing('file_uploads', ['id' => $replacementUpload->id]);
+});
+
 test('updates and deletions are audited and clean up photos', function () {
     Storage::fake('local');
     $delegation = Delegation::factory()->create();

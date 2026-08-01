@@ -17,6 +17,7 @@ import {
     Milestone,
     School,
     ScrollText,
+    Settings,
     Swords,
     Trophy,
     TriangleAlert,
@@ -57,6 +58,7 @@ import { index as scheduleIndex } from '@/routes/schedule';
 import { index as schoolDistrictsIndex } from '@/routes/school-districts';
 import { index as schoolsIndex } from '@/routes/schools';
 import { index as sportsIndex } from '@/routes/sports';
+import { edit as systemSettingsEdit } from '@/routes/system-settings';
 import { index as tallyIndex } from '@/routes/tally';
 import { index as venuesIndex } from '@/routes/venues';
 import type { NavItem } from '@/types';
@@ -183,6 +185,24 @@ const adminNavItems: NavItem[] = [
         href: divisionEdit(),
         icon: Landmark,
     },
+    {
+        title: 'System settings',
+        href: systemSettingsEdit(),
+        icon: Settings,
+    },
+];
+
+const technicalOfficialNavItems: NavItem[] = [
+    {
+        title: 'Dashboard',
+        href: dashboard(),
+        icon: LayoutGrid,
+    },
+    {
+        title: 'Matches',
+        href: matchesIndex(),
+        icon: Swords,
+    },
 ];
 
 export function AppSidebar() {
@@ -190,15 +210,28 @@ export function AppSidebar() {
 
     const role = auth.user?.role;
 
-    const navItems = [
-        ...mainNavItems.map((item) =>
-            item.title === 'Districts'
-                ? { ...item, title: pluralizeAreaLabel(division.areaLabel) }
-                : item,
-        ),
-        ...(role === 'admin' || role === 'organizer' ? managerNavItems : []),
-        ...(role === 'admin' ? adminNavItems : []),
-    ];
+    // A Technical Official only runs live scoring for their assigned
+    // sport(s) — the full admin registry (Districts/Schools/Delegations/
+    // Entries/Eligibility/etc.) isn't their job, so they get a minimal nav
+    // instead of `mainNavItems`, rather than a full console they'd mostly
+    // see 403s on.
+    const navItems =
+        role === 'technical_official'
+            ? technicalOfficialNavItems
+            : [
+                  ...mainNavItems.map((item) =>
+                      item.title === 'Districts'
+                          ? {
+                                ...item,
+                                title: pluralizeAreaLabel(division.areaLabel),
+                            }
+                          : item,
+                  ),
+                  ...(role === 'admin' || role === 'organizer'
+                      ? managerNavItems
+                      : []),
+                  ...(role === 'admin' ? adminNavItems : []),
+              ];
 
     return (
         <Sidebar collapsible="icon">

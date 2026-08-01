@@ -25,7 +25,7 @@ test('the contact page shows only real meet fields, no invented office-contact c
     $this->get("/meets/{$meet->id}/contact")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('meet', fn (AssertableInertia $row) => $row
-                ->hasAll(['id', 'name', 'school_year', 'starts_at', 'ends_at', 'venue', 'status_label'])
+                ->hasAll(['id', 'name', 'school_year', 'starts_at', 'starts_at_iso', 'ends_at', 'venue', 'status_label'])
                 ->missing('contact_email')
                 ->missing('contact_phone')
                 ->missing('office_address')

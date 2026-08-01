@@ -8,9 +8,13 @@ type PortalScheduleListProps = {
     emptyTitle: string;
     emptyDescription?: string;
     showScore?: boolean;
+    /** When set, each card links to that game's own detail page (e.g. a
+     * completed game's result/play-by-play) — omitted, cards stay plain
+     * summaries (the default, unchanged for today's/upcoming games). */
+    linkTo?: (game: PortalGame) => string;
 };
 
-export function PortalScheduleList({ games, emptyTitle, emptyDescription, showScore = false }: PortalScheduleListProps) {
+export function PortalScheduleList({ games, emptyTitle, emptyDescription, showScore = false, linkTo }: PortalScheduleListProps) {
     if (games.length === 0) {
         return <PortalEmptyState icon={CalendarClock} title={emptyTitle} description={emptyDescription} />;
     }
@@ -18,7 +22,7 @@ export function PortalScheduleList({ games, emptyTitle, emptyDescription, showSc
     return (
         <div className="space-y-3">
             {games.map((game) => (
-                <PortalMatchCard key={game.id} game={game} showScore={showScore} />
+                <PortalMatchCard key={game.id} game={game} showScore={showScore} href={linkTo?.(game)} />
             ))}
         </div>
     );

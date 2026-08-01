@@ -226,7 +226,7 @@ class PortalController extends Controller
         return Inertia::render('portal/tally', [
             'meet' => $this->meetSummary($meet),
             'schools' => $standings['schools'],
-            'districts' => $standings['districts'],
+            'districts' => $this->attachDistrictLogos($standings['districts']),
             'totals' => [
                 'gold' => (int) $districts->sum('gold'),
                 'silver' => (int) $districts->sum('silver'),
@@ -268,9 +268,38 @@ class PortalController extends Controller
 
         return Inertia::render('portal/standings', [
             'meet' => $this->meetSummary($meet),
-            'districts' => $tally->standings($meet->id)['districts'],
+            'districts' => $this->attachDistrictLogos($tally->standings($meet->id)['districts']),
             'generatedAt' => now()->toDayDateTimeString(),
         ]);
+    }
+
+    /**
+     * Attaches each row's real municipality crest via its carried-through
+     * `district_id` (`MedalTallyService::standings()`'s district rows) —
+     * one batched lookup rather than N name-matched queries. Rows without
+     * a `district_id` (there always is one here, but this stays honest if
+     * that ever changes) simply get `logo_url: null`, and `MunicipalityCrest`
+     * falls back to its initials badge exactly as it already does.
+     *
+     * @param  array<int, array<string, mixed>>  $districts
+     * @return array<int, array<string, mixed>>
+     */
+    private function attachDistrictLogos(array $districts): array
+    {
+        $ids = collect($districts)->pluck('district_id')->filter()->unique()->values();
+
+        $logoUrlsById = District::query()
+            ->whereIn('id', $ids)
+            ->get()
+            ->mapWithKeys(fn (District $district): array => [$district->id => $district->logoUrl()]);
+
+        return array_map(
+            fn (array $row): array => [
+                ...$row,
+                'logo_url' => $logoUrlsById->get($row['district_id'] ?? null),
+            ],
+            $districts,
+        );
     }
 
     /**
@@ -425,8 +454,16 @@ class PortalController extends Controller
                 'sport' => $match->event->sport->name,
                 'category' => sprintf('%s %s', $match->event->gender->label(), $match->event->age_division->label()),
                 'round_label' => $match->round_label,
+                'status' => $match->status->value,
+                'status_label' => $match->status->label(),
                 'venue' => $match->schedule?->venue?->name,
                 'scheduled_date' => $match->schedule?->scheduled_date?->format('M j, Y'),
+                // Same HH:mm passthrough format the rest of the portal
+                // uses for schedule times (`sportPortalGameRow()`,
+                // `athletics()`, etc.) — the basketball event-strip's
+                // date/time row reuses it rather than introducing a
+                // different (e.g. 12-hour) format for just this page.
+                'starts_at' => $match->schedule === null ? null : substr($match->schedule->starts_at, 0, 5),
                 // ISO 8601, for the public scoreboard's opening countdown
                 // (WP-08.5-08) — the one real scheduled instant this
                 // match has, combining the slot's date and start time.
@@ -441,7 +478,65 @@ class PortalController extends Controller
             // baseline), unlike the internal operator console. The public
             // boxing scoreboard falls back to the same generated logo
             // badge basketball/softball already use.
+            //
+            // A match's official result is a validated `EventResult`,
+            // which belongs to its `Event` — not the `EventMatch` itself
+            // (a multi-round bracket event has many matches feeding one
+            // eventual result, with no schema-level way to attribute the
+            // result to one specific match). Only surfaced as a fallback
+            // when this match never had a `ScoringSession` at all — a
+            // match that *did* use live scoring always shows that
+            // session's own final score/play-by-play instead, even once
+            // ended, since that's this specific match's own record.
+            'officialResult' => $session === null ? $this->matchOfficialResult($match) : null,
         ]);
+    }
+
+    /**
+     * The validated official result for this match's event, in the same
+     * shape `latestResult()`/`results()` already use — the fallback
+     * `scoreboard()` shows for a match that concluded without ever using
+     * live scoring. `null` before any result for this event is
+     * validated (e.g. still pending encode/review).
+     *
+     * @return array<string, mixed>|null
+     */
+    private function matchOfficialResult(EventMatch $match): ?array
+    {
+        $result = EventResult::query()
+            ->where('event_id', $match->event_id)
+            ->where('status', ResultStatus::Validated->value)
+            ->with([
+                'event.sport:id,name',
+                'placements' => fn ($placements) => $placements->orderBy('rank'),
+                'placements.entry.athlete:id,first_name,last_name,school_id',
+                'placements.entry.athlete.school:id,name,district_id',
+                'placements.entry.athlete.school.district:id,name',
+            ])
+            ->orderByDesc('validated_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if ($result === null) {
+            return null;
+        }
+
+        return [
+            'event' => sprintf('%s — %s', $result->event->sport->name, $result->event->name),
+            'official_as_of' => $result->validated_at?->format('M j, Y g:i A'),
+            'placements' => $result->placements
+                ->sortBy('rank')
+                ->map(fn (ResultPlacement $placement): array => [
+                    'rank' => $placement->rank,
+                    'athlete' => $placement->entry->athlete->fullName(),
+                    'school' => $placement->entry->athlete->school->name,
+                    'delegation' => $placement->entry->athlete->school->district->name,
+                    'mark' => $placement->mark,
+                    'is_tie' => $placement->is_tie,
+                ])
+                ->values()
+                ->all(),
+        ];
     }
 
     /**
@@ -933,6 +1028,11 @@ class PortalController extends Controller
                 'round_label' => $match->round_label,
                 'category' => sprintf('%s %s', $match->event->gender->label(), $match->event->age_division->label()),
                 'venue' => $match->schedule?->venue?->name,
+                // Same format as `sportPortalGameRow()` — the sport hub
+                // page's basketball event-strip needs a date/time, not
+                // just venue, to mirror the per-match scoreboard's own.
+                'scheduled_date' => $match->schedule?->scheduled_date?->format('M j, Y'),
+                'starts_at' => $match->schedule === null ? null : substr($match->schedule->starts_at, 0, 5),
                 'session' => $featured->toLivePayload(),
             ],
             $liveSessions->count() - 1,
@@ -1195,6 +1295,7 @@ class PortalController extends Controller
             'name' => $meet->name,
             'school_year' => $meet->school_year,
             'starts_at' => $meet->starts_at->format('M j, Y'),
+            'starts_at_iso' => $meet->starts_at->toIso8601String(),
             'ends_at' => $meet->ends_at->format('M j, Y'),
             'venue' => $meet->venue,
             'status_label' => $meet->status->label(),
@@ -1206,9 +1307,11 @@ class PortalController extends Controller
      * delegation's municipality, deduplicated (a delegation is rooted at
      * either a district/municipality or, in a City division, a school —
      * both resolve to a municipality here). This is the landing page's
-     * "competing entry" list, each shown with a placeholder logo.
+     * "competing entry" list; `logo_url` is null (falls back to an
+     * initials placeholder client-side) until an admin uploads a real
+     * crest for that municipality.
      *
-     * @return array<int, array{id: int, name: string, nickname: string|null}>
+     * @return array<int, array{id: int, name: string, nickname: string|null, logo_url: string|null}>
      */
     private function competingMunicipalities(Meet $meet): array
     {
@@ -1225,6 +1328,7 @@ class PortalController extends Controller
                 'id' => $municipality->id,
                 'name' => $municipality->name,
                 'nickname' => $municipality->nickname,
+                'logo_url' => $municipality->logoUrl(),
             ])
             ->all();
     }

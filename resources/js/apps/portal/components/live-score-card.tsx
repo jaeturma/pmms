@@ -55,7 +55,9 @@ export function PortalLiveScoreCard({ liveNow, className }: PortalLiveScoreCardP
 
             <div className="relative grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-5">
                 <span className="flex min-w-0 items-center gap-2">
-                    {session.side_a_label && <MunicipalityCrest name={session.side_a_label} size="sm" />}
+                    {session.side_a_label && (
+                        <MunicipalityCrest name={session.side_a_label} logoUrl={session.side_a_logo_url} size="sm" shape="square" />
+                    )}
                     <span className="truncate text-sm font-medium">{session.side_a_label ?? 'TBD'}</span>
                 </span>
                 <p className="text-2xl font-bold tabular-nums sm:text-4xl">
@@ -65,7 +67,9 @@ export function PortalLiveScoreCard({ liveNow, className }: PortalLiveScoreCardP
                 </p>
                 <span className="flex min-w-0 items-center justify-end gap-2">
                     <span className="truncate text-right text-sm font-medium">{session.side_b_label ?? 'TBD'}</span>
-                    {session.side_b_label && <MunicipalityCrest name={session.side_b_label} size="sm" />}
+                    {session.side_b_label && (
+                        <MunicipalityCrest name={session.side_b_label} logoUrl={session.side_b_logo_url} size="sm" shape="square" />
+                    )}
                 </span>
             </div>
 

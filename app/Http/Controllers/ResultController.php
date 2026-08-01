@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\EntryStatus;
 use App\Enums\MeetStatus;
 use App\Enums\ResultStatus;
+use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Models\Entry;
 use App\Models\Event;
@@ -30,11 +31,26 @@ class ResultController extends Controller
 
     /**
      * Results per event. Validated results are official and readable by all
-     * roles; encoded results are working data, visible to managers only.
+     * roles; encoded results are working data, visible to managers, plus
+     * (Phase 16) a Technical Official for their own sport's events only —
+     * they encoded it, they should be able to see and revise it before a
+     * manager validates it.
      */
     public function index(Request $request): Response
     {
+        /** @var User $user */
+        $user = $request->user();
+
         $canManage = Gate::allows('manage-meet-data');
+        $isScopedTechnicalOfficial = $user->role === UserRole::TechnicalOfficial;
+        $assignedSportIds = $isScopedTechnicalOfficial ? $user->sports()->pluck('sports.id') : collect();
+
+        // `canEncode` is a strict superset of `canManage`: it governs
+        // "sees encoded results and the encode form at all" (Admin/
+        // Organizer, or a scoped TO), while `canManage` stays the
+        // narrower "can also validate/correct/delete" gate the frontend
+        // already used for those three actions.
+        $canEncode = $canManage || $isScopedTechnicalOfficial;
 
         $meetId = $request->integer('meet_id');
         $eventId = $request->integer('event_id');
@@ -51,7 +67,16 @@ class ResultController extends Controller
             ->orderByDesc('id');
 
         if (! $canManage) {
-            $query->where('status', ResultStatus::Validated->value);
+            $query->where(function ($validatedOrOwnEncoded) use ($isScopedTechnicalOfficial, $assignedSportIds) {
+                $validatedOrOwnEncoded->where('status', ResultStatus::Validated->value);
+
+                if ($isScopedTechnicalOfficial) {
+                    $validatedOrOwnEncoded->orWhere(function ($ownEncoded) use ($assignedSportIds) {
+                        $ownEncoded->where('status', ResultStatus::Encoded->value)
+                            ->whereHas('event', fn ($event) => $event->whereIn('sport_id', $assignedSportIds));
+                    });
+                }
+            });
         }
 
         if ($meetId > 0) {
@@ -110,14 +135,23 @@ class ResultController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name'])
                 ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]),
-            'encodedEventKeys' => $canManage
-                ? EventResult::query()->get(['meet_id', 'event_id'])
+            'encodedEventKeys' => $canEncode
+                ? EventResult::query()
+                    ->when(
+                        ! $canManage,
+                        fn ($query) => $query->whereHas('event', fn ($event) => $event->whereIn('sport_id', $assignedSportIds)),
+                    )
+                    ->get(['meet_id', 'event_id'])
                     ->map(fn (EventResult $result): string => "{$result->meet_id}-{$result->event_id}")
                     ->values()
                 : [],
-            'entryOptions' => $canManage
+            'entryOptions' => $canEncode
                 ? Entry::query()
                     ->where('status', EntryStatus::Confirmed->value)
+                    ->when(
+                        ! $canManage,
+                        fn ($query) => $query->whereHas('event', fn ($event) => $event->whereIn('sport_id', $assignedSportIds)),
+                    )
                     ->with([
                         'athlete:id,first_name,last_name,school_id',
                         'athlete.school:id,name',
@@ -134,11 +168,14 @@ class ResultController extends Controller
                     ->values()
                 : [],
             'canManage' => $canManage,
+            'canEncode' => $canEncode,
         ]);
     }
 
     /**
-     * Encode an event's final standing (first manager decision).
+     * Encode an event's final standing (first decision — a manager, or a
+     * Technical Official encoding a result directly for their own sport
+     * without having run live scoring for it, per Phase 16).
      */
     public function store(Request $request): RedirectResponse
     {
@@ -147,6 +184,8 @@ class ResultController extends Controller
         ]);
 
         $data = $this->validatePayload($request);
+
+        $this->authorizeEncode($request, (int) $data['event_id']);
 
         $meet = Meet::query()->findOrFail((int) $meetData['meet_id']);
 
@@ -196,6 +235,8 @@ class ResultController extends Controller
      */
     public function update(Request $request, EventResult $result): RedirectResponse
     {
+        $this->authorizeEncode($request, $result->event_id);
+
         if ($result->isValidated()) {
             Inertia::flash('toast', [
                 'type' => 'error',
@@ -339,6 +380,32 @@ class ResultController extends Controller
             'placements.*.mark' => ['nullable', 'string', 'max:60'],
             'placements.*.is_tie' => ['boolean'],
         ]);
+    }
+
+    /**
+     * Admin/Organizer may encode any result; a Technical Official only
+     * for an event whose sport is one they're assigned to (`User::sports()`)
+     * — the same scoping `ScoringSessionController::canManage()` already
+     * uses for live scoring, applied here to the separate encode-a-result
+     * path (Phase 16). Validating/correcting/deleting a result stays a
+     * manager-only decision — this method is only called from `store()`/
+     * `update()`, never `validateResult()`/`correct()`/`destroy()`.
+     */
+    private function authorizeEncode(Request $request, int $eventId): void
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+            return;
+        }
+
+        $sportId = Event::query()->whereKey($eventId)->value('sport_id');
+
+        abort_unless(
+            $user->role === UserRole::TechnicalOfficial && $user->sports()->whereKey($sportId)->exists(),
+            403,
+        );
     }
 
     /**

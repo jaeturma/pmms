@@ -42,6 +42,7 @@ class AthleteRequest extends FormRequest
             ],
             'grade_level' => ['required', 'integer', 'min:1', 'max:12'],
             'photo' => ['nullable', 'image', 'max:5120'],
+            'sports_photo' => ['nullable', 'image', 'max:5120'],
         ];
 
         if ($athlete === null) {

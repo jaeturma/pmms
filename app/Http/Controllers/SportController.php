@@ -2,13 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\SportRequest;
 use App\Models\Sport;
+use App\Models\User;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -27,6 +30,7 @@ class SportController extends Controller
 
         $query = Sport::query()
             ->withCount('events')
+            ->with('technicalOfficials:id,name,email')
             ->orderBy('name');
 
         $this->applySearch($query, $search, ['name']);
@@ -38,8 +42,18 @@ class SportController extends Controller
                     'name' => $sport->name,
                     'active' => $sport->active,
                     'events_count' => $sport->events_count,
+                    'technical_officials' => $sport->technicalOfficials
+                        ->map(fn (User $official): array => [
+                            'id' => $official->id,
+                            'name' => $official->name,
+                        ])
+                        ->values(),
                 ]),
             'filters' => ['search' => $search],
+            'technicalOfficialOptions' => User::query()
+                ->where('role', UserRole::TechnicalOfficial->value)
+                ->orderBy('name')
+                ->get(['id', 'name', 'email']),
             'canManage' => Gate::allows('manage-meet-data'),
         ]);
     }
@@ -96,6 +110,38 @@ class SportController extends Controller
         $this->audit->record('sport.restored', $sport, ['name' => $sport->name]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Sport restored.')]);
+
+        return back();
+    }
+
+    /**
+     * Replace the Technical Officials assigned to operate live scoring for
+     * this sport. Same full-replace pattern as
+     * DelegationController::syncOfficers.
+     */
+    public function syncTechnicalOfficials(Request $request, Sport $sport): RedirectResponse
+    {
+        Gate::authorize('manage-meet-data');
+
+        $validated = $request->validate([
+            'user_ids' => ['array'],
+            'user_ids.*' => [
+                'integer',
+                Rule::exists('users', 'id')->where('role', UserRole::TechnicalOfficial->value),
+            ],
+        ]);
+
+        /** @var array<int, int> $userIds */
+        $userIds = $validated['user_ids'] ?? [];
+
+        $sport->technicalOfficials()->sync($userIds);
+
+        $this->audit->record('sport.technical_officials_updated', $sport, [
+            'name' => $sport->name,
+            'official_count' => count($userIds),
+        ]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Technical officials updated.')]);
 
         return back();
     }

@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DdOPAA Medal Tally & Rankings</title>
+  <meta name="description" content="Responsive public medal tally and rankings page for the DdOPAA Provincial Meet." />
+  <style>
+    :root{
+      --blue:#073b99;
+      --blue2:#0c56d8;
+      --navy:#062b70;
+      --gold:#f7b500;
+      --gold2:#ffcc33;
+      --silver:#bfc5ce;
+      --bronze:#c96b28;
+      --green:#16a34a;
+      --ink:#12213d;
+      --muted:#64748b;
+      --line:#dce4ef;
+      --bg:#f5f8fc;
+      --surface:#ffffff;
+      --shadow:0 8px 24px rgba(15,23,42,.08);
+      --radius:14px;
+    }
+
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{
+      margin:0;
+      color:var(--ink);
+      background:
+        radial-gradient(circle at 0% 0%,rgba(12,86,216,.05),transparent 30%),
+        linear-gradient(180deg,#fbfcff 0%,var(--bg) 100%);
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    }
+
+    a{text-decoration:none;color:inherit}
+    button{font:inherit}
+    .container{width:min(1480px,calc(100% - 36px));margin-inline:auto}
+    .card{
+      background:var(--surface);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+
+    /* Header */
+    .topbar{
+      position:sticky;top:0;z-index:50;
+      background:rgba(255,255,255,.97);
+      backdrop-filter:blur(14px);
+      border-bottom:1px solid var(--line);
+    }
+    .nav{
+      min-height:84px;
+      display:flex;align-items:center;gap:24px;
+    }
+    .brand{display:flex;align-items:center;gap:12px;min-width:320px}
+    .brand-logo{
+      width:60px;height:60px;border-radius:50%;
+      display:grid;place-items:center;text-align:center;
+      color:#fff;font-size:11px;font-weight:950;
+      background:conic-gradient(from 210deg,#e62a2a,var(--gold),var(--blue),#e62a2a);
+      box-shadow:inset 0 0 0 6px #fff,0 4px 14px rgba(7,59,153,.18);
+    }
+    .brand h1{margin:0;color:var(--blue);font-size:24px;letter-spacing:-.5px}
+    .brand small{color:var(--blue);font-weight:650}
+    .nav-links{display:flex;align-items:center;justify-content:center;gap:4px;flex:1}
+    .nav-link{
+      position:relative;min-height:84px;padding:0 13px;
+      display:flex;align-items:center;gap:8px;
+      color:#17305f;font-size:13px;font-weight:800;white-space:nowrap;
+    }
+    .nav-link:hover,.nav-link.active{color:var(--blue2)}
+    .nav-link.active::after{
+      content:"";position:absolute;left:10px;right:10px;bottom:0;height:3px;
+      background:var(--gold);border-radius:3px 3px 0 0;
+    }
+    .nav-icon{font-size:19px}
+    .live-btn{
+      border:0;border-radius:9px;padding:13px 17px;
+      background:linear-gradient(135deg,var(--blue),var(--blue2));
+      color:#fff;font-weight:800;box-shadow:0 5px 14px rgba(7,59,153,.18);
+    }
+    .mobile-menu{display:none}
+
+    /* Hero */
+    .hero{
+      color:#fff;
+      background:
+        linear-gradient(90deg,rgba(5,45,113,.95),rgba(5,65,155,.9),rgba(3,43,109,.95)),
+        radial-gradient(circle at 20% 30%,rgba(255,255,255,.08),transparent 24%);
+      border-bottom:1px solid rgba(255,255,255,.12);
+    }
+    .hero-inner{
+      min-height:155px;
+      display:grid;grid-template-columns:280px 1fr 260px;align-items:center;gap:20px;
+    }
+    .hero-art{
+      min-height:130px;display:flex;align-items:end;gap:7px;opacity:.95;
+    }
+    .athlete{
+      width:42px;border-radius:18px 18px 4px 4px;
+      background:linear-gradient(180deg,#ff9b45,#d9502e);
+      box-shadow:0 10px 25px rgba(0,0,0,.18);
+    }
+    .athlete:nth-child(1){height:62px}
+    .athlete:nth-child(2){height:82px;background:linear-gradient(180deg,#f05f3e,#c52235)}
+    .athlete:nth-child(3){height:104px;background:linear-gradient(180deg,#ff914d,#e76a22)}
+    .athlete:nth-child(4){height:75px;background:linear-gradient(180deg,#f2dfc2,#6487be)}
+    .athlete:nth-child(5){height:88px;background:linear-gradient(180deg,#ffc046,#f18b19)}
+    .athlete:nth-child(6){height:56px;background:linear-gradient(180deg,#e8edf5,#84a4d3)}
+    .hero-copy{text-align:center}
+    .hero-copy h2{
+      margin:0;
+      font-size:56px;line-height:1;
+      letter-spacing:1px;font-weight:950;
+      text-shadow:0 4px 14px rgba(0,0,0,.25);
+    }
+    .hero-copy p{margin:12px 0 4px;font-size:18px}
+    .hero-copy .asof{font-size:16px}
+    .live-update{color:#34d058;font-weight:800}
+    .torch{
+      width:150px;height:120px;margin-left:auto;position:relative;
+    }
+    .torch::before{
+      content:"";position:absolute;left:59px;top:44px;width:32px;height:70px;
+      background:linear-gradient(180deg,#f6c84a,#c99b16);border-radius:7px;
+    }
+    .torch::after{
+      content:"";position:absolute;left:43px;top:4px;width:64px;height:78px;
+      background:radial-gradient(circle at 50% 72%,#ffd65a 0 22%,transparent 23%),
+                 radial-gradient(circle at 50% 45%,#ff8d1f 0 33%,transparent 34%),
+                 radial-gradient(circle at 50% 20%,#ffea69 0 20%,transparent 21%);
+      clip-path:polygon(50% 0,68% 24%,89% 19%,82% 48%,100% 62%,67% 75%,50% 100%,33% 75%,0 62%,18% 48%,11% 19%,32% 24%);
+      filter:drop-shadow(0 6px 10px rgba(255,181,0,.3));
+    }
+
+    /* Main */
+    .content{padding:20px 0 18px}
+    .summary-grid{
+      display:grid;grid-template-columns:repeat(4,1fr) minmax(320px,1.6fr);
+      gap:18px;
+    }
+    .stat-card{
+      min-height:135px;padding:20px;
+      display:flex;align-items:center;gap:16px;
+    }
+    .medal{
+      width:68px;height:68px;border-radius:50%;
+      display:grid;place-items:center;color:#fff;font-size:28px;font-weight:950;
+      box-shadow:inset 0 0 0 5px rgba(255,255,255,.28),0 6px 16px rgba(15,23,42,.12);
+      position:relative;
+    }
+    .medal::after{
+      content:"";position:absolute;bottom:-28px;left:15px;width:38px;height:34px;
+      background:inherit;clip-path:polygon(0 0,100% 0,80% 100%,50% 72%,20% 100%);
+      opacity:.9;
+    }
+    .gold{background:linear-gradient(135deg,#ffcd3d,#ed9e08)}
+    .silver{background:linear-gradient(135deg,#d8dce2,#9ea5af)}
+    .bronze{background:linear-gradient(135deg,#e28a4d,#a74c16)}
+    .stat-copy small{display:block;font-weight:850;color:#173b76;text-transform:uppercase}
+    .stat-copy strong{display:block;font-size:42px;line-height:1;margin:9px 0 10px}
+    .delta{font-size:12px;color:var(--green);font-weight:750}
+    .distribution{padding:16px 20px}
+    .card-title{font-size:16px;color:var(--blue);font-weight:950;text-transform:uppercase;margin-bottom:12px}
+    .distribution-body{display:grid;grid-template-columns:180px 1fr;gap:14px;align-items:center}
+    .donut{
+      width:156px;height:156px;border-radius:50%;
+      background:conic-gradient(var(--gold) 0 35.82%,var(--silver) 35.82% 67.26%,var(--bronze) 67.26% 100%);
+      display:grid;place-items:center;margin:auto;
+      position:relative;
+    }
+    .donut::before{
+      content:"";width:86px;height:86px;border-radius:50%;background:#fff;position:absolute;
+    }
+    .donut-label{position:relative;text-align:center;font-weight:900;color:#132a53}
+    .donut-label strong{display:block;font-size:22px}
+    .legend-list{display:grid;gap:12px}
+    .legend-row{display:grid;grid-template-columns:14px 1fr auto;gap:9px;align-items:center;font-size:13px}
+    .legend-dot{width:11px;height:11px;border-radius:50%}
+    .legend-row strong{font-weight:800}
+
+    .body-grid{
+      display:grid;grid-template-columns:minmax(0,2.2fr) minmax(330px,.9fr);
+      gap:18px;margin-top:18px;
+    }
+    .section-head{
+      background:linear-gradient(180deg,var(--blue2),var(--navy));
+      color:#fff;padding:12px 20px;font-size:15px;font-weight:950;text-transform:uppercase;
+    }
+    .ranking-table{width:100%;border-collapse:collapse;font-size:13px}
+    .ranking-table th,.ranking-table td{padding:12px 14px;border-bottom:1px solid var(--line);text-align:center}
+    .ranking-table th{background:#082b6d;color:#fff;font-size:11px;text-transform:uppercase}
+    .ranking-table th:nth-child(2),.ranking-table td:nth-child(2){text-align:left}
+    .municipality{display:flex;align-items:center;gap:10px}
+    .seal{
+      width:28px;height:28px;border-radius:50%;
+      display:grid;place-items:center;color:#fff;font-size:9px;font-weight:900;
+      background:conic-gradient(var(--green),var(--gold),var(--blue),var(--green));
+      box-shadow:0 0 0 2px #fff,0 0 0 3px var(--line);
+    }
+    .rank-badge{
+      width:24px;height:24px;border-radius:50%;
+      display:inline-grid;place-items:center;color:#fff;font-weight:900;
+      background:#7b8798;
+    }
+    .rank-badge.first{background:var(--gold)}
+    .rank-badge.second{background:#8994a5}
+    .rank-badge.third{background:var(--bronze)}
+    .medal-head{display:inline-flex;align-items:center;gap:7px}
+    .rank-footer{
+      display:flex;justify-content:space-between;gap:20px;align-items:center;
+      padding:16px 20px;color:#43577c;font-size:12px;
+    }
+    .link-btn{color:var(--blue2);font-weight:900}
+
+    .side-stack{display:grid;gap:16px;align-content:start}
+    .side-card{padding:16px 20px}
+    .points-list{display:grid;gap:13px}
+    .point-row{
+      display:grid;grid-template-columns:22px 95px 1fr 56px;gap:10px;align-items:center;
+      font-size:12px;
+    }
+    .bar{height:7px;background:#eef2f6;border-radius:999px;overflow:hidden}
+    .bar span{display:block;height:100%;background:linear-gradient(90deg,#ffc82c,#f7a818);border-radius:999px}
+    .sport-table{width:100%;border-collapse:collapse;font-size:12px}
+    .sport-table th,.sport-table td{padding:7px 4px;border-bottom:1px solid #edf1f6;text-align:center}
+    .sport-table th:first-child,.sport-table td:first-child{text-align:left}
+    .sport-table th{font-size:10px;text-transform:uppercase;color:#20375e}
+    .sport-table tr:last-child td{border-bottom:0}
+
+    .announcement{
+      margin-top:16px;
+      display:grid;grid-template-columns:auto auto 1fr;gap:14px;align-items:center;
+      padding:14px 20px;border-radius:10px;
+      background:linear-gradient(90deg,var(--navy),var(--blue2));
+      color:#fff;font-size:13px;
+    }
+    .announcement strong{color:#ffd020}
+    .motto{
+      margin-top:16px;padding:17px 20px;border-radius:999px;
+      text-align:center;font-size:18px;font-weight:950;color:#10254f;
+      background:linear-gradient(90deg,#f6ac0e,#ffd24d);
+    }
+
+    @media (max-width:1180px){
+      .nav-links{display:none}
+      .mobile-menu{display:block;margin-left:auto;border:1px solid var(--line);background:#fff;border-radius:8px;padding:10px 12px}
+      .live-btn{display:none}
+      .hero-inner{grid-template-columns:180px 1fr 160px}
+      .hero-copy h2{font-size:44px}
+      .summary-grid{grid-template-columns:repeat(2,1fr)}
+      .distribution{grid-column:1/-1}
+      .body-grid{grid-template-columns:1fr}
+    }
+
+    @media (max-width:760px){
+      .container{width:min(100% - 20px,1480px)}
+      .nav{min-height:70px}
+      .brand{min-width:auto}
+      .brand-logo{width:46px;height:46px}
+      .brand h1{font-size:17px}
+      .brand small{display:none}
+      .hero-inner{grid-template-columns:1fr;min-height:auto;padding:24px 0}
+      .hero-art,.torch{display:none}
+      .hero-copy h2{font-size:36px}
+      .hero-copy p{font-size:15px}
+      .summary-grid{grid-template-columns:1fr}
+      .distribution{grid-column:auto}
+      .distribution-body{grid-template-columns:1fr}
+      .stat-card{min-height:120px}
+      .body-grid{grid-template-columns:1fr}
+      .ranking-wrap{overflow-x:auto}
+      .ranking-table{min-width:850px}
+      .rank-footer{flex-direction:column;align-items:flex-start}
+      .announcement{grid-template-columns:auto 1fr}
+      .announcement span:last-child{grid-column:1/-1}
+      .motto{border-radius:14px;font-size:15px}
+    }
+  </style>
+</head>
+<body>
+<header class="topbar">
+  <div class="container nav">
+    <a href="#" class="brand">
+      <div class="brand-logo">DdO<br>PM</div>
+      <div>
+        <h1>PROVINCIAL MEET 2025</h1>
+        <small>Stronger Together. Champions Forever!</small>
+      </div>
+    </a>
+
+    <nav class="nav-links" aria-label="Primary navigation">
+      <a class="nav-link" href="#"><span class="nav-icon">⌂</span>HOME</a>
+      <a class="nav-link" href="#"><span class="nav-icon">▣</span>SCHEDULE</a>
+      <a class="nav-link" href="#"><span class="nav-icon">♕</span>RESULTS</a>
+      <a class="nav-link active" href="#"><span class="nav-icon">🏅</span>MEDAL TALLY</a>
+      <a class="nav-link" href="#"><span class="nav-icon">▤</span>NEWS & ANNOUNCEMENTS</a>
+      <a class="nav-link" href="#"><span class="nav-icon">◉</span>GALLERIES</a>
+      <a class="nav-link" href="#"><span class="nav-icon">ⓘ</span>ABOUT</a>
+    </nav>
+
+    <button class="mobile-menu" aria-label="Open menu">☰</button>
+    <button class="live-btn">● LIVE NOW⌄</button>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="container hero-inner">
+    <div class="hero-art" aria-hidden="true">
+      <span class="athlete"></span><span class="athlete"></span><span class="athlete"></span>
+      <span class="athlete"></span><span class="athlete"></span><span class="athlete"></span>
+    </div>
+
+    <div class="hero-copy">
+      <h2>MEDAL TALLY &amp; RANKINGS</h2>
+      <p>Real-time overall medal count and ranking of all municipalities.</p>
+      <div class="asof">As of May 14, 2025 &nbsp; | &nbsp; 10:30 AM &nbsp; <span class="live-update">◷ Live Updates</span></div>
+    </div>
+
+    <div class="torch" aria-hidden="true"></div>
+  </div>
+</section>
+
+<main class="container content">
+  <section class="summary-grid">
+    <article class="card stat-card">
+      <div class="medal gold">★</div>
+      <div class="stat-copy">
+        <small>Total Gold</small>
+        <strong>245</strong>
+        <div class="delta">↑ 15 from yesterday</div>
+      </div>
+    </article>
+
+    <article class="card stat-card">
+      <div class="medal silver">★</div>
+      <div class="stat-copy">
+        <small>Total Silver</small>
+        <strong>213</strong>
+        <div class="delta">↑ 12 from yesterday</div>
+      </div>
+    </article>
+
+    <article class="card stat-card">
+      <div class="medal bronze">★</div>
+      <div class="stat-copy">
+        <small>Total Bronze</small>
+        <strong>226</strong>
+        <div class="delta">↑ 18 from yesterday</div>
+      </div>
+    </article>
+
+    <article class="card stat-card">
+      <div style="display:flex;gap:4px;align-items:center">
+        <div class="medal gold" style="width:44px;height:44px;font-size:18px">★</div>
+        <div class="medal silver" style="width:44px;height:44px;font-size:18px;margin-left:-16px">★</div>
+        <div class="medal bronze" style="width:44px;height:44px;font-size:18px;margin-left:-16px">★</div>
+      </div>
+      <div class="stat-copy">
+        <small>Total Medals</small>
+        <strong>684</strong>
+        <div class="delta">↑ 45 from yesterday</div>
+      </div>
+    </article>
+
+    <article class="card distribution">
+      <div class="card-title">Medal Distribution</div>
+      <div class="distribution-body">
+        <div class="donut">
+          <div class="donut-label"><strong>684</strong>Total Medals</div>
+        </div>
+        <div class="legend-list">
+          <div class="legend-row"><span class="legend-dot" style="background:var(--gold)"></span><strong>Gold</strong><span>245 (35.82%)</span></div>
+          <div class="legend-row"><span class="legend-dot" style="background:var(--silver)"></span><strong>Silver</strong><span>213 (31.14%)</span></div>
+          <div class="legend-row"><span class="legend-dot" style="background:var(--bronze)"></span><strong>Bronze</strong><span>226 (33.04%)</span></div>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <section class="body-grid">
+    <article class="card">
+      <div class="section-head">Overall Ranking by Municipality</div>
+      <div class="ranking-wrap">
+        <table class="ranking-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Municipality</th>
+              <th><span class="medal-head">🏅 Gold</span></th>
+              <th><span class="medal-head">🥈 Silver</span></th>
+              <th><span class="medal-head">🥉 Bronze</span></th>
+              <th>Total Medals</th>
+              <th>Points</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><span class="rank-badge first">1</span></td><td><div class="municipality"><span class="seal">M</span>Mabini</div></td><td>58</td><td>45</td><td>40</td><td>143</td><td><strong>463.0</strong></td></tr>
+            <tr><td><span class="rank-badge second">2</span></td><td><div class="municipality"><span class="seal">MV</span>Montevista</div></td><td>46</td><td>38</td><td>36</td><td>120</td><td><strong>376.0</strong></td></tr>
+            <tr><td><span class="rank-badge third">3</span></td><td><div class="municipality"><span class="seal">NC</span>New Corella</div></td><td>34</td><td>29</td><td>32</td><td>95</td><td><strong>285.0</strong></td></tr>
+            <tr><td>4</td><td><div class="municipality"><span class="seal">A</span>Asuncion</div></td><td>27</td><td>24</td><td>26</td><td>77</td><td><strong>231.0</strong></td></tr>
+            <tr><td>5</td><td><div class="municipality"><span class="seal">N</span>Nabunturan</div></td><td>25</td><td>20</td><td>23</td><td>68</td><td><strong>197.0</strong></td></tr>
+            <tr><td>6</td><td><div class="municipality"><span class="seal">MW</span>Mawab</div></td><td>18</td><td>21</td><td>19</td><td>58</td><td><strong>166.0</strong></td></tr>
+            <tr><td>7</td><td><div class="municipality"><span class="seal">C</span>Compostela</div></td><td>16</td><td>17</td><td>18</td><td>51</td><td><strong>145.0</strong></td></tr>
+            <tr><td>8</td><td><div class="municipality"><span class="seal">L</span>Laak</div></td><td>12</td><td>11</td><td>14</td><td>37</td><td><strong>101.0</strong></td></tr>
+            <tr><td>9</td><td><div class="municipality"><span class="seal">MC</span>Maco</div></td><td>9</td><td>8</td><td>11</td><td>28</td><td><strong>67.0</strong></td></tr>
+            <tr><td>10</td><td><div class="municipality"><span class="seal">MR</span>Maragusan</div></td><td>6</td><td>5</td><td>7</td><td>18</td><td><strong>40.0</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="rank-footer">
+        <span>Ranking is based on: Gold (3 points) • Silver (2 points) • Bronze (1 point)</span>
+        <a class="link-btn" href="#">VIEW FULL RANKING &nbsp; →</a>
+      </div>
+    </article>
+
+    <aside class="side-stack">
+      <article class="card side-card">
+        <div class="card-title">Top Municipalities by Points</div>
+        <div class="points-list">
+          <div class="point-row"><span>1.</span><span>Mabini</span><div class="bar"><span style="width:100%"></span></div><strong>463.0</strong></div>
+          <div class="point-row"><span>2.</span><span>Montevista</span><div class="bar"><span style="width:81%"></span></div><strong>376.0</strong></div>
+          <div class="point-row"><span>3.</span><span>New Corella</span><div class="bar"><span style="width:62%"></span></div><strong>285.0</strong></div>
+          <div class="point-row"><span>4.</span><span>Asuncion</span><div class="bar"><span style="width:50%"></span></div><strong>231.0</strong></div>
+          <div class="point-row"><span>5.</span><span>Nabunturan</span><div class="bar"><span style="width:43%"></span></div><strong>197.0</strong></div>
+        </div>
+        <div style="margin-top:16px"><a class="link-btn" href="#">VIEW ALL RANKINGS &nbsp; →</a></div>
+      </article>
+
+      <article class="card side-card">
+        <div class="card-title">Medals by Sport</div>
+        <table class="sport-table">
+          <thead><tr><th>Sport</th><th>🏅</th><th>🥈</th><th>🥉</th><th>Total</th></tr></thead>
+          <tbody>
+            <tr><td>Athletics</td><td>68</td><td>52</td><td>60</td><td><strong>180</strong></td></tr>
+            <tr><td>Basketball</td><td>44</td><td>37</td><td>41</td><td><strong>122</strong></td></tr>
+            <tr><td>Volleyball</td><td>32</td><td>28</td><td>31</td><td><strong>91</strong></td></tr>
+            <tr><td>Swimming</td><td>28</td><td>24</td><td>26</td><td><strong>78</strong></td></tr>
+            <tr><td>Arnis</td><td>18</td><td>15</td><td>16</td><td><strong>49</strong></td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:14px"><a class="link-btn" href="#">VIEW ALL SPORTS &nbsp; →</a></div>
+      </article>
+
+      <div class="motto">ONE MEET. ONE SPIRIT. ONE CHAMPION.</div>
+    </aside>
+  </section>
+
+  <section class="announcement">
+    <span style="font-size:22px">📣</span>
+    <strong>ANNOUNCEMENT</strong>
+    <span>Stay tuned for updated schedules and results. Visit the Results page for detailed information.</span>
+  </section>
+</main>
+
+<script>
+  // Demo ranking data. Replace this with Laravel/Inertia props or your public API.
+  const rankingEndpoint = '/api/public/medal-tally';
+
+  // Recommended refresh behavior:
+  // - Refresh only while the meet is active.
+  // - Use a 30–60 second interval for medal totals.
+  // - Pause updates when document.hidden is true.
+  // - Update table rows only when values change.
+  //
+  // setInterval(async () => {
+  //   if (document.hidden) return;
+  //   const response = await fetch(rankingEndpoint);
+  //   const data = await response.json();
+  //   renderRanking(data);
+  // }, 45000);
+</script>
+</body>
+</html>

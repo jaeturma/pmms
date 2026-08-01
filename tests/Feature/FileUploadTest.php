@@ -63,6 +63,27 @@ test('uploads over the size limit are rejected', function () {
     expect(FileUpload::query()->count())->toBe(0);
 });
 
+test('a storage failure while uploading is surfaced as a friendly validation error, not a 500', function () {
+    // Regression test: production hit an unhandled `ValueError` ("Path
+    // must not be empty") from deep inside `UploadedFile::store()` when
+    // the destination write failed after the file had already passed
+    // validation — `FileUploadService::store()` now catches any storage
+    // failure and turns it into a normal field-attached validation error
+    // instead of a raw 500.
+    $user = User::factory()->create();
+
+    Storage::shouldReceive('disk')->with('local')->andReturnSelf();
+    Storage::shouldReceive('putFileAs')->andThrow(new RuntimeException('disk unavailable'));
+
+    $response = $this->actingAs($user)->post(route('uploads.store'), [
+        'file' => UploadedFile::fake()->create('report.pdf', 100, 'application/pdf'),
+    ]);
+
+    $response->assertSessionHasErrors('file');
+
+    expect(FileUpload::query()->count())->toBe(0);
+});
+
 test('owners can download their file', function () {
     $user = User::factory()->create();
 

@@ -79,6 +79,17 @@ class UserFactory extends Factory
     }
 
     /**
+     * Indicate that the user is a Technical Official (runs live scoring
+     * for their assigned sport(s) — see the `sports()` relation).
+     */
+    public function technicalOfficial(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => UserRole::TechnicalOfficial,
+        ]);
+    }
+
+    /**
      * Indicate that the model has two-factor authentication configured.
      */
     public function withTwoFactor(): static

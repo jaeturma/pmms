@@ -7,6 +7,7 @@ use App\Enums\ScoringSessionStatus;
 use App\Models\Division;
 use App\Models\Meet;
 use App\Models\ScoringSession;
+use App\Models\Setting;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -57,6 +58,7 @@ class HandleInertiaRequests extends Middleware
                 'type' => $division->type->value,
                 'name' => $division->name,
                 'areaLabel' => $division->areaLabel(),
+                'logoUrl' => $division->logo_upload_id === null ? null : route('division.logo'),
             ],
             // Shell-level chrome (WP-08-03): the sidebar's persistent meet-context
             // card needs this on every authenticated page, not just the dashboard
@@ -69,6 +71,12 @@ class HandleInertiaRequests extends Middleware
             // page — guarded to guest requests only so authenticated page
             // loads never pay for the extra query.
             'publicNav' => $user === null ? $this->publicNav() : null,
+            // Only the login/register pages actually render the widget —
+            // guarded to guest requests for the same reason as `publicNav`
+            // above. The site key is public by design (Google's own docs:
+            // it's meant to ship to the browser); the secret key never
+            // leaves the server.
+            'recaptcha' => $user === null ? $this->recaptcha() : null,
         ];
     }
 
@@ -123,6 +131,19 @@ class HandleInertiaRequests extends Middleware
                 ->where('status', '!=', ScoringSessionStatus::Ended->value)
                 ->whereHas('match', fn ($query) => $query->where('meet_id', $meet->id))
                 ->count(),
+        ];
+    }
+
+    /**
+     * @return array{enabled: bool, siteKey: string|null}
+     */
+    private function recaptcha(): array
+    {
+        $settings = Setting::current();
+
+        return [
+            'enabled' => $settings->recaptchaReady(),
+            'siteKey' => $settings->recaptchaReady() ? $settings->recaptcha_site_key : null,
         ];
     }
 }

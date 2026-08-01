@@ -67,6 +67,19 @@ test('admins can update a district', function () {
         ->and(AuditLog::query()->where('action', 'district.updated')->exists())->toBeTrue();
 });
 
+test('admins can update a district without touching its logo', function () {
+    $district = District::factory()->create(['name' => 'District I', 'logo_upload_id' => null]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put("/districts/{$district->id}", ['name' => 'District I — Renamed'])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
+
+    expect($district->refresh())
+        ->name->toBe('District I — Renamed')
+        ->logo_upload_id->toBeNull();
+});
+
 test('archiving and restoring a district toggles active', function () {
     $district = District::factory()->create();
     $admin = User::factory()->admin()->create();
