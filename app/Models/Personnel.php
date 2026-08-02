@@ -98,6 +98,14 @@ class Personnel extends Model
     }
 
     /**
+     * @return HasOne<MedicalClearance, $this>
+     */
+    public function medicalClearance(): HasOne
+    {
+        return $this->hasOne(MedicalClearance::class);
+    }
+
+    /**
      * This roster row's own login account, when it has one — a Coach
      * account (`App\Enums\UserRole::Coach`) is scoped through this link
      * (`Delegation::hasCoach()`), not through a `delegation_user`-style

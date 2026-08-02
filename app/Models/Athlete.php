@@ -144,4 +144,12 @@ class Athlete extends Model
     {
         return $this->hasOne(Accreditation::class);
     }
+
+    /**
+     * @return HasOne<MedicalClearance, $this>
+     */
+    public function medicalClearance(): HasOne
+    {
+        return $this->hasOne(MedicalClearance::class);
+    }
 }

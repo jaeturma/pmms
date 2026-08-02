@@ -14,14 +14,17 @@ import {
     Gavel,
     Landmark,
     LayoutGrid,
+    LifeBuoy,
     ListChecks,
     MapPin,
     Medal,
     Megaphone,
     Milestone,
+    Siren,
     School,
     ScrollText,
     Settings,
+    Stethoscope,
     Swords,
     Trophy,
     TriangleAlert,
@@ -51,7 +54,9 @@ import { index as billetingIndex } from '@/routes/billeting';
 import { index as delegationsIndex } from '@/routes/delegations';
 import { index as districtsIndex } from '@/routes/districts';
 import { edit as divisionEdit } from '@/routes/division';
+import { index as drrmPlansIndex } from '@/routes/drrm-plans';
 import { index as eligibilityIndex } from '@/routes/eligibility';
+import { index as emergencyIncidentsIndex } from '@/routes/emergency-incidents';
 import { index as entriesIndex } from '@/routes/entries';
 import { index as equipmentIndex } from '@/routes/equipment';
 import { index as eventsIndex } from '@/routes/events';
@@ -60,6 +65,7 @@ import { index as incidentsIndex } from '@/routes/incidents';
 import { index as managementIndex } from '@/routes/management';
 import { index as managementTeamsIndex } from '@/routes/management-teams';
 import { index as matchesIndex } from '@/routes/matches';
+import { index as medicalIndex } from '@/routes/medical';
 import { index as meetSportAssignmentsIndex } from '@/routes/meet-sport-assignments';
 import { index as meetsIndex } from '@/routes/meets';
 import { index as personnelIndex } from '@/routes/personnel';
@@ -216,6 +222,21 @@ const managerNavItems: NavItem[] = [
         title: 'Transport',
         href: transportIndex(),
         icon: Bus,
+    },
+    {
+        title: 'Medical',
+        href: medicalIndex(),
+        icon: Stethoscope,
+    },
+    {
+        title: 'DRRM Plans',
+        href: drrmPlansIndex(),
+        icon: LifeBuoy,
+    },
+    {
+        title: 'Emergency Incidents',
+        href: emergencyIncidentsIndex(),
+        icon: Siren,
     },
     {
         title: 'Incidents',

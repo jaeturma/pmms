@@ -133,6 +133,54 @@ class Meet extends Model
     }
 
     /**
+     * @return HasMany<MedicalClearance, $this>
+     */
+    public function medicalClearances(): HasMany
+    {
+        return $this->hasMany(MedicalClearance::class);
+    }
+
+    /**
+     * @return HasMany<DrrmPlan, $this>
+     */
+    public function drrmPlans(): HasMany
+    {
+        return $this->hasMany(DrrmPlan::class);
+    }
+
+    /**
+     * @return HasMany<EmergencyContact, $this>
+     */
+    public function emergencyContacts(): HasMany
+    {
+        return $this->hasMany(EmergencyContact::class);
+    }
+
+    /**
+     * @return HasMany<DrrmEquipment, $this>
+     */
+    public function drrmEquipment(): HasMany
+    {
+        return $this->hasMany(DrrmEquipment::class);
+    }
+
+    /**
+     * @return HasMany<ReadinessChecklist, $this>
+     */
+    public function readinessChecklists(): HasMany
+    {
+        return $this->hasMany(ReadinessChecklist::class);
+    }
+
+    /**
+     * @return HasMany<EmergencyIncident, $this>
+     */
+    public function emergencyIncidents(): HasMany
+    {
+        return $this->hasMany(EmergencyIncident::class);
+    }
+
+    /**
      * Registration-window hook for the delegation and entry modules.
      */
     public function isRegistrationOpen(): bool

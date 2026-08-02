@@ -11,13 +11,19 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DelegationController;
 use App\Http\Controllers\DistrictController;
 use App\Http\Controllers\DivisionController;
+use App\Http\Controllers\DrrmEquipmentController;
+use App\Http\Controllers\DrrmPlanController;
 use App\Http\Controllers\EligibilityController;
+use App\Http\Controllers\EmergencyCommunicationLogController;
+use App\Http\Controllers\EmergencyContactController;
+use App\Http\Controllers\EmergencyIncidentController;
 use App\Http\Controllers\EntryController;
 use App\Http\Controllers\EquipmentCategoryController;
 use App\Http\Controllers\EquipmentIssueController;
 use App\Http\Controllers\EquipmentItemController;
 use App\Http\Controllers\EquipmentReturnController;
 use App\Http\Controllers\EquipmentTransferController;
+use App\Http\Controllers\EvacuationRouteController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\FileUploadController;
 use App\Http\Controllers\IncidentController;
@@ -28,11 +34,14 @@ use App\Http\Controllers\ManagementTeamMemberController;
 use App\Http\Controllers\MatchController;
 use App\Http\Controllers\MealAnnouncementController;
 use App\Http\Controllers\MealScheduleController;
+use App\Http\Controllers\MedicalAccessController;
+use App\Http\Controllers\MedicalClearanceController;
 use App\Http\Controllers\MeetController;
 use App\Http\Controllers\MeetSportAssignmentController;
 use App\Http\Controllers\PersonnelController;
 use App\Http\Controllers\PortalController;
 use App\Http\Controllers\ProtestController;
+use App\Http\Controllers\ReadinessChecklistController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ResultController;
 use App\Http\Controllers\ScheduleController;
@@ -46,6 +55,7 @@ use App\Http\Controllers\TransportRequestController;
 use App\Http\Controllers\TransportTripController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\VenueController;
+use App\Http\Controllers\VenueEmergencyPlanController;
 use Illuminate\Support\Facades\Route;
 
 // Public portal — guest routes, throttled, published data only.
@@ -128,6 +138,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('food', [MealScheduleController::class, 'index'])->name('food.index');
     Route::get('billeting', [BilletingVenueController::class, 'index'])->name('billeting.index');
     Route::get('transport', [VehicleController::class, 'index'])->name('transport.index');
+    Route::get('medical', [MedicalClearanceController::class, 'index'])->name('medical.index');
+    Route::get('drrm/plans', [DrrmPlanController::class, 'index'])->name('drrm-plans.index');
+    Route::get('drrm/incidents', [EmergencyIncidentController::class, 'index'])->name('emergency-incidents.index');
 
     Route::get('delegations', [DelegationController::class, 'index'])->name('delegations.index');
     Route::put('delegations/{delegation}', [DelegationController::class, 'update'])->name('delegations.update');
@@ -221,6 +234,47 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('transport-trips', [TransportTripController::class, 'store'])->name('transport-trips.store');
     Route::patch('transport-trips/{transportTrip}/status', [TransportTripController::class, 'updateStatus'])->name('transport-trips.status');
     Route::delete('transport-trips/{transportTrip}', [TransportTripController::class, 'destroy'])->name('transport-trips.destroy');
+
+    // Medical/DRRM (WP-REALIGN-12) — same shape as Supply/Food/Billeting/
+    // Transport above: access varies by domain (Medical is the one
+    // three-tier exception in this whole series — see MedicalPolicy's
+    // own docblock), so these stay outside the flat role:admin,organizer
+    // group and authorize inside each controller via MedicalPolicy/
+    // DrrmPolicy.
+    Route::post('medical-clearances', [MedicalClearanceController::class, 'store'])->name('medical-clearances.store');
+    Route::put('medical-clearances/{medicalClearance}', [MedicalClearanceController::class, 'update'])->name('medical-clearances.update');
+
+    Route::post('medical-access', [MedicalAccessController::class, 'store'])->name('medical-access.store');
+    Route::patch('medical-access/{medicalAccessLog}/review', [MedicalAccessController::class, 'review'])->name('medical-access.review');
+
+    Route::post('drrm-plans', [DrrmPlanController::class, 'store'])->name('drrm-plans.store');
+    Route::put('drrm-plans/{drrmPlan}', [DrrmPlanController::class, 'update'])->name('drrm-plans.update');
+    Route::delete('drrm-plans/{drrmPlan}', [DrrmPlanController::class, 'destroy'])->name('drrm-plans.destroy');
+
+    Route::post('venue-emergency-plans', [VenueEmergencyPlanController::class, 'store'])->name('venue-emergency-plans.store');
+    Route::put('venue-emergency-plans/{venueEmergencyPlan}', [VenueEmergencyPlanController::class, 'update'])->name('venue-emergency-plans.update');
+    Route::delete('venue-emergency-plans/{venueEmergencyPlan}', [VenueEmergencyPlanController::class, 'destroy'])->name('venue-emergency-plans.destroy');
+
+    Route::post('evacuation-routes', [EvacuationRouteController::class, 'store'])->name('evacuation-routes.store');
+    Route::put('evacuation-routes/{evacuationRoute}', [EvacuationRouteController::class, 'update'])->name('evacuation-routes.update');
+    Route::delete('evacuation-routes/{evacuationRoute}', [EvacuationRouteController::class, 'destroy'])->name('evacuation-routes.destroy');
+
+    Route::post('emergency-contacts', [EmergencyContactController::class, 'store'])->name('emergency-contacts.store');
+    Route::put('emergency-contacts/{emergencyContact}', [EmergencyContactController::class, 'update'])->name('emergency-contacts.update');
+    Route::delete('emergency-contacts/{emergencyContact}', [EmergencyContactController::class, 'destroy'])->name('emergency-contacts.destroy');
+
+    Route::post('drrm-equipment', [DrrmEquipmentController::class, 'store'])->name('drrm-equipment.store');
+    Route::put('drrm-equipment/{drrmEquipment}', [DrrmEquipmentController::class, 'update'])->name('drrm-equipment.update');
+    Route::delete('drrm-equipment/{drrmEquipment}', [DrrmEquipmentController::class, 'destroy'])->name('drrm-equipment.destroy');
+
+    Route::post('readiness-checklists', [ReadinessChecklistController::class, 'store'])->name('readiness-checklists.store');
+    Route::patch('readiness-checklists/{readinessChecklist}/status', [ReadinessChecklistController::class, 'updateStatus'])->name('readiness-checklists.status');
+    Route::delete('readiness-checklists/{readinessChecklist}', [ReadinessChecklistController::class, 'destroy'])->name('readiness-checklists.destroy');
+
+    Route::post('emergency-incidents', [EmergencyIncidentController::class, 'store'])->name('emergency-incidents.store');
+    Route::patch('emergency-incidents/{emergencyIncident}/status', [EmergencyIncidentController::class, 'updateStatus'])->name('emergency-incidents.status');
+
+    Route::post('emergency-communication-logs', [EmergencyCommunicationLogController::class, 'store'])->name('emergency-communication-logs.store');
 
     Route::get('eligibility', [EligibilityController::class, 'index'])->name('eligibility.index');
     Route::post('eligibility/documents', [EligibilityController::class, 'storeDocument'])->name('eligibility.documents.store');

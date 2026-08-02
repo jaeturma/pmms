@@ -45,10 +45,32 @@ class Venue extends Model
     }
 
     /**
-     * Whether any record references this venue and blocks deletion.
+     * @return HasMany<VenueEmergencyPlan, $this>
+     */
+    public function emergencyPlans(): HasMany
+    {
+        return $this->hasMany(VenueEmergencyPlan::class);
+    }
+
+    /**
+     * @return HasMany<EvacuationRoute, $this>
+     */
+    public function evacuationRoutes(): HasMany
+    {
+        return $this->hasMany(EvacuationRoute::class);
+    }
+
+    /**
+     * Whether any record references this venue and blocks deletion —
+     * includes `VenueEmergencyPlan`/`EvacuationRoute` (both cascade-
+     * delete on this venue, unlike Equipment/Billeting/Vehicle's
+     * `nullOnDelete` references) so deleting a venue never silently
+     * destroys DRRM planning data.
      */
     public function isInUse(): bool
     {
-        return $this->schedules()->exists();
+        return $this->schedules()->exists()
+            || $this->emergencyPlans()->exists()
+            || $this->evacuationRoutes()->exists();
     }
 }
