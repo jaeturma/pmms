@@ -69,6 +69,7 @@ class EligibilityController extends Controller
             'pending' => (clone $base)->where('status', EligibilityStatus::Pending->value)->count(),
             'approved' => (clone $base)->where('status', EligibilityStatus::Approved->value)->count(),
             'returned' => (clone $base)->where('status', EligibilityStatus::Returned->value)->count(),
+            'rejected' => (clone $base)->where('status', EligibilityStatus::Rejected->value)->count(),
         ];
 
         $query = (clone $base)
@@ -156,7 +157,7 @@ class EligibilityController extends Controller
             'file_name' => $document->fileUpload->original_name,
             'uploaded_at' => $document->created_at !== null ? $document->created_at->format('M j, Y') : null,
             'url' => route('eligibility.documents.download', $document),
-            'can_delete' => $review->status !== EligibilityStatus::Approved
+            'can_delete' => ! in_array($review->status, [EligibilityStatus::Approved, EligibilityStatus::Rejected], true)
                 && $user->can('upload', [EligibilityReview::class, $review->athlete->delegation]),
         ];
     }
@@ -187,6 +188,15 @@ class EligibilityController extends Controller
         if ($review->status === EligibilityStatus::Approved) {
             throw ValidationException::withMessages([
                 'athlete_id' => __('This athlete\'s eligibility is already approved.'),
+            ]);
+        }
+
+        // Unlike Returned below, Rejected is terminal — a fresh upload
+        // never reopens it automatically (see EligibilityStatus::Rejected's
+        // own docblock).
+        if ($review->status === EligibilityStatus::Rejected) {
+            throw ValidationException::withMessages([
+                'athlete_id' => __('This athlete\'s eligibility was rejected.'),
             ]);
         }
 
@@ -249,7 +259,9 @@ class EligibilityController extends Controller
     }
 
     /**
-     * Remove a document while the review is not yet approved.
+     * Remove a document while the review is not yet decided in a way that
+     * locks it (approved or rejected — both terminal, see `documentRow()`'s
+     * matching `can_delete` computation).
      */
     public function destroyDocument(EligibilityDocument $document): RedirectResponse
     {
@@ -258,10 +270,10 @@ class EligibilityController extends Controller
 
         Gate::authorize('upload', [EligibilityReview::class, $athlete->delegation]);
 
-        if ($review !== null && $review->status === EligibilityStatus::Approved) {
+        if ($review !== null && in_array($review->status, [EligibilityStatus::Approved, EligibilityStatus::Rejected], true)) {
             Inertia::flash('toast', [
                 'type' => 'error',
-                'message' => __('Documents of an approved review cannot be removed.'),
+                'message' => __('Documents of a decided review cannot be removed.'),
             ]);
 
             return back();
@@ -346,6 +358,44 @@ class EligibilityController extends Controller
         ]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Eligibility returned for correction.')]);
+
+        return back();
+    }
+
+    /**
+     * Reject a pending review outright (reason required) — terminal,
+     * unlike `returnReview()`: a fresh document upload does not reopen a
+     * rejected review the way it reopens a returned one (see
+     * `storeDocument()` and `EligibilityStatus::Rejected`'s docblock).
+     * Added WP-REALIGN-06.
+     */
+    public function reject(Request $request, EligibilityReview $review): RedirectResponse
+    {
+        Gate::authorize('decide', $review);
+
+        $request->validate(['remarks' => ['required', 'string', 'max:500']]);
+
+        if ($review->status !== EligibilityStatus::Pending) {
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => __('Only pending reviews can be decided.'),
+            ]);
+
+            return back();
+        }
+
+        $review->forceFill([
+            'status' => EligibilityStatus::Rejected,
+            'reviewer_id' => $request->user()?->getAuthIdentifier(),
+            'remarks' => $request->string('remarks')->value(),
+            'decided_at' => now(),
+        ])->save();
+
+        $this->audit->record('eligibility.rejected', $review, [
+            'athlete' => $review->athlete->fullName(),
+        ]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Eligibility rejected.')]);
 
         return back();
     }

@@ -37,7 +37,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { approve, index, returnMethod } from '@/routes/eligibility';
+import { approve, index, reject, returnMethod } from '@/routes/eligibility';
 import {
     destroy as destroyDocument,
     store as storeDocument,
@@ -66,7 +66,12 @@ type ReviewRow = {
     can_decide: boolean;
 };
 
-type Counts = { pending: number; approved: number; returned: number };
+type Counts = {
+    pending: number;
+    approved: number;
+    returned: number;
+    rejected: number;
+};
 
 type Props = {
     reviews: Paginated<ReviewRow>;
@@ -80,6 +85,8 @@ const statusBadgeClasses: Record<string, string> = {
     pending: 'border-warning/30 bg-warning/10 text-warning',
     approved: 'border-success/30 bg-success/10 text-success',
 };
+
+const destructiveStatuses = new Set(['returned', 'rejected']);
 
 function UploadDialog({
     athleteOptions,
@@ -208,7 +215,7 @@ function DecisionDialog({
     onOpenChange,
 }: {
     review: ReviewRow;
-    mode: 'approve' | 'return';
+    mode: 'approve' | 'return' | 'reject';
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
@@ -216,18 +223,28 @@ function DecisionDialog({
     const [processing, setProcessing] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const remarksRequired = mode === 'return' || mode === 'reject';
+
     const save = () => {
-        if (mode === 'return' && remarks.trim() === '') {
-            setError('Remarks are required when returning a review.');
+        if (remarksRequired && remarks.trim() === '') {
+            setError(
+                mode === 'return'
+                    ? 'Remarks are required when returning a review.'
+                    : 'A reason is required when rejecting a review.',
+            );
 
             return;
         }
 
         setProcessing(true);
+        const url = {
+            approve: approve(review.id).url,
+            return: returnMethod(review.id).url,
+            reject: reject(review.id).url,
+        }[mode];
+
         router.patch(
-            mode === 'approve'
-                ? approve(review.id).url
-                : returnMethod(review.id).url,
+            url,
             { remarks },
             {
                 preserveScroll: true,
@@ -237,20 +254,27 @@ function DecisionDialog({
         );
     };
 
+    const title = {
+        approve: `Approve eligibility for ${review.athlete}?`,
+        return: `Return ${review.athlete}'s documents?`,
+        reject: `Reject eligibility for ${review.athlete}?`,
+    }[mode];
+
+    const confirmLabel = {
+        approve: 'Approve',
+        return: 'Return for correction',
+        reject: 'Reject',
+    }[mode];
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>
-                        {mode === 'approve'
-                            ? `Approve eligibility for ${review.athlete}?`
-                            : `Return ${review.athlete}'s documents?`}
-                    </DialogTitle>
+                    <DialogTitle>{title}</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-2">
                     <Label htmlFor="decision-remarks">
-                        Remarks{' '}
-                        {mode === 'return' ? '(required)' : '(optional)'}
+                        Remarks {remarksRequired ? '(required)' : '(optional)'}
                     </Label>
                     <Input
                         id="decision-remarks"
@@ -262,7 +286,9 @@ function DecisionDialog({
                         placeholder={
                             mode === 'return'
                                 ? 'What must be corrected?'
-                                : 'Optional note'
+                                : mode === 'reject'
+                                  ? 'Why is this being rejected?'
+                                  : 'Optional note'
                         }
                     />
                     <InputError message={error ?? undefined} />
@@ -271,11 +297,9 @@ function DecisionDialog({
                     <Button
                         onClick={save}
                         disabled={processing}
-                        variant={mode === 'return' ? 'destructive' : 'default'}
+                        variant={mode === 'approve' ? 'default' : 'destructive'}
                     >
-                        {mode === 'approve'
-                            ? 'Approve'
-                            : 'Return for correction'}
+                        {confirmLabel}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -293,7 +317,7 @@ export default function Eligibility({
     const [uploadOpen, setUploadOpen] = useState(false);
     const [decision, setDecision] = useState<{
         review: ReviewRow;
-        mode: 'approve' | 'return';
+        mode: 'approve' | 'return' | 'reject';
     } | null>(null);
 
     const applyStatusFilter = (value: string) => {
@@ -315,6 +339,7 @@ export default function Eligibility({
         { label: 'Pending review', value: counts.pending, tone: 'warning' },
         { label: 'Approved', value: counts.approved, tone: 'success' },
         { label: 'Returned', value: counts.returned },
+        { label: 'Rejected', value: counts.rejected, tone: 'destructive' },
     ];
 
     return (
@@ -334,7 +359,7 @@ export default function Eligibility({
                     }
                 />
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     {countCards.map((card) => (
                         <StatCard
                             key={card.label}
@@ -372,6 +397,7 @@ export default function Eligibility({
                             </SelectItem>
                             <SelectItem value="approved">Approved</SelectItem>
                             <SelectItem value="returned">Returned</SelectItem>
+                            <SelectItem value="rejected">Rejected</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -486,8 +512,9 @@ export default function Eligibility({
                                             <TableCell>
                                                 <Badge
                                                     variant={
-                                                        review.status ===
-                                                        'returned'
+                                                        destructiveStatuses.has(
+                                                            review.status,
+                                                        )
                                                             ? 'destructive'
                                                             : 'outline'
                                                     }
@@ -528,6 +555,18 @@ export default function Eligibility({
                                                             }
                                                         >
                                                             Return
+                                                        </Button>
+                                                        <Button
+                                                            variant="destructive"
+                                                            size="sm"
+                                                            onClick={() =>
+                                                                setDecision({
+                                                                    review,
+                                                                    mode: 'reject',
+                                                                })
+                                                            }
+                                                        >
+                                                            Reject
                                                         </Button>
                                                     </div>
                                                 )}

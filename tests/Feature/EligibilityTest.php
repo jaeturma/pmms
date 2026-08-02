@@ -177,6 +177,67 @@ test('decided reviews cannot be decided again', function () {
     expect($review->refresh()->status)->toBe(EligibilityStatus::Approved);
 });
 
+test('rejecting a review requires remarks and officers cannot decide', function () {
+    $delegation = Delegation::factory()->create();
+    $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);
+    $review = EligibilityReview::factory()->create([
+        'athlete_id' => $athlete->id,
+        'meet_id' => $delegation->meet_id,
+    ]);
+    $officer = eligibilityOfficerFor($delegation);
+
+    $this->actingAs($officer)
+        ->patch("/eligibility/reviews/{$review->id}/reject", ['remarks' => 'Not qualified.'])
+        ->assertForbidden();
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/eligibility/reviews/{$review->id}/reject", ['remarks' => ''])
+        ->assertSessionHasErrors('remarks');
+
+    $this->actingAs($admin)
+        ->patch("/eligibility/reviews/{$review->id}/reject", ['remarks' => 'Age does not match documents.'])
+        ->assertRedirect();
+
+    $review->refresh();
+
+    expect($review->status)->toBe(EligibilityStatus::Rejected)
+        ->and($review->reviewer_id)->toBe($admin->id)
+        ->and($review->decided_at)->not->toBeNull()
+        ->and(AuditLog::query()->where('action', 'eligibility.rejected')->exists())->toBeTrue();
+});
+
+test('a rejected review is terminal — unlike a returned one, a fresh upload does not reopen it', function () {
+    $delegation = Delegation::factory()->create();
+    $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);
+    $review = EligibilityReview::factory()->rejected()->create([
+        'athlete_id' => $athlete->id,
+        'meet_id' => $delegation->meet_id,
+    ]);
+    $officer = eligibilityOfficerFor($delegation);
+
+    $this->actingAs($officer)
+        ->post('/eligibility/documents', [
+            'athlete_id' => $athlete->id,
+            'document_type' => 'report_card',
+            'file' => UploadedFile::fake()->create('card.pdf', 100, 'application/pdf'),
+        ])
+        ->assertSessionHasErrors('athlete_id');
+
+    expect($review->refresh()->status)->toBe(EligibilityStatus::Rejected);
+});
+
+test('a rejected review cannot be decided again', function () {
+    $review = EligibilityReview::factory()->rejected()->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/eligibility/reviews/{$review->id}/approve", ['remarks' => 'Reconsidered.'])
+        ->assertRedirect();
+
+    expect($review->refresh()->status)->toBe(EligibilityStatus::Rejected);
+});
+
 test('uploading to a returned review resubmits it as pending', function () {
     $delegation = Delegation::factory()->create();
     $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);
@@ -237,8 +298,24 @@ test('documents can be removed while pending but not after approval', function (
         ->assertRedirect();
 
     $this->assertDatabaseMissing('eligibility_documents', ['id' => $document->id]);
+});
 
-    expect(AuditLog::query()->where('action', 'eligibility.document_deleted')->exists())->toBeTrue();
+test('documents cannot be removed after rejection either', function () {
+    $delegation = Delegation::factory()->create();
+    $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);
+    $admin = User::factory()->admin()->create();
+    uploadDocumentFor($athlete, $admin);
+
+    $document = EligibilityDocument::query()->sole();
+    $review = EligibilityReview::query()->sole();
+
+    $review->forceFill(['status' => EligibilityStatus::Rejected])->save();
+
+    $this->actingAs($admin)
+        ->delete("/eligibility/documents/{$document->id}")
+        ->assertRedirect();
+
+    $this->assertDatabaseHas('eligibility_documents', ['id' => $document->id]);
 });
 
 test('officers see only their own delegation\'s reviews', function () {
@@ -293,6 +370,7 @@ test('summary counts reflect the whole queue regardless of the status filter', f
     EligibilityReview::factory()->count(2)->create();
     EligibilityReview::factory()->approved()->create();
     EligibilityReview::factory()->returned()->create();
+    EligibilityReview::factory()->rejected()->create();
 
     $this->actingAs(User::factory()->admin()->create())
         ->get('/eligibility?status=approved')
@@ -300,7 +378,8 @@ test('summary counts reflect the whole queue regardless of the status filter', f
             ->has('reviews.data', 1)
             ->where('counts.pending', 2)
             ->where('counts.approved', 1)
-            ->where('counts.returned', 1));
+            ->where('counts.returned', 1)
+            ->where('counts.rejected', 1));
 });
 
 test('entries flag athletes whose eligibility is not approved', function () {

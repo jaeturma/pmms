@@ -54,4 +54,17 @@ class EligibilityReviewFactory extends Factory
             'decided_at' => now(),
         ]);
     }
+
+    /**
+     * Indicate that the review was rejected outright (terminal, unlike
+     * `returned()` — see `EligibilityStatus::Rejected`'s docblock).
+     */
+    public function rejected(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => EligibilityStatus::Rejected,
+            'remarks' => 'Documents do not meet eligibility requirements.',
+            'decided_at' => now(),
+        ]);
+    }
 }

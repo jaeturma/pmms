@@ -154,6 +154,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('eligibility/documents/{document}', [EligibilityController::class, 'destroyDocument'])->name('eligibility.documents.destroy');
     Route::patch('eligibility/reviews/{review}/approve', [EligibilityController::class, 'approve'])->name('eligibility.approve');
     Route::patch('eligibility/reviews/{review}/return', [EligibilityController::class, 'returnReview'])->name('eligibility.return');
+    Route::patch('eligibility/reviews/{review}/reject', [EligibilityController::class, 'reject'])->name('eligibility.reject');
 
     Route::get('reports/participation', [ReportController::class, 'participation'])->name('reports.participation');
     Route::get('reports/participation/download', [ReportController::class, 'downloadParticipation'])->name('reports.participation.download');
