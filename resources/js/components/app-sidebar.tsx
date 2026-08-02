@@ -2,6 +2,7 @@ import { Link, usePage } from '@inertiajs/react';
 import {
     Award,
     BarChart3,
+    Boxes,
     CalendarDays,
     ClipboardList,
     Contact,
@@ -48,6 +49,7 @@ import { index as districtsIndex } from '@/routes/districts';
 import { edit as divisionEdit } from '@/routes/division';
 import { index as eligibilityIndex } from '@/routes/eligibility';
 import { index as entriesIndex } from '@/routes/entries';
+import { index as equipmentIndex } from '@/routes/equipment';
 import { index as eventsIndex } from '@/routes/events';
 import { index as incidentsIndex } from '@/routes/incidents';
 import { index as managementIndex } from '@/routes/management';
@@ -175,6 +177,19 @@ const managerNavItems: NavItem[] = [
         title: 'Management',
         href: managementIndex(),
         icon: BarChart3,
+    },
+    // Placed in the admin/organizer tier rather than mainNavItems (unlike
+    // Management Teams, which is view-open to everyone): SupplyPolicy
+    // also grants access to a meet's Supply Team members who aren't
+    // admin/organizer, but the sidebar only knows the coarse UserRole,
+    // not per-committee ManagementTeamMember rows — those members can
+    // still reach /equipment directly, they just don't get a sidebar
+    // link for it. A dedicated shared-prop visibility flag would close
+    // that gap but is genuinely out of this WP's UI scope.
+    {
+        title: 'Equipment',
+        href: equipmentIndex(),
+        icon: Boxes,
     },
     {
         title: 'Incidents',

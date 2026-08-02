@@ -101,6 +101,14 @@ class Meet extends Model
     }
 
     /**
+     * @return HasMany<EquipmentCategory, $this>
+     */
+    public function equipmentCategories(): HasMany
+    {
+        return $this->hasMany(EquipmentCategory::class);
+    }
+
+    /**
      * Registration-window hook for the delegation and entry modules.
      */
     public function isRegistrationOpen(): bool

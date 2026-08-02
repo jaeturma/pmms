@@ -11,9 +11,15 @@ use App\Http\Controllers\DistrictController;
 use App\Http\Controllers\DivisionController;
 use App\Http\Controllers\EligibilityController;
 use App\Http\Controllers\EntryController;
+use App\Http\Controllers\EquipmentCategoryController;
+use App\Http\Controllers\EquipmentIssueController;
+use App\Http\Controllers\EquipmentItemController;
+use App\Http\Controllers\EquipmentReturnController;
+use App\Http\Controllers\EquipmentTransferController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\FileUploadController;
 use App\Http\Controllers\IncidentController;
+use App\Http\Controllers\InventoryAdjustmentController;
 use App\Http\Controllers\ManagementDashboardController;
 use App\Http\Controllers\ManagementTeamController;
 use App\Http\Controllers\ManagementTeamMemberController;
@@ -111,6 +117,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('schedule', [ScheduleController::class, 'index'])->name('schedule.index');
     Route::get('meet-sport-assignments', [MeetSportAssignmentController::class, 'index'])->name('meet-sport-assignments.index');
     Route::get('management-teams', [ManagementTeamController::class, 'index'])->name('management-teams.index');
+    Route::get('equipment', [EquipmentCategoryController::class, 'index'])->name('equipment.index');
 
     Route::get('delegations', [DelegationController::class, 'index'])->name('delegations.index');
     Route::put('delegations/{delegation}', [DelegationController::class, 'update'])->name('delegations.update');
@@ -152,6 +159,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('protests', [ProtestController::class, 'index'])->name('protests.index');
     Route::post('protests', [ProtestController::class, 'store'])->name('protests.store');
+
+    // Supply/Equipment (WP-REALIGN-10) — access is Admin/Organizer or a
+    // meet's Supply Team, not the flat role:admin,organizer group below,
+    // so these stay outside it and authorize per-meet via SupplyPolicy
+    // inside each controller, same shape as protests/eligibility above.
+    Route::post('equipment-categories', [EquipmentCategoryController::class, 'store'])->name('equipment-categories.store');
+    Route::put('equipment-categories/{equipmentCategory}', [EquipmentCategoryController::class, 'update'])->name('equipment-categories.update');
+    Route::delete('equipment-categories/{equipmentCategory}', [EquipmentCategoryController::class, 'destroy'])->name('equipment-categories.destroy');
+
+    Route::post('equipment-items', [EquipmentItemController::class, 'store'])->name('equipment-items.store');
+    Route::put('equipment-items/{equipmentItem}', [EquipmentItemController::class, 'update'])->name('equipment-items.update');
+    Route::delete('equipment-items/{equipmentItem}', [EquipmentItemController::class, 'destroy'])->name('equipment-items.destroy');
+
+    Route::post('equipment-issues', [EquipmentIssueController::class, 'store'])->name('equipment-issues.store');
+    Route::post('equipment-returns', [EquipmentReturnController::class, 'store'])->name('equipment-returns.store');
+    Route::post('equipment-transfers', [EquipmentTransferController::class, 'store'])->name('equipment-transfers.store');
+    Route::post('inventory-adjustments', [InventoryAdjustmentController::class, 'store'])->name('inventory-adjustments.store');
 
     Route::get('eligibility', [EligibilityController::class, 'index'])->name('eligibility.index');
     Route::post('eligibility/documents', [EligibilityController::class, 'storeDocument'])->name('eligibility.documents.store');
