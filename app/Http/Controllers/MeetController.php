@@ -6,6 +6,7 @@ use App\Enums\MeetStatus;
 use App\Http\Requests\MeetRequest;
 use App\Models\Event;
 use App\Models\Meet;
+use App\Models\MeetSport;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -147,6 +148,21 @@ class MeetController extends Controller
         $eventIds = $validated['event_ids'] ?? [];
 
         $meet->events()->sync($eventIds);
+
+        // Keeps meet_sports current as events are added — the migration
+        // that created the table only backfilled from history that
+        // existed at deploy time (see
+        // docs/architecture/pmms-data-migration-plan.md §5); this is the
+        // live equivalent for events attached afterward. Never removes a
+        // meet_sports row here even if its last event is detached —
+        // WP-REALIGN-07's assignments may already reference it, and
+        // `MeetSport.active` exists precisely so an admin can deactivate
+        // rather than lose the row.
+        $sportIds = Event::query()->whereIn('id', $eventIds)->pluck('sport_id')->unique();
+
+        foreach ($sportIds as $sportId) {
+            MeetSport::query()->firstOrCreate(['meet_id' => $meet->id, 'sport_id' => $sportId]);
+        }
 
         $this->audit->record('meet.events_updated', $meet, [
             'name' => $meet->name,

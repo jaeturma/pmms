@@ -3,6 +3,7 @@ import {
     Award,
     BarChart3,
     CalendarDays,
+    ClipboardList,
     Contact,
     Crown,
     FileCheck,
@@ -50,6 +51,7 @@ import { index as eventsIndex } from '@/routes/events';
 import { index as incidentsIndex } from '@/routes/incidents';
 import { index as managementIndex } from '@/routes/management';
 import { index as matchesIndex } from '@/routes/matches';
+import { index as meetSportAssignmentsIndex } from '@/routes/meet-sport-assignments';
 import { index as meetsIndex } from '@/routes/meets';
 import { index as personnelIndex } from '@/routes/personnel';
 import { index as protestsIndex } from '@/routes/protests';
@@ -108,6 +110,11 @@ const mainNavItems: NavItem[] = [
         title: 'Schedule',
         href: scheduleIndex(),
         icon: CalendarDays,
+    },
+    {
+        title: 'Tournament Assignments',
+        href: meetSportAssignmentsIndex(),
+        icon: ClipboardList,
     },
     {
         title: 'Matches',

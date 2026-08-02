@@ -2,19 +2,23 @@
 
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
+use App\Models\AuditLog;
+use App\Models\Event;
+use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
 use App\Models\SportCategory;
 use App\Models\User;
 use Illuminate\Database\QueryException;
+use Inertia\Testing\AssertableInertia;
 
 /**
- * MeetSportAssignment (WP-REALIGN-04/07) is model/schema only in this
- * phase — no controller, route, or policy exists yet, and it does not
- * yet feed ScoringSessionController/ResultController's authorization
- * (that cutover is a separate, later step gated on a backfill-strategy
- * decision — see the model's own docblock). Same scoping discipline as
- * MeetSportTest/SportCategoryTest.
+ * MeetSportAssignment (WP-REALIGN-04) model-level tests below, followed
+ * by MeetSportAssignmentController (WP-REALIGN-07) route-level tests.
+ * The controller/UI still does not feed
+ * ScoringSessionController/ResultController's authorization — that
+ * cutover is a separate, later step gated on a backfill-strategy
+ * decision (see the model's own docblock); sport_user is untouched.
  */
 test('a sport can have multiple tournament managers for the same meet sport', function () {
     $meetSport = MeetSport::factory()->create();
@@ -130,4 +134,180 @@ test('an assignment can move from pending through active to ended', function () 
     expect($assignment->fresh())
         ->status->toBe(MeetSportAssignmentStatus::Ended)
         ->end_date->not->toBeNull();
+});
+
+// --- MeetSportAssignmentController (WP-REALIGN-07) ---
+
+test('guests are redirected from the assignments page', function () {
+    $this->get('/meet-sport-assignments')->assertRedirect('/login');
+});
+
+test('the assignments page is viewable by any authenticated role, including viewers', function () {
+    $assignment = MeetSportAssignment::factory()->create();
+
+    $this->actingAs(User::factory()->create())
+        ->get('/meet-sport-assignments')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('meet-sport-assignments/index')
+            ->has('assignments', 1)
+            ->where('canManage', false));
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->get('/meet-sport-assignments')
+        ->assertInertia(fn (AssertableInertia $page) => $page->where('canManage', true));
+});
+
+test('the assignments page can be filtered by meet', function () {
+    $meetSportA = MeetSport::factory()->create();
+    $meetSportB = MeetSport::factory()->create();
+    MeetSportAssignment::factory()->create(['meet_sport_id' => $meetSportA->id]);
+    MeetSportAssignment::factory()->create(['meet_sport_id' => $meetSportB->id]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get("/meet-sport-assignments?meet_id={$meetSportA->meet_id}")
+        ->assertInertia(fn (AssertableInertia $page) => $page->has('assignments', 1));
+});
+
+test('organizers can create an assignment', function () {
+    $meetSport = MeetSport::factory()->create();
+    $official = User::factory()->technicalOfficial()->create();
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->post('/meet-sport-assignments', [
+            'meet_sport_id' => $meetSport->id,
+            'user_id' => $official->id,
+            'role' => MeetSportAssignmentRole::TechnicalOfficial->value,
+            'is_lead' => true,
+        ])
+        ->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('meet_sport_assignments', [
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $official->id,
+        'role' => MeetSportAssignmentRole::TechnicalOfficial->value,
+        'is_lead' => true,
+        'status' => MeetSportAssignmentStatus::Pending->value,
+    ]);
+
+    expect(AuditLog::query()->where('action', 'meet_sport_assignment.created')->exists())->toBeTrue();
+});
+
+test('non-managers cannot create an assignment', function (User $user) {
+    $meetSport = MeetSport::factory()->create();
+
+    $this->actingAs($user)
+        ->post('/meet-sport-assignments', [
+            'meet_sport_id' => $meetSport->id,
+            'user_id' => User::factory()->technicalOfficial()->create()->id,
+            'role' => MeetSportAssignmentRole::TechnicalOfficial->value,
+        ])
+        ->assertForbidden();
+})->with([
+    'viewer' => fn () => User::factory()->create(),
+    'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+    'technical official' => fn () => User::factory()->technicalOfficial()->create(),
+    'coach' => fn () => User::factory()->coach()->create(),
+]);
+
+test('a delegation officer cannot be assigned — only admin, organizer, or technical official accounts are eligible', function () {
+    $meetSport = MeetSport::factory()->create();
+    $officer = User::factory()->delegationOfficer()->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/meet-sport-assignments', [
+            'meet_sport_id' => $meetSport->id,
+            'user_id' => $officer->id,
+            'role' => MeetSportAssignmentRole::TournamentSecretary->value,
+        ])
+        ->assertSessionHasErrors('user_id');
+});
+
+test('the same person cannot be assigned the same role twice for the same meet sport, with a field error', function () {
+    $meetSport = MeetSport::factory()->create();
+    $official = User::factory()->technicalOfficial()->create();
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $official->id,
+        'role' => MeetSportAssignmentRole::TechnicalOfficial,
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/meet-sport-assignments', [
+            'meet_sport_id' => $meetSport->id,
+            'user_id' => $official->id,
+            'role' => MeetSportAssignmentRole::TechnicalOfficial->value,
+        ])
+        ->assertSessionHasErrors('user_id');
+});
+
+test('organizers can update an assignment\'s status', function () {
+    $assignment = MeetSportAssignment::factory()->create(['status' => MeetSportAssignmentStatus::Pending]);
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->patch("/meet-sport-assignments/{$assignment->id}/status", ['status' => MeetSportAssignmentStatus::Active->value])
+        ->assertSessionHasNoErrors();
+
+    expect($assignment->fresh()->status)->toBe(MeetSportAssignmentStatus::Active)
+        ->and(AuditLog::query()->where('action', 'meet_sport_assignment.status_updated')->exists())->toBeTrue();
+});
+
+test('non-managers cannot update an assignment\'s status', function (User $user) {
+    $assignment = MeetSportAssignment::factory()->create();
+
+    $this->actingAs($user)
+        ->patch("/meet-sport-assignments/{$assignment->id}/status", ['status' => MeetSportAssignmentStatus::Active->value])
+        ->assertForbidden();
+})->with([
+    'viewer' => fn () => User::factory()->create(),
+    'technical official' => fn () => User::factory()->technicalOfficial()->create(),
+]);
+
+test('organizers can remove an assignment', function () {
+    $assignment = MeetSportAssignment::factory()->create();
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->delete("/meet-sport-assignments/{$assignment->id}")
+        ->assertSessionHasNoErrors();
+
+    expect(MeetSportAssignment::query()->whereKey($assignment->id)->exists())->toBeFalse()
+        ->and(AuditLog::query()->where('action', 'meet_sport_assignment.deleted')->exists())->toBeTrue();
+});
+
+test('non-managers cannot remove an assignment', function (User $user) {
+    $assignment = MeetSportAssignment::factory()->create();
+
+    $this->actingAs($user)
+        ->delete("/meet-sport-assignments/{$assignment->id}")
+        ->assertForbidden();
+
+    expect(MeetSportAssignment::query()->whereKey($assignment->id)->exists())->toBeTrue();
+})->with([
+    'viewer' => fn () => User::factory()->create(),
+    'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+]);
+
+test('syncing a meet\'s events keeps meet_sports current for newly attached sports', function () {
+    $meet = Meet::factory()->create();
+    $event = Event::factory()->create();
+
+    expect(MeetSport::query()->where('meet_id', $meet->id)->where('sport_id', $event->sport_id)->exists())->toBeFalse();
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->put("/meets/{$meet->id}/events", ['event_ids' => [$event->id]])
+        ->assertSessionHasNoErrors();
+
+    expect(MeetSport::query()->where('meet_id', $meet->id)->where('sport_id', $event->sport_id)->exists())->toBeTrue();
+});
+
+test('syncing a meet\'s events does not duplicate an already-existing meet_sports row', function () {
+    $meet = Meet::factory()->create();
+    $event = Event::factory()->create();
+    MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $event->sport_id]);
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->put("/meets/{$meet->id}/events", ['event_ids' => [$event->id]])
+        ->assertSessionHasNoErrors();
+
+    expect(MeetSport::query()->where('meet_id', $meet->id)->where('sport_id', $event->sport_id)->count())->toBe(1);
 });

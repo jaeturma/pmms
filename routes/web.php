@@ -17,6 +17,7 @@ use App\Http\Controllers\IncidentController;
 use App\Http\Controllers\ManagementDashboardController;
 use App\Http\Controllers\MatchController;
 use App\Http\Controllers\MeetController;
+use App\Http\Controllers\MeetSportAssignmentController;
 use App\Http\Controllers\PersonnelController;
 use App\Http\Controllers\PortalController;
 use App\Http\Controllers\ProtestController;
@@ -106,6 +107,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('meets', [MeetController::class, 'index'])->name('meets.index');
     Route::get('venues', [VenueController::class, 'index'])->name('venues.index');
     Route::get('schedule', [ScheduleController::class, 'index'])->name('schedule.index');
+    Route::get('meet-sport-assignments', [MeetSportAssignmentController::class, 'index'])->name('meet-sport-assignments.index');
 
     Route::get('delegations', [DelegationController::class, 'index'])->name('delegations.index');
     Route::put('delegations/{delegation}', [DelegationController::class, 'update'])->name('delegations.update');
@@ -238,6 +240,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('schedule', [ScheduleController::class, 'store'])->name('schedule.store');
         Route::put('schedule/{schedule}', [ScheduleController::class, 'update'])->name('schedule.update');
         Route::delete('schedule/{schedule}', [ScheduleController::class, 'destroy'])->name('schedule.destroy');
+
+        Route::post('meet-sport-assignments', [MeetSportAssignmentController::class, 'store'])->name('meet-sport-assignments.store');
+        Route::patch('meet-sport-assignments/{meetSportAssignment}/status', [MeetSportAssignmentController::class, 'updateStatus'])->name('meet-sport-assignments.status');
+        Route::delete('meet-sport-assignments/{meetSportAssignment}', [MeetSportAssignmentController::class, 'destroy'])->name('meet-sport-assignments.destroy');
 
         Route::post('meets', [MeetController::class, 'store'])->name('meets.store');
         Route::put('meets/{meet}', [MeetController::class, 'update'])->name('meets.update');
