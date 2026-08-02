@@ -78,4 +78,16 @@ class SportCategory extends Model
     {
         return $this->hasMany(Event::class);
     }
+
+    /**
+     * Assignments specifically scoped to this category (e.g. a Category
+     * Tournament Manager) — assignments scoped to the whole meet_sport
+     * instead are reached via `meetSport->assignments()`.
+     *
+     * @return HasMany<MeetSportAssignment, $this>
+     */
+    public function assignments(): HasMany
+    {
+        return $this->hasMany(MeetSportAssignment::class);
+    }
 }

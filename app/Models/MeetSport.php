@@ -74,4 +74,15 @@ class MeetSport extends Model
     {
         return $this->hasMany(SportCategory::class);
     }
+
+    /**
+     * Tournament Manager/Secretary/ICT/Technical Official assignments
+     * scoped to this meet's inclusion of the sport.
+     *
+     * @return HasMany<MeetSportAssignment, $this>
+     */
+    public function assignments(): HasMany
+    {
+        return $this->hasMany(MeetSportAssignment::class);
+    }
 }

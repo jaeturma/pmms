@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
@@ -72,5 +73,18 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     public function sports(): BelongsToMany
     {
         return $this->belongsToMany(Sport::class)->withTimestamps();
+    }
+
+    /**
+     * This user's meet-scoped tournament-personnel assignments (Tournament
+     * Manager/Secretary/ICT/Technical Official) — distinct from `sports()`
+     * above, which is the existing, meet-unscoped Technical Official
+     * pivot still in live use (see `MeetSportAssignment`'s own docblock).
+     *
+     * @return HasMany<MeetSportAssignment, $this>
+     */
+    public function meetSportAssignments(): HasMany
+    {
+        return $this->hasMany(MeetSportAssignment::class);
     }
 }
