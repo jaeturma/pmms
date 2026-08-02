@@ -15,6 +15,8 @@ use App\Http\Controllers\EventController;
 use App\Http\Controllers\FileUploadController;
 use App\Http\Controllers\IncidentController;
 use App\Http\Controllers\ManagementDashboardController;
+use App\Http\Controllers\ManagementTeamController;
+use App\Http\Controllers\ManagementTeamMemberController;
 use App\Http\Controllers\MatchController;
 use App\Http\Controllers\MeetController;
 use App\Http\Controllers\MeetSportAssignmentController;
@@ -108,6 +110,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('venues', [VenueController::class, 'index'])->name('venues.index');
     Route::get('schedule', [ScheduleController::class, 'index'])->name('schedule.index');
     Route::get('meet-sport-assignments', [MeetSportAssignmentController::class, 'index'])->name('meet-sport-assignments.index');
+    Route::get('management-teams', [ManagementTeamController::class, 'index'])->name('management-teams.index');
 
     Route::get('delegations', [DelegationController::class, 'index'])->name('delegations.index');
     Route::put('delegations/{delegation}', [DelegationController::class, 'update'])->name('delegations.update');
@@ -244,6 +247,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('meet-sport-assignments', [MeetSportAssignmentController::class, 'store'])->name('meet-sport-assignments.store');
         Route::patch('meet-sport-assignments/{meetSportAssignment}/status', [MeetSportAssignmentController::class, 'updateStatus'])->name('meet-sport-assignments.status');
         Route::delete('meet-sport-assignments/{meetSportAssignment}', [MeetSportAssignmentController::class, 'destroy'])->name('meet-sport-assignments.destroy');
+
+        Route::post('management-teams', [ManagementTeamController::class, 'store'])->name('management-teams.store');
+        Route::put('management-teams/{managementTeam}', [ManagementTeamController::class, 'update'])->name('management-teams.update');
+        Route::delete('management-teams/{managementTeam}', [ManagementTeamController::class, 'destroy'])->name('management-teams.destroy');
+
+        Route::post('management-team-members', [ManagementTeamMemberController::class, 'store'])->name('management-team-members.store');
+        Route::patch('management-team-members/{managementTeamMember}/status', [ManagementTeamMemberController::class, 'updateStatus'])->name('management-team-members.status');
+        Route::delete('management-team-members/{managementTeamMember}', [ManagementTeamMemberController::class, 'destroy'])->name('management-team-members.destroy');
 
         Route::post('meets', [MeetController::class, 'store'])->name('meets.store');
         Route::put('meets/{meet}', [MeetController::class, 'update'])->name('meets.update');

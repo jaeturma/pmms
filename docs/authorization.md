@@ -139,6 +139,8 @@ the named policy on top of the role check.
 | Schedule — create, update, delete slots (meet registration-closed or active) | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Tournament assignments — view (Tournament Manager/Secretary/ICT/Technical Official per meet+sport, WP-REALIGN-07) | ✓ all | ✓ all | ✓ all | ✓ all | ✓ all | ✓ all |
 | Tournament assignments — create, update status, remove | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| Management teams — view (WP-REALIGN-09) | ✓ all | ✓ all | ✓ all | ✓ all | ✓ all | ✓ all |
+| Management teams — create, update, remove; add/update-status/remove a member | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Delegations — list | ✓ all | ✓ all | own only | ✗ | ✓ all³ | ✓ all |
 | Delegations — register, delete (draft only) | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Delegations — update head contact | ✓ | ✓ | own (draft + registration open) | ✗ | ✗ | ✗ |

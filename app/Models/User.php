@@ -105,4 +105,12 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     {
         return $this->hasOne(Personnel::class);
     }
+
+    /**
+     * @return HasMany<ManagementTeamMember, $this>
+     */
+    public function managementTeamMemberships(): HasMany
+    {
+        return $this->hasMany(ManagementTeamMember::class);
+    }
 }

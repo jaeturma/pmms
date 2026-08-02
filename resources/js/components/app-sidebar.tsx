@@ -23,6 +23,7 @@ import {
     Trophy,
     TriangleAlert,
     UserCog,
+    Users,
     UsersRound,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
@@ -50,6 +51,7 @@ import { index as entriesIndex } from '@/routes/entries';
 import { index as eventsIndex } from '@/routes/events';
 import { index as incidentsIndex } from '@/routes/incidents';
 import { index as managementIndex } from '@/routes/management';
+import { index as managementTeamsIndex } from '@/routes/management-teams';
 import { index as matchesIndex } from '@/routes/matches';
 import { index as meetSportAssignmentsIndex } from '@/routes/meet-sport-assignments';
 import { index as meetsIndex } from '@/routes/meets';
@@ -115,6 +117,11 @@ const mainNavItems: NavItem[] = [
         title: 'Tournament Assignments',
         href: meetSportAssignmentsIndex(),
         icon: ClipboardList,
+    },
+    {
+        title: 'Management Teams',
+        href: managementTeamsIndex(),
+        icon: Users,
     },
     {
         title: 'Matches',

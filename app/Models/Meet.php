@@ -93,6 +93,14 @@ class Meet extends Model
     }
 
     /**
+     * @return HasMany<ManagementTeam, $this>
+     */
+    public function managementTeams(): HasMany
+    {
+        return $this->hasMany(ManagementTeam::class);
+    }
+
+    /**
      * Registration-window hook for the delegation and entry modules.
      */
     public function isRegistrationOpen(): bool
