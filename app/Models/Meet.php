@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -78,6 +79,17 @@ class Meet extends Model
     public function events(): BelongsToMany
     {
         return $this->belongsToMany(Event::class, 'meet_events')->withTimestamps();
+    }
+
+    /**
+     * This meet's sport inclusions — see `MeetSport`'s own docblock for
+     * why this exists alongside (not instead of) `events()` above.
+     *
+     * @return HasMany<MeetSport, $this>
+     */
+    public function meetSports(): HasMany
+    {
+        return $this->hasMany(MeetSport::class);
     }
 
     /**

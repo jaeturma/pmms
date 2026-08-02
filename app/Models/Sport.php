@@ -51,4 +51,16 @@ class Sport extends Model
     {
         return $this->belongsToMany(User::class)->withTimestamps();
     }
+
+    /**
+     * This sport's inclusion across meets — see `MeetSport`'s own
+     * docblock. `Sport` itself remains a global, meet-unscoped catalog
+     * row; this is the new per-meet join.
+     *
+     * @return HasMany<MeetSport, $this>
+     */
+    public function meetSports(): HasMany
+    {
+        return $this->hasMany(MeetSport::class);
+    }
 }
