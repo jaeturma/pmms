@@ -1,5 +1,5 @@
 import { Head, router } from '@inertiajs/react';
-import { useEcho } from '@laravel/echo-react';
+import { configureEcho, useEcho } from '@laravel/echo-react';
 import { Pause, Play, Radio, Square } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
@@ -41,6 +41,15 @@ import {
     show as pollRoute,
     start as startRoute,
 } from '@/routes/scoring';
+
+/** Configuring Echo here rather than in `app.tsx` keeps pusher-js out of
+ * every other page's bundle — `useEcho` below is the only call site of
+ * Echo's realtime hooks app-wide, so there's no reason to pay for it
+ * globally. Runs once, the first time this module is imported (Inertia
+ * only resolves a page's module when it's actually visited). */
+configureEcho({
+    broadcaster: 'reverb',
+});
 
 type Session = LiveSession;
 

@@ -1,6 +1,5 @@
 import { createInertiaApp } from '@inertiajs/react';
 import type { ResolvedComponent } from '@inertiajs/react';
-import { configureEcho } from '@laravel/echo-react';
 import type { ComponentType } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -26,10 +25,6 @@ function isKioskVisit(name: string, url: string): boolean {
 
     return new URLSearchParams(query).get('kiosk') === '1';
 }
-
-configureEcho({
-    broadcaster: 'reverb',
-});
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
