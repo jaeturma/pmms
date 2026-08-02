@@ -667,15 +667,17 @@ class ScoringSessionController extends Controller
     }
 
     /**
-     * Admin/Organizer may manage any match's scoring; a Technical Official
-     * only a match whose sport is one they're assigned to (`User::sports()`).
-     * Shared by `board()`'s `canManage` flag, `authorizeView()`'s Technical
-     * Official branch, and every mutating action's own authorization check
-     * below — one definition of "who may run this match's scoreboard."
+     * Admin may manage any match's scoring; a Technical Official only a
+     * match whose sport is one they're assigned to (`User::sports()`).
+     * Organizer is deliberately excluded — Organizer can manage other
+     * meet data but not operate the live scoreboard. Shared by `board()`'s
+     * `canManage` flag, `authorizeView()`'s Technical Official branch, and
+     * every mutating action's own authorization check below — one
+     * definition of "who may run this match's scoreboard."
      */
     private function canManage(User $user, EventMatch $match): bool
     {
-        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+        if ($user->hasRole(UserRole::Admin)) {
             return true;
         }
 

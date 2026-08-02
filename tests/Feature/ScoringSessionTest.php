@@ -190,6 +190,7 @@ test('non-managers cannot start, score, or end a scoring session', function (Use
         ->assertForbidden();
 })->with([
     'viewer' => fn () => User::factory()->create(),
+    'organizer' => fn () => User::factory()->organizer()->create(),
     'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
     'technical official not assigned to this match\'s sport' => fn () => User::factory()->technicalOfficial()->create(),
 ]);
@@ -308,7 +309,7 @@ test('a correction requires a reason', function () {
     $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
     $session = ScoringSession::factory()->create(['match_id' => $match->id]);
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->patch("/scoring-sessions/{$session->id}/score", ['type' => 'correction', 'side' => 'a', 'delta' => -1])
         ->assertSessionHasErrors('reason');
 });
@@ -317,7 +318,7 @@ test('score never goes below zero', function () {
     $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
     $session = ScoringSession::factory()->create(['match_id' => $match->id, 'score_a' => 1]);
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->patch("/scoring-sessions/{$session->id}/score", ['type' => 'correction', 'side' => 'a', 'delta' => -5, 'reason' => 'Fix'])
         ->assertSessionHasNoErrors();
 
@@ -328,7 +329,7 @@ test('ending a scoring session never creates or touches an EventResult', functio
     $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
     $session = ScoringSession::factory()->create(['match_id' => $match->id]);
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->patch("/scoring-sessions/{$session->id}/end", [])
         ->assertSessionHasNoErrors();
 
@@ -543,6 +544,7 @@ test('non-managers cannot record a team foul', function (User $user) {
         ->assertForbidden();
 })->with([
     'viewer' => fn () => User::factory()->create(),
+    'organizer' => fn () => User::factory()->organizer()->create(),
     'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
 ]);
 
@@ -781,6 +783,7 @@ test('non-managers cannot record a round score', function (User $user) {
         ->assertForbidden();
 })->with([
     'viewer' => fn () => User::factory()->create(),
+    'organizer' => fn () => User::factory()->organizer()->create(),
     'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
 ]);
 
@@ -995,6 +998,7 @@ test('non-managers cannot advance the count or record a run', function (User $us
         ->assertForbidden();
 })->with([
     'viewer' => fn () => User::factory()->create(),
+    'organizer' => fn () => User::factory()->organizer()->create(),
     'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
 ]);
 

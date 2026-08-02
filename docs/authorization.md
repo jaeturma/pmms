@@ -146,7 +146,7 @@ the named policy on top of the role check.
 | Matches — list | ✓ all | ✓ all | own delegation's only | own assigned sport(s)² only | ✗ |
 | Matches — create, update, participants, status, delete | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Live scoring — view session (Phase 7) | ✓ all | ✓ all | own delegation's matches only | own assigned sport(s)² only | ✗ |
-| Live scoring — start, score, correct, period, pause, resume, end, record/reset team fouls, record a boxing round score, advance count/outs, record an inning run (Phase 7) | ✓ | ✓ | ✗ | own assigned sport(s)² only | ✗ |
+| Live scoring — start, score, correct, period, pause, resume, end, record/reset team fouls, record a boxing round score, advance count/outs, record an inning run (Phase 7) | ✓ | ✗ | ✗ | own assigned sport(s)² only | ✗ |
 | Results — validated results | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Results — encoded (unvalidated) results | ✓ all | ✓ all | ✗ | own sport's only | ✗ |
 | Results — encode, update | ✓ | ✓ | ✗ | own sport's only | ✗ |
