@@ -96,6 +96,19 @@ class Delegation extends Model
     }
 
     /**
+     * Whether `$user` is this delegation's own Coach (or Assistant Coach,
+     * or Chaperone — any roster role) via their own `Personnel.user_id`
+     * link, not the `delegation_user` pivot `hasOfficer()` checks — a
+     * Coach is scoped through their roster identity, not an
+     * administrative "officer" assignment. See `Personnel::user()`'s
+     * docblock.
+     */
+    public function hasCoach(User $user): bool
+    {
+        return $this->personnel()->where('user_id', $user->id)->exists();
+    }
+
+    /**
      * The delegation's own identity — its school's name (City division) or
      * its district's name (Province division, presented as "Municipality").
      * Use this for anything describing the delegation itself (rosters,

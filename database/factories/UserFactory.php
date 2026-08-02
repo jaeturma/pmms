@@ -90,6 +90,18 @@ class UserFactory extends Factory
     }
 
     /**
+     * Indicate that the user is a Coach — scoped to whichever delegation
+     * their own `Personnel` roster row (`personnel.user_id`) belongs to,
+     * see `Delegation::hasCoach()`.
+     */
+    public function coach(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => UserRole::Coach,
+        ]);
+    }
+
+    /**
      * Indicate that the model has two-factor authentication configured.
      */
     public function withTwoFactor(): static

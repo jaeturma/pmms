@@ -10,15 +10,19 @@ use App\Models\User;
 class EligibilityReviewPolicy
 {
     /**
-     * Eligibility data concerns minors — viewers have no access.
+     * Eligibility data concerns minors — viewers have no access. A Coach
+     * is scoped identically to a Delegation Officer for view/upload —
+     * see `Delegation::hasCoach()` — but never for `decide()` below,
+     * which stays a manager-only DSAC-style decision.
      */
     public function viewAny(User $user): bool
     {
-        return $user->hasRole(UserRole::Admin, UserRole::Organizer, UserRole::DelegationOfficer);
+        return $user->hasRole(UserRole::Admin, UserRole::Organizer, UserRole::DelegationOfficer, UserRole::Coach);
     }
 
     /**
-     * Managers see any review; officers only their own delegation's.
+     * Managers see any review; officers and coaches only their own
+     * delegation's.
      */
     public function view(User $user, EligibilityReview $review): bool
     {
@@ -26,13 +30,13 @@ class EligibilityReviewPolicy
             return true;
         }
 
-        return $review->athlete->delegation->hasOfficer($user);
+        return $review->athlete->delegation->hasOfficer($user) || $review->athlete->delegation->hasCoach($user);
     }
 
     /**
-     * Managers may upload anytime; officers for their own delegation's
-     * athletes while the meet's registration window is open (entries-style
-     * window — the delegation need not still be a draft).
+     * Managers may upload anytime; officers and coaches for their own
+     * delegation's athletes while the meet's registration window is open
+     * (entries-style window — the delegation need not still be a draft).
      */
     public function upload(User $user, Delegation $delegation): bool
     {
@@ -40,12 +44,14 @@ class EligibilityReviewPolicy
             return true;
         }
 
-        return $delegation->hasOfficer($user)
+        return ($delegation->hasOfficer($user) || $delegation->hasCoach($user))
             && $delegation->meet->isRegistrationOpen();
     }
 
     /**
-     * Eligibility decisions are made by managers, never automatically.
+     * Eligibility decisions are made by managers, never automatically —
+     * a Coach submits and resubmits (`upload()` above) but never decides
+     * their own submission, same as an officer today.
      */
     public function decide(User $user, EligibilityReview $review): bool
     {

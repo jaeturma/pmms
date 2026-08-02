@@ -30,6 +30,7 @@ function forbiddenActor(string $role): User
     return match ($role) {
         'delegation officer' => User::factory()->delegationOfficer()->create(),
         'technical official' => User::factory()->technicalOfficial()->create(),
+        'coach' => User::factory()->coach()->create(),
         default => User::factory()->create(),
     };
 }
@@ -46,7 +47,7 @@ test('meet-data management is denied to viewers, delegation officers, and techni
         ->{$method}($uri)
         ->assertForbidden();
 })
-    ->with(['viewer', 'delegation officer', 'technical official'])
+    ->with(['viewer', 'delegation officer', 'technical official', 'coach'])
     ->with([
         'district create' => fn (): array => ['post', '/districts'],
         'district update' => fn (): array => ['put', '/districts/'.District::factory()->create()->id],

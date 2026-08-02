@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
@@ -86,5 +87,22 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     public function meetSportAssignments(): HasMany
     {
         return $this->hasMany(MeetSportAssignment::class);
+    }
+
+    /**
+     * A Coach's own roster identity (`Personnel::user()`'s inverse) — not
+     * unique across meets by design (a returning coach gets a new
+     * `Personnel` row per meet's delegation but may keep the same login,
+     * see the migration's own docblock), so this resolves to whichever
+     * row Eloquent's default ordering returns first when a login has
+     * more than one. Fine for this WP's scope (one active assignment at
+     * a time is the common case); a "current meet" concept would be
+     * needed to disambiguate the multi-row case precisely.
+     *
+     * @return HasOne<Personnel, $this>
+     */
+    public function personnel(): HasOne
+    {
+        return $this->hasOne(Personnel::class);
     }
 }

@@ -22,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $phone
  * @property string|null $email
  * @property int|null $photo_upload_id
+ * @property int|null $user_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -94,5 +95,23 @@ class Personnel extends Model
     public function accreditation(): HasOne
     {
         return $this->hasOne(Accreditation::class);
+    }
+
+    /**
+     * This roster row's own login account, when it has one — a Coach
+     * account (`App\Enums\UserRole::Coach`) is scoped through this link
+     * (`Delegation::hasCoach()`), not through a `delegation_user`-style
+     * pivot the way a Delegation Officer is. `user_id` is intentionally
+     * kept out of Fillable (like `photo_upload_id`) — linking a roster
+     * row to a login is a controlled action, never mass-assignable from
+     * `PersonnelController::update()`'s general request input. Most
+     * `Personnel` rows have no linked account at all; that's normal, not
+     * every coach/assistant coach/chaperone gets a login.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 }
