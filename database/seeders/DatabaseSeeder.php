@@ -17,9 +17,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call(AdminUserSeeder::class);
         $this->call(DivisionRegistrySeeder::class);
-        $this->call(SampleRegistrySeeder::class);
         $this->call(SportsCatalogSeeder::class);
-        $this->call(SampleProvinceDemoSeeder::class);
 
         $hasTestUser = User::query()->where('email', 'test@example.com')->exists();
 
@@ -30,8 +28,8 @@ class DatabaseSeeder extends Seeder
             ]);
         }
 
-        if (app()->environment(['local', 'testing'])) {
-            $this->call(RoleDemoUsersSeeder::class);
-        }
+        // Ddopaa2026ShowcaseSeeder guards itself to local/testing, so it's
+        // always safe to call — a production run no-ops.
+        $this->call(Ddopaa2026ShowcaseSeeder::class);
     }
 }

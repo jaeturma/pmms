@@ -106,7 +106,8 @@ test('the division registry seeder creates the real default configuration', func
         ->and(District::query()->count())->toBe(11);
 
     $maco = District::query()->where('name', 'Maco')->firstOrFail();
-    expect($maco->nickname)->toBe('Tigers');
+    expect($maco->nickname)->toBe('Power Voltz')
+        ->and($maco->congressional_district)->toBe('Second');
 
     // Idempotent: re-running does not duplicate rows.
     (new DivisionRegistrySeeder)->run();

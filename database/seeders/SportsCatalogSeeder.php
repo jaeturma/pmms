@@ -21,20 +21,34 @@ class SportsCatalogSeeder extends Seeder
     public function run(): void
     {
         $sports = [
-            'Arnis',
             'Athletics',
+            'Archery',
+            'Arnis',
             'Badminton',
             'Baseball',
             'Basketball',
+            'Billiard',
+            'Bocce',
+            'Boxing',
             'Chess',
+            'Dancesports',
             'Football',
+            'Futsal',
+            'Goal Ball',
             'Gymnastics',
+            'Pencak Silat',
+            'Swimming',
+            'Weightlifting',
             'Sepak Takraw',
             'Softball',
-            'Swimming',
-            'Table Tennis',
             'Taekwondo',
+            'Table Tennis',
+            'Tennis',
             'Volleyball',
+            'Wrestling',
+            'Wushu',
+            'Paragames - Athletics',
+            'Paragames - Swimming',
         ];
 
         foreach ($sports as $name) {

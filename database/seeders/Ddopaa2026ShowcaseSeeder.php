@@ -42,14 +42,16 @@ use Illuminate\Support\Collection;
  * registration, schedule, live scoring, medal tally, portal, and the new
  * Technical Official role) without hand-creating anything first.
  *
- * Deliberately a *separate* meet from `DdopaaReferenceSeeder`'s "DdOPAA
- * Meet 2025" (docs/phases/ddopaa-2025-reference-dataset/), not a rename of
- * it — that dataset's whole point is documenting real, source-corroborated
- * facts about the January 2025 event; repurposing its Meet row for a
- * fictional 2026 date would corrupt that record. This seeder reuses the
- * real, meet-independent registry the 2025 dataset also reuses (Division,
- * the 11 real Davao de Oro municipalities via `DivisionRegistrySeeder`,
- * the sports catalog via `SportsCatalogSeeder`) but creates its own
+ * Deliberately a *separate* meet from the "DdOPAA Meet 2025" reference
+ * dataset (docs/phases/ddopaa-2025-reference-dataset/; that dataset's own
+ * seeder classes have since been removed as sample/demo cleanup, this
+ * showcase is the one that remains), not a rename of it — that dataset's
+ * whole point was documenting real, source-corroborated facts about the
+ * January 2025 event; repurposing its Meet row for a fictional 2026 date
+ * would have corrupted that record. This seeder reuses the real,
+ * meet-independent registry that dataset also reused (Division, the 11
+ * real Davao de Oro municipalities via `DivisionRegistrySeeder`, the
+ * sports catalog via `SportsCatalogSeeder`) but creates its own
  * delegations/schools/athletes/schedule/live-scoring — every fact below is
  * synthetic demonstration data, no source claims corroborate it.
  *
@@ -170,8 +172,8 @@ class Ddopaa2026ShowcaseSeeder extends Seeder
 
     /**
      * Basketball/Volleyball/Boxing/Softball/Swimming/Gymnastics, Secondary
-     * only, Boys+Girls — the same breadth `DdopaaReferenceSeeder` demonstrates
-     * for the 2025 dataset, recreated here via identical `firstOrCreate`
+     * only, Boys+Girls — the same breadth the 2025 reference dataset
+     * demonstrated, recreated here via identical `firstOrCreate`
      * criteria so the two datasets share the same underlying `Event` rows
      * rather than duplicating the catalog.
      *
@@ -244,10 +246,9 @@ class Ddopaa2026ShowcaseSeeder extends Seeder
 
     /**
      * All 11 real municipalities get a delegation, two schools (one
-     * Secondary, one Elementary — same naming convention
-     * `DdopaaStandardSeeder` uses for the 2025 dataset), a coach + an
-     * assistant coach, and a handful of athletes each with a confirmed
-     * entry.
+     * Secondary, one Elementary — same naming convention the 2025
+     * reference dataset used), a coach + an assistant coach, and a
+     * handful of athletes each with a confirmed entry.
      *
      * @param  Collection<int, Event>  $secondaryEvents
      * @param  Collection<int, Event>  $elementaryEvents
@@ -431,9 +432,9 @@ class Ddopaa2026ShowcaseSeeder extends Seeder
      * path Medal Tally/Rankings/Standings actually read
      * (`MedalTallyService::standings()` derives everything from
      * `ResultPlacement` at read time, no separate "medal award"
-     * mechanism, same discipline `DdopaaResultsSeeder` follows for the
-     * 2025 dataset). Every placement here is synthetic — this is a
-     * fictional future meet, nothing to corroborate against a source.
+     * mechanism, same discipline the 2025 reference dataset followed).
+     * Every placement here is synthetic — this is a fictional future
+     * meet, nothing to corroborate against a source.
      */
     private function results(Meet $meet, ?User $admin): void
     {
@@ -466,8 +467,8 @@ class Ddopaa2026ShowcaseSeeder extends Seeder
      * delegations, not individual entries — every teammate at a given
      * rank shares it with `is_tie = true`, since the medal award is "this
      * team placed Nth," not an individual finishing position. Same
-     * approach `DdopaaResultsSeeder::teamPlacements()` uses for the 2025
-     * dataset, without that method's corroborated-winner overrides (this
+     * approach the 2025 reference dataset's own team-placement logic
+     * used, without that logic's corroborated-winner overrides (this
      * meet has none to reproduce).
      *
      * @param  Collection<int, Entry>  $entries
@@ -604,8 +605,8 @@ class Ddopaa2026ShowcaseSeeder extends Seeder
      * but zero top-3 placements anywhere — invisible on the medal tally
      * page entirely (not just at zero), since
      * `MedalTallyService::standings()` only lists districts that appear
-     * in at least one placement. Same fix `DdopaaResultsSeeder` already
-     * needed for the 2025 dataset: guarantee every delegation with a
+     * in at least one placement. Same fix the 2025 reference dataset
+     * already needed: guarantee every delegation with a
      * confirmed entry has at least one placement, swapping a bronze from
      * a donor delegation that already has enough medals to spare one.
      */
@@ -1122,8 +1123,8 @@ class Ddopaa2026ShowcaseSeeder extends Seeder
      * Eloquent's `date` cast serializes through the query grammar's
      * default datetime format on save, but a `firstOrNew` match array is
      * compared as a literal string, so a bare `Y-m-d` lookup key never
-     * matches what actually got stored (same fix `DdopaaLiveScoringSeeder`
-     * already needed for the same reason).
+     * matches what actually got stored (same fix the 2025 reference
+     * dataset's live-scoring seeder already needed for the same reason).
      */
     private function slot(Meet $meet, Event $event, Venue $venue, Carbon $date, string $note): EventSchedule
     {

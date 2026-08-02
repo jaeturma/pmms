@@ -14,6 +14,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property string $name
  * @property string|null $nickname
+ * @property string|null $congressional_district
  * @property bool $active
  * @property int|null $logo_upload_id
  * @property Carbon|null $created_at
@@ -21,7 +22,7 @@ use Illuminate\Support\Carbon;
  * @property-read int|null $schools_count
  * @property-read FileUpload|null $logo
  */
-#[Fillable(['name', 'nickname'])]
+#[Fillable(['name', 'nickname', 'congressional_district'])]
 class District extends Model
 {
     /** @use HasFactory<DistrictFactory> */

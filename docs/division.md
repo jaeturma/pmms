@@ -20,8 +20,13 @@ municipalities seeded as `District` rows.
   City, "Municipality" for Province). Code, relations, and audit log keys
   always say `District`; never "Municipality."
 - `districts.nickname` (nullable) — a delegation's nickname (e.g. Maco →
-  "Tigers") for banners/ID cards/public portal. Seeded where known, editable
-  via the district/municipality registry screen otherwise.
+  "Power Voltz") for banners/ID cards/public portal. All 11 municipalities'
+  nicknames are now confirmed and seeded by `DivisionRegistrySeeder`;
+  further edits happen via the district/municipality registry screen.
+- `districts.congressional_district` (nullable) — the municipality's
+  legislative district ("First" or "Second"), seeded alongside the
+  nickname. Reference data only — not currently surfaced in the registry
+  UI or used by any grouping/authorization logic.
 - `school_districts` — the real DepEd school-district sub-unit (e.g. "Laak
   North"), a level *below* `districts`/municipality, added for the medal
   tally's "School standings" District column and the public landing page.
@@ -34,14 +39,14 @@ municipalities seeded as `District` rows.
   (`districts`) level regardless of how many school districts it has.
   `schools.school_district_id` (nullable) is the one new link: a school may
   optionally belong to a specific school district within its municipality.
-  Most municipalities have zero school-district rows and are expected to —
-  it's opt-in registry data, not a required backfill (same "seeded where
-  known, editable otherwise" policy as `nickname` above). Only Laak is
-  seeded with real school districts (Laak North / Laak South) by
-  `DivisionRegistrySeeder`; the other ten municipalities are left for an
-  admin to fill in via the districts registry (`registry/school-
-  districts.tsx`, `SchoolDistrictController`) if/when they actually split.
-  See `docs/medal-tally.md` for how the tally's District column uses this.
+  A municipality with a single DepEd district (Mabini, Mawab, Montevista,
+  New Bataan) gets no `SchoolDistrict` row at all — standings fall back to
+  its own name. The other seven (Compostela, Laak, Maco, Maragusan,
+  Monkayo, Nabunturan, Pantukan) are seeded with their real East/West or
+  North/South split by `DivisionRegistrySeeder`; further changes happen via
+  the districts registry (`registry/school-districts.tsx`,
+  `SchoolDistrictController`). See `docs/medal-tally.md` for how the
+  tally's District column uses this.
 
 ## Type lock
 
@@ -86,12 +91,13 @@ the `pluralizeAreaLabel()` helper in `resources/js/lib/utils.ts`.
 
 `database/seeders/DivisionRegistrySeeder.php` — the **real default
 configuration** for this deployment (unconditional, all environments,
-idempotent via `firstOrCreate`, unlike the local/testing-only
-`SampleRegistrySeeder`): a Province division named "Davao de Oro" and its 11
+idempotent): a Province division named "Davao de Oro" and its 11
 municipalities (Compostela, Laak, Mabini, Maco, Maragusan, Mawab, Monkayo,
-Montevista, Nabunturan, New Bataan, Pantukan) as `District` rows. Only
-Maco's nickname ("Tigers") is confirmed; the rest are left blank for the
-admin to fill in via the registry screen.
+Montevista, Nabunturan, New Bataan, Pantukan) as `District` rows, each with
+a confirmed nickname and congressional district. Municipality *creation*
+is create-only (an admin's archive/edit choices are never undone by
+re-seeding), but nickname/congressional_district are treated as
+authoritative facts and re-synced on every run.
 
 ## Division initiative — complete (WP1–WP7)
 
@@ -103,19 +109,20 @@ deployment's municipal delegation pools multiple schools, and every module —
 entries, matches, results, reports, ID cards, the tally, the public portal —
 correctly attributes an individual to their own school while the delegation
 itself is still identified by its municipality. Demonstrated with seed data
-via `SampleProvinceDemoSeeder` (WP6). The officer-sees-whole-municipal-roster
+during development (WP6, seeder since removed as sample/demo cleanup — see
+`Ddopaa2026ShowcaseSeeder` for the dataset that remains). The officer-sees-whole-municipal-roster
 authorization consequence is reviewed and documented as accepted/intended —
 see `docs/delegations.md` "Officer roster scope" (WP7).
 
-## Open item: school districts for the other ten municipalities
+## School districts: confirmed vs. single-district municipalities
 
-Only Laak has real school-district rows seeded (North/South). The other ten
-municipalities' actual DepEd school-district breakdowns (if any) aren't
-verified data and weren't guessed at — an admin adds them via the districts
-registry as they're confirmed, the same "known vs. blank, filled in later"
-policy `nickname` already follows above. A municipality with zero or one
-school district shows its own name in the tally's District column; nothing
-needs to change there as districts get added.
+Seven municipalities have a confirmed East/West or North/South DepEd split,
+seeded by `DivisionRegistrySeeder`: Compostela, Laak, Maco, Maragusan,
+Monkayo, Nabunturan, Pantukan. The remaining four (Mabini, Mawab,
+Montevista, New Bataan) have a single DepEd district and deliberately get
+no `SchoolDistrict` row — a municipality with zero or one school district
+shows its own name in the tally's District column; nothing needs to change
+there if one of these four is later confirmed to split.
 
 ## Open item: City's "district competes" option
 

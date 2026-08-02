@@ -155,6 +155,6 @@ test('the sports catalog seeder is idempotent and seeds athletics events', funct
     $this->seed(SportsCatalogSeeder::class);
 
     expect(Sport::query()->where('name', 'Athletics')->count())->toBe(1)
-        ->and(Sport::query()->count())->toBe(14)
+        ->and(Sport::query()->count())->toBe(28)
         ->and(Event::query()->count())->toBe(16);
 });
