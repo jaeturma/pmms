@@ -2,7 +2,9 @@ import { Link, usePage } from '@inertiajs/react';
 import {
     Award,
     BarChart3,
+    BedDouble,
     Boxes,
+    Bus,
     CalendarDays,
     ClipboardList,
     Contact,
@@ -26,6 +28,7 @@ import {
     UserCog,
     Users,
     UsersRound,
+    Utensils,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
@@ -44,6 +47,7 @@ import { dashboard } from '@/routes';
 import { index as announcementsIndex } from '@/routes/announcements';
 import { index as athletesIndex } from '@/routes/athletes';
 import { index as auditLogsIndex } from '@/routes/audit-logs';
+import { index as billetingIndex } from '@/routes/billeting';
 import { index as delegationsIndex } from '@/routes/delegations';
 import { index as districtsIndex } from '@/routes/districts';
 import { edit as divisionEdit } from '@/routes/division';
@@ -51,6 +55,7 @@ import { index as eligibilityIndex } from '@/routes/eligibility';
 import { index as entriesIndex } from '@/routes/entries';
 import { index as equipmentIndex } from '@/routes/equipment';
 import { index as eventsIndex } from '@/routes/events';
+import { index as foodIndex } from '@/routes/food';
 import { index as incidentsIndex } from '@/routes/incidents';
 import { index as managementIndex } from '@/routes/management';
 import { index as managementTeamsIndex } from '@/routes/management-teams';
@@ -66,6 +71,7 @@ import { index as schoolsIndex } from '@/routes/schools';
 import { index as sportsIndex } from '@/routes/sports';
 import { edit as systemSettingsEdit } from '@/routes/system-settings';
 import { index as tallyIndex } from '@/routes/tally';
+import { index as transportIndex } from '@/routes/transport';
 import { index as venuesIndex } from '@/routes/venues';
 import type { NavItem } from '@/types';
 
@@ -190,6 +196,26 @@ const managerNavItems: NavItem[] = [
         title: 'Equipment',
         href: equipmentIndex(),
         icon: Boxes,
+    },
+    // Same disclosed sidebar-visibility gap as Equipment above — Food/
+    // Billeting/Transport Team members and (for Billeting/Transport) a
+    // DelegationOfficer's own read-only access don't get a sidebar link,
+    // only direct-URL access, since the sidebar can't see per-committee
+    // ManagementTeamMember rows without a dedicated shared prop.
+    {
+        title: 'Food',
+        href: foodIndex(),
+        icon: Utensils,
+    },
+    {
+        title: 'Billeting',
+        href: billetingIndex(),
+        icon: BedDouble,
+    },
+    {
+        title: 'Transport',
+        href: transportIndex(),
+        icon: Bus,
     },
     {
         title: 'Incidents',

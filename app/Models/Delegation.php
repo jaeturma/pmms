@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -93,6 +94,30 @@ class Delegation extends Model
     public function hasOfficer(User $user): bool
     {
         return $this->officers()->whereKey($user->getKey())->exists();
+    }
+
+    /**
+     * @return HasOne<BilletingAssignment, $this>
+     */
+    public function billetingAssignment(): HasOne
+    {
+        return $this->hasOne(BilletingAssignment::class);
+    }
+
+    /**
+     * @return HasMany<TransportRequest, $this>
+     */
+    public function transportRequests(): HasMany
+    {
+        return $this->hasMany(TransportRequest::class);
+    }
+
+    /**
+     * @return HasMany<TransportTrip, $this>
+     */
+    public function transportTrips(): HasMany
+    {
+        return $this->hasMany(TransportTrip::class);
     }
 
     /**

@@ -5,6 +5,8 @@ use App\Http\Controllers\AccreditationController;
 use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\AthleteController;
 use App\Http\Controllers\AuditLogController;
+use App\Http\Controllers\BilletingAssignmentController;
+use App\Http\Controllers\BilletingVenueController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DelegationController;
 use App\Http\Controllers\DistrictController;
@@ -24,6 +26,8 @@ use App\Http\Controllers\ManagementDashboardController;
 use App\Http\Controllers\ManagementTeamController;
 use App\Http\Controllers\ManagementTeamMemberController;
 use App\Http\Controllers\MatchController;
+use App\Http\Controllers\MealAnnouncementController;
+use App\Http\Controllers\MealScheduleController;
 use App\Http\Controllers\MeetController;
 use App\Http\Controllers\MeetSportAssignmentController;
 use App\Http\Controllers\PersonnelController;
@@ -38,6 +42,9 @@ use App\Http\Controllers\ScoringSessionController;
 use App\Http\Controllers\SportController;
 use App\Http\Controllers\SystemSettingsController;
 use App\Http\Controllers\TallyController;
+use App\Http\Controllers\TransportRequestController;
+use App\Http\Controllers\TransportTripController;
+use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\VenueController;
 use Illuminate\Support\Facades\Route;
 
@@ -118,6 +125,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('meet-sport-assignments', [MeetSportAssignmentController::class, 'index'])->name('meet-sport-assignments.index');
     Route::get('management-teams', [ManagementTeamController::class, 'index'])->name('management-teams.index');
     Route::get('equipment', [EquipmentCategoryController::class, 'index'])->name('equipment.index');
+    Route::get('food', [MealScheduleController::class, 'index'])->name('food.index');
+    Route::get('billeting', [BilletingVenueController::class, 'index'])->name('billeting.index');
+    Route::get('transport', [VehicleController::class, 'index'])->name('transport.index');
 
     Route::get('delegations', [DelegationController::class, 'index'])->name('delegations.index');
     Route::put('delegations/{delegation}', [DelegationController::class, 'update'])->name('delegations.update');
@@ -176,6 +186,41 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('equipment-returns', [EquipmentReturnController::class, 'store'])->name('equipment-returns.store');
     Route::post('equipment-transfers', [EquipmentTransferController::class, 'store'])->name('equipment-transfers.store');
     Route::post('inventory-adjustments', [InventoryAdjustmentController::class, 'store'])->name('inventory-adjustments.store');
+
+    // Food/Billeting/Transport (WP-REALIGN-11) — same shape as Supply
+    // above: access varies by domain (Food is Admin/Organizer/Food Team;
+    // Billeting/Transport also allow a DelegationOfficer read-only access
+    // to their own delegation's records, plus filing their own transport
+    // request), so these stay outside the flat role:admin,organizer group
+    // and authorize inside each controller via FoodPolicy/
+    // BilletingPolicy/TransportPolicy.
+    Route::post('meal-schedules', [MealScheduleController::class, 'store'])->name('meal-schedules.store');
+    Route::put('meal-schedules/{mealSchedule}', [MealScheduleController::class, 'update'])->name('meal-schedules.update');
+    Route::delete('meal-schedules/{mealSchedule}', [MealScheduleController::class, 'destroy'])->name('meal-schedules.destroy');
+
+    Route::post('meal-announcements', [MealAnnouncementController::class, 'store'])->name('meal-announcements.store');
+    Route::put('meal-announcements/{mealAnnouncement}', [MealAnnouncementController::class, 'update'])->name('meal-announcements.update');
+    Route::delete('meal-announcements/{mealAnnouncement}', [MealAnnouncementController::class, 'destroy'])->name('meal-announcements.destroy');
+
+    Route::post('billeting-venues', [BilletingVenueController::class, 'store'])->name('billeting-venues.store');
+    Route::put('billeting-venues/{billetingVenue}', [BilletingVenueController::class, 'update'])->name('billeting-venues.update');
+    Route::delete('billeting-venues/{billetingVenue}', [BilletingVenueController::class, 'destroy'])->name('billeting-venues.destroy');
+
+    Route::post('billeting-assignments', [BilletingAssignmentController::class, 'store'])->name('billeting-assignments.store');
+    Route::patch('billeting-assignments/{billetingAssignment}/status', [BilletingAssignmentController::class, 'updateStatus'])->name('billeting-assignments.status');
+    Route::delete('billeting-assignments/{billetingAssignment}', [BilletingAssignmentController::class, 'destroy'])->name('billeting-assignments.destroy');
+
+    Route::post('vehicles', [VehicleController::class, 'store'])->name('vehicles.store');
+    Route::put('vehicles/{vehicle}', [VehicleController::class, 'update'])->name('vehicles.update');
+    Route::delete('vehicles/{vehicle}', [VehicleController::class, 'destroy'])->name('vehicles.destroy');
+
+    Route::post('transport-requests', [TransportRequestController::class, 'store'])->name('transport-requests.store');
+    Route::patch('transport-requests/{transportRequest}/status', [TransportRequestController::class, 'updateStatus'])->name('transport-requests.status');
+    Route::delete('transport-requests/{transportRequest}', [TransportRequestController::class, 'destroy'])->name('transport-requests.destroy');
+
+    Route::post('transport-trips', [TransportTripController::class, 'store'])->name('transport-trips.store');
+    Route::patch('transport-trips/{transportTrip}/status', [TransportTripController::class, 'updateStatus'])->name('transport-trips.status');
+    Route::delete('transport-trips/{transportTrip}', [TransportTripController::class, 'destroy'])->name('transport-trips.destroy');
 
     Route::get('eligibility', [EligibilityController::class, 'index'])->name('eligibility.index');
     Route::post('eligibility/documents', [EligibilityController::class, 'storeDocument'])->name('eligibility.documents.store');

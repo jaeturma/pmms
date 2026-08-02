@@ -109,6 +109,30 @@ class Meet extends Model
     }
 
     /**
+     * @return HasMany<MealSchedule, $this>
+     */
+    public function mealSchedules(): HasMany
+    {
+        return $this->hasMany(MealSchedule::class);
+    }
+
+    /**
+     * @return HasMany<BilletingVenue, $this>
+     */
+    public function billetingVenues(): HasMany
+    {
+        return $this->hasMany(BilletingVenue::class);
+    }
+
+    /**
+     * @return HasMany<Vehicle, $this>
+     */
+    public function vehicles(): HasMany
+    {
+        return $this->hasMany(Vehicle::class);
+    }
+
+    /**
      * Registration-window hook for the delegation and entry modules.
      */
     public function isRegistrationOpen(): bool
