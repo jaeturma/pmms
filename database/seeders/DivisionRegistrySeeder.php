@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Enums\DivisionType;
+use App\Models\CongressionalDistrict;
 use App\Models\District;
 use App\Models\Division;
 use App\Models\SchoolDistrict;
@@ -67,6 +68,15 @@ class DivisionRegistrySeeder extends Seeder
             'name' => 'Davao de Oro',
         ]);
 
+        // Keyed by the same "First"/"Second" strings used in MUNICIPALITIES
+        // below, so each municipality's congressional_district_id backfill
+        // is a plain lookup — see
+        // docs/architecture/pmms-data-migration-plan.md §5.
+        $congressionalDistricts = collect(['First', 'Second'])
+            ->mapWithKeys(fn (string $name): array => [
+                $name => CongressionalDistrict::query()->firstOrCreate(['name' => $name], ['active' => true]),
+            ]);
+
         foreach (self::MUNICIPALITIES as $name => [$nickname, $congressionalDistrict]) {
             $municipality = District::query()->firstOrCreate(
                 ['name' => $name],
@@ -76,6 +86,7 @@ class DivisionRegistrySeeder extends Seeder
             $municipality->fill([
                 'nickname' => $nickname,
                 'congressional_district' => $congressionalDistrict,
+                'congressional_district_id' => $congressionalDistricts[$congressionalDistrict]->id,
             ]);
 
             if ($municipality->isDirty()) {

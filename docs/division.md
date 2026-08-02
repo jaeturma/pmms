@@ -23,10 +23,23 @@ municipalities seeded as `District` rows.
   "Power Voltz") for banners/ID cards/public portal. All 11 municipalities'
   nicknames are now confirmed and seeded by `DivisionRegistrySeeder`;
   further edits happen via the district/municipality registry screen.
-- `districts.congressional_district` (nullable) — the municipality's
+- `districts.congressional_district` (nullable string) — the municipality's
   legislative district ("First" or "Second"), seeded alongside the
   nickname. Reference data only — not currently surfaced in the registry
   UI or used by any grouping/authorization logic.
+- `congressional_districts` (`First`, `Second`) + `districts.congressional_district_id`
+  (nullable FK) — the real `CongressionalDistrict → has many District`
+  relationship (`App\Models\CongressionalDistrict::districts()`,
+  `District::congressionalDistrict()`), added
+  2026-08-02 as WP-REALIGN-01 of the DdOPAA organizational realignment
+  (`docs/reports/architecture/pmms-organizational-realignment-gap-assessment.md`).
+  Deliberately **not** named `District` (that already means municipality
+  throughout this codebase) — same naming discipline `SchoolDistrict`
+  already established. Coexists with the plain `congressional_district`
+  string column rather than replacing it; both are synced together by
+  `DivisionRegistrySeeder` — see
+  `docs/architecture/pmms-data-migration-plan.md` §6-7 for the
+  coexistence/eventual-cutover plan. No registry UI yet.
 - `school_districts` — the real DepEd school-district sub-unit (e.g. "Laak
   North"), a level *below* `districts`/municipality, added for the medal
   tally's "School standings" District column and the public landing page.

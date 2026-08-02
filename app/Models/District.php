@@ -15,14 +15,16 @@ use Illuminate\Support\Carbon;
  * @property string $name
  * @property string|null $nickname
  * @property string|null $congressional_district
+ * @property int|null $congressional_district_id
  * @property bool $active
  * @property int|null $logo_upload_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read int|null $schools_count
  * @property-read FileUpload|null $logo
+ * @property-read CongressionalDistrict|null $congressionalDistrict
  */
-#[Fillable(['name', 'nickname', 'congressional_district'])]
+#[Fillable(['name', 'nickname', 'congressional_district', 'congressional_district_id'])]
 class District extends Model
 {
     /** @use HasFactory<DistrictFactory> */
@@ -85,5 +87,20 @@ class District extends Model
     public function schoolDistricts(): HasMany
     {
         return $this->hasMany(SchoolDistrict::class);
+    }
+
+    /**
+     * The province's legislative district this municipality belongs to.
+     * `congressional_district` (the plain string column) remains the
+     * authoritative value while both coexist — this FK is populated
+     * alongside it by `DivisionRegistrySeeder` and is additive, not yet a
+     * replacement (see `docs/architecture/pmms-data-migration-plan.md`
+     * §6-7 for the coexistence/cutover plan).
+     *
+     * @return BelongsTo<CongressionalDistrict, $this>
+     */
+    public function congressionalDistrict(): BelongsTo
+    {
+        return $this->belongsTo(CongressionalDistrict::class);
     }
 }

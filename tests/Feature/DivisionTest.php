@@ -2,6 +2,7 @@
 
 use App\Enums\DivisionType;
 use App\Models\AuditLog;
+use App\Models\CongressionalDistrict;
 use App\Models\Delegation;
 use App\Models\District;
 use App\Models\Division;
@@ -107,10 +108,14 @@ test('the division registry seeder creates the real default configuration', func
 
     $maco = District::query()->where('name', 'Maco')->firstOrFail();
     expect($maco->nickname)->toBe('Power Voltz')
-        ->and($maco->congressional_district)->toBe('Second');
+        ->and($maco->congressional_district)->toBe('Second')
+        ->and($maco->congressionalDistrict->name)->toBe('Second');
+
+    expect(CongressionalDistrict::query()->count())->toBe(2);
 
     // Idempotent: re-running does not duplicate rows.
     (new DivisionRegistrySeeder)->run();
     expect(Division::query()->count())->toBe(1)
-        ->and(District::query()->count())->toBe(11);
+        ->and(District::query()->count())->toBe(11)
+        ->and(CongressionalDistrict::query()->count())->toBe(2);
 });
