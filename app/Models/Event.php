@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
 /**
  * @property int $id
  * @property int $sport_id
+ * @property int|null $sport_category_id
  * @property string $name
  * @property GenderCategory $gender
  * @property AgeDivision $age_division
@@ -27,6 +28,7 @@ use Illuminate\Support\Carbon;
  */
 #[Fillable([
     'sport_id',
+    'sport_category_id',
     'name',
     'gender',
     'age_division',
@@ -60,6 +62,20 @@ class Event extends Model
     public function sport(): BelongsTo
     {
         return $this->belongsTo(Sport::class);
+    }
+
+    /**
+     * Optional additional classification (e.g. "Elementary Boys Track")
+     * — `gender`/`age_division` above remain the authoritative,
+     * always-set columns; this is additive context, not a dependency of
+     * anything reading this event today (see `SportCategory`'s own
+     * docblock).
+     *
+     * @return BelongsTo<SportCategory, $this>
+     */
+    public function sportCategory(): BelongsTo
+    {
+        return $this->belongsTo(SportCategory::class);
     }
 
     /**

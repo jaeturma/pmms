@@ -63,4 +63,12 @@ class Sport extends Model
     {
         return $this->hasMany(MeetSport::class);
     }
+
+    /**
+     * @return HasMany<SportCategory, $this>
+     */
+    public function categories(): HasMany
+    {
+        return $this->hasMany(SportCategory::class);
+    }
 }

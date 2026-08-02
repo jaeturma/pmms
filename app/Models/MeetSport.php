@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -60,5 +61,17 @@ class MeetSport extends Model
     public function sport(): BelongsTo
     {
         return $this->belongsTo(Sport::class);
+    }
+
+    /**
+     * Categories scoped specifically to this meet's inclusion of the
+     * sport — catalog-wide categories (`SportCategory.meet_sport_id`
+     * null) are reached via `sport->categories()` instead.
+     *
+     * @return HasMany<SportCategory, $this>
+     */
+    public function categories(): HasMany
+    {
+        return $this->hasMany(SportCategory::class);
     }
 }
