@@ -13,18 +13,46 @@ results alone.
   `EntryController::destroy` also refuses entries with placements), `rank`,
   optional `mark` (score/time text, ≤60), `is_tie`. Unique per (result, entry).
 
-## Flow (all decisions manager-only, `role:admin,organizer`)
+## Flow
 
-1. **Encode** (`result.encoded`) — allowed only while the meet is **active** and
-   for events attached to the meet. Encoded results may be re-encoded (same audit
-   action, `revision: true`) or deleted; they are working data.
-2. **Validate** (`result.validated`) — a second explicit manager decision;
-   validator identity and time recorded. Validated results are official and
-   **locked**: no edits, no deletion.
-3. **Correct** (`result.corrected`) — never a silent edit, per DESIGN-NOTES. A
-   correction requires a **reason**, reopens the result to encoded (clearing the
-   validation), and the audit record preserves the superseded placements. The
-   corrected standing must then be re-encoded and validated again.
+1. **Encode** (`result.encoded`) — Admin/Organizer for any event, or (Phase 16) a
+   Technical Official for an event whose sport they're assigned to
+   (`ResultController::authorizeEncode()`, `User::sports()`) — allowed only while
+   the meet is **active** and for events attached to the meet. Encoded results may
+   be re-encoded (same audit action, `revision: true`) or deleted; they are
+   working data.
+2. **Validate** (`result.validated`) — manager-only (`role:admin,organizer`), a
+   second explicit decision distinct from encoding; validator identity and time
+   recorded. Validated results are official and **locked**: no edits, no
+   deletion.
+3. **Correct** (`result.corrected`) — manager-only, never a silent edit, per
+   DESIGN-NOTES. A correction requires a **reason**, reopens the result to
+   encoded (clearing the validation), and the audit record preserves the
+   superseded placements. The corrected standing must then be re-encoded and
+   validated again.
+
+## Reviewed against the DdOPAA organizational model (WP-REALIGN-08, 2026-08-02)
+
+The gap assessment
+(`docs/reports/architecture/pmms-organizational-realignment-gap-assessment.md` §13)
+flagged two differences from the approved model: a richer status state machine
+(Draft/Submitted/For Confirmation/Returned/Reopened/Cancelled vs. today's
+Encoded/Validated) and a distinct "Results Committee" role instead of generic
+Admin/Organizer. Both were reviewed and deliberately deferred, not built:
+
+- **State machine** — the two-state Encoded/Validated flow, with `correct()`'s
+  required-reason/reopen/audit-preserving-superseded-placements behavior, already
+  meets the mandate's real requirement ("must not silently edit... traceable...
+  reason... preserve original values... generate audit events"). A richer state
+  machine would be a larger, riskier rework (touches this controller, the
+  `results/index.tsx` UI, and every consumer of `ResultStatus` — medal tally,
+  reports, the public portal) for no corresponding gain in what's actually
+  enforced today.
+- **Results Committee role** — same reasoning as WP-REALIGN-06's DSAC decision:
+  the approved model already plans this as a `ManagementTeam` `team_type`
+  (WP-REALIGN-09, not yet built). A standalone role now would likely be thrown
+  away or need rework once that table exists, so validate/correct/delete stay
+  `role:admin,organizer`-only until then.
 
 ## Placement integrity (server-enforced)
 
