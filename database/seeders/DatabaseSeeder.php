@@ -31,5 +31,9 @@ class DatabaseSeeder extends Seeder
         // Ddopaa2026ShowcaseSeeder guards itself to local/testing, so it's
         // always safe to call — a production run no-ops.
         $this->call(Ddopaa2026ShowcaseSeeder::class);
+
+        // RoleShowcaseSeeder needs Ddopaa2026ShowcaseSeeder's meet and
+        // delegations; same local/testing self-guard, always safe to call.
+        $this->call(RoleShowcaseSeeder::class);
     }
 }
