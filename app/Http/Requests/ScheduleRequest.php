@@ -2,8 +2,11 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Event;
+use App\Models\SportCategory;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class ScheduleRequest extends FormRequest
 {
@@ -17,6 +20,11 @@ class ScheduleRequest extends FormRequest
         return [
             'meet_id' => ['required', 'integer', Rule::exists('meets', 'id')],
             'event_id' => ['required', 'integer', Rule::exists('events', 'id')],
+            'sport_category_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('sport_categories', 'id')->where('active', true),
+            ],
             'venue_id' => [
                 'required',
                 'integer',
@@ -27,6 +35,42 @@ class ScheduleRequest extends FormRequest
             'ends_at' => ['required', 'date_format:H:i', 'after:starts_at'],
             'note' => ['nullable', 'string', 'max:255'],
         ];
+    }
+
+    /**
+     * A chosen category must belong to the same sport as the scheduled
+     * event — a category is additive context for that event's slot, never
+     * a different sport's classification (see `EventSchedule::sportCategory()`'s
+     * own docblock).
+     */
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator) {
+            $categoryId = $this->integer('sport_category_id');
+            $eventId = $this->integer('event_id');
+
+            if ($categoryId <= 0 || $eventId <= 0) {
+                return;
+            }
+
+            $event = Event::query()->find($eventId);
+
+            if ($event === null) {
+                return;
+            }
+
+            $categoryBelongsToEventSport = SportCategory::query()
+                ->whereKey($categoryId)
+                ->where('sport_id', $event->sport_id)
+                ->exists();
+
+            if (! $categoryBelongsToEventSport) {
+                $validator->errors()->add(
+                    'sport_category_id',
+                    __('That category belongs to a different sport than the selected event.'),
+                );
+            }
+        });
     }
 
     /**

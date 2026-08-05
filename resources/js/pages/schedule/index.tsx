@@ -43,9 +43,11 @@ type ScheduleSlot = {
     id: number;
     meet_id: number;
     event_id: number;
+    sport_category_id: number | null;
     venue_id: number;
     meet: string;
     event: string;
+    sport_category: string | null;
     venue: string;
     date: string;
     date_label: string;
@@ -58,7 +60,9 @@ type ScheduleSlot = {
 
 type Option = { id: number; label: string };
 
-type EventOption = Option & { meet_id: number };
+type EventOption = Option & { meet_id: number; sport_id: number };
+
+type SportCategoryOption = Option & { sport_id: number };
 
 type Props = {
     schedules: Paginated<ScheduleSlot>;
@@ -73,6 +77,7 @@ type Props = {
     schedulableMeets: Option[];
     eventOptionsByMeet: EventOption[];
     venueOptions: Option[];
+    sportCategoryOptions: SportCategoryOption[];
     canManage: boolean;
 };
 
@@ -81,6 +86,7 @@ function SlotFormDialog({
     schedulableMeets,
     eventOptionsByMeet,
     venueOptions,
+    sportCategoryOptions,
     open,
     onOpenChange,
 }: {
@@ -88,12 +94,16 @@ function SlotFormDialog({
     schedulableMeets: Option[];
     eventOptionsByMeet: EventOption[];
     venueOptions: Option[];
+    sportCategoryOptions: SportCategoryOption[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
     const { data, setData, post, put, processing, errors, reset } = useForm({
         meet_id: slot ? String(slot.meet_id) : '',
         event_id: slot ? String(slot.event_id) : '',
+        sport_category_id: slot?.sport_category_id
+            ? String(slot.sport_category_id)
+            : '',
         venue_id: slot ? String(slot.venue_id) : '',
         scheduled_date: slot?.date ?? '',
         starts_at: slot?.starts_at ?? '',
@@ -103,6 +113,14 @@ function SlotFormDialog({
 
     const eventOptions = eventOptionsByMeet.filter(
         (option) => String(option.meet_id) === data.meet_id,
+    );
+
+    const selectedEventSportId = eventOptionsByMeet.find(
+        (option) => String(option.id) === data.event_id,
+    )?.sport_id;
+
+    const categoryOptions = sportCategoryOptions.filter(
+        (option) => option.sport_id === selectedEventSportId,
     );
 
     const submit = (e: FormEvent) => {
@@ -161,9 +179,10 @@ function SlotFormDialog({
                         <Label htmlFor="slot-event">Event</Label>
                         <Select
                             value={data.event_id}
-                            onValueChange={(value) =>
-                                setData('event_id', value)
-                            }
+                            onValueChange={(value) => {
+                                setData('event_id', value);
+                                setData('sport_category_id', '');
+                            }}
                             disabled={!data.meet_id}
                         >
                             <SelectTrigger id="slot-event">
@@ -187,6 +206,43 @@ function SlotFormDialog({
                             </SelectContent>
                         </Select>
                         <InputError message={errors.event_id} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="slot-category">
+                            Sport category (optional)
+                        </Label>
+                        <Select
+                            value={data.sport_category_id || 'none'}
+                            onValueChange={(value) =>
+                                setData(
+                                    'sport_category_id',
+                                    value === 'none' ? '' : value,
+                                )
+                            }
+                            disabled={!data.event_id}
+                        >
+                            <SelectTrigger id="slot-category">
+                                <SelectValue
+                                    placeholder={
+                                        data.event_id
+                                            ? 'None'
+                                            : 'Select an event first'
+                                    }
+                                />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">None</SelectItem>
+                                {categoryOptions.map((option) => (
+                                    <SelectItem
+                                        key={option.id}
+                                        value={String(option.id)}
+                                    >
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <InputError message={errors.sport_category_id} />
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="slot-venue">Venue</Label>
@@ -279,6 +335,7 @@ export default function Schedule({
     schedulableMeets,
     eventOptionsByMeet,
     venueOptions,
+    sportCategoryOptions,
     canManage,
 }: Props) {
     const [formOpen, setFormOpen] = useState(false);
@@ -455,6 +512,7 @@ export default function Schedule({
                                     <TableHead>Day</TableHead>
                                     <TableHead>Time</TableHead>
                                     <TableHead>Event</TableHead>
+                                    <TableHead>Category</TableHead>
                                     <TableHead>Venue</TableHead>
                                     <TableHead>Meet</TableHead>
                                     <TableHead>Note</TableHead>
@@ -476,6 +534,9 @@ export default function Schedule({
                                             {slot.starts_at}–{slot.ends_at}
                                         </TableCell>
                                         <TableCell>{slot.event}</TableCell>
+                                        <TableCell>
+                                            {slot.sport_category ?? '—'}
+                                        </TableCell>
                                         <TableCell>{slot.venue}</TableCell>
                                         <TableCell>{slot.meet}</TableCell>
                                         <TableCell className="max-w-48 truncate">
@@ -580,6 +641,7 @@ export default function Schedule({
                 schedulableMeets={schedulableMeets}
                 eventOptionsByMeet={eventOptionsByMeet}
                 venueOptions={venueOptions}
+                sportCategoryOptions={sportCategoryOptions}
                 open={formOpen}
                 onOpenChange={setFormOpen}
             />

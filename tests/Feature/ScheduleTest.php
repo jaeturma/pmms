@@ -9,6 +9,7 @@ use App\Models\EventMatch;
 use App\Models\EventSchedule;
 use App\Models\Meet;
 use App\Models\ScoringSession;
+use App\Models\SportCategory;
 use App\Models\User;
 use App\Models\Venue;
 use Inertia\Testing\AssertableInertia;
@@ -258,6 +259,90 @@ test('the schedule can be filtered per day and per venue', function () {
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('schedules.data', 1)
             ->where('schedules.data.0.venue', $venue->name));
+});
+
+test('managers can attach a sport category matching the event\'s sport', function () {
+    $meet = Meet::factory()->active()->create();
+    $event = Event::factory()->create();
+    $meet->events()->attach($event);
+    $category = SportCategory::factory()->create(['sport_id' => $event->sport_id]);
+
+    $input = validSlotInput($meet);
+    $input['event_id'] = $event->id;
+    $input['sport_category_id'] = $category->id;
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/schedule', $input)
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('event_schedules', [
+        'event_id' => $event->id,
+        'sport_category_id' => $category->id,
+    ]);
+});
+
+test('a sport category belonging to a different sport is rejected', function () {
+    $meet = Meet::factory()->active()->create();
+    $event = Event::factory()->create();
+    $meet->events()->attach($event);
+    $otherSportCategory = SportCategory::factory()->create();
+
+    $input = validSlotInput($meet);
+    $input['event_id'] = $event->id;
+    $input['sport_category_id'] = $otherSportCategory->id;
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/schedule', $input)
+        ->assertSessionHasErrors('sport_category_id');
+
+    $this->assertDatabaseCount('event_schedules', 0);
+});
+
+test('an inactive sport category cannot be attached', function () {
+    $meet = Meet::factory()->active()->create();
+    $event = Event::factory()->create();
+    $meet->events()->attach($event);
+    $category = SportCategory::factory()->create(['sport_id' => $event->sport_id, 'active' => false]);
+
+    $input = validSlotInput($meet);
+    $input['event_id'] = $event->id;
+    $input['sport_category_id'] = $category->id;
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/schedule', $input)
+        ->assertSessionHasErrors('sport_category_id');
+});
+
+test('a scheduled slot with no sport category still works exactly as before', function () {
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/schedule', validSlotInput())
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('event_schedules', ['sport_category_id' => null]);
+});
+
+test('the schedule payload exposes the sport category label for the admin form', function () {
+    $meet = Meet::factory()->active()->create();
+    $event = Event::factory()->create();
+    $meet->events()->attach($event);
+    $category = SportCategory::factory()->create([
+        'sport_id' => $event->sport_id,
+        'display_name' => 'Elementary Boys Track',
+    ]);
+    EventSchedule::factory()->create([
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+        'sport_category_id' => $category->id,
+    ]);
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->get('/schedule')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('schedules.data.0.sport_category', 'Elementary Boys Track')
+            ->where('sportCategoryOptions.0.id', $category->id)
+            ->where('sportCategoryOptions.0.sport_id', $category->sport_id));
 });
 
 test('venues with schedule slots cannot be deleted', function () {

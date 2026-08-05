@@ -11,6 +11,7 @@ use App\Models\Event;
 use App\Models\EventMatch;
 use App\Models\EventSchedule;
 use App\Models\Meet;
+use App\Models\SportCategory;
 use App\Models\User;
 use App\Models\Venue;
 use App\Services\AuditLogger;
@@ -42,7 +43,7 @@ class ScheduleController extends Controller
         $date = $request->string('date')->toString();
 
         $query = EventSchedule::query()
-            ->with(['event.sport:id,name', 'venue:id,name', 'meet:id,name'])
+            ->with(['event.sport:id,name', 'sportCategory:id,display_name', 'venue:id,name', 'meet:id,name'])
             ->orderBy('scheduled_date')
             ->orderBy('starts_at');
 
@@ -78,6 +79,7 @@ class ScheduleController extends Controller
                         'id' => $schedule->id,
                         'meet_id' => $schedule->meet_id,
                         'event_id' => $schedule->event_id,
+                        'sport_category_id' => $schedule->sport_category_id,
                         'venue_id' => $schedule->venue_id,
                         'meet' => $schedule->meet->name,
                         'event' => sprintf(
@@ -87,6 +89,7 @@ class ScheduleController extends Controller
                             $schedule->event->gender->label(),
                             $schedule->event->age_division->label(),
                         ),
+                        'sport_category' => $schedule->sportCategory?->display_name,
                         'venue' => $schedule->venue->name,
                         'date' => $schedule->scheduled_date->toDateString(),
                         'date_label' => $schedule->scheduled_date->format('D, M j, Y'),
@@ -119,6 +122,7 @@ class ScheduleController extends Controller
                 ->flatMap(fn (Event $event) => $event->meets->map(fn (Meet $meet): array => [
                     'id' => $event->id,
                     'meet_id' => $meet->id,
+                    'sport_id' => $event->sport_id,
                     'label' => sprintf(
                         '%s — %s (%s, %s)',
                         $event->sport->name,
@@ -130,6 +134,13 @@ class ScheduleController extends Controller
                 ->values(),
             'venueOptions' => Venue::query()->where('active', true)->orderBy('name')->get(['id', 'name'])
                 ->map(fn (Venue $venue): array => ['id' => $venue->id, 'label' => $venue->name]),
+            'sportCategoryOptions' => SportCategory::query()->where('active', true)->orderBy('display_name')
+                ->get(['id', 'sport_id', 'display_name'])
+                ->map(fn (SportCategory $category): array => [
+                    'id' => $category->id,
+                    'sport_id' => $category->sport_id,
+                    'label' => $category->display_name,
+                ]),
             'canManage' => Gate::allows('manage-meet-data'),
         ]);
     }
