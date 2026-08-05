@@ -77,12 +77,15 @@ test('the day selector defaults to the first day when today has no slots', funct
             ->where('selectedDay', '2026-08-10'));
 });
 
-test('the day selector defaults to today when today has slots', function () {
-    $meet = Meet::factory()->active()->published()->create();
+test('the day selector defaults to today when today falls within the meet\'s own dates', function () {
+    $meet = Meet::factory()->active()->published()->create([
+        'starts_at' => today()->subDay()->toDateString(),
+        'ends_at' => today()->addDay()->toDateString(),
+    ]);
 
     EventSchedule::factory()->create([
         'meet_id' => $meet->id,
-        'scheduled_date' => '2026-08-10',
+        'scheduled_date' => today()->addDay()->toDateString(),
     ]);
     EventSchedule::factory()->create([
         'meet_id' => $meet->id,
@@ -90,6 +93,35 @@ test('the day selector defaults to today when today has slots', function () {
     ]);
 
     $this->get("/meets/{$meet->id}")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('selectedDay', today()->toDateString()));
+});
+
+test('a slot dated outside the meet\'s own starts_at/ends_at window is never the default day, even if it falls on today', function () {
+    // A live-scoring demo slot dated to "today" regardless of when the real
+    // meet runs (Ddopaa2026ShowcaseSeeder's own pattern) must not hijack the
+    // default landing day away from the meet's real, announced schedule.
+    $meet = Meet::factory()->active()->published()->create([
+        'starts_at' => '2026-09-04',
+        'ends_at' => '2026-09-08',
+    ]);
+
+    EventSchedule::factory()->create([
+        'meet_id' => $meet->id,
+        'scheduled_date' => today()->toDateString(),
+    ]);
+    EventSchedule::factory()->create([
+        'meet_id' => $meet->id,
+        'scheduled_date' => '2026-09-04',
+    ]);
+
+    $this->get("/meets/{$meet->id}")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('days', 2)
+            ->where('selectedDay', '2026-09-04'));
+
+    // The stray day is still real and reachable, just never the default.
+    $this->get("/meets/{$meet->id}?date=".today()->toDateString())
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('selectedDay', today()->toDateString()));
 });

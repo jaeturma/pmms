@@ -89,10 +89,20 @@ class PortalController extends Controller
 
         $requested = $request->string('date')->toString();
 
+        // A slot can exist outside the meet's own starts_at/ends_at window
+        // (e.g. a live-scoring demo dated to "today" regardless of when the
+        // real meet runs) — still a real, reachable day via `?date=` or the
+        // day-tab list itself, but never the *default* landing day. Default
+        // only to "today" when today genuinely falls within the meet's own
+        // dates; otherwise prefer the meet's own first real day over
+        // whichever day happens to sort first among every slot.
+        $officialDays = $days->filter(fn (string $day): bool => $day >= $meet->starts_at->toDateString()
+            && $day <= $meet->ends_at->toDateString());
+
         $selectedDay = match (true) {
             $days->contains($requested) => $requested,
-            $days->contains(today()->toDateString()) => today()->toDateString(),
-            default => $days->first(),
+            $officialDays->contains(today()->toDateString()) => today()->toDateString(),
+            default => $officialDays->first() ?? $days->first(),
         };
 
         return Inertia::render('portal/schedule', [
