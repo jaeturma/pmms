@@ -129,18 +129,28 @@ class Ddopaa2026ShowcaseSeeder extends Seeder
             ['name' => 'DdOPAA Meet 2026'],
             [
                 'school_year' => '2025-2026',
-                'starts_at' => Carbon::now()->addDays(3)->toDateString(),
-                'ends_at' => Carbon::now()->addDays(9)->toDateString(),
+                // The real, announced dates for this meet — not a
+                // relative-to-seed-time placeholder.
+                'starts_at' => '2026-09-04',
+                'ends_at' => '2026-09-08',
                 'venue' => 'Compostela, Davao de Oro',
             ],
         );
 
-        if ($meet->status !== MeetStatus::Active || ! $meet->is_published || ! $meet->is_active || $meet->venue !== 'Compostela, Davao de Oro') {
+        if ($meet->status !== MeetStatus::Active
+            || ! $meet->is_published
+            || ! $meet->is_active
+            || $meet->venue !== 'Compostela, Davao de Oro'
+            || $meet->starts_at->toDateString() !== '2026-09-04'
+            || $meet->ends_at->toDateString() !== '2026-09-08'
+        ) {
             $meet->forceFill([
                 'status' => MeetStatus::Active,
                 'is_published' => true,
                 'is_active' => true,
                 'venue' => 'Compostela, Davao de Oro',
+                'starts_at' => '2026-09-04',
+                'ends_at' => '2026-09-08',
             ])->save();
         }
 
@@ -728,15 +738,15 @@ class Ddopaa2026ShowcaseSeeder extends Seeder
 
         if ($volleyball !== null) {
             $slot = $venues->first();
-            $volleyballSlot = EventSchedule::query()->firstOrCreate(
-                ['meet_id' => $meet->id, 'event_id' => $volleyball->id, 'venue_id' => $slot->id],
-                [
-                    'scheduled_date' => Carbon::parse($meet->starts_at)->addDays(4)->toDateString(),
-                    'starts_at' => '13:00:00',
-                    'ends_at' => '15:00:00',
-                    'note' => 'Pool Game 1',
-                ],
-            );
+            $volleyballSlot = EventSchedule::query()->firstOrNew([
+                'meet_id' => $meet->id, 'event_id' => $volleyball->id, 'venue_id' => $slot->id,
+            ]);
+            $volleyballSlot->fill([
+                'scheduled_date' => Carbon::parse($meet->starts_at)->addDays(4)->toDateString(),
+                'starts_at' => '13:00:00',
+                'ends_at' => '15:00:00',
+                'note' => 'Pool Game 1',
+            ])->save();
 
             EventMatch::query()->firstOrCreate(
                 ['meet_id' => $meet->id, 'event_id' => $volleyball->id, 'event_schedule_id' => $volleyballSlot->id],
@@ -1146,7 +1156,48 @@ class Ddopaa2026ShowcaseSeeder extends Seeder
             'note' => $note,
         ])->save();
 
+        $this->pruneStaleSlots($meet, $event, $note, $slot);
+
         return $slot;
+    }
+
+    /**
+     * `slot()` keys today's Scheduled/Live/Completed row to today's date
+     * (see `endOtherLiveSessions()`'s note on why), so re-running this
+     * seeder on a later calendar day creates a fresh `EventSchedule`
+     * rather than reusing an earlier one. Without this, every previous
+     * day's now-superseded slot — and its `EventMatch`/`ScoringSession`/
+     * `ScoreEvent` trio — piles up forever instead of being replaced.
+     * Identified by the same `(event, note)` pairing `slot()` itself
+     * dedupes new slots on, so exactly one Scheduled/Live/Completed row
+     * survives per event at any time. Deletes bottom-up
+     * (`ScoreEvent`→`ScoringSession`→`EventMatch`→`EventSchedule`) since
+     * `scoring_sessions.match_id` and `matches.event_schedule_id` are
+     * `restrictOnDelete()`/`nullOnDelete()`, not cascading.
+     */
+    private function pruneStaleSlots(Meet $meet, Event $event, string $note, EventSchedule $keep): void
+    {
+        $stale = EventSchedule::query()
+            ->where('meet_id', $meet->id)
+            ->where('event_id', $event->id)
+            ->where('note', $note)
+            ->where('id', '!=', $keep->id)
+            ->get();
+
+        foreach ($stale as $slot) {
+            $matches = EventMatch::query()->where('event_schedule_id', $slot->id)->get();
+
+            foreach ($matches as $match) {
+                $match->scoringSessions()->get()->each(function (ScoringSession $session): void {
+                    $session->events()->delete();
+                    $session->delete();
+                });
+
+                $match->delete();
+            }
+
+            $slot->delete();
+        }
     }
 
     private function match(Meet $meet, Event $event, EventSchedule $slot, string $roundLabel): EventMatch
