@@ -47,6 +47,9 @@ Grouped by work package (see the gap assessment §24 for WP descriptions):
 - `medical_clearances`, `medical_incidents` — FK'd to `management_teams` (Medical) + `meets` + nullable `athlete_id`/`personnel_id`/`user_id`. **Access-controlled from this migration, not after.**
 - `drrm_plans`, `venue_emergency_plans`, `evacuation_routes`, `emergency_contacts`, `drrm_equipment`, `readiness_checklists`, `emergency_incidents`, `emergency_communication_logs` — FK'd to `management_teams` (DRRM) + `meets`/`venues`.
 
+**WP-REALIGN-17 (product-owner confirmed 2026-08-05)**
+- No new table. `event_schedules` gains nullable `sport_category_id` (FK → `sport_categories.id`), additive alongside its existing `event_id`/`venue_id` — mirrors how `events.sport_category_id` was added in WP-REALIGN-03 without removing `events.gender`/`events.age_division`. `SportCategory` gains a `schedules()` relation (`hasMany(EventSchedule)`) and a derived `venues()` accessor through it. Nothing existing is removed or renamed; `EventSchedule::event()`/`::venue()` are unchanged.
+
 ## 4. Obsolete tables retained temporarily
 
 `sport_user` (Technical Official global-sport pivot) is **not dropped** when `meet_sport_assignments` is introduced. It is retained, unused by new code, until:

@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * An optional classification layer between `Sport` and `Event` — e.g.
@@ -89,5 +90,33 @@ class SportCategory extends Model
     public function assignments(): HasMany
     {
         return $this->hasMany(MeetSportAssignment::class);
+    }
+
+    /**
+     * Schedule slots specifically scoped to this category (e.g. an
+     * "Elementary Boys Track" session) — a slot's `event`/`venue` remain
+     * its own authoritative source; `EventSchedule.sport_category_id` is
+     * additive context, same relationship shape as `events()` above.
+     *
+     * @return HasMany<EventSchedule, $this>
+     */
+    public function schedules(): HasMany
+    {
+        return $this->hasMany(EventSchedule::class);
+    }
+
+    /**
+     * The distinct venues this category's own schedule slots have been
+     * booked into. Derived through `schedules()` rather than a direct FK
+     * — a category has no `venue_id` of its own, since its slots may span
+     * several venues across a meet.
+     *
+     * @return Collection<int, Venue>
+     */
+    public function venues(): Collection
+    {
+        return Venue::query()
+            ->whereIn('id', $this->schedules()->pluck('venue_id'))
+            ->get();
     }
 }

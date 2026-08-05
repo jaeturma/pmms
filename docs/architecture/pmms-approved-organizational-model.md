@@ -27,12 +27,15 @@ Meet  [existing]
 └── MeetSport (NEW)
     └── Sport  [existing, becomes meet-scoped only via this new join]
         └── SportCategory (NEW, optional layer)
-            └── Event  [existing — team sports may skip SportCategory and attach directly, as today]
+            ├── Event  [existing — team sports may skip SportCategory and attach directly, as today]
+            ├── Venue (NEW relation — see WP-REALIGN-17 below)
+            └── EventSchedule (NEW relation — see WP-REALIGN-17 below)
 ```
 
 - `MeetSport` — new table: `id`, `meet_id`, `sport_id`, `active` (include/exclude this sport from this meet), `notes`, timestamps. Unique on `(meet_id, sport_id)`.
 - `SportCategory` — new table: `id`, `sport_id`, `meet_sport_id` (nullable — a category can be catalog-wide or meet-specific), `level` (enum, reuses `AgeDivision`), `sex` (enum, reuses `GenderCategory`), `discipline` (nullable string — "Track", "Field", "Lightweight"), `event_type` (nullable string — "individual"/"team", mirrors `Event.is_team_event`), `display_name`. `Event` gains an optional nullable `sport_category_id` — existing `Event.gender`/`Event.age_division` columns are **not removed**; a category, where used, is additive context, not a replacement (avoids the high-risk rewrite flagged in the gap assessment §21).
 - `Delegation` is not renamed. The mandate's "MeetDelegation" concept is what `Delegation` already is (meet-scoped via `meet_id`, municipality-scoped via `district_id` under Province).
+- **WP-REALIGN-17 (product-owner confirmed 2026-08-05, not yet built):** `SportCategory` should scope `Venue`/`EventSchedule` directly, not just via `Event`. Today `EventSchedule belongsTo Meet/Event/Venue` only — a category (e.g. "Elementary Boys Track" vs. "Secondary Girls Track" under the same Sport) cannot be scheduled to its own venue/session independently of the concrete `Event` rows under it. Proposed additive fix: add nullable `sport_category_id` to `event_schedules` (mirroring the `events` table's own additive `sport_category_id` from WP-REALIGN-03), plus a `SportCategory::schedules()`/`SportCategory::venues()` (derived through schedules) relation. No column removed, no existing consumer (`EventSchedule::event()`/`::venue()`) changed. See the gap assessment's addendum and the migration plan §3 for detail.
 
 ## 3. Personnel and assignments (existing pivots kept, one new generic layer)
 

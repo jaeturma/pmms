@@ -204,6 +204,7 @@ Full detail in [pmms-data-migration-plan.md](../../architecture/pmms-data-migrat
 | WP-REALIGN-14 | Reports and Dashboard Alignment — extend `ReportController`/`ManagementDashboardController` patterns to new domains | trails each domain WP | Low |
 | WP-REALIGN-15 | Seeder and Reference Data Alignment — extend `DivisionRegistrySeeder`/`SportsCatalogSeeder`, never a parallel path | WP-REALIGN-01, -03 | Low |
 | WP-REALIGN-16 | Integration, Migration Testing, and Acceptance | all above | — |
+| WP-REALIGN-17 | Scope `Venue`/`EventSchedule` to `SportCategory` — add nullable `sport_category_id` to `event_schedules`, additive; product-owner confirmed 2026-08-05 (see addendum below) | WP-REALIGN-03 (`SportCategory` must exist first) | Low |
 
 ## 25. Files expected to change (by future WP, for planning only — none touched in this assessment)
 
@@ -214,6 +215,12 @@ Full detail in [pmms-data-migration-plan.md](../../architecture/pmms-data-migrat
 - **WP-REALIGN-13**: `app/Enums/UserRole.php`, new policy classes, `routes/web.php` role-group middleware, `docs/authorization.md`.
 
 ---
+
+## Addendum (2026-08-05) — post-implementation review and one resolved open question
+
+WP-REALIGN-01 through -12 have since shipped (commits `55502ce` through `6a2ecb6`, 2026-08-02–03) — the sections above describing them as gaps now describe history, not current state. WP-REALIGN-13 through -16 remain unbuilt as of this addendum.
+
+A fresh comparison against the same approved spec (re-supplied verbatim in this session) surfaced one genuine structural mismatch not previously called out: **§8's `SportCategory` layer, now built, does not scope `Venue`/`EventSchedule`** — scheduling still runs `Event`-level only (`EventSchedule belongsTo Meet/Event/Venue`), with no path from a `SportCategory` to its own venue/session. The approved spec states "Sport Category has many Venues and Schedules." Put to the product owner in this session: **confirmed** — `SportCategory` should scope both. Recorded as **WP-REALIGN-17** (§24 table above) and in [pmms-approved-organizational-model.md](../../architecture/pmms-approved-organizational-model.md) §2. No migration has been written; this addendum documents the decision only, per this session's explicit no-code-changes instruction.
 
 ## Companion documents produced
 
