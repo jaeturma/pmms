@@ -231,6 +231,57 @@ test('the public tally can be filtered by age division', function () {
             ->has('ageDivisionOptions', 2));
 });
 
+test('top medalists rank individual athletes by gold, then silver, then bronze, then name, aggregating across sports', function () {
+    $meet = Meet::factory()->active()->published()->create();
+
+    $basketball = Sport::factory()->create(['name' => 'Basketball']);
+    $chess = Sport::factory()->create(['name' => 'Chess']);
+
+    $school = School::factory()->create(['name' => 'Champion School']);
+    $delegation = Delegation::factory()->approved()->create(['meet_id' => $meet->id, 'school_id' => $school->id]);
+    $star = Athlete::factory()->create([
+        'delegation_id' => $delegation->id,
+        'school_id' => $school->id,
+        'first_name' => 'Ana',
+        'last_name' => 'Cruz',
+        'grade_level' => 10,
+    ]);
+
+    $basketballEvent = Event::factory()->create(['sport_id' => $basketball->id]);
+    $basketballResult = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $basketballEvent->id]);
+    $basketballEntry = Entry::factory()->confirmed()->create([
+        'athlete_id' => $star->id,
+        'delegation_id' => $delegation->id,
+        'event_id' => $basketballEvent->id,
+    ]);
+    ResultPlacement::factory()->create(['event_result_id' => $basketballResult->id, 'entry_id' => $basketballEntry->id, 'rank' => 1]);
+
+    $chessEvent = Event::factory()->create(['sport_id' => $chess->id]);
+    $chessResult = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $chessEvent->id]);
+    $chessEntry = Entry::factory()->confirmed()->create([
+        'athlete_id' => $star->id,
+        'delegation_id' => $delegation->id,
+        'event_id' => $chessEvent->id,
+    ]);
+    ResultPlacement::factory()->create(['event_result_id' => $chessResult->id, 'entry_id' => $chessEntry->id, 'rank' => 1]);
+
+    $singleGoldEvent = Event::factory()->create(['sport_id' => $basketball->id]);
+    $singleGoldResult = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $singleGoldEvent->id]);
+    publicTallyPlacement($singleGoldResult, School::factory()->create(['name' => 'Other School']), 1);
+
+    $this->get("/meets/{$meet->id}/tally")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('topMedalists', 2)
+            ->where('topMedalists.0.athlete', 'Ana Cruz')
+            ->where('topMedalists.0.grade_level', 10)
+            ->where('topMedalists.0.sport', 'Basketball, Chess')
+            ->where('topMedalists.0.school', 'Champion School')
+            ->where('topMedalists.0.municipality', $school->district->name)
+            ->where('topMedalists.0.gold', 2)
+            ->where('topMedalists.0.total', 2)
+            ->where('topMedalists.1.gold', 1));
+});
+
 test('the public tally exposes a generated-at timestamp and every district is returned, not truncated server-side', function () {
     // WP-08-09's mobile "View full ranking" collapse is a client-side
     // display choice — the backend must still return every district row

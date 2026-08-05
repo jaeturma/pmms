@@ -239,6 +239,20 @@ export type PortalSportMedals = {
     total: number;
 };
 
+export type PortalTopMedalistRow = {
+    position: number;
+    athlete: string;
+    grade_level: number;
+    sport: string;
+    school: string;
+    municipality: string;
+    district: string;
+    gold: number;
+    silver: number;
+    bronze: number;
+    total: number;
+};
+
 export type PortalAthleticsSlot = {
     id: number;
     starts_at: string;

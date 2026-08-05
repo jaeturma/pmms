@@ -8,7 +8,6 @@ import {
     gallery as publicGallery,
     meet as publicMeet,
     news as publicNews,
-    rankings as publicRankings,
     results as publicResults,
     search as publicSearch,
     sportPortal,
@@ -42,7 +41,6 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
             { label: 'Schedule', href: publicMeet(nav.meetId).url, active: activePath === publicMeet(nav.meetId).url },
             { label: 'Results', href: publicResults(nav.meetId).url, active: activePath === publicResults(nav.meetId).url },
             { label: 'Medal Tally', href: publicTally(nav.meetId).url, active: activePath === publicTally(nav.meetId).url },
-            { label: 'Standings', href: publicRankings(nav.meetId).url, active: activePath === publicRankings(nav.meetId).url },
         );
     }
 

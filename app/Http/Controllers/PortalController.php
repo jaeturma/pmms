@@ -240,6 +240,7 @@ class PortalController extends Controller
                 ->all(),
             'bySport' => $tally->medalsBySport($meet->id, $sportId > 0 ? $sportId : null, $ageDivision),
             'recentMedals' => $tally->recentMedals($meet->id, $sportId > 0 ? $sportId : null, $ageDivision),
+            'topMedalists' => $tally->topMedalists($meet->id, $sportId > 0 ? $sportId : null, $ageDivision),
             'filters' => [
                 'sport_id' => $sportId > 0 ? $sportId : null,
                 'age_division' => $ageDivision,

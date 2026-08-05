@@ -44,26 +44,7 @@ class MedalTallyService
             ->with('entry.athlete.school.district', 'entry.athlete.school.schoolDistrict')
             ->get();
 
-        // A municipality with more than one real school district (e.g.
-        // Laak → Laak North / Laak South) shows the finer-grained district
-        // name in the "School standings" column below; a municipality with
-        // zero or one shows its own name — nothing to disambiguate yet,
-        // and most municipalities have no school districts registered at
-        // all (an admin fills these in as-needed via the registry).
-        $municipalityIds = $placements
-            ->pluck('entry.athlete.school.district_id')
-            ->unique()
-            ->filter()
-            ->values();
-
-        $multiDistrictMunicipalityIds = SchoolDistrict::query()
-            ->whereIn('district_id', $municipalityIds)
-            ->where('active', true)
-            ->selectRaw('district_id, COUNT(*) as school_district_count')
-            ->groupBy('district_id')
-            ->havingRaw('COUNT(*) > 1')
-            ->pluck('district_id')
-            ->flip();
+        $multiDistrictMunicipalityIds = $this->multiDistrictMunicipalityIds($placements);
 
         // Grouped by the placed athlete's own school — not the delegation's
         // — so a municipal delegation's medals split correctly across the
@@ -158,6 +139,59 @@ class MedalTallyService
     }
 
     /**
+     * Individual athletes ranked by their own medal count (gold, then
+     * silver, then bronze, then name) — the "Top Medalist" leaderboard.
+     * Same validated-only, filtered placement set as `standings()`, just
+     * grouped by athlete instead of school/district. `sport` lists every
+     * sport the athlete medaled in within this filtered set (comma-
+     * separated) — an athlete competing across sports is not split into
+     * multiple rows.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function topMedalists(?int $meetId = null, ?int $sportId = null, ?string $ageDivision = null, int $limit = 20): array
+    {
+        $placements = $this->basePlacements($meetId, $sportId, $ageDivision)
+            ->with([
+                'entry.athlete.school.district',
+                'entry.athlete.school.schoolDistrict',
+                'entry.event.sport',
+            ])
+            ->get();
+
+        $multiDistrictMunicipalityIds = $this->multiDistrictMunicipalityIds($placements);
+
+        return $placements
+            ->groupBy(fn (ResultPlacement $placement): int => $placement->entry->athlete_id)
+            ->map(function (Collection $group) use ($multiDistrictMunicipalityIds): array {
+                $athlete = $group->first()->entry->athlete;
+                $school = $athlete->school;
+                $showSchoolDistrict = $school->school_district_id !== null
+                    && $multiDistrictMunicipalityIds->has($school->district_id);
+
+                return [
+                    'athlete' => $athlete->fullName(),
+                    'grade_level' => $athlete->grade_level,
+                    'sport' => $group
+                        ->map(fn (ResultPlacement $placement): string => $placement->entry->event->sport->name)
+                        ->unique()
+                        ->sort()
+                        ->implode(', '),
+                    'school' => $school->name,
+                    'municipality' => $school->district->name,
+                    'district' => $showSchoolDistrict ? $school->schoolDistrict->name : $school->district->name,
+                    ...$this->medals($group),
+                ];
+            })
+            ->sort(fn (array $a, array $b): int => [$b['gold'], $b['silver'], $b['bronze'], $a['athlete']]
+                <=> [$a['gold'], $a['silver'], $a['bronze'], $b['athlete']])
+            ->values()
+            ->take($limit)
+            ->map(fn (array $row, int $i): array => ['position' => $i + 1, ...$row])
+            ->all();
+    }
+
+    /**
      * @return Builder<ResultPlacement>
      */
     private function basePlacements(?int $meetId, ?int $sportId, ?string $ageDivision): Builder
@@ -181,6 +215,36 @@ class MedalTallyService
                     fn ($event) => $event->where('age_division', $ageDivision),
                 ),
             );
+    }
+
+    /**
+     * A municipality with more than one real school district (e.g. Laak →
+     * Laak North / Laak South) shows the finer-grained district name in
+     * the "School standings"/"Top Medalist" district column; a
+     * municipality with zero or one shows its own name — nothing to
+     * disambiguate yet, and most municipalities have no school districts
+     * registered at all (an admin fills these in as-needed via the
+     * registry). Shared by `standings()` and `topMedalists()`.
+     *
+     * @param  Collection<int, ResultPlacement>  $placements
+     * @return Collection<int, int>
+     */
+    private function multiDistrictMunicipalityIds(Collection $placements): Collection
+    {
+        $municipalityIds = $placements
+            ->pluck('entry.athlete.school.district_id')
+            ->unique()
+            ->filter()
+            ->values();
+
+        return SchoolDistrict::query()
+            ->whereIn('district_id', $municipalityIds)
+            ->where('active', true)
+            ->selectRaw('district_id, COUNT(*) as school_district_count')
+            ->groupBy('district_id')
+            ->havingRaw('COUNT(*) > 1')
+            ->pluck('district_id')
+            ->flip();
     }
 
     private function points(int $gold, int $silver, int $bronze): int
