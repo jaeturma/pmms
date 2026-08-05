@@ -425,12 +425,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Live scoring mutations are their own role group, not folded into the
     // block above: a Technical Official may run the scoreboard but must not
-    // gain any of that block's other meet-data-management permissions.
-    // Organizer is deliberately excluded here — only Admin and Technical
-    // Official may manage/operate the live scoreboard.
-    // Per-match/session sport scoping (not just this coarse role check)
-    // happens inside ScoringSessionController itself.
-    Route::middleware('role:admin,technical_official')->group(function () {
+    // gain any of that block's other meet-data-management permissions. An
+    // Organizer only gains scoreboard access when specifically assigned as
+    // Tournament Secretary/ICT for the match's meet+sport — a plain
+    // Organizer is still denied. Per-match/session sport scoping (not just
+    // this coarse role check) happens inside ScoringSessionController's own
+    // canManage().
+    Route::middleware('role:admin,organizer,technical_official')->group(function () {
         Route::post('matches/{match}/scoring-sessions', [ScoringSessionController::class, 'store'])->name('scoring.start');
         Route::patch('scoring-sessions/{session}/score', [ScoringSessionController::class, 'score'])->name('scoring.score');
         Route::patch('scoring-sessions/{session}/period', [ScoringSessionController::class, 'period'])->name('scoring.period');

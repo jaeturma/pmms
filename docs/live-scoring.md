@@ -68,20 +68,28 @@ the app to function.
 
 ## Endpoints
 
-All under `App\Http\Controllers\ScoringSessionController`:
+All under `App\Http\Controllers\ScoringSessionController`. Every mutation
+route below sits behind `role:admin,organizer,technical_official`
+middleware, then the controller's own `canManage()` narrows that coarse
+filter to who may actually manage *this* match's scoreboard: Admin (any
+match), a Technical Official scoped to their own assigned sport
+(`User::sports()`), or an Organizer holding an active Tournament
+Secretary or Tournament ICT `MeetSportAssignment` for the match's
+meet+sport — a plain Organizer, or a Technical Official/Tournament
+Secretary/ICT outside their own assignment, still gets `403`.
 
 | Route | Access |
 |---|---|
 | `GET /matches/{match}/scoring-session` (`scoring.show`) | Same rule as `Matches — list`: Admin/Organizer any match, Delegation Officer their own delegation's matches only, Viewer forbidden. Polling contract — returns the current (most recent) session or `null`. |
-| `POST /matches/{match}/scoring-sessions` (`scoring.start`) | `role:admin,organizer` (same gate match create/update use). Only for a `Scheduled` match with no existing active session. |
-| `PATCH /scoring-sessions/{session}/score` (`scoring.score`) | `role:admin,organizer`. `type` = `point` or `correction`; `correction` requires a `reason`. Score never goes below 0. |
-| `PATCH /scoring-sessions/{session}/period` (`scoring.period`) | `role:admin,organizer`. Updates `period_label`/`status_note`. |
-| `PATCH /scoring-sessions/{session}/pause` \| `/resume` (`scoring.pause` / `scoring.resume`) | `role:admin,organizer`. |
-| `PATCH /scoring-sessions/{session}/end` (`scoring.end`) | `role:admin,organizer`. Sets the session `ended`; never touches `EventResult`. |
-| `PATCH /scoring-sessions/{session}/foul` (`scoring.foul`, WP-07-04) | `role:admin,organizer`. Basketball board only — `422` for any other board type. `action` = `add` (with `side`) or `reset`; mutates `sport_state.fouls_a`/`fouls_b`. |
-| `PATCH /scoring-sessions/{session}/round` (`scoring.round`, WP-07-05) | `role:admin,organizer`. Boxing board only — `422` for any other board type. `score_a`/`score_b` (0-10 each) append a round to `sport_state.rounds` and add to the session's running `score_a`/`score_b`. |
-| `PATCH /scoring-sessions/{session}/count` (`scoring.count`, WP-07-06) | `role:admin,organizer`. Softball/Baseball board only — `422` for any other board type. `action` = `out` \| `ball` \| `strike` \| `reset_count`; advances `sport_state`'s outs/count/inning per the cascading rules below. |
-| `PATCH /scoring-sessions/{session}/inning-run` (`scoring.inning-run`, WP-07-06) | `role:admin,organizer`. Softball/Baseball board only — `422` for any other board type. `side` + `runs` (1-20) add to the current inning's row in `sport_state.innings` and to the session's running `score_a`/`score_b`. |
+| `POST /matches/{match}/scoring-sessions` (`scoring.start`) | `canManage()` (above). Only for a `Scheduled` match with no existing active session. |
+| `PATCH /scoring-sessions/{session}/score` (`scoring.score`) | `canManage()`. `type` = `point` or `correction`; `correction` requires a `reason`. Score never goes below 0. |
+| `PATCH /scoring-sessions/{session}/period` (`scoring.period`) | `canManage()`. Updates `period_label`/`status_note`. |
+| `PATCH /scoring-sessions/{session}/pause` \| `/resume` (`scoring.pause` / `scoring.resume`) | `canManage()`. |
+| `PATCH /scoring-sessions/{session}/end` (`scoring.end`) | `canManage()`. Sets the session `ended`; never touches `EventResult`. |
+| `PATCH /scoring-sessions/{session}/foul` (`scoring.foul`, WP-07-04) | `canManage()`. Basketball board only — `422` for any other board type. `action` = `add` (with `side`) or `reset`; mutates `sport_state.fouls_a`/`fouls_b`. |
+| `PATCH /scoring-sessions/{session}/round` (`scoring.round`, WP-07-05) | `canManage()`. Boxing board only — `422` for any other board type. `score_a`/`score_b` (0-10 each) append a round to `sport_state.rounds` and add to the session's running `score_a`/`score_b`. |
+| `PATCH /scoring-sessions/{session}/count` (`scoring.count`, WP-07-06) | `canManage()`. Softball/Baseball board only — `422` for any other board type. `action` = `out` \| `ball` \| `strike` \| `reset_count`; advances `sport_state`'s outs/count/inning per the cascading rules below. |
+| `PATCH /scoring-sessions/{session}/inning-run` (`scoring.inning-run`, WP-07-06) | `canManage()`. Softball/Baseball board only — `422` for any other board type. `side` + `runs` (1-20) add to the current inning's row in `sport_state.innings` and to the session's running `score_a`/`score_b`. |
 
 `scoring.start` also accepts an optional `board_type` (WP-07-07) — see
 "Manual board-type override" below.

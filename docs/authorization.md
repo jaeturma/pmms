@@ -29,6 +29,18 @@ Admin/Organizer attaches sports to them from the **Sports** catalog page
 Delegation Officer assignment (role first, then a specific delegation from
 the Delegations page).
 
+An Organizer's live-scoring access is likewise separate from the base
+`manage-meet-data` gate every other Organizer action uses: an Organizer
+gains scoreboard access for a specific match only when they hold an
+**active** Tournament Secretary or Tournament ICT `MeetSportAssignment`
+(`App\Enums\MeetSportAssignmentRole`) for that match's meet+sport — a
+plain Organizer with no such assignment is still forbidden, same as
+before this carve-out existed. `MeetSportAssignmentRole::TechnicalOfficial`
+is a distinct concept from `UserRole::TechnicalOfficial` above (a per-
+assignment duty, not a login role) and grants no scoreboard access on its
+own — only the `UserRole::TechnicalOfficial` sport-assignment path above
+does.
+
 A Coach's delegation scope is separate from their role too, but via a
 different mechanism than a Delegation Officer's: a Coach is scoped through
 their own roster identity (`Personnel.user_id` → `Delegation::hasCoach()`),
@@ -159,7 +171,7 @@ the named policy on top of the role check.
 | Matches — list | ✓ all | ✓ all | own delegation's only | own assigned sport(s)² only | ✗ | ✗ |
 | Matches — create, update, participants, status, delete | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Live scoring — view session (Phase 7) | ✓ all | ✓ all | own delegation's matches only | own assigned sport(s)² only | ✗ | ✗ |
-| Live scoring — start, score, correct, period, pause, resume, end, record/reset team fouls, record a boxing round score, advance count/outs, record an inning run (Phase 7) | ✓ | ✗ | ✗ | own assigned sport(s)² only | ✗ | ✗ |
+| Live scoring — start, score, correct, period, pause, resume, end, record/reset team fouls, record a boxing round score, advance count/outs, record an inning run (Phase 7) | ✓ | own Tournament Secretary/ICT assignment⁴ only | ✗ | own assigned sport(s)² only | ✗ | ✗ |
 | Results — validated results | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Results — encoded (unvalidated) results | ✓ all | ✓ all | ✗ | own sport's only | ✗ | ✗ |
 | Results — encode, update | ✓ | ✓ | ✗ | own sport's only | ✗ | ✗ |
@@ -190,7 +202,9 @@ Enforcement lives in four layers: the `role:admin,organizer` route middleware gr
 matches/protest-decision/incidents/accreditation mutations, and the three
 validate/correct/delete result actions), the separate `role:admin,organizer,
 technical_official` route group for the 9 live-scoring mutation endpoints (kept apart
-deliberately so a Technical Official gains no other meet-data-management permission)
+deliberately so a Technical Official gains no other meet-data-management permission,
+and so an Organizer without a Tournament Secretary/ICT assignment is still narrowed
+out by `canManage()` despite passing this coarse role check)
 plus a second, equally deliberate carve-out of that same shape for `results.store`/
 `results.update` only (Phase 16 — a Technical Official may encode a result directly,
 but never validate/correct/delete one; that trio stays manager-only), and the per-model
@@ -234,6 +248,12 @@ registry).
 ² A Technical Official's sport assignment (`User::sports()`, a `sport_user` pivot —
 see "Roles" above) — not a delegation. A match belongs to exactly one sport via its
 event, so this scoping is a straightforward `sport_id` check, no policy class needed.
+
+⁴ An active (`MeetSportAssignmentStatus::Active`) `MeetSportAssignment` with role
+`TournamentSecretary` or `TournamentICT` for the match's own `meet_id` + event's
+`sport_id` — added 2026-08-06 per owner request, alongside (not replacing) the
+existing Technical Official path. `Pending`/`Declined`/`Ended` assignments, or one
+for a different meet or sport, do not grant access.
 
 ## Testing pattern
 

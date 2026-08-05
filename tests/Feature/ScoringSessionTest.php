@@ -1,6 +1,8 @@
 <?php
 
 use App\Enums\MatchStatus;
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\ScoringSessionStatus;
 use App\Models\Athlete;
 use App\Models\AuditLog;
@@ -10,6 +12,8 @@ use App\Models\Event;
 use App\Models\EventMatch;
 use App\Models\EventResult;
 use App\Models\FileUpload;
+use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
 use App\Models\ResultPlacement;
 use App\Models\ScoreEvent;
 use App\Models\ScoringSession;
@@ -169,6 +173,102 @@ test('a technical official cannot run scoring for a match outside their assigned
 
     $this->actingAs($official)
         ->get("/matches/{$boxing->id}/scoreboard")
+        ->assertForbidden();
+});
+
+test('an organizer assigned as tournament secretary can run a scoring session for their assigned meet+sport', function () {
+    $match = basketballMatch();
+
+    $organizer = User::factory()->organizer()->create();
+    $meetSport = MeetSport::factory()->create(['meet_id' => $match->meet_id, 'sport_id' => $match->event->sport_id]);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $organizer->id,
+        'role' => MeetSportAssignmentRole::TournamentSecretary,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($organizer)
+        ->get("/matches/{$match->id}/scoreboard")
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page->where('canManage', true));
+
+    $this->actingAs($organizer)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'A', 'side_b_label' => 'B'])
+        ->assertRedirect();
+});
+
+test('an organizer assigned as tournament ict can run a scoring session for their assigned meet+sport', function () {
+    $match = boxingMatch();
+
+    $organizer = User::factory()->organizer()->create();
+    $meetSport = MeetSport::factory()->create(['meet_id' => $match->meet_id, 'sport_id' => $match->event->sport_id]);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $organizer->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($organizer)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'A', 'side_b_label' => 'B'])
+        ->assertRedirect();
+});
+
+test('an organizer\'s tournament secretary/ICT assignment does not carry over to a different meet or sport', function () {
+    $basketball = basketballMatch();
+    $boxing = boxingMatch();
+
+    $organizer = User::factory()->organizer()->create();
+    // Assigned as Tournament Secretary for boxing's meet+sport, not basketball's.
+    $meetSport = MeetSport::factory()->create(['meet_id' => $boxing->meet_id, 'sport_id' => $boxing->event->sport_id]);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $organizer->id,
+        'role' => MeetSportAssignmentRole::TournamentSecretary,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($organizer)
+        ->post("/matches/{$basketball->id}/scoring-sessions", ['side_a_label' => 'A', 'side_b_label' => 'B'])
+        ->assertForbidden();
+});
+
+test('a pending or ended tournament secretary/ICT assignment does not grant scoreboard access', function (MeetSportAssignmentStatus $status) {
+    $match = basketballMatch();
+
+    $organizer = User::factory()->organizer()->create();
+    $meetSport = MeetSport::factory()->create(['meet_id' => $match->meet_id, 'sport_id' => $match->event->sport_id]);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $organizer->id,
+        'role' => MeetSportAssignmentRole::TournamentSecretary,
+        'status' => $status,
+    ]);
+
+    $this->actingAs($organizer)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'A', 'side_b_label' => 'B'])
+        ->assertForbidden();
+})->with([
+    'pending' => MeetSportAssignmentStatus::Pending,
+    'declined' => MeetSportAssignmentStatus::Declined,
+    'ended' => MeetSportAssignmentStatus::Ended,
+]);
+
+test('an organizer assigned as tournament manager (not secretary/ICT) cannot run the scoreboard', function () {
+    $match = basketballMatch();
+
+    $organizer = User::factory()->organizer()->create();
+    $meetSport = MeetSport::factory()->create(['meet_id' => $match->meet_id, 'sport_id' => $match->event->sport_id]);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $organizer->id,
+        'role' => MeetSportAssignmentRole::TournamentManager,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($organizer)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'A', 'side_b_label' => 'B'])
         ->assertForbidden();
 });
 
