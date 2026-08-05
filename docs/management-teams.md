@@ -7,8 +7,9 @@ see `docs/reports/architecture/pmms-organizational-realignment-gap-assessment.md
 ## Scope
 
 `ManagementTeam` is deliberately the **administrative shell only** — who is on a
-meet's Top Management/Meet Management/Results Committee/Division Secretariat
-(DSAC)/ICT/Supply/Food/Billeting/Transport/Medical/DRRM team, and what its mandate
+meet's Top Management/Meet Management/Results Committee/Division Screening and
+Accreditation Committee (DSAC)/ICT/Supply/Food/Billeting/Transport/Medical/DRRM
+team, and what its mandate
 is. It does **not** own the specialized operational data those teams produce
 (medical records, equipment inventory, meal plans, etc.) — those are separate,
 later work packages (WP-REALIGN-10 through -12) that will reference a team by id,

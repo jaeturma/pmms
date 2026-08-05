@@ -70,7 +70,7 @@ Unchanged: `Delegation → Athlete/Personnel → Entry → EligibilityReview →
 ManagementTeam (NEW)
 ├── meet_id
 ├── team_type: TopManagement | MeetManagement | ResultsCommittee |
-│              DivisionSecretariat | ICT | Supply | Food | Billeting |
+│              DivisionScreeningAndAccreditation | ICT | Supply | Food | Billeting |
 │              Transport | Medical | DRRM
 ├── name, description, status
 └── ManagementTeamMember (NEW)

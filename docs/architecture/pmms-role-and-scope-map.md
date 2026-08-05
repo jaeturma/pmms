@@ -23,7 +23,7 @@ Two gates only: `administer` (Admin-only, `AppServiceProvider.php:44`) and `mana
 | Top Management | `admin`/`organizer` (undifferentiated) | New scoped read/approve capability, not full admin — currently anyone passing `manage-meet-data` gets identical access regardless of seniority |
 | Meet Manager | `organizer` (undifferentiated) | Same gap — no distinction between "Organizer generally" and "the Meet Manager for this specific meet" |
 | Results Committee | `admin`/`organizer` via `manage-meet-data` | No distinct role; validate/correct/delete result is folded into the same gate as everything else Organizer can do |
-| Division Secretariat / DSAC | `admin`/`organizer` via `EligibilityReviewPolicy::decide` | Same pattern — any Organizer can decide any eligibility review, not a scoped DSAC group |
+| Division Screening and Accreditation Committee / DSAC | `admin`/`organizer` via `EligibilityReviewPolicy::decide` | Same pattern — any Organizer can decide any eligibility review, not a scoped DSAC group |
 | Tournament Manager | *(rejected previously, see gap assessment §9)* | Needs `MeetSportAssignment.role = 'Tournament Manager'`, scoped to a `MeetSport` |
 | Assistant Tournament Manager | *(none)* | Same mechanism, `is_lead = false` |
 | Tournament Secretary | *(none)* | Same mechanism, different `role` value |

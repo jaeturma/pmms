@@ -19,7 +19,7 @@ enum ManagementTeamType: string
     case TopManagement = 'top_management';
     case MeetManagement = 'meet_management';
     case ResultsCommittee = 'results_committee';
-    case DivisionSecretariat = 'division_secretariat';
+    case DivisionScreeningAndAccreditation = 'division_screening_and_accreditation';
     case ICT = 'ict';
     case Supply = 'supply';
     case Food = 'food';
@@ -34,7 +34,7 @@ enum ManagementTeamType: string
             self::TopManagement => 'Top Management',
             self::MeetManagement => 'Meet Management',
             self::ResultsCommittee => 'Results Committee',
-            self::DivisionSecretariat => 'Division Secretariat (DSAC)',
+            self::DivisionScreeningAndAccreditation => 'Division Screening and Accreditation Committee (DSAC)',
             self::ICT => 'ICT Team',
             self::Supply => 'Supply Team',
             self::Food => 'Food Team',

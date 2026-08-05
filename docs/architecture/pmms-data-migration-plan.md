@@ -32,7 +32,7 @@ Grouped by work package (see the gap assessment §24 for WP descriptions):
 - `meet_sport_assignments` — `id`, `meet_sport_id` (FK, cascade), `sport_category_id` (FK, cascade, nullable), `user_id` (FK, cascade), `role` (string enum: TournamentManager/AssistantTournamentManager/TrackTournamentManager/FieldTournamentManager/BoysTournamentManager/GirlsTournamentManager/CategoryTournamentManager/TournamentSecretary/TournamentICT/TechnicalOfficial), `is_lead` (boolean), `start_date`, `end_date`, `status`, timestamps.
 
 **WP-REALIGN-09**
-- `management_teams` — `id`, `meet_id` (FK, cascade), `team_type` (string enum: TopManagement/MeetManagement/ResultsCommittee/DivisionSecretariat/ICT/Supply/Food/Billeting/Transport/Medical/DRRM), `name`, `description`, `status`, timestamps.
+- `management_teams` — `id`, `meet_id` (FK, cascade), `team_type` (string enum: TopManagement/MeetManagement/ResultsCommittee/DivisionScreeningAndAccreditation/ICT/Supply/Food/Billeting/Transport/Medical/DRRM), `name`, `description`, `status`, timestamps.
 - `management_team_members` — `id`, `management_team_id` (FK, cascade), `user_id` (FK, cascade), `role_title`, `is_head` (boolean), `responsibilities` (text, nullable), `status`, timestamps.
 
 **WP-REALIGN-10**
