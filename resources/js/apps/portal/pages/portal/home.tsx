@@ -81,6 +81,7 @@ export default function PortalHome({
                     description={`Department of Education - Schools Division of ${props.division.name}`}
                     startsAtIso={meet.starts_at_iso}
                     heroIconUrl={props.division.heroIconUrl}
+                    municipalities={municipalities}
                     meta={
                         <>
                             <span>SY {meet.school_year}</span>

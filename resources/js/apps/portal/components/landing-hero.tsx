@@ -3,6 +3,7 @@ import { PortalCountdown } from '@/apps/portal/components/countdown';
 import { PortalHeroBackground } from '@/apps/portal/components/hero-background';
 import { PortalTorchIcon } from '@/apps/portal/components/torch-icon';
 import { cn } from '@/apps/portal/lib/utils';
+import type { PortalMunicipality } from '@/apps/portal/types';
 
 type PortalLandingHeroProps = {
     title: string;
@@ -16,6 +17,13 @@ type PortalLandingHeroProps = {
      * has uploaded one (`Division::heroIcon`, admin-configurable via the
      * Division settings page) — never both at once. */
     heroIconUrl?: string | null;
+    /** Rendered as a wrapping row of plain logo images spanning 90% of
+     * the hero's width, below the countdown — one row on wide screens,
+     * wrapping onto more rows as the viewport narrows rather than
+     * shrinking below a legible size. A municipality with no crest
+     * uploaded yet falls back to its plain name (no placeholder badge —
+     * this row is images, not avatars). */
+    municipalities?: PortalMunicipality[];
     className?: string;
 };
 
@@ -42,6 +50,7 @@ export function PortalLandingHero({
     meta,
     startsAtIso,
     heroIconUrl,
+    municipalities,
     className,
 }: PortalLandingHeroProps) {
     return (
@@ -78,6 +87,31 @@ export function PortalLandingHero({
                     </div>
                 )}
             </div>
+
+            {municipalities && municipalities.length > 0 && (
+                <div
+                    className="relative mx-auto mt-8 flex w-[90%] flex-wrap items-center justify-center gap-x-8 gap-y-6 sm:mt-10"
+                    aria-label="Competing municipalities"
+                >
+                    {municipalities.map((municipality) =>
+                        municipality.logo_url ? (
+                            <img
+                                key={municipality.id}
+                                src={municipality.logo_url}
+                                alt={municipality.name}
+                                className="h-14 w-auto object-contain sm:h-20"
+                            />
+                        ) : (
+                            <span
+                                key={municipality.id}
+                                className="text-sm font-medium text-[var(--portal-ink-foreground)]/70 sm:text-base"
+                            >
+                                {municipality.name}
+                            </span>
+                        ),
+                    )}
+                </div>
+            )}
         </section>
     );
 }
