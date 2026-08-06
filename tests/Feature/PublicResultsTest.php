@@ -1,6 +1,8 @@
 <?php
 
+use App\Enums\AgeDivision;
 use App\Enums\ResultStatus;
+use App\Models\Event;
 use App\Models\EventResult;
 use App\Models\Meet;
 use App\Models\ResultPlacement;
@@ -55,13 +57,31 @@ test('encoded results are structurally excluded from the public page', function 
             ->has('sportOptions', 0));
 });
 
+test('each result exposes its own event\'s age division, for the results page\'s Elementary/Secondary split', function () {
+    $meet = Meet::factory()->active()->published()->create();
+
+    $elementaryEvent = Event::factory()->create(['age_division' => AgeDivision::Elementary]);
+    $elementaryResult = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $elementaryEvent->id]);
+    ResultPlacement::factory()->create(['event_result_id' => $elementaryResult->id, 'rank' => 1]);
+
+    $secondaryEvent = Event::factory()->create(['age_division' => AgeDivision::Secondary]);
+    $secondaryResult = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $secondaryEvent->id]);
+    ResultPlacement::factory()->create(['event_result_id' => $secondaryResult->id, 'rank' => 1]);
+
+    $this->get("/meets/{$meet->id}/results")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('results', 2)
+            ->where('results.0.age_division', 'secondary')
+            ->where('results.1.age_division', 'elementary'));
+});
+
 test('public placements carry no sensitive or internal fields', function () {
     [$meet] = publishedMeetWithValidatedResult();
 
     $this->get("/meets/{$meet->id}/results")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('results.0', fn (AssertableInertia $result) => $result
-                ->hasAll(['id', 'event', 'official_as_of', 'placements'])
+                ->hasAll(['id', 'event', 'age_division', 'official_as_of', 'placements'])
                 ->missing('validated_by')
                 ->missing('encoded_by')
                 ->missing('status'))

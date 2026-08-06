@@ -189,6 +189,7 @@ export type PortalVenueGuideEntry = {
 export type PortalResultRow = {
     id: number;
     event: string;
+    age_division: 'elementary' | 'secondary';
     official_as_of: string | null;
     placements: PortalResultPlacement[];
 };

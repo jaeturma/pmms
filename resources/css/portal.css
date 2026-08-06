@@ -24,7 +24,7 @@
     --portal-surface-foreground: oklch(0.24 0.06 258);
     --portal-muted: oklch(0.95 0.015 90);
     --portal-muted-foreground: oklch(0.45 0.05 258);
-    --portal-border: oklch(0.89 0.02 90);
+    --portal-border: oklch(0.72 0.03 90);
 
     /* Golden yellow — primary accent */
     --portal-accent: oklch(0.78 0.16 90);
@@ -128,7 +128,7 @@
     --portal-surface-foreground: oklch(0.24 0.06 258);
     --portal-muted: oklch(0.95 0.015 90);
     --portal-muted-foreground: oklch(0.45 0.05 258);
-    --portal-border: oklch(0.89 0.02 90);
+    --portal-border: oklch(0.72 0.03 90);
     --portal-accent: oklch(0.78 0.16 90);
     --portal-accent-foreground: oklch(0.22 0.05 258);
     --portal-accent-soft: oklch(0.95 0.05 90);

@@ -194,6 +194,7 @@ class PortalController extends Controller
                         $result->event->gender->label(),
                         $result->event->age_division->label(),
                     ),
+                    'age_division' => $result->event->age_division->value,
                     'official_as_of' => $result->validated_at?->format('M j, Y g:i A'),
                     'placements' => $result->placements
                         ->sortBy([['rank', 'asc']])
