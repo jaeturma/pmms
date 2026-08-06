@@ -128,7 +128,7 @@ class Ddopaa2026ShowcaseSeeder extends Seeder
         $meet = Meet::query()->firstOrCreate(
             ['name' => 'DdOPAA Meet 2026'],
             [
-                'school_year' => '2025-2026',
+                'school_year' => '2026-2027',
                 // The real, announced dates for this meet — not a
                 // relative-to-seed-time placeholder.
                 'starts_at' => '2026-09-04',
@@ -141,6 +141,7 @@ class Ddopaa2026ShowcaseSeeder extends Seeder
             || ! $meet->is_published
             || ! $meet->is_active
             || $meet->venue !== 'Compostela, Davao de Oro'
+            || $meet->school_year !== '2026-2027'
             || $meet->starts_at->toDateString() !== '2026-09-04'
             || $meet->ends_at->toDateString() !== '2026-09-08'
         ) {
@@ -149,6 +150,7 @@ class Ddopaa2026ShowcaseSeeder extends Seeder
                 'is_published' => true,
                 'is_active' => true,
                 'venue' => 'Compostela, Davao de Oro',
+                'school_year' => '2026-2027',
                 'starts_at' => '2026-09-04',
                 'ends_at' => '2026-09-08',
             ])->save();

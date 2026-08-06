@@ -17,12 +17,16 @@ type PortalLandingHeroProps = {
      * has uploaded one (`Division::heroIcon`, admin-configurable via the
      * Division settings page) — never both at once. */
     heroIconUrl?: string | null;
-    /** Rendered as a wrapping row of plain logo images spanning 90% of
-     * the hero's width, below the countdown — one row on wide screens,
-     * wrapping onto more rows as the viewport narrows rather than
-     * shrinking below a legible size. A municipality with no crest
-     * uploaded yet falls back to its plain name (no placeholder badge —
-     * this row is images, not avatars). */
+    /** Rendered below the countdown as a card grid spanning 90% of the
+     * hero's width — 3 columns on mobile, 4 from `sm:` (~640px, tablet),
+     * 6 from `md:` (~768px), then from `lg:` (~1024px, laptop/desktop) a
+     * single non-wrapping row fitting every card at once (each card
+     * becomes `flex-1`, sharing the row width evenly rather than a fixed
+     * column count). Each card is a plain logo image (no placeholder
+     * badge if none is uploaded yet — this shows real logos, not
+     * avatars) with the municipality's name (always one line, truncated
+     * if it doesn't fit) and nickname (broken onto a second line
+     * whenever it's more than one word) underneath. */
     municipalities?: PortalMunicipality[];
     className?: string;
 };
@@ -56,7 +60,7 @@ export function PortalLandingHero({
     return (
         <section
             className={cn(
-                'relative -mx-4 -mt-8 flex min-h-[78vh] flex-col justify-center overflow-hidden border-b-4 border-[var(--portal-accent)] px-4 py-14 text-[var(--portal-ink-foreground)] sm:-mx-6 sm:-mt-10 sm:px-6 sm:py-20 lg:-mx-10 lg:px-10 xl:-mx-16 xl:px-16 2xl:-mx-24 2xl:px-24',
+                'relative -mx-4 -mt-8 flex min-h-[78vh] flex-col justify-center overflow-hidden border-b-4 border-[var(--portal-accent)] px-4 pt-8 pb-14 text-[var(--portal-ink-foreground)] sm:-mx-6 sm:-mt-10 sm:px-6 sm:pt-12 sm:pb-20 lg:-mx-10 lg:px-10 xl:-mx-16 xl:px-16 2xl:-mx-24 2xl:px-24',
                 className,
             )}
         >
@@ -90,26 +94,44 @@ export function PortalLandingHero({
 
             {municipalities && municipalities.length > 0 && (
                 <div
-                    className="relative mx-auto mt-8 flex w-[90%] flex-wrap items-center justify-center gap-x-8 gap-y-6 sm:mt-10"
+                    id="municipalities"
+                    className="relative mx-auto mt-8 grid w-[90%] scroll-mt-20 grid-cols-3 items-start gap-x-4 gap-y-6 sm:mt-10 sm:grid-cols-4 md:grid-cols-6 lg:flex lg:flex-nowrap lg:gap-x-3"
                     aria-label="Competing municipalities"
                 >
-                    {municipalities.map((municipality) =>
-                        municipality.logo_url ? (
-                            <img
-                                key={municipality.id}
-                                src={municipality.logo_url}
-                                alt={municipality.name}
-                                className="h-14 w-auto object-contain sm:h-20"
-                            />
-                        ) : (
-                            <span
-                                key={municipality.id}
-                                className="text-sm font-medium text-[var(--portal-ink-foreground)]/70 sm:text-base"
-                            >
-                                {municipality.name}
-                            </span>
-                        ),
-                    )}
+                    {municipalities.map((municipality) => {
+                        const nicknameWords = municipality.nickname?.split(' ') ?? [];
+
+                        return (
+                            <div key={municipality.id} className="flex min-w-0 flex-col items-center gap-1 lg:flex-1">
+                                {municipality.logo_url && (
+                                    <img
+                                        src={municipality.logo_url}
+                                        alt={municipality.name}
+                                        className="h-auto max-h-[53px] w-full object-contain sm:max-h-[69px]"
+                                    />
+                                )}
+
+                                <div className="flex w-full flex-col items-center text-center">
+                                    <span className="w-full truncate text-[10px] font-semibold sm:text-xs">
+                                        {municipality.name}
+                                    </span>
+                                    {nicknameWords.length > 0 && (
+                                        <span className="text-[9px] text-[var(--portal-ink-foreground)]/70 sm:text-[11px]">
+                                            {nicknameWords.length > 1 ? (
+                                                <>
+                                                    "{nicknameWords[0]}
+                                                    <br />
+                                                    {nicknameWords.slice(1).join(' ')}"
+                                                </>
+                                            ) : (
+                                                `"${nicknameWords[0]}"`
+                                            )}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             )}
         </section>
