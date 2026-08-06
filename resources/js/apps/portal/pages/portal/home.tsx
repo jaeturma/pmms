@@ -64,12 +64,12 @@ export default function PortalHome({
     }
 
     const quickNavItems: PortalQuickNavItem[] = [
-        { label: 'Schedule', href: publicMeet(meet.id).url, icon: CalendarDays },
-        { label: 'Results', href: publicResults(meet.id).url, icon: Award },
-        { label: 'Medal Tally', href: publicTally(meet.id).url, icon: Trophy },
-        { label: 'Municipalities', href: `${home().url}#municipalities`, icon: Users },
-        { label: 'Sports', href: publicSports(meet.id).url, icon: Dumbbell },
-        { label: 'Live Now', href: `${home().url}#live-now`, icon: Radio, live: liveMatches.length > 0 },
+        { label: 'Schedule', href: publicMeet(meet.id).url, icon: CalendarDays, tone: 'accent' },
+        { label: 'Results', href: publicResults(meet.id).url, icon: Award, tone: 'ink' },
+        { label: 'Medal Tally', href: publicTally(meet.id).url, icon: Trophy, tone: 'maroon' },
+        { label: 'Municipalities', href: `${home().url}#municipalities`, icon: Users, tone: 'warning' },
+        { label: 'Sports', href: publicSports(meet.id).url, icon: Dumbbell, tone: 'muted' },
+        { label: 'Live Now', href: `${home().url}#live-now`, icon: Radio, live: liveMatches.length > 0, tone: 'live' },
     ];
 
     return (
@@ -153,33 +153,6 @@ export default function PortalHome({
                                         </span>
                                     </div>
                                 </Link>
-                            ))}
-                        </div>
-                    )}
-                </section>
-
-                <section id="municipalities" className="scroll-mt-20 space-y-3">
-                    <PortalSectionHeader
-                        title="Competing municipalities"
-                        action={municipalities.length > 0 && <span className="text-sm text-[var(--portal-muted-foreground)]">{municipalities.length}</span>}
-                    />
-                    {municipalities.length === 0 ? (
-                        <PortalEmptyState icon={Users} title="No delegations registered yet" />
-                    ) : (
-                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-                            {municipalities.map((municipality) => (
-                                <div
-                                    key={municipality.id}
-                                    className="portal-animate-in flex flex-col items-center gap-2 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4 text-center transition-transform hover:-translate-y-0.5"
-                                >
-                                    <MunicipalityCrest name={municipality.name} logoUrl={municipality.logo_url} size="lg" />
-                                    <div>
-                                        <p className="text-sm leading-snug font-medium">{municipality.name}</p>
-                                        {municipality.nickname && (
-                                            <p className="text-xs text-[var(--portal-muted-foreground)]">"{municipality.nickname}"</p>
-                                        )}
-                                    </div>
-                                </div>
                             ))}
                         </div>
                     )}
