@@ -24,6 +24,13 @@ type PortalLandingHeroProps = {
  * Sports directory, ...) still reuses for its simple title/description
  * header. Building a second component here rather than expanding
  * `PortalHero` itself keeps every one of those inner pages unaffected.
+ *
+ * Deliberately full-bleed (a row spanning the viewport, not a rounded
+ * card floating inside `PortalLayout`'s padded `<main>`) — the negative
+ * margins below exactly cancel that padding at each of its breakpoints
+ * (`px-4 sm:px-6 lg:px-10 xl:px-16 2xl:px-24`), then re-apply the same
+ * values as the section's own padding so the hero's content still lines
+ * up with every other page section instead of touching the true edge.
  */
 export function PortalLandingHero({
     eyebrow,
@@ -38,7 +45,7 @@ export function PortalLandingHero({
     return (
         <section
             className={cn(
-                'relative flex min-h-[78vh] flex-col justify-center overflow-hidden rounded-[var(--portal-radius)] border-b-4 border-[var(--portal-accent)] px-6 py-14 text-[var(--portal-ink-foreground)] sm:px-10 sm:py-20',
+                'relative -mx-4 flex min-h-[78vh] flex-col justify-center overflow-hidden border-b-4 border-[var(--portal-accent)] px-4 py-14 text-[var(--portal-ink-foreground)] sm:-mx-6 sm:px-6 sm:py-20 lg:-mx-10 lg:px-10 xl:-mx-16 xl:px-16 2xl:-mx-24 2xl:px-24',
                 className,
             )}
         >

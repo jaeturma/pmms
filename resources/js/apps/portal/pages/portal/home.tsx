@@ -1,5 +1,5 @@
 import { Head, Link, usePage } from '@inertiajs/react';
-import { Award, CalendarClock, CalendarDays, Crown, Dumbbell, Flag, Images, MapPin, Radio, Trophy, Users } from 'lucide-react';
+import { Award, CalendarClock, CalendarDays, Crown, Dumbbell, Flag, MapPin, Radio, Trophy, Users } from 'lucide-react';
 import { PortalButton } from '@/apps/portal/components/button';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { PortalHero } from '@/apps/portal/components/hero';
@@ -20,7 +20,7 @@ import type {
     PortalUpcomingEvent,
 } from '@/apps/portal/types';
 import { home } from '@/routes';
-import { gallery as publicGallery, meet as publicMeet, results as publicResults, sports as publicSports, tally as publicTally } from '@/routes/public';
+import { meet as publicMeet, results as publicResults, sports as publicSports, tally as publicTally } from '@/routes/public';
 
 type Props = {
     meet: PortalMeetSummary | null;
@@ -70,7 +70,6 @@ export default function PortalHome({
         { label: 'Medal Tally', href: publicTally(meet.id).url, icon: Trophy },
         { label: 'Municipalities', href: `${home().url}#municipalities`, icon: Users },
         { label: 'Sports', href: publicSports(meet.id).url, icon: Dumbbell },
-        { label: 'Gallery', href: publicGallery(meet.id).url, icon: Images },
         { label: 'Live Now', href: `${home().url}#live-now`, icon: Radio, live: liveMatches.length > 0 },
     ];
 
@@ -130,28 +129,6 @@ export default function PortalHome({
                     </div>
                 )}
 
-                <section className="space-y-3">
-                    <PortalSectionHeader title="Announcements" />
-                    {announcements.length === 0 ? (
-                        <PortalEmptyState icon={CalendarClock} title="No announcements yet" />
-                    ) : (
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            {announcements.map((announcement) => (
-                                <div
-                                    key={announcement.id}
-                                    className="rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4"
-                                >
-                                    <p className="text-sm font-medium">{announcement.title}</p>
-                                    <p className="mt-1 line-clamp-2 text-sm text-[var(--portal-muted-foreground)]">{announcement.body}</p>
-                                    {announcement.published_at && (
-                                        <p className="mt-2 text-xs text-[var(--portal-muted-foreground)]">{announcement.published_at}</p>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </section>
-
                 <section id="live-now" className="scroll-mt-20 space-y-3">
                     <PortalSectionHeader
                         title="Live now"
@@ -190,6 +167,55 @@ export default function PortalHome({
                                         </span>
                                     </div>
                                 </Link>
+                            ))}
+                        </div>
+                    )}
+                </section>
+
+                <section id="municipalities" className="scroll-mt-20 space-y-3">
+                    <PortalSectionHeader
+                        title="Competing municipalities"
+                        action={municipalities.length > 0 && <span className="text-sm text-[var(--portal-muted-foreground)]">{municipalities.length}</span>}
+                    />
+                    {municipalities.length === 0 ? (
+                        <PortalEmptyState icon={Users} title="No delegations registered yet" />
+                    ) : (
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+                            {municipalities.map((municipality) => (
+                                <div
+                                    key={municipality.id}
+                                    className="portal-animate-in flex flex-col items-center gap-2 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4 text-center transition-transform hover:-translate-y-0.5"
+                                >
+                                    <MunicipalityCrest name={municipality.name} logoUrl={municipality.logo_url} size="lg" />
+                                    <div>
+                                        <p className="text-sm leading-snug font-medium">{municipality.name}</p>
+                                        {municipality.nickname && (
+                                            <p className="text-xs text-[var(--portal-muted-foreground)]">"{municipality.nickname}"</p>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </section>
+
+                <section className="space-y-3">
+                    <PortalSectionHeader title="Announcements" />
+                    {announcements.length === 0 ? (
+                        <PortalEmptyState icon={CalendarClock} title="No announcements yet" />
+                    ) : (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            {announcements.map((announcement) => (
+                                <div
+                                    key={announcement.id}
+                                    className="rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4"
+                                >
+                                    <p className="text-sm font-medium">{announcement.title}</p>
+                                    <p className="mt-1 line-clamp-2 text-sm text-[var(--portal-muted-foreground)]">{announcement.body}</p>
+                                    {announcement.published_at && (
+                                        <p className="mt-2 text-xs text-[var(--portal-muted-foreground)]">{announcement.published_at}</p>
+                                    )}
+                                </div>
                             ))}
                         </div>
                     )}
@@ -249,33 +275,6 @@ export default function PortalHome({
                             </div>
                         )}
                     </div>
-                </section>
-
-                <section id="municipalities" className="scroll-mt-20 space-y-3">
-                    <PortalSectionHeader
-                        title="Competing municipalities"
-                        action={municipalities.length > 0 && <span className="text-sm text-[var(--portal-muted-foreground)]">{municipalities.length}</span>}
-                    />
-                    {municipalities.length === 0 ? (
-                        <PortalEmptyState icon={Users} title="No delegations registered yet" />
-                    ) : (
-                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-                            {municipalities.map((municipality) => (
-                                <div
-                                    key={municipality.id}
-                                    className="portal-animate-in flex flex-col items-center gap-2 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4 text-center transition-transform hover:-translate-y-0.5"
-                                >
-                                    <MunicipalityCrest name={municipality.name} logoUrl={municipality.logo_url} size="lg" />
-                                    <div>
-                                        <p className="text-sm leading-snug font-medium">{municipality.name}</p>
-                                        {municipality.nickname && (
-                                            <p className="text-xs text-[var(--portal-muted-foreground)]">"{municipality.nickname}"</p>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
                 </section>
             </div>
         </>
