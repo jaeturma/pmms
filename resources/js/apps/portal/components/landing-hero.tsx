@@ -12,7 +12,6 @@ type PortalLandingHeroProps = {
      * elapsed (meet already underway) both simply skip the countdown —
      * `PortalCountdown`'s own `onElapsed="hide"` handles the latter. */
     startsAtIso?: string;
-    divisionLogoUrl?: string | null;
     /** Replaces the default `PortalTorchIcon` SVG mark when the division
      * has uploaded one (`Division::heroIcon`, admin-configurable via the
      * Division settings page) — never both at once. */
@@ -42,7 +41,6 @@ export function PortalLandingHero({
     description,
     meta,
     startsAtIso,
-    divisionLogoUrl,
     heroIconUrl,
     className,
 }: PortalLandingHeroProps) {
@@ -56,20 +54,11 @@ export function PortalLandingHero({
             <PortalHeroBackground />
 
             <div className="portal-hero-in relative mx-auto flex w-full max-w-4xl flex-col items-center gap-5 text-center">
-                <div className="flex items-center gap-4">
-                    {heroIconUrl ? (
-                        <img src={heroIconUrl} alt="" className="h-16 w-auto object-contain sm:h-20" />
-                    ) : (
-                        <PortalTorchIcon className="h-16 w-auto text-[var(--portal-ink-foreground)] sm:h-20" />
-                    )}
-                    {divisionLogoUrl && (
-                        <img
-                            src={divisionLogoUrl}
-                            alt=""
-                            className="size-14 rounded-full border-2 border-white/30 object-cover sm:size-[72px]"
-                        />
-                    )}
-                </div>
+                {heroIconUrl ? (
+                    <img src={heroIconUrl} alt="" className="h-20 w-auto object-contain sm:h-24" />
+                ) : (
+                    <PortalTorchIcon className="h-20 w-auto text-[var(--portal-ink-foreground)] sm:h-24" />
+                )}
 
                 <h1 className="text-4xl leading-[1.05] font-extrabold tracking-tight sm:text-6xl lg:text-7xl">{title}</h1>
 

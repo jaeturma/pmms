@@ -42,7 +42,7 @@ export default function PortalHome({
     latestResult,
     closingSummary,
 }: Props) {
-    const { props } = usePage<{ division: { name: string; logoUrl: string | null; heroIconUrl: string | null } }>();
+    const { props } = usePage<{ division: { name: string; heroIconUrl: string | null } }>();
 
     if (meet === null) {
         return (
@@ -80,7 +80,6 @@ export default function PortalHome({
                     title={meet.name}
                     description={`Department of Education - Schools Division of ${props.division.name}`}
                     startsAtIso={meet.starts_at_iso}
-                    divisionLogoUrl={props.division.logoUrl}
                     heroIconUrl={props.division.heroIconUrl}
                     meta={
                         <>
