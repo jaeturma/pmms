@@ -32,7 +32,7 @@ export default function PortalFaqs({ meet }: Props) {
         <>
             <Head title={`FAQs — ${meet.name}`} />
             <div className="flex flex-col gap-6">
-                <PortalHero eyebrow="FAQs" title={meet.name} description="Common questions about how this portal works." />
+                <PortalHero title="FAQs" description="Common questions about how this portal works." />
 
                 <div className="space-y-3">
                     {faqItems(meet).map((item) => (

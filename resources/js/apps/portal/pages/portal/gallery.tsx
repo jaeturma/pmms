@@ -25,7 +25,7 @@ export default function PortalGallery({ meet, sports }: Props) {
         <>
             <Head title={`Gallery — ${meet.name}`} />
             <div className="flex flex-col gap-6">
-                <PortalHero eyebrow="Gallery" title={meet.name} description="Sport identity tiles for every sport contested at this meet." />
+                <PortalHero title="Gallery" description="Sport identity tiles for every sport contested at this meet." />
 
                 {sports.length === 0 ? (
                     <PortalEmptyState icon={ImageIcon} title="Nothing to show yet" />

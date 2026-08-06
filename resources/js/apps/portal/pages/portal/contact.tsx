@@ -13,7 +13,7 @@ export default function PortalContact({ meet }: Props) {
         <>
             <Head title={`Contact — ${meet.name}`} />
             <div className="flex flex-col gap-6">
-                <PortalHero eyebrow="Contact" title={meet.name} description="Meet information and quick links." />
+                <PortalHero title="Contact" description="Meet information and quick links." />
 
                 <section className="space-y-3">
                     <PortalSectionHeader title="Meet details" />

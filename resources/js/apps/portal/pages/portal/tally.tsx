@@ -89,8 +89,7 @@ export default function PortalTally({
             <Head title={`Medal Tally — ${meet.name}`} />
             <div className="flex flex-col gap-6">
                 <PortalHero
-                    eyebrow="Medal tally"
-                    title={meet.name}
+                    title="Medal Tally"
                     description={`Standings derived from validated results only. Generated ${generatedAt}.`}
                 />
 

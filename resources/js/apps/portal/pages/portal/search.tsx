@@ -29,7 +29,7 @@ export default function PortalSearch({ meet, query, schools, sports, announcemen
         <>
             <Head title={`Search — ${meet.name}`} />
             <div className="flex flex-col gap-6">
-                <PortalHero eyebrow="Search" title={meet.name} description="Search schools, sports, announcements, and results." />
+                <PortalHero title="Search" description="Search schools, sports, announcements, and results." />
 
                 <form onSubmit={submit} className="flex gap-2">
                     <input

@@ -21,7 +21,7 @@ export default function PortalAbout({ meet, municipalityCount, schoolCount, spor
         <>
             <Head title={`About — ${meet.name}`} />
             <div className="flex flex-col gap-6">
-                <PortalHero eyebrow="About" title={meet.name} description={`Organized by ${props.division.name} (${props.division.areaLabel}).`} />
+                <PortalHero title="About" description={`Organized by ${props.division.name} (${props.division.areaLabel}).`} />
 
                 <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <div className="flex flex-col items-center gap-2 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-5 text-center">

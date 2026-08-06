@@ -15,7 +15,7 @@ export default function PortalStandings({ meet, districts, generatedAt }: Props)
         <>
             <Head title={`Standings — ${meet.name}`} />
             <div className="flex flex-col gap-6">
-                <PortalHero eyebrow="Standings" title={meet.name} description={`Full district ranking, derived from validated results only. Generated ${generatedAt}.`} />
+                <PortalHero title="Standings" description={`Full district ranking, derived from validated results only. Generated ${generatedAt}.`} />
 
                 <PortalSectionHeader title="District ranking" />
                 <PortalStandingsTable

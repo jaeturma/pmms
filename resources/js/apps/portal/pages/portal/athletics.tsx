@@ -33,7 +33,7 @@ export default function PortalAthletics({ meet, days, selectedDay, medalTotals, 
         <>
             <Head title={`Athletics — ${meet.name}`} />
             <div className="flex flex-col gap-6">
-                <PortalHero eyebrow="Athletics" title={meet.name} description="Real schedule and, once validated, top-3 placements — no live per-athlete tracking." />
+                <PortalHero title="Athletics" description="Real schedule and, once validated, top-3 placements — no live per-athlete tracking." />
 
                 <PortalMedalTotalsRow totals={medalTotals} />
 

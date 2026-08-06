@@ -15,7 +15,7 @@ export default function PortalSports({ meet, sports }: Props) {
         <>
             <Head title={`Sports — ${meet.name}`} />
             <div className="flex flex-col gap-6">
-                <PortalHero eyebrow="Sports" title={meet.name} description="Every sport contested at this meet." />
+                <PortalHero title="Sports" description="Every sport contested at this meet." />
 
                 {sports.length === 0 ? (
                     <PortalEmptyState icon={Trophy} title="No sports registered yet" />

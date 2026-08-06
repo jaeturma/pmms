@@ -31,8 +31,7 @@ export default function PortalSchedule({ meet, hasAthletics, days, selectedDay, 
             <Head title={`Schedule — ${meet.name}`} />
             <div className="flex flex-col gap-8">
                 <PortalHero
-                    eyebrow="Schedule"
-                    title={meet.name}
+                    title="Schedule"
                     description="Day-by-day schedule of events, grouped by venue."
                     actions={
                         hasAthletics ? (

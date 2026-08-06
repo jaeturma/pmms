@@ -15,7 +15,7 @@ export default function PortalNews({ meet, announcements }: Props) {
         <>
             <Head title={`News — ${meet.name}`} />
             <div className="flex flex-col gap-6">
-                <PortalHero eyebrow="News" title={meet.name} description="All published announcements for this meet." />
+                <PortalHero title="News" description="All published announcements for this meet." />
 
                 {announcements.data.length === 0 ? (
                     <PortalEmptyState icon={Newspaper} title="No announcements yet" />
