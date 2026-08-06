@@ -59,6 +59,7 @@ class HandleInertiaRequests extends Middleware
                 'name' => $division->name,
                 'areaLabel' => $division->areaLabel(),
                 'logoUrl' => $division->logo_upload_id === null ? null : route('division.logo'),
+                'heroIconUrl' => $division->hero_icon_upload_id === null ? null : route('division.hero-icon'),
             ],
             // Shell-level chrome (WP-08-03): the sidebar's persistent meet-context
             // card needs this on every authenticated page, not just the dashboard

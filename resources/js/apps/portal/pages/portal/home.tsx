@@ -1,6 +1,5 @@
 import { Head, Link, usePage } from '@inertiajs/react';
 import { Award, CalendarClock, CalendarDays, Crown, Dumbbell, Flag, MapPin, Radio, Trophy, Users } from 'lucide-react';
-import { PortalButton } from '@/apps/portal/components/button';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { PortalHero } from '@/apps/portal/components/hero';
 import { PortalLandingHero } from '@/apps/portal/components/landing-hero';
@@ -43,7 +42,7 @@ export default function PortalHome({
     latestResult,
     closingSummary,
 }: Props) {
-    const { props } = usePage<{ division: { logoUrl: string | null } }>();
+    const { props } = usePage<{ division: { name: string; logoUrl: string | null; heroIconUrl: string | null } }>();
 
     if (meet === null) {
         return (
@@ -78,11 +77,11 @@ export default function PortalHome({
             <Head title={meet.name} />
             <div className="flex flex-col gap-10">
                 <PortalLandingHero
-                    eyebrow={meet.status_label}
                     title={meet.name}
-                    description="Schedules, results, and medal standings of the Schools Division Office athletic meet."
+                    description={`Department of Education - Schools Division of ${props.division.name}`}
                     startsAtIso={meet.starts_at_iso}
                     divisionLogoUrl={props.division.logoUrl}
+                    heroIconUrl={props.division.heroIconUrl}
                     meta={
                         <>
                             <span>SY {meet.school_year}</span>
@@ -96,19 +95,6 @@ export default function PortalHome({
                                     {meet.venue}
                                 </span>
                             )}
-                        </>
-                    }
-                    actions={
-                        <>
-                            <PortalButton asChild size="lg">
-                                <Link href={publicMeet(meet.id).url}>View schedule</Link>
-                            </PortalButton>
-                            <PortalButton asChild size="lg" variant="outline" className="border-white/40 text-[var(--portal-ink-foreground)] hover:bg-white/10">
-                                <Link href={publicResults(meet.id).url}>Results</Link>
-                            </PortalButton>
-                            <PortalButton asChild size="lg" variant="outline" className="border-white/40 text-[var(--portal-ink-foreground)] hover:bg-white/10">
-                                <Link href={publicTally(meet.id).url}>Medal tally</Link>
-                            </PortalButton>
                         </>
                     }
                 />

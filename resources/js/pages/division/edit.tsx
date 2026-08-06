@@ -27,6 +27,7 @@ type Props = {
         name: string;
         areaLabel: string;
         logo_url: string | null;
+        hero_icon_url: string | null;
     };
     typeLocked: boolean;
 };
@@ -38,12 +39,16 @@ export default function DivisionEdit({ division, typeLocked }: Props) {
         type: DivisionType;
         logo: File | null;
         remove_logo: boolean;
+        hero_icon: File | null;
+        remove_hero_icon: boolean;
     }>({
         _method: 'patch',
         name: division.name,
         type: division.type,
         logo: null,
         remove_logo: false,
+        hero_icon: null,
+        remove_hero_icon: false,
     });
 
     const submit = (e: FormEvent) => {
@@ -185,6 +190,73 @@ export default function DivisionEdit({ division, typeLocked }: Props) {
                             <p className="text-sm text-muted-foreground">
                                 Shown in the public portal header in place of
                                 the default mark.
+                            </p>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="division-hero-icon">
+                                Public landing hero icon (optional, max 2MB)
+                            </Label>
+                            {division.hero_icon_url && !data.hero_icon && !data.remove_hero_icon && (
+                                <div className="flex items-center gap-3">
+                                    <img
+                                        src={division.hero_icon_url}
+                                        alt=""
+                                        className="size-12 rounded-full border object-cover"
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                            setData('remove_hero_icon', true)
+                                        }
+                                    >
+                                        Remove
+                                    </Button>
+                                </div>
+                            )}
+                            {data.remove_hero_icon && (
+                                <p className="text-sm text-muted-foreground">
+                                    The current hero icon will be removed on
+                                    save.{' '}
+                                    <button
+                                        type="button"
+                                        className="underline"
+                                        onClick={() =>
+                                            setData('remove_hero_icon', false)
+                                        }
+                                    >
+                                        Undo
+                                    </button>
+                                </p>
+                            )}
+                            <Input
+                                id="division-hero-icon"
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0] ?? null;
+
+                                    if (file && file.size > MAX_LOGO_SIZE_BYTES) {
+                                        setError('hero_icon', 'The hero icon must not be larger than 2MB.');
+                                        e.target.value = '';
+
+                                        return;
+                                    }
+
+                                    clearErrors('hero_icon');
+                                    setData((current) => ({
+                                        ...current,
+                                        hero_icon: file,
+                                        remove_hero_icon: false,
+                                    }));
+                                }}
+                            />
+                            <InputError message={errors.hero_icon} />
+                            <p className="text-sm text-muted-foreground">
+                                Shown on the public landing page's hero
+                                section in place of the default torch mark.
                             </p>
                         </div>
 

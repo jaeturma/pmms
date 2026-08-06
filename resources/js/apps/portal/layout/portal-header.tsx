@@ -61,7 +61,7 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
         : [];
 
     return (
-        <header className="sticky top-0 z-40 border-b border-[var(--portal-border)] bg-[var(--portal-surface)]/95 backdrop-blur">
+        <header className="sticky top-0 z-40 border-b border-[var(--portal-border)] bg-[color-mix(in_oklch,var(--portal-surface),black_8%)]/95 backdrop-blur">
             <div className="flex h-16 w-full items-center justify-between gap-4 px-4 sm:px-6 lg:px-10 xl:px-16 2xl:px-24">
                 <Link href={home().url} className="flex items-center gap-2 text-base font-bold text-[var(--portal-fg)]">
                     {props.division.logoUrl ? (

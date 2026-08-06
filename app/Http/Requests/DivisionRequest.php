@@ -20,6 +20,8 @@ class DivisionRequest extends FormRequest
             'name' => ['required', 'string', 'max:160'],
             'logo' => ['nullable', 'image', 'max:2048'],
             'remove_logo' => ['nullable', 'boolean'],
+            'hero_icon' => ['nullable', 'image', 'max:2048'],
+            'remove_hero_icon' => ['nullable', 'boolean'],
         ];
 
         if (! Division::current()->typeIsLocked()) {

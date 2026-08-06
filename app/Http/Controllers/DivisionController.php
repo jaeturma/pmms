@@ -41,6 +41,7 @@ class DivisionController extends Controller
                 'name' => $division->name,
                 'areaLabel' => $division->areaLabel(),
                 'logo_url' => $division->logo_upload_id === null ? null : route('division.logo'),
+                'hero_icon_url' => $division->hero_icon_upload_id === null ? null : route('division.hero-icon'),
             ],
             'typeLocked' => $division->typeIsLocked(),
         ]);
@@ -60,9 +61,23 @@ class DivisionController extends Controller
     }
 
     /**
+     * Serve the public landing hero's mark. Public — same reasoning as
+     * `logo()`, it replaces a purely decorative default SVG.
+     */
+    public function heroIcon(): HttpResponse
+    {
+        $upload = Division::current()->heroIcon;
+
+        abort_if($upload === null, 404);
+
+        return Storage::disk($upload->disk)->response($upload->path, $upload->original_name);
+    }
+
+    /**
      * Update the division settings. The type is refused once any
-     * delegation exists — see Division::typeIsLocked(). The logo may be
-     * replaced or, via `remove_logo`, cleared back to the placeholder mark.
+     * delegation exists — see Division::typeIsLocked(). The logo and the
+     * public landing hero's icon may each be replaced or, via
+     * `remove_logo`/`remove_hero_icon`, cleared back to their default mark.
      */
     public function update(DivisionRequest $request): RedirectResponse
     {
@@ -88,10 +103,26 @@ class DivisionController extends Controller
             $division->logo_upload_id = null;
         }
 
+        $oldHeroIcon = null;
+
+        if ($request->hasFile('hero_icon')) {
+            /** @var User $user */
+            $user = $request->user();
+            $oldHeroIcon = $division->heroIcon;
+            $division->hero_icon_upload_id = $this->uploads->store($request->file('hero_icon'), $user, 'hero_icon')->id;
+        } elseif ($request->boolean('remove_hero_icon') && $division->hero_icon_upload_id !== null) {
+            $oldHeroIcon = $division->heroIcon;
+            $division->hero_icon_upload_id = null;
+        }
+
         $division->save();
 
         if ($oldLogo !== null) {
             $this->uploads->delete($oldLogo);
+        }
+
+        if ($oldHeroIcon !== null) {
+            $this->uploads->delete($oldHeroIcon);
         }
 
         $this->audit->record('division.updated', $division, [

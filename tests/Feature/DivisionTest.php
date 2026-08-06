@@ -6,8 +6,11 @@ use App\Models\CongressionalDistrict;
 use App\Models\Delegation;
 use App\Models\District;
 use App\Models\Division;
+use App\Models\FileUpload;
 use App\Models\User;
 use Database\Seeders\DivisionRegistrySeeder;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia;
 
 test('Division::current creates a Province default on first access', function () {
@@ -118,4 +121,100 @@ test('the division registry seeder creates the real default configuration', func
     expect(Division::query()->count())->toBe(1)
         ->and(District::query()->count())->toBe(11)
         ->and(CongressionalDistrict::query()->count())->toBe(2);
+});
+
+test('admins can upload a public landing hero icon, served publicly', function () {
+    Storage::fake('local');
+    Division::factory()->province()->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch('/division', [
+            'name' => 'Davao de Oro',
+            'type' => 'province',
+            'hero_icon' => UploadedFile::fake()->image('hero.png'),
+        ])
+        ->assertRedirect();
+
+    $division = Division::current();
+    $upload = FileUpload::query()->sole();
+
+    expect($division->hero_icon_upload_id)->toBe($upload->id);
+    Storage::disk('local')->assertExists($upload->path);
+
+    // Public — no authentication required, same as the site logo.
+    $this->get('/division/hero-icon')->assertOk();
+});
+
+test('the hero icon route 404s until one is uploaded', function () {
+    Division::factory()->province()->create();
+
+    $this->get('/division/hero-icon')->assertNotFound();
+});
+
+test('replacing the hero icon deletes the old upload', function () {
+    Storage::fake('local');
+    Division::factory()->province()->create();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->patch('/division', [
+        'name' => 'Davao de Oro',
+        'type' => 'province',
+        'hero_icon' => UploadedFile::fake()->image('first.png'),
+    ]);
+
+    $firstUpload = Division::current()->heroIcon;
+
+    $this->actingAs($admin)->patch('/division', [
+        'name' => 'Davao de Oro',
+        'type' => 'province',
+        'hero_icon' => UploadedFile::fake()->image('second.png'),
+    ]);
+
+    $division = Division::current();
+
+    expect($division->hero_icon_upload_id)->not->toBe($firstUpload->id)
+        ->and(FileUpload::query()->whereKey($firstUpload->id)->exists())->toBeFalse();
+    Storage::disk('local')->assertExists($division->heroIcon->path);
+});
+
+test('admins can remove the hero icon back to the default mark', function () {
+    Storage::fake('local');
+    Division::factory()->province()->create();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->patch('/division', [
+        'name' => 'Davao de Oro',
+        'type' => 'province',
+        'hero_icon' => UploadedFile::fake()->image('hero.png'),
+    ]);
+
+    $upload = Division::current()->heroIcon;
+
+    $this->actingAs($admin)
+        ->patch('/division', ['name' => 'Davao de Oro', 'type' => 'province', 'remove_hero_icon' => true])
+        ->assertRedirect();
+
+    expect(Division::current()->hero_icon_upload_id)->toBeNull()
+        ->and(FileUpload::query()->whereKey($upload->id)->exists())->toBeFalse();
+
+    $this->get('/division/hero-icon')->assertNotFound();
+});
+
+test('the hero icon url is shared on every page once uploaded, null otherwise', function () {
+    Storage::fake('local');
+    Division::factory()->province()->create();
+
+    $this->actingAs(User::factory()->create())
+        ->get('/dashboard')
+        ->assertInertia(fn (AssertableInertia $page) => $page->where('division.heroIconUrl', null));
+
+    $this->actingAs(User::factory()->admin()->create())->patch('/division', [
+        'name' => 'Davao de Oro',
+        'type' => 'province',
+        'hero_icon' => UploadedFile::fake()->image('hero.png'),
+    ]);
+
+    $this->actingAs(User::factory()->create())
+        ->get('/dashboard')
+        ->assertInertia(fn (AssertableInertia $page) => $page->where('division.heroIconUrl', route('division.hero-icon')));
 });

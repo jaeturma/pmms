@@ -63,6 +63,7 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('/', [PortalController::class, 'home'])->name('home');
     Route::get('districts/{district}/logo', [DistrictController::class, 'logo'])->name('districts.logo');
     Route::get('division/logo', [DivisionController::class, 'logo'])->name('division.logo');
+    Route::get('division/hero-icon', [DivisionController::class, 'heroIcon'])->name('division.hero-icon');
     Route::get('meets/{meet}', [PortalController::class, 'meet'])
         ->whereNumber('meet')
         ->name('public.meet');

@@ -15,9 +15,11 @@ use Illuminate\Support\Carbon;
  * @property DivisionType $type
  * @property string $name
  * @property int|null $logo_upload_id
+ * @property int|null $hero_icon_upload_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read FileUpload|null $logo
+ * @property-read FileUpload|null $heroIcon
  */
 #[Fillable(['type', 'name'])]
 class Division extends Model
@@ -48,6 +50,19 @@ class Division extends Model
     public function logo(): BelongsTo
     {
         return $this->belongsTo(FileUpload::class, 'logo_upload_id');
+    }
+
+    /**
+     * The public landing hero's mark, shown in place of the default
+     * `PortalTorchIcon` SVG when set. `hero_icon_upload_id` is kept out of
+     * Fillable — only DivisionController sets it, after a successful
+     * upload, same convention as `logo_upload_id`.
+     *
+     * @return BelongsTo<FileUpload, $this>
+     */
+    public function heroIcon(): BelongsTo
+    {
+        return $this->belongsTo(FileUpload::class, 'hero_icon_upload_id');
     }
 
     /**

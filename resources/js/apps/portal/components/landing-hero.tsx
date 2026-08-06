@@ -5,16 +5,18 @@ import { PortalTorchIcon } from '@/apps/portal/components/torch-icon';
 import { cn } from '@/apps/portal/lib/utils';
 
 type PortalLandingHeroProps = {
-    eyebrow?: string;
     title: string;
     description?: string;
     meta?: ReactNode;
-    actions?: ReactNode;
     /** ISO instant to count down to. Omitted (no active meet) or already
      * elapsed (meet already underway) both simply skip the countdown —
      * `PortalCountdown`'s own `onElapsed="hide"` handles the latter. */
     startsAtIso?: string;
     divisionLogoUrl?: string | null;
+    /** Replaces the default `PortalTorchIcon` SVG mark when the division
+     * has uploaded one (`Division::heroIcon`, admin-configurable via the
+     * Division settings page) — never both at once. */
+    heroIconUrl?: string | null;
     className?: string;
 };
 
@@ -27,25 +29,27 @@ type PortalLandingHeroProps = {
  *
  * Deliberately full-bleed (a row spanning the viewport, not a rounded
  * card floating inside `PortalLayout`'s padded `<main>`) — the negative
- * margins below exactly cancel that padding at each of its breakpoints
- * (`px-4 sm:px-6 lg:px-10 xl:px-16 2xl:px-24`), then re-apply the same
- * values as the section's own padding so the hero's content still lines
- * up with every other page section instead of touching the true edge.
+ * horizontal margins below exactly cancel that `<main>`'s padding at each
+ * of its breakpoints (`px-4 sm:px-6 lg:px-10 xl:px-16 2xl:px-24`), then
+ * re-apply the same values as the section's own padding so the hero's
+ * content still lines up with every other page section instead of
+ * touching the true edge. The negative top margin (`-mt-8 sm:-mt-10`,
+ * matching `<main>`'s own `py-8 sm:py-10`) does the same vertically, so
+ * the hero sits flush against the sticky header with no gap row.
  */
 export function PortalLandingHero({
-    eyebrow,
     title,
     description,
     meta,
-    actions,
     startsAtIso,
     divisionLogoUrl,
+    heroIconUrl,
     className,
 }: PortalLandingHeroProps) {
     return (
         <section
             className={cn(
-                'relative -mx-4 flex min-h-[78vh] flex-col justify-center overflow-hidden border-b-4 border-[var(--portal-accent)] px-4 py-14 text-[var(--portal-ink-foreground)] sm:-mx-6 sm:px-6 sm:py-20 lg:-mx-10 lg:px-10 xl:-mx-16 xl:px-16 2xl:-mx-24 2xl:px-24',
+                'relative -mx-4 -mt-8 flex min-h-[78vh] flex-col justify-center overflow-hidden border-b-4 border-[var(--portal-accent)] px-4 py-14 text-[var(--portal-ink-foreground)] sm:-mx-6 sm:-mt-10 sm:px-6 sm:py-20 lg:-mx-10 lg:px-10 xl:-mx-16 xl:px-16 2xl:-mx-24 2xl:px-24',
                 className,
             )}
         >
@@ -53,7 +57,11 @@ export function PortalLandingHero({
 
             <div className="portal-hero-in relative mx-auto flex w-full max-w-4xl flex-col items-center gap-5 text-center">
                 <div className="flex items-center gap-4">
-                    <PortalTorchIcon className="h-16 w-auto text-[var(--portal-ink-foreground)] sm:h-20" />
+                    {heroIconUrl ? (
+                        <img src={heroIconUrl} alt="" className="h-16 w-auto object-contain sm:h-20" />
+                    ) : (
+                        <PortalTorchIcon className="h-16 w-auto text-[var(--portal-ink-foreground)] sm:h-20" />
+                    )}
                     {divisionLogoUrl && (
                         <img
                             src={divisionLogoUrl}
@@ -62,12 +70,6 @@ export function PortalLandingHero({
                         />
                     )}
                 </div>
-
-                {eyebrow && (
-                    <p className="rounded-full border border-white/25 bg-white/10 px-4 py-1.5 text-xs font-semibold tracking-[0.15em] text-[var(--portal-ink-foreground)]/90 uppercase backdrop-blur-sm">
-                        {eyebrow}
-                    </p>
-                )}
 
                 <h1 className="text-4xl leading-[1.05] font-extrabold tracking-tight sm:text-6xl lg:text-7xl">{title}</h1>
 
@@ -86,8 +88,6 @@ export function PortalLandingHero({
                         <PortalCountdown targetIso={startsAtIso} variant="display" onElapsed="hide" />
                     </div>
                 )}
-
-                {actions && <div className="mt-3 flex flex-wrap justify-center gap-3">{actions}</div>}
             </div>
         </section>
     );
