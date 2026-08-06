@@ -24,7 +24,7 @@ export function PortalNavDropdown({ label, items, trigger }: PortalNavDropdownPr
             <DropdownMenu.Trigger asChild>
                 <button
                     type="button"
-                    className="flex items-center gap-1 rounded-[calc(var(--portal-radius)-0.25rem)] px-3 py-2 text-sm font-medium text-[var(--portal-fg)]/80 transition-colors hover:bg-[var(--portal-muted)] hover:text-[var(--portal-fg)]"
+                    className="flex items-center gap-1 rounded-[calc(var(--portal-radius)-0.25rem)] px-3 py-2 text-sm font-medium text-[var(--portal-accent-foreground)]/80 transition-colors hover:bg-[var(--portal-accent-foreground)]/10 hover:text-[var(--portal-accent-foreground)]"
                 >
                     {trigger ?? label}
                     <ChevronDown aria-hidden="true" className="size-3.5" />

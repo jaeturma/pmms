@@ -25,8 +25,8 @@ export function PortalNavigation({ items, className, itemClassName, onNavigate }
                     className={cn(
                         'rounded-[calc(var(--portal-radius)-0.25rem)] px-3 py-2 text-sm font-medium transition-colors',
                         item.active
-                            ? 'bg-[var(--portal-accent-soft)] text-[var(--portal-accent)]'
-                            : 'text-[var(--portal-fg)]/80 hover:bg-[var(--portal-muted)] hover:text-[var(--portal-fg)]',
+                            ? 'bg-[var(--portal-ink)] text-[var(--portal-ink-foreground)]'
+                            : 'text-[var(--portal-accent-foreground)]/80 hover:bg-[var(--portal-accent-foreground)]/10 hover:text-[var(--portal-accent-foreground)]',
                         itemClassName,
                     )}
                 >

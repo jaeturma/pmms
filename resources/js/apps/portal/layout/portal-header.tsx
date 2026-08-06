@@ -61,9 +61,9 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
         : [];
 
     return (
-        <header className="sticky top-0 z-40 border-b border-[var(--portal-border)] bg-[color-mix(in_oklch,var(--portal-surface),black_8%)]/95 backdrop-blur">
+        <header className="sticky top-0 z-40 bg-[var(--portal-accent)] text-[var(--portal-accent-foreground)] shadow-md">
             <div className="flex h-16 w-full items-center justify-between gap-4 px-4 sm:px-6 lg:px-10 xl:px-16 2xl:px-24">
-                <Link href={home().url} className="flex items-center gap-2 text-base font-bold text-[var(--portal-fg)]">
+                <Link href={home().url} className="flex min-w-0 items-center gap-2 text-base font-bold text-[var(--portal-accent-foreground)]">
                     {props.division.logoUrl ? (
                         <img
                             src={props.division.logoUrl}
@@ -71,11 +71,11 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
                             className="size-8 rounded-[calc(var(--portal-radius)-0.25rem)] object-cover"
                         />
                     ) : (
-                        <span className="flex size-8 items-center justify-center rounded-[calc(var(--portal-radius)-0.25rem)] bg-[var(--portal-accent)] text-sm text-[var(--portal-accent-foreground)]">
+                        <span className="flex size-8 items-center justify-center rounded-[calc(var(--portal-radius)-0.25rem)] bg-[var(--portal-ink)] text-sm text-[var(--portal-ink-foreground)]">
                             PM
                         </span>
                     )}
-                    <span className="hidden sm:inline">{nav?.meetName ?? 'Provincial Meet Portal'}</span>
+                    <span className="min-w-0 truncate">{nav?.meetName ?? 'Provincial Meet Portal'}</span>
                 </Link>
 
                 <div className="hidden items-center md:flex">
@@ -93,13 +93,13 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
                     )}
                     <Link
                         href={props.auth.user ? dashboard().url : login().url}
-                        className="hidden rounded-[calc(var(--portal-radius)-0.25rem)] border border-[var(--portal-border)] px-3 py-1.5 text-sm font-medium text-[var(--portal-fg)] transition-colors hover:bg-[var(--portal-muted)] sm:inline-flex"
+                        className="hidden rounded-[calc(var(--portal-radius)-0.25rem)] border border-[var(--portal-accent-foreground)]/30 px-3 py-1.5 text-sm font-medium text-[var(--portal-accent-foreground)] transition-colors hover:bg-[var(--portal-accent-foreground)]/10 sm:inline-flex"
                     >
                         {props.auth.user ? 'Dashboard' : 'Staff login'}
                     </Link>
                     <button
                         type="button"
-                        className="inline-flex size-9 items-center justify-center rounded-[calc(var(--portal-radius)-0.25rem)] text-[var(--portal-fg)] hover:bg-[var(--portal-muted)] md:hidden"
+                        className="inline-flex size-9 items-center justify-center rounded-[calc(var(--portal-radius)-0.25rem)] text-[var(--portal-accent-foreground)] hover:bg-[var(--portal-accent-foreground)]/10 md:hidden"
                         aria-label={menuOpen ? 'Close menu' : 'Open menu'}
                         aria-expanded={menuOpen}
                         onClick={() => setMenuOpen((value) => !value)}
@@ -110,7 +110,7 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
             </div>
 
             {menuOpen && (
-                <div className="border-t border-[var(--portal-border)] px-4 py-3 md:hidden">
+                <div className="border-t border-[var(--portal-accent-foreground)]/20 px-4 py-3 md:hidden">
                     <PortalNavigation
                         items={[...items, ...sportItems.map((item) => ({ ...item, active: false })), ...moreItems.map((item) => ({ ...item, active: false }))]}
                         className="flex-col items-stretch gap-1"
@@ -119,7 +119,7 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
                     />
                     <Link
                         href={props.auth.user ? dashboard().url : login().url}
-                        className="mt-2 block rounded-[calc(var(--portal-radius)-0.25rem)] border border-[var(--portal-border)] px-3 py-2 text-center text-sm font-medium text-[var(--portal-fg)]"
+                        className="mt-2 block rounded-[calc(var(--portal-radius)-0.25rem)] border border-[var(--portal-accent-foreground)]/30 px-3 py-2 text-center text-sm font-medium text-[var(--portal-accent-foreground)]"
                     >
                         {props.auth.user ? 'Dashboard' : 'Staff login'}
                     </Link>
