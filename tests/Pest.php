@@ -60,3 +60,26 @@ function schoolForDelegation(Delegation $delegation): School
 
     return School::factory()->create(['district_id' => $delegation->district_id]);
 }
+
+/**
+ * The full sport_state a fresh basketball session starts with (WP
+ * live-basketball) — clocks, roster/lineup, possession, and settings
+ * defaults on top of the original {fouls_a, fouls_b}. Shared by
+ * ScoringSessionTest and MatchRosterTest.
+ *
+ * @return array<string, mixed>
+ */
+function basketballInitialSportState(): array
+{
+    return [
+        'fouls_a' => 0, 'fouls_b' => 0,
+        'on_court_a' => [], 'on_court_b' => [],
+        'possession' => null,
+        'player_points' => [], 'player_fouls' => [],
+        'game_clock_seconds' => 600, 'game_clock_updated_at' => null,
+        'shot_clock_seconds' => 24, 'shot_clock_updated_at' => null,
+        'minutes_per_period' => 10, 'shot_clock_duration' => 24,
+        'team_color_a' => '#dc2626', 'team_color_b' => '#2563eb',
+        'horn_sounded_at' => null,
+    ];
+}

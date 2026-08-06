@@ -1,10 +1,20 @@
 import { Maximize2, Minimize2, WifiOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import { LiveBadge } from '@/components/live-badge';
 import { TeamLogo } from '@/components/team-logo';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
     Table,
     TableBody,
@@ -28,6 +38,20 @@ const PLAY_BY_PLAY_PREVIEW_COUNT = 8;
 export type BasketballState = {
     fouls_a: number;
     fouls_b: number;
+    on_court_a: number[];
+    on_court_b: number[];
+    possession: 'a' | 'b' | null;
+    player_points: Record<string, number>;
+    player_fouls: Record<string, number>;
+    game_clock_seconds: number;
+    game_clock_updated_at: string | null;
+    shot_clock_seconds: number;
+    shot_clock_updated_at: string | null;
+    minutes_per_period: number;
+    shot_clock_duration: number;
+    team_color_a: string;
+    team_color_b: string;
+    horn_sounded_at: string | null;
 };
 
 export type BoxingRound = {
@@ -55,6 +79,14 @@ export type SoftballState = {
     innings: SoftballInning[];
 };
 
+export type RosterPlayer = {
+    id: number;
+    name: string;
+    jersey_number: string | null;
+    is_starter: boolean;
+    photo_url: string | null;
+};
+
 export type LiveSession = {
     id: number;
     match_id: number;
@@ -68,6 +100,7 @@ export type LiveSession = {
     status_note: string | null;
     board_type: 'generic' | 'basketball' | 'boxing' | 'softball_baseball';
     sport_state: BasketballState | BoxingState | SoftballState | null;
+    roster: { a: RosterPlayer[]; b: RosterPlayer[] };
     playByPlay: PlayByPlayEntry[];
     started_at: string | null;
     elapsed_seconds: number;
@@ -117,7 +150,7 @@ export function isSoftballState(
  * timekeeping (the browser's own timer) is the only "impure" part, and it
  * stays confined to the effect.
  */
-function useTicks(running: boolean): number {
+export function useTicks(running: boolean): number {
     const [ticks, setTicks] = useState(0);
 
     useEffect(() => {
@@ -193,7 +226,7 @@ function TickingLastUpdated() {
     return <>Updated {ticks === 0 ? 'just now' : `${ticks}s ago`}</>;
 }
 
-function formatClock(totalSeconds: number): string {
+export function formatClock(totalSeconds: number): string {
     const seconds = Math.max(0, Math.floor(totalSeconds));
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
@@ -523,6 +556,129 @@ function BoxingRoundTable({
 }
 
 /**
+ * A manual score correction (delta + required reason) for one side —
+ * shared by the operator console's generic controls and
+ * `BasketballGameControl`'s team-level correction, so the two never drift.
+ */
+export function CorrectionDialog({
+    side,
+    label,
+    onSubmit,
+}: {
+    side: 'a' | 'b';
+    label: string;
+    onSubmit: (delta: number, reason: string) => void;
+}) {
+    const [open, setOpen] = useState(false);
+    const [delta, setDelta] = useState('0');
+    const [reason, setReason] = useState('');
+
+    const submit = (e: FormEvent) => {
+        e.preventDefault();
+        onSubmit(Number(delta), reason);
+        setOpen(false);
+        setDelta('0');
+        setReason('');
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                    Correct {label}
+                </Button>
+            </DialogTrigger>
+            <DialogContent>
+                <form onSubmit={submit}>
+                    <DialogHeader>
+                        <DialogTitle>Correct {label}'s score</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                            <Label htmlFor={`delta-${side}`}>
+                                Adjustment (use a negative number to subtract)
+                            </Label>
+                            <Input
+                                id={`delta-${side}`}
+                                type="number"
+                                value={delta}
+                                onChange={(e) => setDelta(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor={`reason-${side}`}>Reason</Label>
+                            <Input
+                                id={`reason-${side}`}
+                                value={reason}
+                                onChange={(e) => setReason(e.target.value)}
+                                required
+                                maxLength={500}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button type="submit">Save correction</Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+/**
+ * The live play-by-play feed — extracted from `LiveScoreDisplay` so the
+ * operator console can position it independently of the score card (e.g.
+ * below its own operator-controls block) instead of always at the bottom
+ * of the shared score display. `LiveScoreDisplay` still renders this
+ * itself by default (`hidePlayByPlay` prop) for every caller that doesn't
+ * need to reposition it — the public/legacy scoreboard pages.
+ */
+export function PlayByPlayList({ playByPlay }: { playByPlay: PlayByPlayEntry[] }) {
+    const [showAllPlays, setShowAllPlays] = useState(false);
+    const visiblePlays = showAllPlays
+        ? playByPlay
+        : playByPlay.slice(0, PLAY_BY_PLAY_PREVIEW_COUNT);
+
+    if (playByPlay.length === 0) {
+        return null;
+    }
+
+    return (
+        <div className="w-full">
+            <p className="mb-2 text-sm font-medium text-muted-foreground">
+                Live play by play
+            </p>
+            <ul className="divide-y rounded-lg border text-sm">
+                {visiblePlays.map((play) => (
+                    <li
+                        key={play.id}
+                        className="flex items-center justify-between gap-3 px-3 py-2"
+                    >
+                        <span className="w-16 shrink-0 text-xs text-muted-foreground tabular-nums">
+                            {play.created_at}
+                        </span>
+                        <span className="flex-1">{play.description}</span>
+                        <span className="shrink-0 font-medium tabular-nums">
+                            {play.score_a} – {play.score_b}
+                        </span>
+                    </li>
+                ))}
+            </ul>
+            {!showAllPlays && playByPlay.length > PLAY_BY_PLAY_PREVIEW_COUNT && (
+                <Button
+                    variant="link"
+                    className="mt-1 h-auto p-0"
+                    onClick={() => setShowAllPlays(true)}
+                >
+                    View full play by play ({playByPlay.length} events) →
+                </Button>
+            )}
+        </div>
+    );
+}
+
+/**
  * The read-only running score, status, and sport-specific breakdown — the
  * one presentation shared by the operator console (`scoring/show.tsx`) and
  * the public scoreboard (`public/scoreboard.tsx`). Purely presentational:
@@ -539,6 +695,7 @@ export function LiveScoreDisplay({
     showFullscreenToggle = true,
     maxWidthClassName = 'max-w-5xl',
     participants,
+    hidePlayByPlay = false,
 }: {
     session: LiveSession;
     fullscreen: boolean;
@@ -564,6 +721,11 @@ export function LiveScoreDisplay({
     /** Boxing's real boxer photos — internal operator console only, never
      * present on the public scoreboard (photos are never public). */
     participants?: [Participant | null, Participant | null];
+    /** Suppress the embedded play-by-play feed (default: shown here) — the
+     * operator console renders its own `<PlayByPlayList>` after its
+     * controls block instead, so score/controls/plays land in that order
+     * rather than always having plays directly under the score card. */
+    hidePlayByPlay?: boolean;
 }) {
     const basketballState = isBasketballState(session.sport_state)
         ? session.sport_state
@@ -574,10 +736,6 @@ export function LiveScoreDisplay({
     const softballState = isSoftballState(session.sport_state)
         ? session.sport_state
         : null;
-    const [showAllPlays, setShowAllPlays] = useState(false);
-    const visiblePlays = showAllPlays
-        ? session.playByPlay
-        : session.playByPlay.slice(0, PLAY_BY_PLAY_PREVIEW_COUNT);
     const cornerA: Corner = boxingState ? 'red' : null;
     const cornerB: Corner = boxingState ? 'blue' : null;
 
@@ -773,42 +931,8 @@ export function LiveScoreDisplay({
                 </div>
             )}
 
-            {session.playByPlay.length > 0 && (
-                <div className="w-full">
-                    <p className="mb-2 text-sm font-medium text-muted-foreground">
-                        Live play by play
-                    </p>
-                    <ul className="divide-y rounded-lg border text-sm">
-                        {visiblePlays.map((play) => (
-                            <li
-                                key={play.id}
-                                className="flex items-center justify-between gap-3 px-3 py-2"
-                            >
-                                <span className="w-16 shrink-0 text-xs text-muted-foreground tabular-nums">
-                                    {play.created_at}
-                                </span>
-                                <span className="flex-1">
-                                    {play.description}
-                                </span>
-                                <span className="shrink-0 font-medium tabular-nums">
-                                    {play.score_a} – {play.score_b}
-                                </span>
-                            </li>
-                        ))}
-                    </ul>
-                    {!showAllPlays &&
-                        session.playByPlay.length >
-                            PLAY_BY_PLAY_PREVIEW_COUNT && (
-                            <Button
-                                variant="link"
-                                className="mt-1 h-auto p-0"
-                                onClick={() => setShowAllPlays(true)}
-                            >
-                                View full play by play (
-                                {session.playByPlay.length} events) →
-                            </Button>
-                        )}
-                </div>
+            {!hidePlayByPlay && (
+                <PlayByPlayList playByPlay={session.playByPlay} />
             )}
         </>
     );

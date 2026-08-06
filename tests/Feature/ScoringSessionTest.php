@@ -575,7 +575,7 @@ test('starting a session for a basketball match initializes team fouls and the b
 
     expect($session->toLivePayload())->toMatchArray([
         'board_type' => 'basketball',
-        'sport_state' => ['fouls_a' => 0, 'fouls_b' => 0],
+        'sport_state' => basketballInitialSportState(),
     ]);
 });
 
@@ -672,7 +672,7 @@ test('the scoreboard page exposes board type and sport state for a basketball ma
         ->get("/matches/{$match->id}/scoreboard")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('session.board_type', 'basketball')
-            ->where('session.sport_state', ['fouls_a' => 0, 'fouls_b' => 0]));
+            ->where('session.sport_state', basketballInitialSportState()));
 });
 
 // WP-08-10: real play-by-play reconstructed from the score_events log
@@ -1230,7 +1230,7 @@ test('without an override a basketball match session still gets the basketball b
 
     expect($session->toLivePayload())->toMatchArray([
         'board_type' => 'basketball',
-        'sport_state' => ['fouls_a' => 0, 'fouls_b' => 0],
+        'sport_state' => basketballInitialSportState(),
     ]);
 });
 

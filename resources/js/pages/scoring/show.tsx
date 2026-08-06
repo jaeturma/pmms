@@ -3,15 +3,19 @@ import { configureEcho, useEcho } from '@laravel/echo-react';
 import { Pause, Play, Radio, Square } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import type { EligibleAthlete } from '@/components/basketball-game-control';
+import { BasketballGameControl } from '@/components/basketball-game-control';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import { LiveBadge } from '@/components/live-badge';
 import type { LiveSession, Participant } from '@/components/live-score-display';
 import {
+    CorrectionDialog,
     isBasketballState,
     isBoxingState,
     isSoftballState,
     LiveScoreDisplay,
+    PlayByPlayList,
 } from '@/components/live-score-display';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -31,7 +35,6 @@ import { index as matchesIndex } from '@/routes/matches';
 import {
     count as countRoute,
     end as endRoute,
-    foul as foulRoute,
     inningRun as inningRunRoute,
     pause as pauseRoute,
     period as periodRoute,
@@ -73,73 +76,8 @@ type Props = {
     channel: string;
     canManage: boolean;
     participants: [Participant | null, Participant | null];
+    eligibleAthletes: { a: EligibleAthlete[]; b: EligibleAthlete[] };
 };
-
-function CorrectionDialog({
-    side,
-    label,
-    onSubmit,
-}: {
-    side: 'a' | 'b';
-    label: string;
-    onSubmit: (delta: number, reason: string) => void;
-}) {
-    const [open, setOpen] = useState(false);
-    const [delta, setDelta] = useState('0');
-    const [reason, setReason] = useState('');
-
-    const submit = (e: FormEvent) => {
-        e.preventDefault();
-        onSubmit(Number(delta), reason);
-        setOpen(false);
-        setDelta('0');
-        setReason('');
-    };
-
-    return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                    Correct {label}
-                </Button>
-            </DialogTrigger>
-            <DialogContent>
-                <form onSubmit={submit}>
-                    <DialogHeader>
-                        <DialogTitle>Correct {label}'s score</DialogTitle>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor={`delta-${side}`}>
-                                Adjustment (use a negative number to subtract)
-                            </Label>
-                            <Input
-                                id={`delta-${side}`}
-                                type="number"
-                                value={delta}
-                                onChange={(e) => setDelta(e.target.value)}
-                                required
-                            />
-                        </div>
-                        <div className="grid gap-2">
-                            <Label htmlFor={`reason-${side}`}>Reason</Label>
-                            <Input
-                                id={`reason-${side}`}
-                                value={reason}
-                                onChange={(e) => setReason(e.target.value)}
-                                required
-                                maxLength={500}
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button type="submit">Save correction</Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
-    );
-}
 
 function RoundScoreDialog({
     labelA,
@@ -275,6 +213,7 @@ export default function ScoringBoard({
     channel,
     canManage,
     participants,
+    eligibleAthletes,
 }: Props) {
     const [session, setSession] = useState(initialSession);
     const [syncedSession, setSyncedSession] = useState(initialSession);
@@ -384,30 +323,6 @@ export default function ScoringBoard({
         router.patch(
             scoreRoute(session.id).url,
             { type: 'correction', side, delta, reason },
-            { preserveScroll: true },
-        );
-    };
-
-    const recordFoul = (side: 'a' | 'b') => {
-        if (session === null) {
-            return;
-        }
-
-        router.patch(
-            foulRoute(session.id).url,
-            { action: 'add', side },
-            { preserveScroll: true },
-        );
-    };
-
-    const resetFouls = () => {
-        if (session === null) {
-            return;
-        }
-
-        router.patch(
-            foulRoute(session.id).url,
-            { action: 'reset' },
             { preserveScroll: true },
         );
     };
@@ -591,9 +506,18 @@ export default function ScoringBoard({
                             disconnected={pollFailures >= 2}
                             lastUpdatedAt={lastUpdatedAt}
                             participants={participants}
+                            hidePlayByPlay={isManager && isActive}
                         />
 
-                        {isManager && isActive && (
+                        {isManager && isActive && basketballState && (
+                            <BasketballGameControl
+                                session={session}
+                                state={basketballState}
+                                eligibleAthletes={eligibleAthletes}
+                            />
+                        )}
+
+                        {isManager && isActive && !basketballState && (
                             <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 print:hidden">
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                     <div className="flex flex-col items-center gap-2">
@@ -611,16 +535,6 @@ export default function ScoringBoard({
                                                 </Button>
                                             ))}
                                         </div>
-                                        {basketballState && (
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                aria-label={`Add team foul, ${session.side_a_label}`}
-                                                onClick={() => recordFoul('a')}
-                                            >
-                                                Foul ({basketballState.fouls_a})
-                                            </Button>
-                                        )}
                                         {softballState && (
                                             <RunDialog
                                                 side="a"
@@ -653,16 +567,6 @@ export default function ScoringBoard({
                                                 </Button>
                                             ))}
                                         </div>
-                                        {basketballState && (
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                aria-label={`Add team foul, ${session.side_b_label}`}
-                                                onClick={() => recordFoul('b')}
-                                            >
-                                                Foul ({basketballState.fouls_b})
-                                            </Button>
-                                        )}
                                         {softballState && (
                                             <RunDialog
                                                 side="b"
@@ -681,18 +585,6 @@ export default function ScoringBoard({
                                         />
                                     </div>
                                 </div>
-
-                                {basketballState && (
-                                    <div className="flex justify-center">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={resetFouls}
-                                        >
-                                            Reset fouls
-                                        </Button>
-                                    </div>
-                                )}
 
                                 {boxingState && (
                                     <div className="flex justify-center">
@@ -796,6 +688,14 @@ export default function ScoringBoard({
                                         }
                                     />
                                 </div>
+                            </div>
+                        )}
+
+                        {isManager && isActive && (
+                            <div className="mx-auto w-full max-w-2xl print:hidden">
+                                <PlayByPlayList
+                                    playByPlay={session.playByPlay}
+                                />
                             </div>
                         )}
                     </div>

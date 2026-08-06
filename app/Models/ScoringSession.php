@@ -139,6 +139,7 @@ class ScoringSession extends Model
             'status_note' => $this->status_note,
             'board_type' => $this->boardType()->value,
             'sport_state' => $this->sport_state,
+            'roster' => MatchRosterPlayer::payloadForMatch($this->match_id),
             'playByPlay' => $this->playByPlay(),
             'started_at' => $this->started_at?->toIso8601String(),
             'elapsed_seconds' => $this->activeElapsedSeconds(),
@@ -304,12 +305,22 @@ class ScoringSession extends Model
             };
         };
 
+        // A basketball point/foul attributed to a specific roster player
+        // (WP live-basketball) denormalizes the name into the payload at
+        // write time — never joined back from match_roster_players here,
+        // so an old play-by-play line still reads correctly even if that
+        // roster row is later removed.
+        $playerSuffix = isset($payload['player_name']) && $payload['player_name'] !== ''
+            ? " ({$payload['player_name']})"
+            : '';
+
         return match ($event->type) {
             ScoreEventType::Point => sprintf(
-                '%s%d — %s',
+                '%s%d — %s%s',
                 ((int) ($payload['delta'] ?? 0)) >= 0 ? '+' : '',
                 (int) ($payload['delta'] ?? 0),
                 $sideLabel($payload['side'] ?? null) ?? 'Unknown',
+                $playerSuffix,
             ),
             ScoreEventType::Correction => sprintf(
                 'Correction: %s%d — %s%s',
@@ -322,7 +333,7 @@ class ScoringSession extends Model
             ),
             ScoreEventType::Foul => ($payload['action'] ?? null) === 'reset'
                 ? 'Team fouls reset'
-                : sprintf('Foul — %s', $sideLabel($payload['side'] ?? null) ?? 'Unknown'),
+                : sprintf('Foul — %s%s', $sideLabel($payload['side'] ?? null) ?? 'Unknown', $playerSuffix),
             ScoreEventType::PeriodChange => trim(implode(' — ', array_filter([
                 isset($payload['period_label']) ? "Period: {$payload['period_label']}" : null,
                 isset($payload['status_note']) ? (string) $payload['status_note'] : null,
@@ -352,6 +363,16 @@ class ScoringSession extends Model
                 'reset_count' => 'Count reset',
                 default => 'Count updated',
             },
+            ScoreEventType::Possession => isset($payload['side'])
+                ? sprintf('Possession: %s', $sideLabel($payload['side']) ?? 'Unknown')
+                : 'Possession cleared',
+            ScoreEventType::Substitution => sprintf(
+                '%s: %s (%s)',
+                ($payload['on_court'] ?? false) ? 'IN' : 'OUT',
+                (string) ($payload['player_name'] ?? 'Unknown'),
+                $sideLabel($payload['side'] ?? null) ?? 'Unknown',
+            ),
+            ScoreEventType::Horn => 'Horn sounded',
             default => $event->type->label(),
         };
     }

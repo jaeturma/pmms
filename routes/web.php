@@ -32,6 +32,7 @@ use App\Http\Controllers\ManagementDashboardController;
 use App\Http\Controllers\ManagementTeamController;
 use App\Http\Controllers\ManagementTeamMemberController;
 use App\Http\Controllers\MatchController;
+use App\Http\Controllers\MatchRosterController;
 use App\Http\Controllers\MealAnnouncementController;
 use App\Http\Controllers\MealScheduleController;
 use App\Http\Controllers\MedicalAccessController;
@@ -443,6 +444,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('scoring-sessions/{session}/round', [ScoringSessionController::class, 'round'])->name('scoring.round');
         Route::patch('scoring-sessions/{session}/count', [ScoringSessionController::class, 'count'])->name('scoring.count');
         Route::patch('scoring-sessions/{session}/inning-run', [ScoringSessionController::class, 'inningRun'])->name('scoring.inning-run');
+
+        // Basketball-only (WP live-basketball): roster/lineup, clocks,
+        // possession, and the whistle/horn signals. Same role group as
+        // every other scoring mutation above — canManage() inside each
+        // controller narrows it further per match/session.
+        Route::post('matches/{match}/roster', [MatchRosterController::class, 'store'])->name('match-roster.store');
+        Route::patch('match-roster/{rosterPlayer}', [MatchRosterController::class, 'update'])->name('match-roster.update');
+        Route::delete('match-roster/{rosterPlayer}', [MatchRosterController::class, 'destroy'])->name('match-roster.destroy');
+        Route::patch('scoring-sessions/{session}/settings', [ScoringSessionController::class, 'settings'])->name('scoring.settings');
+        Route::patch('scoring-sessions/{session}/possession', [ScoringSessionController::class, 'possession'])->name('scoring.possession');
+        Route::patch('scoring-sessions/{session}/game-clock', [ScoringSessionController::class, 'gameClock'])->name('scoring.game-clock');
+        Route::patch('scoring-sessions/{session}/shot-clock', [ScoringSessionController::class, 'shotClock'])->name('scoring.shot-clock');
+        Route::patch('scoring-sessions/{session}/horn', [ScoringSessionController::class, 'horn'])->name('scoring.horn');
+        Route::patch('scoring-sessions/{session}/lineup', [ScoringSessionController::class, 'lineup'])->name('scoring.lineup');
     });
 
     // A Technical Official may encode a result directly for their own

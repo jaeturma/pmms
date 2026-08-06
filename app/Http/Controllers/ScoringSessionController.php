@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\EntryStatus;
 use App\Enums\MatchStatus;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
@@ -12,6 +13,7 @@ use App\Enums\UserRole;
 use App\Events\ScoreUpdated;
 use App\Models\Entry;
 use App\Models\EventMatch;
+use App\Models\MatchRosterPlayer;
 use App\Models\MeetSportAssignment;
 use App\Models\ScoreEvent;
 use App\Models\ScoringSession;
@@ -106,6 +108,8 @@ class ScoringSessionController extends Controller
             'channel' => "match.{$match->id}.scoring",
             'canManage' => $this->canManage($user, $match),
             'participants' => $this->matchParticipants($entries),
+            'roster' => $this->rosterPayload($match),
+            'eligibleAthletes' => $this->eligibleAthletes($match, $entries),
         ]);
     }
 
@@ -162,7 +166,17 @@ class ScoringSessionController extends Controller
         }
 
         $initialSportState = match ($session->boardType()) {
-            ScoreboardType::Basketball => ['fouls_a' => 0, 'fouls_b' => 0],
+            ScoreboardType::Basketball => [
+                'fouls_a' => 0, 'fouls_b' => 0,
+                'on_court_a' => [], 'on_court_b' => [],
+                'possession' => null,
+                'player_points' => [], 'player_fouls' => [],
+                'game_clock_seconds' => 600, 'game_clock_updated_at' => null,
+                'shot_clock_seconds' => 24, 'shot_clock_updated_at' => null,
+                'minutes_per_period' => 10, 'shot_clock_duration' => 24,
+                'team_color_a' => '#dc2626', 'team_color_b' => '#2563eb',
+                'horn_sounded_at' => null,
+            ],
             ScoreboardType::Boxing => ['rounds' => []],
             ScoreboardType::SoftballBaseball => [
                 'inning' => 1, 'half' => 'top', 'outs' => 0, 'balls' => 0, 'strikes' => 0, 'innings' => [],
@@ -194,12 +208,29 @@ class ScoringSessionController extends Controller
             'side' => ['required', Rule::in(['a', 'b'])],
             'delta' => ['required', 'integer'],
             'reason' => ['required_if:type,'.ScoreEventType::Correction->value, 'nullable', 'string', 'max:500'],
+            'roster_player_id' => ['nullable', 'integer'],
         ]);
 
         $column = $data['side'] === 'a' ? 'score_a' : 'score_b';
         $newValue = max(0, $session->{$column} + $data['delta']);
 
-        $session->forceFill([$column => $newValue])->save();
+        $state = $session->sport_state;
+        $rosterPlayer = null;
+
+        if (($data['roster_player_id'] ?? null) !== null && $session->boardType() === ScoreboardType::Basketball) {
+            $rosterPlayer = $this->rosterPlayerForSide($session, $data['roster_player_id'], $data['side']);
+
+            if ($rosterPlayer !== null && $data['type'] === ScoreEventType::Point->value) {
+                $state ??= ['player_points' => []];
+                $id = (string) $rosterPlayer->id;
+                $state['player_points'][$id] = max(0, ($state['player_points'][$id] ?? 0) + $data['delta']);
+            }
+        }
+
+        $session->forceFill([
+            $column => $newValue,
+            ...($state !== null ? ['sport_state' => $state] : []),
+        ])->save();
 
         /** @var User $user */
         $user = $request->user();
@@ -212,6 +243,10 @@ class ScoringSessionController extends Controller
                 'delta' => $data['delta'],
                 'reason' => $data['reason'] ?? null,
                 'result' => $newValue,
+                ...($rosterPlayer !== null ? [
+                    'roster_player_id' => $rosterPlayer->id,
+                    'player_name' => $rosterPlayer->entry->athlete->fullName(),
+                ] : []),
             ],
             'recorded_by' => $user->id,
         ]);
@@ -340,14 +375,29 @@ class ScoringSessionController extends Controller
         $data = $request->validate([
             'action' => ['required', Rule::in(['add', 'reset'])],
             'side' => ['required_if:action,add', 'nullable', Rule::in(['a', 'b'])],
+            'roster_player_id' => ['nullable', 'integer'],
         ]);
 
         $state = $session->sport_state ?? ['fouls_a' => 0, 'fouls_b' => 0];
+        $rosterPlayer = null;
 
         if ($data['action'] === 'add') {
             $column = $data['side'] === 'a' ? 'fouls_a' : 'fouls_b';
             $state[$column] = ($state[$column] ?? 0) + 1;
+
+            if (($data['roster_player_id'] ?? null) !== null) {
+                $rosterPlayer = $this->rosterPlayerForSide($session, $data['roster_player_id'], $data['side']);
+
+                if ($rosterPlayer !== null) {
+                    $state['player_fouls'] ??= [];
+                    $id = (string) $rosterPlayer->id;
+                    $state['player_fouls'][$id] = ($state['player_fouls'][$id] ?? 0) + 1;
+                }
+            }
         } else {
+            // A quarter's team-foul reset never touches player_fouls — a
+            // player's own foul count is cumulative for the whole game
+            // (real disqualification tracking), unlike the team total.
             $state['fouls_a'] = 0;
             $state['fouls_b'] = 0;
         }
@@ -360,7 +410,12 @@ class ScoringSessionController extends Controller
         ScoreEvent::create([
             'scoring_session_id' => $session->id,
             'type' => ScoreEventType::Foul,
-            'payload' => [...$data, 'fouls_a' => $state['fouls_a'], 'fouls_b' => $state['fouls_b']],
+            'payload' => [
+                ...$data,
+                'fouls_a' => $state['fouls_a'],
+                'fouls_b' => $state['fouls_b'],
+                ...($rosterPlayer !== null ? ['player_name' => $rosterPlayer->entry->athlete->fullName()] : []),
+            ],
             'recorded_by' => $user->id,
         ]);
 
@@ -528,6 +583,255 @@ class ScoringSessionController extends Controller
         broadcast(new ScoreUpdated($session))->toOthers();
 
         return back();
+    }
+
+    /**
+     * Update the game control settings (minutes per period, shot clock
+     * duration, team colors) — basketball only. A config change, not a
+     * play, so this doesn't append a score_events row/play-by-play line,
+     * same reasoning as gameClock()/shotClock() below.
+     */
+    public function settings(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertBasketball($session);
+
+        $data = $request->validate([
+            'minutes_per_period' => ['required', 'integer', 'min:1', 'max:20'],
+            'shot_clock_duration' => ['required', 'integer', 'min:5', 'max:60'],
+            'team_color_a' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'team_color_b' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+        ]);
+
+        $state = [...($session->sport_state ?? []), ...$data];
+
+        $session->forceFill(['sport_state' => $state])->save();
+
+        $this->audit->record('scoring.settings_updated', $session, [...$this->context($session), ...$data]);
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Set or clear the possession arrow — basketball only.
+     */
+    public function possession(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertBasketball($session);
+
+        $data = $request->validate([
+            'side' => ['nullable', Rule::in(['a', 'b'])],
+        ]);
+
+        $state = $session->sport_state ?? [];
+        $state['possession'] = $data['side'] ?? null;
+
+        $session->forceFill(['sport_state' => $state])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::Possession,
+            'payload' => $data,
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record('scoring.possession_set', $session, [...$this->context($session), ...$data]);
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Set the operator-controlled game clock's remaining seconds —
+     * basketball only. Manual, not server-ticking (owner decision): a
+     * snapshot value plus a timestamp, same anchor+ticker shape
+     * `RunningClock` already uses for the elapsed-time clock, just counting
+     * down instead of up. Not an event/play-by-play line — a frequent
+     * manual correction would flood the feed.
+     */
+    public function gameClock(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertBasketball($session);
+
+        $data = $request->validate([
+            'seconds' => ['required', 'integer', 'min:0', 'max:3600'],
+        ]);
+
+        $state = $session->sport_state ?? [];
+        $state['game_clock_seconds'] = $data['seconds'];
+        $state['game_clock_updated_at'] = now()->toIso8601String();
+
+        $session->forceFill(['sport_state' => $state])->save();
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Set the shot clock's remaining seconds — basketball only. Omitting
+     * `seconds` resets it to the configured `shot_clock_duration` (the
+     * common "reset after a play" case) — this app deliberately never
+     * auto-resets it from a made basket/turnover, same documented
+     * restraint as the rest of live scoring (docs/live-scoring.md).
+     */
+    public function shotClock(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertBasketball($session);
+
+        $data = $request->validate([
+            'seconds' => ['nullable', 'integer', 'min:0', 'max:60'],
+        ]);
+
+        $state = $session->sport_state ?? [];
+        $state['shot_clock_seconds'] = $data['seconds'] ?? ($state['shot_clock_duration'] ?? 24);
+        $state['shot_clock_updated_at'] = now()->toIso8601String();
+
+        $session->forceFill(['sport_state' => $state])->save();
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Sound a manual horn/buzzer signal — basketball only. No other state
+     * change; viewers flash on a fresh `horn_sounded_at`.
+     */
+    public function horn(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertBasketball($session);
+
+        $state = $session->sport_state ?? [];
+        $state['horn_sounded_at'] = now()->toIso8601String();
+
+        $session->forceFill(['sport_state' => $state])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::Horn,
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record('scoring.horn_sounded', $session, $this->context($session));
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Toggle a roster player in or out of their side's on-court lineup —
+     * basketball only. One primitive covers both "send a starter to court"
+     * and "sub during play": `on_court: true` adds them (422 past 5 already
+     * on court), `on_court: false` removes them.
+     */
+    public function lineup(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertBasketball($session);
+
+        $data = $request->validate([
+            'side' => ['required', Rule::in(['a', 'b'])],
+            'roster_player_id' => ['required', 'integer'],
+            'on_court' => ['required', 'boolean'],
+        ]);
+
+        $rosterPlayer = $this->rosterPlayerForSide($session, $data['roster_player_id'], $data['side']);
+
+        if ($rosterPlayer === null) {
+            throw ValidationException::withMessages([
+                'roster_player_id' => __('That player is not on this side\'s roster.'),
+            ]);
+        }
+
+        $column = $data['side'] === 'a' ? 'on_court_a' : 'on_court_b';
+        $state = $session->sport_state ?? [];
+        $onCourt = $state[$column] ?? [];
+
+        if ($data['on_court']) {
+            if (in_array($rosterPlayer->id, $onCourt, true)) {
+                throw ValidationException::withMessages([
+                    'roster_player_id' => __('That player is already on court.'),
+                ]);
+            }
+
+            if (count($onCourt) >= 5) {
+                throw ValidationException::withMessages([
+                    'roster_player_id' => __('Only 5 players may be on court at once — bench someone first.'),
+                ]);
+            }
+
+            $onCourt[] = $rosterPlayer->id;
+        } else {
+            $onCourt = array_values(array_diff($onCourt, [$rosterPlayer->id]));
+        }
+
+        $state[$column] = $onCourt;
+
+        $session->forceFill(['sport_state' => $state])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::Substitution,
+            'payload' => [
+                'side' => $data['side'],
+                'roster_player_id' => $rosterPlayer->id,
+                'on_court' => $data['on_court'],
+                'player_name' => $rosterPlayer->entry->athlete->fullName(),
+            ],
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record('scoring.lineup_changed', $session, [
+            ...$this->context($session),
+            'side' => $data['side'],
+            'roster_player_id' => $rosterPlayer->id,
+            'on_court' => $data['on_court'],
+        ]);
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * A roster player belonging to this session's match and the given
+     * side — `null` if the id doesn't resolve, so callers can decide
+     * whether that's a hard validation error or just "skip attribution."
+     */
+    private function rosterPlayerForSide(ScoringSession $session, int $rosterPlayerId, string $side): ?MatchRosterPlayer
+    {
+        $session->loadMissing('match');
+
+        return MatchRosterPlayer::query()
+            ->where('id', $rosterPlayerId)
+            ->where('match_id', $session->match_id)
+            ->where('side', $side)
+            ->with('entry.athlete')
+            ->first();
     }
 
     /**
@@ -759,6 +1063,63 @@ class ScoringSessionController extends Controller
         return [
             ['photo_url' => $photoUrl($entries[0])],
             ['photo_url' => $photoUrl($entries[1])],
+        ];
+    }
+
+    /**
+     * The match's current basketball roster, both sides — same shape
+     * `MatchRosterPlayer::payloadForMatch()` gives the live payload, so the
+     * initial Inertia page and every subsequent poll/Echo push agree.
+     *
+     * @return array{a: array<int, array<string, mixed>>, b: array<int, array<string, mixed>>}
+     */
+    private function rosterPayload(EventMatch $match): array
+    {
+        return MatchRosterPlayer::payloadForMatch($match->id);
+    }
+
+    /**
+     * Confirmed entries for this match's event, per side, minus whoever's
+     * already rostered — the pool `MatchRosterController::store()` can add
+     * from. Only meaningful when the match has exactly two representative
+     * entries (same guard `suggestedLabels` already uses); anything else
+     * returns both sides empty so the frontend can prompt the operator to
+     * set match participants first.
+     *
+     * @param  Collection<int, Entry>  $entries
+     * @return array{a: array<int, array{id: int, label: string}>, b: array<int, array{id: int, label: string}>}
+     */
+    private function eligibleAthletes(EventMatch $match, $entries): array
+    {
+        if ($entries->count() !== 2) {
+            return ['a' => [], 'b' => []];
+        }
+
+        $rosteredEntryIds = MatchRosterPlayer::query()
+            ->where('match_id', $match->id)
+            ->pluck('entry_id');
+
+        $schoolIdFor = fn (int $index): int => $entries[$index]->athlete->school_id;
+
+        $poolFor = function (int $schoolId) use ($match, $rosteredEntryIds): array {
+            return Entry::query()
+                ->where('event_id', $match->event_id)
+                ->where('status', EntryStatus::Confirmed->value)
+                ->whereHas('athlete', fn ($query) => $query->where('school_id', $schoolId))
+                ->whereNotIn('id', $rosteredEntryIds)
+                ->with('athlete')
+                ->get()
+                ->map(fn (Entry $entry): array => [
+                    'id' => $entry->id,
+                    'label' => $entry->athlete->fullName(),
+                ])
+                ->values()
+                ->all();
+        };
+
+        return [
+            'a' => $poolFor($schoolIdFor(0)),
+            'b' => $poolFor($schoolIdFor(1)),
         ];
     }
 
