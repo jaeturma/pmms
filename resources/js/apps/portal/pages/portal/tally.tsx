@@ -161,6 +161,7 @@ export default function PortalTally({
                         <PortalSectionHeader title="School standings" />
                         <PortalStandingsTable
                             nameLabel="School"
+                            showCrest={false}
                             rows={schools.map((row) => ({
                                 label: row.school,
                                 gold: row.gold,
