@@ -337,14 +337,23 @@ function TeamPanel({
     return (
         <div
             className={cn(
-                'flex flex-1 flex-wrap items-center justify-center gap-4 px-4 text-center',
+                // `flex-nowrap` is deliberate: with the score sitting
+                // beside the logo/name column instead of below it, wrapping
+                // this row (e.g. in fullscreen, where both the logo and the
+                // `text-score-lg` digits are largest) pushed the score onto
+                // a second line that the fullscreen container's fixed
+                // height then clipped — the score simply wasn't visible.
+                // Not wrapping keeps both columns on one line; `min-w-0` +
+                // `truncate` on the name below is what lets it shrink
+                // instead.
+                'flex flex-1 flex-nowrap items-center justify-center gap-2 overflow-hidden px-2 text-center sm:gap-4 sm:px-4',
                 fullscreen ? 'py-8' : 'py-5',
                 corner === 'red' && 'bg-red-500/5',
                 corner === 'blue' && 'bg-blue-500/5',
             )}
         >
             {/* Logo, then the team name below it — one column. */}
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex min-w-0 flex-col items-center gap-2">
                 {corner && (
                     <Badge
                         className={cn(
@@ -367,7 +376,7 @@ function TeamPanel({
                                 : corner === 'blue'
                                   ? 'border-blue-500'
                                   : 'border-border',
-                            fullscreen ? 'size-32' : 'size-20',
+                            fullscreen ? 'size-24' : 'size-20',
                         )}
                     />
                 ) : (
@@ -375,12 +384,12 @@ function TeamPanel({
                         name={label}
                         shape="circle"
                         className={cn(
-                            fullscreen ? 'size-32 text-3xl' : 'size-20 text-xl',
+                            fullscreen ? 'size-24 text-2xl' : 'size-20 text-xl',
                         )}
                     />
                 )}
 
-                <p className="max-w-32 text-lg font-medium text-muted-foreground">
+                <p className="max-w-28 truncate text-base font-medium text-muted-foreground sm:max-w-56 sm:text-lg">
                     {label}
                 </p>
             </div>
@@ -440,6 +449,18 @@ function CenterPanel({
                 fullscreen ? 'py-8' : 'py-5',
             )}
         >
+            {session.status === 'in_progress' ? (
+                <LiveBadge label={session.status_label} />
+            ) : (
+                <Badge
+                    variant={
+                        session.status === 'ended' ? 'outline' : 'secondary'
+                    }
+                >
+                    {session.status_label}
+                </Badge>
+            )}
+
             <p
                 className={cn(
                     'text-clock',
@@ -447,8 +468,10 @@ function CenterPanel({
                     // step-up (WP-08.5-05) — a flat `text-6xl` clock in
                     // fullscreen would also squeeze the two score panels
                     // on a phone, since this center column is `auto`-
-                    // width and sizes to its own content.
-                    fullscreen ? 'text-4xl sm:text-6xl' : 'text-3xl',
+                    // width and sizes to its own content. Bumped up a
+                    // step (owner instruction) — the clock is the single
+                    // most-glanced-at number on the board.
+                    fullscreen ? 'text-5xl sm:text-7xl' : 'text-4xl sm:text-5xl',
                 )}
                 aria-label={
                     basketballState ? 'Game clock' : 'Running time'
@@ -805,35 +828,22 @@ export function LiveScoreDisplay({
 
     return (
         <>
-            <div className="flex items-center justify-between gap-2">
-                {session.status === 'in_progress' ? (
-                    <LiveBadge label={session.status_label} />
-                ) : (
-                    <Badge
-                        variant={
-                            session.status === 'ended' ? 'outline' : 'secondary'
-                        }
+            <div className="flex items-center justify-end gap-3">
+                <LastUpdated at={lastUpdatedAt} />
+                {showFullscreenToggle && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={onToggleFullscreen}
                     >
-                        {session.status_label}
-                    </Badge>
+                        {fullscreen ? (
+                            <Minimize2 aria-hidden="true" />
+                        ) : (
+                            <Maximize2 aria-hidden="true" />
+                        )}
+                        {fullscreen ? 'Exit full screen' : 'Full screen'}
+                    </Button>
                 )}
-                <div className="flex items-center gap-3">
-                    <LastUpdated at={lastUpdatedAt} />
-                    {showFullscreenToggle && (
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={onToggleFullscreen}
-                        >
-                            {fullscreen ? (
-                                <Minimize2 aria-hidden="true" />
-                            ) : (
-                                <Maximize2 aria-hidden="true" />
-                            )}
-                            {fullscreen ? 'Exit full screen' : 'Full screen'}
-                        </Button>
-                    )}
-                </div>
             </div>
 
             {disconnected && (

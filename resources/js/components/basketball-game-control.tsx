@@ -296,7 +296,7 @@ function TeamModal({
                     Substitute
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+            <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
                 <DialogHeader>
                     <DialogTitle>{label}</DialogTitle>
                 </DialogHeader>
@@ -307,116 +307,132 @@ function TeamModal({
                     </p>
                 ) : (
                     <>
-                        <div>
-                            <p className="mb-1 text-xs font-medium text-muted-foreground uppercase">
-                                On court ({onCourt.length}/5)
-                            </p>
-                            <ul className="divide-y rounded-lg border text-sm">
-                                {onCourt.length === 0 && (
-                                    <li className="px-3 py-3 text-muted-foreground">
-                                        No one on court yet.
-                                    </li>
-                                )}
-                                {onCourt.map((player) => (
-                                    <li
-                                        key={player.id}
-                                        className="flex items-center justify-between gap-2 px-3 py-2.5"
-                                    >
-                                        <span className="min-w-0 truncate">
-                                            {player.jersey_number && (
-                                                <span className="text-muted-foreground">
-                                                    #{player.jersey_number}{' '}
-                                                </span>
-                                            )}
-                                            {player.name}
-                                        </span>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-9 shrink-0"
-                                            disabled={!isPaused}
-                                            aria-label={`Bench ${player.name}`}
-                                            onClick={() =>
-                                                handleToggle(player.id, false)
-                                            }
+                        {/* On court and Bench side by side — the modal is
+                            wide enough now that stacking them just forces
+                            scrolling for no reason. */}
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div>
+                                <p className="mb-1 text-xs font-medium text-muted-foreground uppercase">
+                                    On court ({onCourt.length}/5)
+                                </p>
+                                <ul className="divide-y rounded-lg border text-sm">
+                                    {onCourt.length === 0 && (
+                                        <li className="px-3 py-3 text-muted-foreground">
+                                            No one on court yet.
+                                        </li>
+                                    )}
+                                    {onCourt.map((player) => (
+                                        <li
+                                            key={player.id}
+                                            className="flex items-center justify-between gap-2 px-3 py-2.5"
                                         >
-                                            <LogOut
-                                                aria-hidden="true"
-                                                className="size-4"
-                                            />
-                                            Bench
-                                        </Button>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-
-                        <div>
-                            <p className="mb-1 text-xs font-medium text-muted-foreground uppercase">
-                                Bench ({bench.length})
-                            </p>
-                            <ul className="divide-y rounded-lg border text-sm">
-                                {bench.length === 0 && (
-                                    <li className="px-3 py-3 text-muted-foreground">
-                                        No one on the bench.
-                                    </li>
-                                )}
-                                {bench.map((player) => (
-                                    <li
-                                        key={player.id}
-                                        className="flex items-center justify-between gap-2 px-3 py-2.5"
-                                    >
-                                        <span className="min-w-0 truncate">
-                                            {player.jersey_number && (
-                                                <span className="text-muted-foreground">
-                                                    #{player.jersey_number}{' '}
-                                                </span>
-                                            )}
-                                            {player.name}
-                                            {player.is_starter && (
-                                                <span className="ml-1 text-xs text-muted-foreground">
-                                                    (starter)
-                                                </span>
-                                            )}
-                                        </span>
-                                        <span className="flex shrink-0 items-center gap-1">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="h-9"
-                                                disabled={!isPaused || courtFull}
-                                                aria-label={`Send ${player.name} to court`}
-                                                onClick={() =>
-                                                    handleToggle(player.id, true)
-                                                }
-                                            >
-                                                <LogIn
-                                                    aria-hidden="true"
-                                                    className="size-4"
-                                                />
-                                                Send in
-                                            </Button>
+                                            <span className="min-w-0 truncate">
+                                                {player.jersey_number && (
+                                                    <span className="text-muted-foreground">
+                                                        #{player.jersey_number}{' '}
+                                                    </span>
+                                                )}
+                                                {player.name}
+                                            </span>
                                             <Button
                                                 variant="ghost"
-                                                size="icon"
-                                                className="size-9"
-                                                aria-label={`Remove ${player.name} from roster`}
+                                                size="sm"
+                                                className="h-9 shrink-0"
+                                                disabled={!isPaused}
+                                                aria-label={`Bench ${player.name}`}
                                                 onClick={() =>
-                                                    handleRemove(player.id)
+                                                    handleToggle(
+                                                        player.id,
+                                                        false,
+                                                    )
                                                 }
                                             >
-                                                <X
+                                                <LogOut
                                                     aria-hidden="true"
                                                     className="size-4"
                                                 />
+                                                Bench
                                             </Button>
-                                        </span>
-                                    </li>
-                                ))}
-                            </ul>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+
+                            <div>
+                                <p className="mb-1 text-xs font-medium text-muted-foreground uppercase">
+                                    Bench ({bench.length})
+                                </p>
+                                <ul className="divide-y rounded-lg border text-sm">
+                                    {bench.length === 0 && (
+                                        <li className="px-3 py-3 text-muted-foreground">
+                                            No one on the bench.
+                                        </li>
+                                    )}
+                                    {bench.map((player) => (
+                                        <li
+                                            key={player.id}
+                                            className="flex items-center justify-between gap-2 px-3 py-2.5"
+                                        >
+                                            <span className="min-w-0 truncate">
+                                                {player.jersey_number && (
+                                                    <span className="text-muted-foreground">
+                                                        #{player.jersey_number}{' '}
+                                                    </span>
+                                                )}
+                                                {player.name}
+                                                {player.is_starter && (
+                                                    <span className="ml-1 text-xs text-muted-foreground">
+                                                        (starter)
+                                                    </span>
+                                                )}
+                                            </span>
+                                            <span className="flex shrink-0 items-center gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-9"
+                                                    disabled={
+                                                        !isPaused || courtFull
+                                                    }
+                                                    aria-label={`Send ${player.name} to court`}
+                                                    onClick={() =>
+                                                        handleToggle(
+                                                            player.id,
+                                                            true,
+                                                        )
+                                                    }
+                                                >
+                                                    <LogIn
+                                                        aria-hidden="true"
+                                                        className="size-4"
+                                                    />
+                                                    Send in
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="size-9"
+                                                    aria-label={`Remove ${player.name} from roster`}
+                                                    onClick={() =>
+                                                        handleRemove(player.id)
+                                                    }
+                                                >
+                                                    <X
+                                                        aria-hidden="true"
+                                                        className="size-4"
+                                                    />
+                                                </Button>
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
                         </div>
 
-                        <form onSubmit={submitAdd} className="grid gap-3 pt-2">
+                        <form
+                            onSubmit={submitAdd}
+                            className="grid grid-cols-1 items-end gap-3 pt-2 sm:grid-cols-[1fr_auto_auto_auto]"
+                        >
                             <div className="grid gap-2">
                                 <Label htmlFor={`add-athlete-${side}`}>
                                     Add registered athlete
@@ -440,35 +456,34 @@ function TeamModal({
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div className="grid grid-cols-[1fr_auto] items-end gap-3">
-                                <div className="grid gap-2">
-                                    <Label htmlFor={`jersey-${side}`}>
-                                        Jersey number
-                                    </Label>
-                                    <Input
-                                        id={`jersey-${side}`}
-                                        value={jerseyNumber}
-                                        onChange={(e) =>
-                                            setJerseyNumber(e.target.value)
-                                        }
-                                        maxLength={10}
-                                    />
-                                </div>
-                                <div className="flex items-center gap-2 pb-2">
-                                    <Checkbox
-                                        id={`starter-${side}`}
-                                        checked={isStarter}
-                                        onCheckedChange={(checked) =>
-                                            setIsStarter(checked === true)
-                                        }
-                                    />
-                                    <Label
-                                        htmlFor={`starter-${side}`}
-                                        className="font-normal"
-                                    >
-                                        Starter
-                                    </Label>
-                                </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor={`jersey-${side}`}>
+                                    Jersey #
+                                </Label>
+                                <Input
+                                    id={`jersey-${side}`}
+                                    className="sm:w-24"
+                                    value={jerseyNumber}
+                                    onChange={(e) =>
+                                        setJerseyNumber(e.target.value)
+                                    }
+                                    maxLength={10}
+                                />
+                            </div>
+                            <div className="flex items-center gap-2 pb-2">
+                                <Checkbox
+                                    id={`starter-${side}`}
+                                    checked={isStarter}
+                                    onCheckedChange={(checked) =>
+                                        setIsStarter(checked === true)
+                                    }
+                                />
+                                <Label
+                                    htmlFor={`starter-${side}`}
+                                    className="font-normal"
+                                >
+                                    Starter
+                                </Label>
                             </div>
                             <Button type="submit" disabled={entryId === ''}>
                                 Add to roster
@@ -805,94 +820,100 @@ export function BasketballGameControl({
     };
 
     return (
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 print:hidden">
-            <div className="flex flex-wrap items-center justify-center gap-2 rounded-xl border bg-muted/20 p-2">
-                <SettingsDialog
-                    state={state}
-                    disabled={running}
-                    onSave={saveSettings}
-                />
+        <div className="flex w-full flex-col gap-4 print:hidden">
+            <div className="flex flex-col gap-2 rounded-xl border bg-muted/20 p-2">
+                {/* Row 1: Settings, then the two clock readouts. */}
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                    <SettingsDialog
+                        state={state}
+                        disabled={running}
+                        onSave={saveSettings}
+                    />
 
-                <Button
-                    className="h-12 border-amber-600 bg-amber-500 text-base font-semibold text-white hover:bg-amber-600"
-                    onClick={pauseResume}
-                    aria-label={isPaused ? 'Resume clock' : 'Pause clock'}
-                >
-                    <WhistleIcon aria-hidden="true" className="size-5" />
-                    {isPaused ? 'Resume' : 'Pause'}
-                </Button>
+                    <div className="flex h-12 items-center gap-1.5 rounded-md border bg-background px-3">
+                        <span className="text-sm text-muted-foreground">
+                            Clock
+                        </span>
+                        <span className="font-mono text-lg font-semibold tabular-nums">
+                            <CountdownClock
+                                anchor={state.game_clock_updated_at}
+                                baseSeconds={state.game_clock_seconds}
+                                running={running}
+                            />
+                        </span>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-9"
+                            onClick={() => adjustGameClock(-10)}
+                        >
+                            -10s
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-9"
+                            onClick={resetGameClockToPeriod}
+                        >
+                            Reset
+                        </Button>
+                    </div>
 
-                <Button
-                    className="h-12 border-orange-700 bg-orange-600 text-base font-semibold text-white hover:bg-orange-700"
-                    onClick={soundHorn}
-                    aria-label="Sound horn"
-                >
-                    <Bell aria-hidden="true" className="size-5" />
-                    Horn
-                </Button>
-
-                <Button
-                    className="h-12 border-sky-700 bg-sky-600 text-base font-semibold text-white hover:bg-sky-700"
-                    onClick={cyclePossession}
-                    aria-label="Toggle possession arrow"
-                >
-                    {state.possession === 'a' && (
-                        <ArrowLeft aria-hidden="true" className="size-5" />
-                    )}
-                    {state.possession === 'b' && (
-                        <ArrowRight aria-hidden="true" className="size-5" />
-                    )}
-                    Possession
-                    {state.possession === null && ': none'}
-                </Button>
-
-                <div className="flex h-12 items-center gap-1.5 rounded-md border bg-background px-3">
-                    <span className="text-sm text-muted-foreground">
-                        Clock
-                    </span>
-                    <span className="font-mono text-lg font-semibold tabular-nums">
-                        <CountdownClock
-                            anchor={state.game_clock_updated_at}
-                            baseSeconds={state.game_clock_seconds}
-                            running={running}
-                        />
-                    </span>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-9"
-                        onClick={() => adjustGameClock(-10)}
-                    >
-                        -10s
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-9"
-                        onClick={resetGameClockToPeriod}
-                    >
-                        Reset
-                    </Button>
+                    <div className="flex h-12 items-center gap-1.5 rounded-md border bg-background px-3">
+                        <span className="text-sm text-muted-foreground">
+                            Shot
+                        </span>
+                        <span className="font-mono text-lg font-semibold tabular-nums">
+                            <CountdownClock
+                                anchor={state.shot_clock_updated_at}
+                                baseSeconds={state.shot_clock_seconds}
+                                running={running}
+                            />
+                        </span>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-9"
+                            onClick={resetShotClock}
+                        >
+                            Reset
+                        </Button>
+                    </div>
                 </div>
 
-                <div className="flex h-12 items-center gap-1.5 rounded-md border bg-background px-3">
-                    <span className="text-sm text-muted-foreground">
-                        Shot
-                    </span>
-                    <span className="font-mono text-lg font-semibold tabular-nums">
-                        <CountdownClock
-                            anchor={state.shot_clock_updated_at}
-                            baseSeconds={state.shot_clock_seconds}
-                            running={running}
-                        />
-                    </span>
+                {/* Row 2: Whistle (pause/resume), Horn, Possession. */}
+                <div className="flex flex-wrap items-center justify-center gap-2">
                     <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-9"
-                        onClick={resetShotClock}
+                        className="h-12 border-amber-600 bg-amber-500 text-base font-semibold text-white hover:bg-amber-600"
+                        onClick={pauseResume}
+                        aria-label={isPaused ? 'Resume clock' : 'Pause clock'}
                     >
-                        Reset
+                        <WhistleIcon aria-hidden="true" className="size-5" />
+                        {isPaused ? 'Resume' : 'Pause'}
+                    </Button>
+
+                    <Button
+                        className="h-12 border-orange-700 bg-orange-600 text-base font-semibold text-white hover:bg-orange-700"
+                        onClick={soundHorn}
+                        aria-label="Sound horn"
+                    >
+                        <Bell aria-hidden="true" className="size-5" />
+                        Horn
+                    </Button>
+
+                    <Button
+                        className="h-12 border-sky-700 bg-sky-600 text-base font-semibold text-white hover:bg-sky-700"
+                        onClick={cyclePossession}
+                        aria-label="Toggle possession arrow"
+                    >
+                        {state.possession === 'a' && (
+                            <ArrowLeft aria-hidden="true" className="size-5" />
+                        )}
+                        {state.possession === 'b' && (
+                            <ArrowRight aria-hidden="true" className="size-5" />
+                        )}
+                        Possession
+                        {state.possession === null && ': none'}
                     </Button>
                 </div>
             </div>
