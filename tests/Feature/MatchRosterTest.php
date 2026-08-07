@@ -203,6 +203,7 @@ test('a manager can update basketball game settings', function () {
             'shot_clock_duration' => 30,
             'team_color_a' => '#111111',
             'team_color_b' => '#222222',
+            'quarters' => 2,
         ])
         ->assertSessionHasNoErrors();
 
@@ -212,7 +213,27 @@ test('a manager can update basketball game settings', function () {
             'shot_clock_duration' => 30,
             'team_color_a' => '#111111',
             'team_color_b' => '#222222',
+            'quarters' => 2,
         ]);
+});
+
+test('settings rejects a quarters value other than 2 or 4', function () {
+    [$match] = basketballMatchWithSides();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => basketballInitialSportState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/settings", [
+            'minutes_per_period' => 10,
+            'shot_clock_duration' => 24,
+            'team_color_a' => '#111111',
+            'team_color_b' => '#222222',
+            'quarters' => 3,
+        ])
+        ->assertSessionHasErrors('quarters');
 });
 
 test('settings is rejected for a non-basketball session', function () {
@@ -224,6 +245,7 @@ test('settings is rejected for a non-basketball session', function () {
             'shot_clock_duration' => 24,
             'team_color_a' => '#111111',
             'team_color_b' => '#222222',
+            'quarters' => 4,
         ])
         ->assertStatus(422);
 });

@@ -172,7 +172,7 @@ class ScoringSessionController extends Controller
                 'shot_clock_seconds' => 24, 'shot_clock_updated_at' => null,
                 'minutes_per_period' => 10, 'shot_clock_duration' => 24,
                 'team_color_a' => '#dc2626', 'team_color_b' => '#2563eb',
-                'horn_sounded_at' => null,
+                'horn_sounded_at' => null, 'quarters' => 4,
             ],
             ScoreboardType::Boxing => ['rounds' => []],
             ScoreboardType::SoftballBaseball => [
@@ -599,6 +599,7 @@ class ScoringSessionController extends Controller
             'shot_clock_duration' => ['required', 'integer', 'min:5', 'max:60'],
             'team_color_a' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'team_color_b' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'quarters' => ['required', 'integer', Rule::in([2, 4])],
         ]);
 
         $state = [...($session->sport_state ?? []), ...$data];

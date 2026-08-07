@@ -36,6 +36,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 import {
     destroy as rosterDestroyRoute,
     show as rosterShowRoute,
@@ -47,6 +48,7 @@ import {
     horn as hornRoute,
     lineup as lineupRoute,
     pause as pauseRoute,
+    period as periodRoute,
     possession as possessionRoute,
     resume as resumeRoute,
     score as scoreRoute,
@@ -78,6 +80,7 @@ function SettingsDialog({
         shot_clock_duration: number;
         team_color_a: string;
         team_color_b: string;
+        quarters: number;
     }) => void;
 }) {
     const [open, setOpen] = useState(false);
@@ -87,6 +90,7 @@ function SettingsDialog({
     );
     const [colorA, setColorA] = useState(state.team_color_a);
     const [colorB, setColorB] = useState(state.team_color_b);
+    const [quarters, setQuarters] = useState(String(state.quarters));
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -95,6 +99,7 @@ function SettingsDialog({
             shot_clock_duration: Number(shotClock),
             team_color_a: colorA,
             team_color_b: colorB,
+            quarters: Number(quarters),
         });
         setOpen(false);
     };
@@ -149,6 +154,18 @@ function SettingsDialog({
                                 onChange={(e) => setShotClock(e.target.value)}
                                 required
                             />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="quarters">Quarters</Label>
+                            <Select value={quarters} onValueChange={setQuarters}>
+                                <SelectTrigger id="quarters">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="2">2</SelectItem>
+                                    <SelectItem value="4">4</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="team-color-a">
@@ -284,7 +301,7 @@ function TeamModal({
             <DialogTrigger asChild>
                 <Button
                     variant="outline"
-                    className="h-12 flex-1 border-indigo-600 bg-indigo-600 text-base text-white hover:bg-indigo-700"
+                    className="h-10 shrink-0 border-indigo-600 bg-indigo-600 text-base text-white hover:bg-indigo-700"
                     disabled={!isPaused}
                     title={
                         !isPaused
@@ -511,24 +528,22 @@ function OnCourtRow({
 }) {
     return (
         <li className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-            <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-                <span className="min-w-0 truncate text-base">
-                    {player.jersey_number && (
-                        <span className="font-mono text-muted-foreground">
-                            #{player.jersey_number}{' '}
-                        </span>
-                    )}
-                    {player.name}
-                </span>
-                <span className="shrink-0 text-sm text-muted-foreground">
-                    {points} pts · {fouls} PF
+            <span className="min-w-0 truncate text-base">
+                {player.jersey_number && (
+                    <span className="font-mono text-muted-foreground">
+                        #{player.jersey_number}{' '}
+                    </span>
+                )}
+                {player.name}{' '}
+                <span className="text-sm text-muted-foreground">
+                    ({points} pts - {fouls} PF)
                 </span>
             </span>
             <span className="flex items-center gap-1.5">
                 {[1, 2, 3].map((points) => (
                     <Button
                         key={points}
-                        className="h-12 min-w-12 border-emerald-700 bg-emerald-600 text-lg font-bold text-white hover:bg-emerald-700"
+                        className="h-10 min-w-10 border-emerald-700 bg-emerald-600 text-lg font-bold text-white hover:bg-emerald-700"
                         aria-label={`Add ${points} point${points > 1 ? 's' : ''}, ${player.name}`}
                         onClick={() => onScore(points)}
                     >
@@ -537,7 +552,7 @@ function OnCourtRow({
                 ))}
                 <Button
                     variant="destructive"
-                    className="h-12 text-base font-semibold"
+                    className="h-10 text-base font-semibold"
                     aria-label={`Foul, ${player.name}`}
                     onClick={onFoul}
                 >
@@ -593,17 +608,29 @@ function SidePanel({
             style={{ borderColor: color }}
         >
             <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-2 text-lg font-medium">
+                <span className="flex min-w-0 items-center gap-2 text-lg font-medium">
                     <span
                         className="size-3 shrink-0 rounded-full"
                         style={{ backgroundColor: color }}
                         aria-hidden="true"
                     />
-                    <span className="truncate">{label}</span>
+                    <span className="truncate">
+                        {label}{' '}
+                        <span className="text-sm font-normal text-muted-foreground">
+                            (Fouls: {fouls})
+                        </span>
+                    </span>
                 </span>
-                <span className="shrink-0 text-sm text-muted-foreground">
-                    Team fouls: {fouls}
-                </span>
+                <TeamModal
+                    side={side}
+                    label={label}
+                    matchId={matchId}
+                    onCourtIds={onCourtIds}
+                    isPaused={isPaused}
+                    onToggleCourt={onToggleCourt}
+                    onAddPlayer={onAddPlayer}
+                    onRemovePlayer={onRemovePlayer}
+                />
             </div>
 
             <div>
@@ -613,8 +640,8 @@ function SidePanel({
                 <ul className="divide-y rounded-lg border">
                     {onCourt.length === 0 && (
                         <li className="px-3 py-3 text-sm text-muted-foreground">
-                            No one on court yet — open "{label} lineup" to
-                            send players in.
+                            No one on court yet — open "Substitute" to send
+                            players in.
                         </li>
                     )}
                     {onCourt.map((player) => (
@@ -631,19 +658,9 @@ function SidePanel({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-                <TeamModal
-                    side={side}
-                    label={label}
-                    matchId={matchId}
-                    onCourtIds={onCourtIds}
-                    isPaused={isPaused}
-                    onToggleCourt={onToggleCourt}
-                    onAddPlayer={onAddPlayer}
-                    onRemovePlayer={onRemovePlayer}
-                />
                 <Button
                     variant="outline"
-                    className="h-12 text-base"
+                    className="h-10 text-base"
                     onClick={onResetFouls}
                 >
                     Reset fouls
@@ -677,6 +694,7 @@ const BASKETBALL_STATE_DEFAULTS: BasketballState = {
     team_color_a: '#dc2626',
     team_color_b: '#2563eb',
     horn_sounded_at: null,
+    quarters: 4,
 };
 
 export function BasketballGameControl({
@@ -692,6 +710,29 @@ export function BasketballGameControl({
     };
     const running = session.status === 'in_progress';
     const isPaused = session.status === 'paused';
+
+    // Basketball doesn't track a structured "current quarter" column —
+    // it reuses the same free-text `period_label` every board type has
+    // (e.g. "Q2"), same as boxing's round label and softball's inning
+    // label already do. Parsed here only for the stepper's display/
+    // bounds-checking; the write path is the plain `scoring.period`
+    // endpoint every sport already uses, not a new basketball-only one.
+    const currentQuarter = Math.min(
+        Math.max(1, Number(session.period_label?.match(/\d+/)?.[0]) || 1),
+        state.quarters,
+    );
+
+    const changeQuarter = (next: number) => {
+        if (next < 1 || next > state.quarters) {
+            return;
+        }
+
+        router.patch(
+            periodRoute(session.id).url,
+            { period_label: `Q${next}`, status_note: session.status_note },
+            { preserveScroll: true },
+        );
+    };
 
     const pauseResume = () => {
         router.patch(
@@ -749,6 +790,7 @@ export function BasketballGameControl({
         shot_clock_duration: number;
         team_color_a: string;
         team_color_b: string;
+        quarters: number;
     }) => {
         router.patch(settingsRoute(session.id).url, data, {
             preserveScroll: true,
@@ -822,7 +864,7 @@ export function BasketballGameControl({
     return (
         <div className="flex w-full flex-col gap-4 print:hidden">
             <div className="flex flex-col gap-2 rounded-xl border bg-muted/20 p-2">
-                {/* Row 1: Settings, then the two clock readouts. */}
+                {/* Row 1: Settings, quarter stepper, then the two clock readouts. */}
                 <div className="flex flex-wrap items-center justify-center gap-2">
                     <SettingsDialog
                         state={state}
@@ -830,7 +872,33 @@ export function BasketballGameControl({
                         onSave={saveSettings}
                     />
 
-                    <div className="flex h-12 items-center gap-1.5 rounded-md border bg-background px-3">
+                    <div className="flex h-10 items-center gap-1 rounded-md border bg-background px-2">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7"
+                            disabled={currentQuarter <= 1}
+                            aria-label="Previous quarter"
+                            onClick={() => changeQuarter(currentQuarter - 1)}
+                        >
+                            <ArrowLeft aria-hidden="true" className="size-4" />
+                        </Button>
+                        <span className="text-base font-semibold tabular-nums">
+                            Q{currentQuarter} / {state.quarters}
+                        </span>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7"
+                            disabled={currentQuarter >= state.quarters}
+                            aria-label="Next quarter"
+                            onClick={() => changeQuarter(currentQuarter + 1)}
+                        >
+                            <ArrowRight aria-hidden="true" className="size-4" />
+                        </Button>
+                    </div>
+
+                    <div className="flex h-10 items-center gap-1.5 rounded-md border bg-background px-3">
                         <span className="text-sm text-muted-foreground">
                             Clock
                         </span>
@@ -844,7 +912,7 @@ export function BasketballGameControl({
                         <Button
                             variant="ghost"
                             size="sm"
-                            className="h-9"
+                            className="h-8"
                             onClick={() => adjustGameClock(-10)}
                         >
                             -10s
@@ -852,14 +920,14 @@ export function BasketballGameControl({
                         <Button
                             variant="ghost"
                             size="sm"
-                            className="h-9"
+                            className="h-8"
                             onClick={resetGameClockToPeriod}
                         >
                             Reset
                         </Button>
                     </div>
 
-                    <div className="flex h-12 items-center gap-1.5 rounded-md border bg-background px-3">
+                    <div className="flex h-10 items-center gap-1.5 rounded-md border bg-background px-3">
                         <span className="text-sm text-muted-foreground">
                             Shot
                         </span>
@@ -873,7 +941,7 @@ export function BasketballGameControl({
                         <Button
                             variant="ghost"
                             size="sm"
-                            className="h-9"
+                            className="h-8"
                             onClick={resetShotClock}
                         >
                             Reset
@@ -881,17 +949,10 @@ export function BasketballGameControl({
                     </div>
                 </div>
 
-                {/* Row 2: Whistle (pause/resume), Horn, Possession. */}
+                {/* Row 2: Horn, Possession, then Whistle (pause/resume) —
+                    color reflects what the click will do: green while it
+                    would Pause, orange while it would Resume. */}
                 <div className="flex flex-wrap items-center justify-center gap-2">
-                    <Button
-                        className="h-12 border-amber-600 bg-amber-500 text-base font-semibold text-white hover:bg-amber-600"
-                        onClick={pauseResume}
-                        aria-label={isPaused ? 'Resume clock' : 'Pause clock'}
-                    >
-                        <WhistleIcon aria-hidden="true" className="size-5" />
-                        {isPaused ? 'Resume' : 'Pause'}
-                    </Button>
-
                     <Button
                         className="h-12 border-orange-700 bg-orange-600 text-base font-semibold text-white hover:bg-orange-700"
                         onClick={soundHorn}
@@ -914,6 +975,20 @@ export function BasketballGameControl({
                         )}
                         Possession
                         {state.possession === null && ': none'}
+                    </Button>
+
+                    <Button
+                        className={cn(
+                            'h-12 text-base font-semibold text-white',
+                            isPaused
+                                ? 'border-orange-700 bg-orange-600 hover:bg-orange-700'
+                                : 'border-emerald-700 bg-emerald-600 hover:bg-emerald-700',
+                        )}
+                        onClick={pauseResume}
+                        aria-label={isPaused ? 'Resume clock' : 'Pause clock'}
+                    >
+                        <WhistleIcon aria-hidden="true" className="size-5" />
+                        {isPaused ? 'Resume' : 'Pause'}
                     </Button>
                 </div>
             </div>

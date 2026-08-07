@@ -215,7 +215,7 @@ class BasketballLiveDemoSeeder extends Seeder
             'shot_clock_seconds' => 24, 'shot_clock_updated_at' => null,
             'minutes_per_period' => 10, 'shot_clock_duration' => 24,
             'team_color_a' => '#7f1d1d', 'team_color_b' => '#1e3a8a',
-            'horn_sounded_at' => null,
+            'horn_sounded_at' => null, 'quarters' => 4,
         ];
 
         $t = now()->subMinutes(6);

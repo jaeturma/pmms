@@ -80,6 +80,6 @@ function basketballInitialSportState(): array
         'shot_clock_seconds' => 24, 'shot_clock_updated_at' => null,
         'minutes_per_period' => 10, 'shot_clock_duration' => 24,
         'team_color_a' => '#dc2626', 'team_color_b' => '#2563eb',
-        'horn_sounded_at' => null,
+        'horn_sounded_at' => null, 'quarters' => 4,
     ];
 }

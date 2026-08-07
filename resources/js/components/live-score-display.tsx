@@ -52,6 +52,7 @@ export type BasketballState = {
     team_color_a: string;
     team_color_b: string;
     horn_sounded_at: string | null;
+    quarters: 2 | 4;
 };
 
 export type BoxingRound = {
