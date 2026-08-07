@@ -13,6 +13,7 @@ use App\Models\MeetSportAssignment;
 use App\Models\ScoringSession;
 use App\Models\User;
 use App\Services\AuditLogger;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -30,6 +31,28 @@ use Inertia\Inertia;
 class MatchRosterController extends Controller
 {
     public function __construct(private readonly AuditLogger $audit) {}
+
+    /**
+     * The full roster (both sides, starters and bench) plus the pool of
+     * still-eligible confirmed entries — fetched on demand only, by the
+     * operator console's substitution/manage-roster modal when it opens.
+     * Deliberately not part of `board()`'s Inertia props or the live-polled
+     * `scoring.show`/Reverb payload (`ScoringSession::onCourtPayload()` is
+     * the lightweight one baked into those): the full roster is real data
+     * an operator needs only while actively substituting, not on every 5s
+     * tick, so this keeps the hot path down to just the players on court.
+     */
+    public function show(Request $request, EventMatch $match): JsonResponse
+    {
+        $this->authorizeManage($request, $match);
+
+        $entries = $match->entries()->with('athlete:id,school_id')->get();
+
+        return response()->json([
+            'roster' => MatchRosterPlayer::payloadForMatch($match->id),
+            'eligibleAthletes' => $this->eligibleAthletes($match, $entries),
+        ]);
+    }
 
     /**
      * Add a registered, confirmed entry to the match's roster for a side.
@@ -189,6 +212,51 @@ class MatchRosterController extends Controller
         }
 
         return $side === 'a' ? $entries[0]->athlete->school_id : $entries[1]->athlete->school_id;
+    }
+
+    /**
+     * Confirmed entries for this match's event, per side, minus whoever's
+     * already rostered — the pool `store()` can add from. Only meaningful
+     * when the match has exactly two representative entries (same guard
+     * `sideSchoolId()` uses); anything else returns both sides empty so
+     * the frontend can prompt the operator to set match participants
+     * first.
+     *
+     * @param  \Illuminate\Support\Collection<int, Entry>  $entries
+     * @return array{a: array<int, array{id: int, label: string}>, b: array<int, array{id: int, label: string}>}
+     */
+    private function eligibleAthletes(EventMatch $match, $entries): array
+    {
+        if ($entries->count() !== 2) {
+            return ['a' => [], 'b' => []];
+        }
+
+        $rosteredEntryIds = MatchRosterPlayer::query()
+            ->where('match_id', $match->id)
+            ->pluck('entry_id');
+
+        $schoolIdFor = fn (int $index): int => $entries[$index]->athlete->school_id;
+
+        $poolFor = function (int $schoolId) use ($match, $rosteredEntryIds): array {
+            return Entry::query()
+                ->where('event_id', $match->event_id)
+                ->where('status', EntryStatus::Confirmed->value)
+                ->whereHas('athlete', fn ($query) => $query->where('school_id', $schoolId))
+                ->whereNotIn('id', $rosteredEntryIds)
+                ->with('athlete')
+                ->get()
+                ->map(fn (Entry $entry): array => [
+                    'id' => $entry->id,
+                    'label' => $entry->athlete->fullName(),
+                ])
+                ->values()
+                ->all();
+        };
+
+        return [
+            'a' => $poolFor($schoolIdFor(0)),
+            'b' => $poolFor($schoolIdFor(1)),
+        ];
     }
 
     /**

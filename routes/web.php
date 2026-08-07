@@ -449,6 +449,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // possession, and the whistle/horn signals. Same role group as
         // every other scoring mutation above — canManage() inside each
         // controller narrows it further per match/session.
+        Route::get('matches/{match}/roster', [MatchRosterController::class, 'show'])->name('match-roster.show');
         Route::post('matches/{match}/roster', [MatchRosterController::class, 'store'])->name('match-roster.store');
         Route::patch('match-roster/{rosterPlayer}', [MatchRosterController::class, 'update'])->name('match-roster.update');
         Route::delete('match-roster/{rosterPlayer}', [MatchRosterController::class, 'destroy'])->name('match-roster.destroy');

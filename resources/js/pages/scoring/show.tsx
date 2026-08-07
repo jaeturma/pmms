@@ -3,7 +3,6 @@ import { configureEcho, useEcho } from '@laravel/echo-react';
 import { Pause, Play, Radio, Square } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { EligibleAthlete } from '@/components/basketball-game-control';
 import { BasketballGameControl } from '@/components/basketball-game-control';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
@@ -76,7 +75,6 @@ type Props = {
     channel: string;
     canManage: boolean;
     participants: [Participant | null, Participant | null];
-    eligibleAthletes: { a: EligibleAthlete[]; b: EligibleAthlete[] };
 };
 
 function RoundScoreDialog({
@@ -213,7 +211,6 @@ export default function ScoringBoard({
     channel,
     canManage,
     participants,
-    eligibleAthletes,
 }: Props) {
     const [session, setSession] = useState(initialSession);
     const [syncedSession, setSyncedSession] = useState(initialSession);
@@ -513,7 +510,6 @@ export default function ScoringBoard({
                             <BasketballGameControl
                                 session={session}
                                 state={basketballState}
-                                eligibleAthletes={eligibleAthletes}
                             />
                         )}
 

@@ -100,7 +100,11 @@ export type LiveSession = {
     status_note: string | null;
     board_type: 'generic' | 'basketball' | 'boxing' | 'softball_baseball';
     sport_state: BasketballState | BoxingState | SoftballState | null;
-    roster: { a: RosterPlayer[]; b: RosterPlayer[] };
+    /** Basketball only: the (at most 5-per-side) players currently on
+     * court — deliberately not the whole roster, kept small since this is
+     * embedded in the live-polled payload. The full roster (bench
+     * included) is fetched on demand only, by the substitution modal. */
+    onCourt: { a: RosterPlayer[]; b: RosterPlayer[] };
     playByPlay: PlayByPlayEntry[];
     started_at: string | null;
     elapsed_seconds: number;

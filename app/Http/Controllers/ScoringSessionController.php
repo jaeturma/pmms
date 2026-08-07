@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\EntryStatus;
 use App\Enums\MatchStatus;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
@@ -108,8 +107,6 @@ class ScoringSessionController extends Controller
             'channel' => "match.{$match->id}.scoring",
             'canManage' => $this->canManage($user, $match),
             'participants' => $this->matchParticipants($entries),
-            'roster' => $this->rosterPayload($match),
-            'eligibleAthletes' => $this->eligibleAthletes($match, $entries),
         ]);
     }
 
@@ -742,13 +739,17 @@ class ScoringSessionController extends Controller
      * Toggle a roster player in or out of their side's on-court lineup —
      * basketball only. One primitive covers both "send a starter to court"
      * and "sub during play": `on_court: true` adds them (422 past 5 already
-     * on court), `on_court: false` removes them.
+     * on court), `on_court: false` removes them. Only allowed while the
+     * session is paused (owner instruction) — mirrors a real scorer's
+     * table, where substitutions happen on a dead ball, not mid-play; the
+     * operator uses the Whistle (pause) button first.
      */
     public function lineup(Request $request, ScoringSession $session): RedirectResponse
     {
         $this->authorizeManageSession($request, $session);
         $this->assertActive($session);
         $this->assertBasketball($session);
+        $this->assertPaused($session);
 
         $data = $request->validate([
             'side' => ['required', Rule::in(['a', 'b'])],
@@ -913,6 +914,15 @@ class ScoringSessionController extends Controller
         }
     }
 
+    private function assertPaused(ScoringSession $session): void
+    {
+        if ($session->status !== ScoringSessionStatus::Paused) {
+            throw ValidationException::withMessages([
+                'status' => __('Pause the game before substituting a player.'),
+            ]);
+        }
+    }
+
     private function assertBoxing(ScoringSession $session): void
     {
         if ($session->boardType() !== ScoreboardType::Boxing) {
@@ -1063,63 +1073,6 @@ class ScoringSessionController extends Controller
         return [
             ['photo_url' => $photoUrl($entries[0])],
             ['photo_url' => $photoUrl($entries[1])],
-        ];
-    }
-
-    /**
-     * The match's current basketball roster, both sides — same shape
-     * `MatchRosterPlayer::payloadForMatch()` gives the live payload, so the
-     * initial Inertia page and every subsequent poll/Echo push agree.
-     *
-     * @return array{a: array<int, array<string, mixed>>, b: array<int, array<string, mixed>>}
-     */
-    private function rosterPayload(EventMatch $match): array
-    {
-        return MatchRosterPlayer::payloadForMatch($match->id);
-    }
-
-    /**
-     * Confirmed entries for this match's event, per side, minus whoever's
-     * already rostered — the pool `MatchRosterController::store()` can add
-     * from. Only meaningful when the match has exactly two representative
-     * entries (same guard `suggestedLabels` already uses); anything else
-     * returns both sides empty so the frontend can prompt the operator to
-     * set match participants first.
-     *
-     * @param  Collection<int, Entry>  $entries
-     * @return array{a: array<int, array{id: int, label: string}>, b: array<int, array{id: int, label: string}>}
-     */
-    private function eligibleAthletes(EventMatch $match, $entries): array
-    {
-        if ($entries->count() !== 2) {
-            return ['a' => [], 'b' => []];
-        }
-
-        $rosteredEntryIds = MatchRosterPlayer::query()
-            ->where('match_id', $match->id)
-            ->pluck('entry_id');
-
-        $schoolIdFor = fn (int $index): int => $entries[$index]->athlete->school_id;
-
-        $poolFor = function (int $schoolId) use ($match, $rosteredEntryIds): array {
-            return Entry::query()
-                ->where('event_id', $match->event_id)
-                ->where('status', EntryStatus::Confirmed->value)
-                ->whereHas('athlete', fn ($query) => $query->where('school_id', $schoolId))
-                ->whereNotIn('id', $rosteredEntryIds)
-                ->with('athlete')
-                ->get()
-                ->map(fn (Entry $entry): array => [
-                    'id' => $entry->id,
-                    'label' => $entry->athlete->fullName(),
-                ])
-                ->values()
-                ->all();
-        };
-
-        return [
-            'a' => $poolFor($schoolIdFor(0)),
-            'b' => $poolFor($schoolIdFor(1)),
         ];
     }
 

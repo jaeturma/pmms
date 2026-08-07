@@ -139,12 +139,31 @@ class ScoringSession extends Model
             'status_note' => $this->status_note,
             'board_type' => $this->boardType()->value,
             'sport_state' => $this->sport_state,
-            'roster' => MatchRosterPlayer::payloadForMatch($this->match_id),
+            'onCourt' => $this->onCourtPayload(),
             'playByPlay' => $this->playByPlay(),
             'started_at' => $this->started_at?->toIso8601String(),
             'elapsed_seconds' => $this->activeElapsedSeconds(),
             'clock_running' => $this->status === ScoringSessionStatus::InProgress,
         ];
+    }
+
+    /**
+     * The (at most 5-per-side) players currently on court — deliberately
+     * NOT the whole roster. This is embedded in the live-polled payload
+     * (every 5s, plus every Reverb push), so keeping it to just what the
+     * score/foul buttons need to render is the point: the full roster
+     * (bench included) is real data too, but it's fetched on demand only
+     * by the substitution modal (`MatchRosterController::show()`), never
+     * baked into the hot polling path.
+     *
+     * @return array{a: array<int, array<string, mixed>>, b: array<int, array<string, mixed>>}
+     */
+    public function onCourtPayload(): array
+    {
+        $state = $this->sport_state ?? [];
+        $ids = [...($state['on_court_a'] ?? []), ...($state['on_court_b'] ?? [])];
+
+        return MatchRosterPlayer::payloadForIds($ids);
     }
 
     /**

@@ -57,10 +57,12 @@ class MatchRosterPlayer extends Model
     }
 
     /**
-     * The one shape every consumer (the operator console's Inertia props,
-     * ScoringSession::toLivePayload()'s live roster) reads — real
-     * relational data (name/jersey/photo), always freshly queried, never
-     * cached inside sport_state's provisional JSON.
+     * The full roster (both sides, all players — starters and bench) for a
+     * match, on demand only: the "Substitute / manage roster" modal's own
+     * `match-roster.show` fetch, never part of the live-polled payload
+     * (`ScoringSession::onCourtPayload()` below is the lightweight one
+     * that IS). Real relational data (name/jersey/photo), always freshly
+     * queried, never cached inside sport_state's provisional JSON.
      *
      * @return array{a: array<int, array{id: int, name: string, jersey_number: string|null, is_starter: bool, photo_url: string|null}>, b: array<int, array{id: int, name: string, jersey_number: string|null, is_starter: bool, photo_url: string|null}>}
      */
@@ -73,6 +75,38 @@ class MatchRosterPlayer extends Model
             ->orderBy('jersey_number')
             ->get();
 
+        return self::groupBySide($players);
+    }
+
+    /**
+     * The same shape as `payloadForMatch()`, but scoped to a specific set
+     * of roster player ids — `ScoringSession::onCourtPayload()` uses this
+     * to keep the live-polled payload down to just the (at most 5-per-side)
+     * players currently on court, instead of the whole roster.
+     *
+     * @param  array<int, int>  $ids
+     * @return array{a: array<int, array{id: int, name: string, jersey_number: string|null, is_starter: bool, photo_url: string|null}>, b: array<int, array{id: int, name: string, jersey_number: string|null, is_starter: bool, photo_url: string|null}>}
+     */
+    public static function payloadForIds(array $ids): array
+    {
+        if ($ids === []) {
+            return ['a' => [], 'b' => []];
+        }
+
+        $players = self::query()
+            ->whereIn('id', $ids)
+            ->with('entry.athlete')
+            ->get();
+
+        return self::groupBySide($players);
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Collection<int, self>  $players
+     * @return array{a: array<int, array{id: int, name: string, jersey_number: string|null, is_starter: bool, photo_url: string|null}>, b: array<int, array{id: int, name: string, jersey_number: string|null, is_starter: bool, photo_url: string|null}>}
+     */
+    private static function groupBySide($players): array
+    {
         $describe = fn (self $player): array => [
             'id' => $player->id,
             'name' => $player->entry->athlete->fullName(),

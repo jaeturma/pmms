@@ -287,7 +287,7 @@ test('a manager can sound the horn and it is recorded in play-by-play', function
 
 test('a manager can send a roster player to court and bench them again, capped at 5', function () {
     [$match, $entryA] = basketballMatchWithSides();
-    $session = ScoringSession::factory()->create([
+    $session = ScoringSession::factory()->paused()->create([
         'match_id' => $match->id,
         'sport_state' => basketballInitialSportState(),
     ]);
@@ -331,6 +331,30 @@ test('a manager can send a roster player to court and bench them again, capped a
     ]);
 
     expect($session->fresh()->sport_state['on_court_a'])->toHaveCount(4);
+});
+
+test('a substitution is rejected unless the session is paused', function () {
+    [$match, $entryA] = basketballMatchWithSides();
+    $teammate = rosterTeammateEntry($match, $entryA);
+    $rosterPlayer = MatchRosterPlayer::factory()->side('a')->create([
+        'match_id' => $match->id,
+        'entry_id' => $teammate->id,
+    ]);
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => basketballInitialSportState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/lineup", [
+            'side' => 'a',
+            'roster_player_id' => $rosterPlayer->id,
+            'on_court' => true,
+        ])
+        ->assertSessionHasErrors('status');
+
+    expect($session->fresh()->sport_state['on_court_a'])->toBeEmpty();
 });
 
 test('recording a point attributed to a roster player updates player_points and names the player in play-by-play', function () {
@@ -383,7 +407,7 @@ test('recording a foul attributed to a roster player updates player_fouls', func
     expect($session->fresh()->sport_state['player_fouls'][(string) $rosterPlayer->id])->toBe(1);
 });
 
-test('the board Inertia page exposes the roster and eligible athletes pool', function () {
+test('the on-demand roster endpoint exposes the full roster and eligible athletes pool, fetched only when requested', function () {
     [$match, $entryA] = basketballMatchWithSides();
     $teammate = rosterTeammateEntry($match, $entryA);
     $rosterPlayer = MatchRosterPlayer::factory()->side('a')->create([
@@ -393,12 +417,58 @@ test('the board Inertia page exposes the roster and eligible athletes pool', fun
     $admin = User::factory()->admin()->create();
 
     $this->actingAs($admin)
+        ->getJson("/matches/{$match->id}/roster")
+        ->assertOk()
+        ->assertJsonPath('roster.a.0.id', $rosterPlayer->id)
+        // entryA is the school's own representative entry — it was never
+        // rostered by this test, so it's still a legitimate eligible pick
+        // alongside $teammate's own school B counterpart.
+        ->assertJsonCount(1, 'eligibleAthletes.a')
+        ->assertJsonCount(1, 'eligibleAthletes.b');
+});
+
+test('non-managers cannot fetch the on-demand roster endpoint', function (User $user) {
+    [$match] = basketballMatchWithSides();
+
+    $this->actingAs($user)
+        ->getJson("/matches/{$match->id}/roster")
+        ->assertForbidden();
+})->with([
+    'viewer' => fn () => User::factory()->create(),
+    'organizer' => fn () => User::factory()->organizer()->create(),
+    'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+]);
+
+test('the board Inertia page and live payload only ever expose on-court players, not the full roster', function () {
+    [$match, $entryA] = basketballMatchWithSides();
+    $teammate = rosterTeammateEntry($match, $entryA);
+    $onCourtPlayer = MatchRosterPlayer::factory()->side('a')->create([
+        'match_id' => $match->id,
+        'entry_id' => $teammate->id,
+    ]);
+    $benchTeammate = rosterTeammateEntry($match, $entryA);
+    MatchRosterPlayer::factory()->side('a')->create([
+        'match_id' => $match->id,
+        'entry_id' => $benchTeammate->id,
+    ]);
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => [...basketballInitialSportState(), 'on_court_a' => [$onCourtPlayer->id]],
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
         ->get("/matches/{$match->id}/scoreboard")
         ->assertInertia(fn ($page) => $page
-            ->where('roster.a.0.id', $rosterPlayer->id)
-            // entryA is the school's own representative entry — it was
-            // never rostered by this test, so it's still a legitimate
-            // eligible pick alongside $teammate's own school B counterpart.
-            ->has('eligibleAthletes.a', 1)
-            ->has('eligibleAthletes.b', 1));
+            ->missing('roster')
+            ->missing('eligibleAthletes')
+            ->has('session.onCourt.a', 1)
+            ->where('session.onCourt.a.0.id', $onCourtPlayer->id)
+            ->has('session.onCourt.b', 0));
+
+    $this->actingAs($admin)
+        ->getJson("/matches/{$match->id}/scoring-session")
+        ->assertOk()
+        ->assertJsonCount(1, 'session.onCourt.a')
+        ->assertJsonMissingPath('session.roster');
 });
