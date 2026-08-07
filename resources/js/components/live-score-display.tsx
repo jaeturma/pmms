@@ -202,6 +202,43 @@ function TickingClock({
 }
 
 /**
+ * A manual, operator-set countdown (basketball's game/shot clock) — the
+ * same anchor+ticker shape as `RunningClock`/`TickingClock` above, just
+ * counting DOWN instead of up. Shared by `CenterPanel` (the main basketball
+ * scoreboard clock) and `BasketballGameControl`'s toolbar readouts, so
+ * there's exactly one countdown implementation, not two.
+ */
+export function CountdownClock({
+    baseSeconds,
+    anchor,
+    running,
+}: {
+    baseSeconds: number;
+    anchor: string | null;
+    running: boolean;
+}) {
+    return (
+        <TickingCountdown
+            key={anchor ?? 'initial'}
+            baseSeconds={baseSeconds}
+            running={running}
+        />
+    );
+}
+
+function TickingCountdown({
+    baseSeconds,
+    running,
+}: {
+    baseSeconds: number;
+    running: boolean;
+}) {
+    const ticks = useTicks(running);
+
+    return <>{formatClock(baseSeconds - ticks)}</>;
+}
+
+/**
  * "Updated Xs ago" (WP-08.5-04's "last-updated time" requirement) — the
  * same remount-a-ticker-from-zero technique as `RunningClock`, so no
  * render ever reads the wall clock directly (the React Compiler's purity
@@ -300,66 +337,73 @@ function TeamPanel({
     return (
         <div
             className={cn(
-                'flex flex-1 flex-col items-center gap-2 px-4 text-center',
+                'flex flex-1 flex-wrap items-center justify-center gap-4 px-4 text-center',
                 fullscreen ? 'py-8' : 'py-5',
                 corner === 'red' && 'bg-red-500/5',
                 corner === 'blue' && 'bg-blue-500/5',
             )}
         >
-            {corner && (
-                <Badge
+            {/* Logo, then the team name below it — one column. */}
+            <div className="flex flex-col items-center gap-2">
+                {corner && (
+                    <Badge
+                        className={cn(
+                            'border-0 text-white',
+                            corner === 'red' ? 'bg-red-600' : 'bg-blue-600',
+                        )}
+                    >
+                        {corner === 'red' ? 'Red corner' : 'Blue corner'}
+                    </Badge>
+                )}
+
+                {photoUrl ? (
+                    <img
+                        src={photoUrl}
+                        alt={`Photo of ${label}`}
+                        className={cn(
+                            'rounded-full border-4 object-cover',
+                            corner === 'red'
+                                ? 'border-red-500'
+                                : corner === 'blue'
+                                  ? 'border-blue-500'
+                                  : 'border-border',
+                            fullscreen ? 'size-32' : 'size-20',
+                        )}
+                    />
+                ) : (
+                    <TeamLogo
+                        name={label}
+                        shape="circle"
+                        className={cn(
+                            fullscreen ? 'size-32 text-3xl' : 'size-20 text-xl',
+                        )}
+                    />
+                )}
+
+                <p className="max-w-32 text-lg font-medium text-muted-foreground">
+                    {label}
+                </p>
+            </div>
+
+            {/* The score sits beside the logo/name column, not below it. */}
+            <div className="flex flex-col items-center gap-2">
+                {/* `key={score}` remounts this element on every real score
+                    change (same technique as `RunningClock`/`LastUpdated`
+                    below), replaying `animate-score-pop` — WP-08.5-06's
+                    "score-change emphasis." Plays once on first mount too,
+                    which reads fine as part of the board's own entrance. */}
+                <p
+                    key={score}
                     className={cn(
-                        'border-0 text-white',
-                        corner === 'red' ? 'bg-red-600' : 'bg-blue-600',
+                        fullscreen ? 'text-score-lg' : 'text-score',
+                        'animate-score-pop',
                     )}
                 >
-                    {corner === 'red' ? 'Red corner' : 'Blue corner'}
-                </Badge>
-            )}
+                    {score}
+                </p>
 
-            {photoUrl ? (
-                <img
-                    src={photoUrl}
-                    alt={`Photo of ${label}`}
-                    className={cn(
-                        'rounded-full border-4 object-cover',
-                        corner === 'red'
-                            ? 'border-red-500'
-                            : corner === 'blue'
-                              ? 'border-blue-500'
-                              : 'border-border',
-                        fullscreen ? 'size-32' : 'size-20',
-                    )}
-                />
-            ) : (
-                <TeamLogo
-                    name={label}
-                    shape="circle"
-                    className={cn(
-                        fullscreen ? 'size-32 text-3xl' : 'size-20 text-xl',
-                    )}
-                />
-            )}
-
-            <p className="w-full truncate text-lg font-medium text-muted-foreground">
-                {label}
-            </p>
-            {/* `key={score}` remounts this element on every real score
-                change (same technique as `RunningClock`/`LastUpdated`
-                below), replaying `animate-score-pop` — WP-08.5-06's
-                "score-change emphasis." Plays once on first mount too,
-                which reads fine as part of the board's own entrance. */}
-            <p
-                key={score}
-                className={cn(
-                    fullscreen ? 'text-score-lg' : 'text-score',
-                    'animate-score-pop',
-                )}
-            >
-                {score}
-            </p>
-
-            {children}
+                {children}
+            </div>
         </div>
     );
 }
@@ -377,11 +421,17 @@ function CenterPanel({
     periodLabel,
     statusNote,
     fullscreen,
+    basketballState,
 }: {
     session: LiveSession;
     periodLabel: string | null;
     statusNote: string | null;
     fullscreen: boolean;
+    /** When set, the main clock shows this side's real countdown (game
+     * clock) instead of the generic elapsed-since-start stopwatch — a
+     * basketball scoreboard's prominent clock should read down to zero
+     * like a real one, not count up from tip-off. */
+    basketballState: BasketballState | null;
 }) {
     return (
         <div
@@ -400,9 +450,19 @@ function CenterPanel({
                     // width and sizes to its own content.
                     fullscreen ? 'text-4xl sm:text-6xl' : 'text-3xl',
                 )}
-                aria-label="Running time"
+                aria-label={
+                    basketballState ? 'Game clock' : 'Running time'
+                }
             >
-                <RunningClock session={session} />
+                {basketballState ? (
+                    <CountdownClock
+                        baseSeconds={basketballState.game_clock_seconds}
+                        anchor={basketballState.game_clock_updated_at}
+                        running={session.status === 'in_progress'}
+                    />
+                ) : (
+                    <RunningClock session={session} />
+                )}
             </p>
             {periodLabel && (
                 <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -845,6 +905,7 @@ export function LiveScoreDisplay({
                         periodLabel={session.period_label}
                         statusNote={session.status_note}
                         fullscreen={fullscreen}
+                        basketballState={basketballState}
                     />
 
                     <TeamPanel

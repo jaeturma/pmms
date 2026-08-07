@@ -14,8 +14,7 @@ import type { FormEvent } from 'react';
 import { WhistleIcon } from '@/components/icons/whistle-icon';
 import {
     CorrectionDialog,
-    formatClock,
-    useTicks,
+    CountdownClock,
 } from '@/components/live-score-display';
 import type { BasketballState, LiveSession, RosterPlayer } from '@/components/live-score-display';
 import { Button } from '@/components/ui/button';
@@ -64,30 +63,16 @@ type RosterData = {
     eligibleAthletes: { a: EligibleAthlete[]; b: EligibleAthlete[] };
 };
 
-/** The game/shot clock — a manual, operator-set value plus a timestamp
- * (`sport_state.game_clock_updated_at`), counting DOWN locally between
- * writes the same anchor+ticker way `RunningClock` (live-score-display.tsx)
- * counts UP — remounted (via `key`) on every fresh value so it never
- * drifts more than one poll/Echo interval out of sync. */
-function TickingCountdown({
-    anchorKey,
-    baseSeconds,
-    running,
-}: {
-    anchorKey: string;
-    baseSeconds: number;
-    running: boolean;
-}) {
-    const ticks = useTicks(running);
-
-    return <span key={anchorKey}>{formatClock(baseSeconds - ticks)}</span>;
-}
-
 function SettingsDialog({
     state,
+    disabled,
     onSave,
 }: {
     state: BasketballState;
+    /** Disabled while the clock is running (owner instruction) — settings
+     * only change during a stoppage, the same reasoning as the
+     * substitution modal below. */
+    disabled: boolean;
     onSave: (data: {
         minutes_per_period: number;
         shot_clock_duration: number;
@@ -117,7 +102,16 @@ function SettingsDialog({
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline" className="h-11 text-base">
+                <Button
+                    variant="outline"
+                    className="h-12 text-base"
+                    disabled={disabled}
+                    title={
+                        disabled
+                            ? 'Pause the game to change settings'
+                            : undefined
+                    }
+                >
                     <Settings2 aria-hidden="true" />
                     Settings
                 </Button>
@@ -288,23 +282,24 @@ function TeamModal({
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline" className="h-11 flex-1 text-base">
+                <Button
+                    variant="outline"
+                    className="h-12 flex-1 border-indigo-600 bg-indigo-600 text-base text-white hover:bg-indigo-700"
+                    disabled={!isPaused}
+                    title={
+                        !isPaused
+                            ? 'Pause the game to substitute players'
+                            : undefined
+                    }
+                >
                     <Users aria-hidden="true" />
-                    {label} lineup
+                    Substitute
                 </Button>
             </DialogTrigger>
             <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
                 <DialogHeader>
                     <DialogTitle>{label}</DialogTitle>
                 </DialogHeader>
-
-                {!isPaused && (
-                    <p className="rounded-md bg-warning/10 px-3 py-2 text-sm text-muted-foreground">
-                        Pause the game (Whistle) to substitute players.
-                        Adding a new player to the roster doesn't require a
-                        pause.
-                    </p>
-                )}
 
                 {open && data === null ? (
                     <p className="py-6 text-center text-sm text-muted-foreground">
@@ -518,8 +513,7 @@ function OnCourtRow({
                 {[1, 2, 3].map((points) => (
                     <Button
                         key={points}
-                        variant="outline"
-                        className="h-11 min-w-11 text-base font-semibold"
+                        className="h-12 min-w-12 border-emerald-700 bg-emerald-600 text-lg font-bold text-white hover:bg-emerald-700"
                         aria-label={`Add ${points} point${points > 1 ? 's' : ''}, ${player.name}`}
                         onClick={() => onScore(points)}
                     >
@@ -527,8 +521,8 @@ function OnCourtRow({
                     </Button>
                 ))}
                 <Button
-                    variant="outline"
-                    className="h-11 text-base"
+                    variant="destructive"
+                    className="h-12 text-base font-semibold"
                     aria-label={`Foul, ${player.name}`}
                     onClick={onFoul}
                 >
@@ -633,8 +627,8 @@ function SidePanel({
                     onRemovePlayer={onRemovePlayer}
                 />
                 <Button
-                    variant="ghost"
-                    className="h-11 text-base"
+                    variant="outline"
+                    className="h-12 text-base"
                     onClick={onResetFouls}
                 >
                     Reset fouls
@@ -813,11 +807,14 @@ export function BasketballGameControl({
     return (
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 print:hidden">
             <div className="flex flex-wrap items-center justify-center gap-2 rounded-xl border bg-muted/20 p-2">
-                <SettingsDialog state={state} onSave={saveSettings} />
+                <SettingsDialog
+                    state={state}
+                    disabled={running}
+                    onSave={saveSettings}
+                />
 
                 <Button
-                    variant="outline"
-                    className="h-11 text-base"
+                    className="h-12 border-amber-600 bg-amber-500 text-base font-semibold text-white hover:bg-amber-600"
                     onClick={pauseResume}
                     aria-label={isPaused ? 'Resume clock' : 'Pause clock'}
                 >
@@ -826,8 +823,7 @@ export function BasketballGameControl({
                 </Button>
 
                 <Button
-                    variant="outline"
-                    className="h-11 text-base"
+                    className="h-12 border-orange-700 bg-orange-600 text-base font-semibold text-white hover:bg-orange-700"
                     onClick={soundHorn}
                     aria-label="Sound horn"
                 >
@@ -836,8 +832,7 @@ export function BasketballGameControl({
                 </Button>
 
                 <Button
-                    variant="outline"
-                    className="h-11 text-base"
+                    className="h-12 border-sky-700 bg-sky-600 text-base font-semibold text-white hover:bg-sky-700"
                     onClick={cyclePossession}
                     aria-label="Toggle possession arrow"
                 >
@@ -851,13 +846,13 @@ export function BasketballGameControl({
                     {state.possession === null && ': none'}
                 </Button>
 
-                <div className="flex h-11 items-center gap-1.5 rounded-md border bg-background px-3">
+                <div className="flex h-12 items-center gap-1.5 rounded-md border bg-background px-3">
                     <span className="text-sm text-muted-foreground">
                         Clock
                     </span>
                     <span className="font-mono text-lg font-semibold tabular-nums">
-                        <TickingCountdown
-                            anchorKey={state.game_clock_updated_at ?? 'initial'}
+                        <CountdownClock
+                            anchor={state.game_clock_updated_at}
                             baseSeconds={state.game_clock_seconds}
                             running={running}
                         />
@@ -880,13 +875,13 @@ export function BasketballGameControl({
                     </Button>
                 </div>
 
-                <div className="flex h-11 items-center gap-1.5 rounded-md border bg-background px-3">
+                <div className="flex h-12 items-center gap-1.5 rounded-md border bg-background px-3">
                     <span className="text-sm text-muted-foreground">
                         Shot
                     </span>
                     <span className="font-mono text-lg font-semibold tabular-nums">
-                        <TickingCountdown
-                            anchorKey={state.shot_clock_updated_at ?? 'initial'}
+                        <CountdownClock
+                            anchor={state.shot_clock_updated_at}
                             baseSeconds={state.shot_clock_seconds}
                             running={running}
                         />
