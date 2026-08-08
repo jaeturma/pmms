@@ -326,6 +326,32 @@ class ScoringSession extends Model
                 // running score here is games won.
                 $runningA = (int) ($payload['games_won_a'] ?? $runningA);
                 $runningB = (int) ($payload['games_won_b'] ?? $runningB);
+            } elseif ($event->type === ScoreEventType::RackComplete) {
+                // Billiard: the running score here is racks won, not
+                // points — same "assign the real total" reasoning as
+                // SetComplete/GameComplete above.
+                $runningA = (int) ($payload['racks_won_a'] ?? $runningA);
+                $runningB = (int) ($payload['racks_won_b'] ?? $runningB);
+            } elseif ($event->type === ScoreEventType::RackUndo) {
+                $runningA = (int) ($payload['racks_won_a'] ?? $runningA);
+                $runningB = (int) ($payload['racks_won_b'] ?? $runningB);
+            } elseif (in_array($event->type, [ScoreEventType::EndComplete, ScoreEventType::EndUndo], true)) {
+                // Bocce: the payload already carries the real post-event
+                // totals for both sides (an end always resolves to only
+                // one side scoring, but recording both keeps this branch
+                // symmetric with every other "assign, don't add" case
+                // above), so this assigns rather than adds.
+                $runningA = (int) ($payload['score_a'] ?? $runningA);
+                $runningB = (int) ($payload['score_b'] ?? $runningB);
+            } elseif ($event->type === ScoreEventType::TennisUndo) {
+                // Re-asserts the real post-undo sets-won total (the
+                // ScoringSessionController::tennisUndo() payload always
+                // carries it) — safe to apply unconditionally, whether or
+                // not the undone point had also completed a set, since
+                // this is the same "assign, don't add" pattern as
+                // SetComplete/GameComplete above.
+                $runningA = (int) ($payload['sets_won_a'] ?? $runningA);
+                $runningB = (int) ($payload['sets_won_b'] ?? $runningB);
             }
 
             $rows[] = [
@@ -338,6 +364,30 @@ class ScoringSession extends Model
         }
 
         return array_slice(array_reverse($rows), 0, $limit);
+    }
+
+    /**
+     * Formats a tennis game's raw point counters as the real Love/15/30/
+     * 40/Deuce/Ad display — the raw counters (see
+     * `ScoringSessionController::applyTennisPoint()`) only ever exceed 3
+     * while both sides are tied at 3+ (deuce territory), so this only
+     * needs to special-case that range.
+     */
+    private function formatTennisPoints(int $a, int $b): string
+    {
+        if ($a >= 3 && $b >= 3) {
+            if ($a === $b) {
+                return 'Deuce';
+            }
+
+            return $a > $b
+                ? "Ad {$this->side_a_label}"
+                : "Ad {$this->side_b_label}";
+        }
+
+        $labels = ['Love', '15', '30', '40'];
+
+        return sprintf('%s-%s', $labels[min($a, 3)], $labels[min($b, 3)]);
     }
 
     private function describeEvent(ScoreEvent $event): string
@@ -448,6 +498,12 @@ class ScoringSession extends Model
                     ucfirst((string) ($payload['type'] ?? 'unknown')),
                     $sideLabel($payload['side'] ?? null) ?? 'Unknown',
                 ),
+            ScoreEventType::PenaltyThrow => ($payload['action'] ?? null) === 'reset'
+                ? 'Penalty throws reset'
+                : sprintf(
+                    'Penalty throw — %s',
+                    $sideLabel($payload['side'] ?? null) ?? 'Unknown',
+                ),
             ScoreEventType::GamePoint => sprintf(
                 '%s%s%d — %s (Game %s: %d-%d)',
                 ($payload['is_correction'] ?? false) ? 'Correction: ' : '',
@@ -484,6 +540,36 @@ class ScoringSession extends Model
             ScoreEventType::Fall => ($payload['action'] ?? null) === 'clear'
                 ? 'Fall cleared'
                 : sprintf('Fall — %s', $sideLabel($payload['side'] ?? null) ?? 'Unknown'),
+            ScoreEventType::TennisPoint => sprintf(
+                '+1 — %s (Games %d-%d, %s)',
+                $sideLabel($payload['side'] ?? null) ?? 'Unknown',
+                (int) ($payload['current_set_games_a'] ?? 0),
+                (int) ($payload['current_set_games_b'] ?? 0),
+                ($payload['is_tiebreak'] ?? false)
+                    ? 'Tiebreak'
+                    : $this->formatTennisPoints(
+                        (int) ($payload['current_game_points_a'] ?? 0),
+                        (int) ($payload['current_game_points_b'] ?? 0),
+                    ),
+            ),
+            ScoreEventType::TennisUndo => 'Last point undone',
+            ScoreEventType::RackComplete => sprintf(
+                'Rack %s: %s wins (leads %d-%d)',
+                (string) ($payload['rack'] ?? '?'),
+                $sideLabel($payload['winner'] ?? null) ?? 'Unknown',
+                (int) ($payload['racks_won_a'] ?? 0),
+                (int) ($payload['racks_won_b'] ?? 0),
+            ),
+            ScoreEventType::RackUndo => 'Last rack undone',
+            ScoreEventType::EndComplete => sprintf(
+                'End %s: %s +%d (score %d-%d)',
+                (string) ($payload['end'] ?? '?'),
+                $sideLabel($payload['winner'] ?? null) ?? 'Unknown',
+                (int) ($payload['points'] ?? 0),
+                (int) ($payload['score_a'] ?? 0),
+                (int) ($payload['score_b'] ?? 0),
+            ),
+            ScoreEventType::EndUndo => 'Last end undone',
             default => $event->type->label(),
         };
     }

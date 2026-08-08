@@ -478,6 +478,26 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('scoring-sessions/{session}/wrestling-point', [ScoringSessionController::class, 'wrestlingPoint'])->name('scoring.wrestling-point');
         Route::patch('scoring-sessions/{session}/period-clock', [ScoringSessionController::class, 'periodClock'])->name('scoring.period-clock');
         Route::patch('scoring-sessions/{session}/fall', [ScoringSessionController::class, 'fall'])->name('scoring.fall');
+
+        // Tennis-only: real Love/15/30/40/deuce/advantage point scoring
+        // (games within a set, sets within a match) and a single-level
+        // undo for the last point.
+        Route::patch('scoring-sessions/{session}/tennis-point', [ScoringSessionController::class, 'tennisPoint'])->name('scoring.tennis-point');
+        Route::patch('scoring-sessions/{session}/tennis-undo', [ScoringSessionController::class, 'tennisUndo'])->name('scoring.tennis-undo');
+
+        // Goal ball only: penalty throw tally (the resulting goal, if
+        // scored, is still recorded via the ordinary score() endpoint).
+        Route::patch('scoring-sessions/{session}/penalty-throw', [ScoringSessionController::class, 'penaltyThrow'])->name('scoring.penalty-throw');
+
+        // Billiard only: declare the winner of the rack just played, and
+        // undo that declaration if it was a mistake.
+        Route::patch('scoring-sessions/{session}/billiard-rack', [ScoringSessionController::class, 'billiardRack'])->name('scoring.billiard-rack');
+        Route::patch('scoring-sessions/{session}/billiard-undo-rack', [ScoringSessionController::class, 'billiardUndoRack'])->name('scoring.billiard-undo-rack');
+
+        // Bocce only: award a completed end's points to one side, and
+        // undo that award if it was a mistake.
+        Route::patch('scoring-sessions/{session}/bocce-end', [ScoringSessionController::class, 'bocceEnd'])->name('scoring.bocce-end');
+        Route::patch('scoring-sessions/{session}/bocce-undo-end', [ScoringSessionController::class, 'bocceUndoEnd'])->name('scoring.bocce-undo-end');
     });
 
     // A Technical Official may encode a result directly for their own

@@ -148,6 +148,57 @@ export type WrestlingState = {
     fall_declared_at: string | null;
 };
 
+export type TennisSet = {
+    set: number;
+    score_a: number;
+    score_b: number;
+};
+
+export type TennisState = {
+    sets: TennisSet[];
+    sets_won_a: number;
+    sets_won_b: number;
+    current_set_games_a: number;
+    current_set_games_b: number;
+    current_game_points_a: number;
+    current_game_points_b: number;
+    is_tiebreak: boolean;
+    tiebreak_points_a: number;
+    tiebreak_points_b: number;
+    sets_to_win: number;
+    possession: 'a' | 'b' | null;
+};
+
+export type GoalBallState = {
+    penalty_throws_a: number;
+    penalty_throws_b: number;
+    minutes_per_half: number;
+};
+
+export type BilliardRack = {
+    rack: number;
+    winner: 'a' | 'b';
+};
+
+export type BilliardState = {
+    racks: BilliardRack[];
+    racks_won_a: number;
+    racks_won_b: number;
+    racks_to_win: number;
+};
+
+export type BocceEnd = {
+    end: number;
+    winner: 'a' | 'b';
+    points: number;
+};
+
+export type BocceState = {
+    ends: BocceEnd[];
+    ends_played: number;
+    target_score: number;
+};
+
 export type RosterPlayer = {
     id: number;
     name: string;
@@ -176,7 +227,11 @@ export type LiveSession = {
         | 'football_futsal'
         | 'racket_games'
         | 'combat_rounds'
-        | 'wrestling';
+        | 'wrestling'
+        | 'tennis'
+        | 'goal_ball'
+        | 'billiard'
+        | 'bocce';
     sport_state:
         | BasketballState
         | BoxingState
@@ -185,6 +240,10 @@ export type LiveSession = {
         | FootballState
         | RacketGamesState
         | WrestlingState
+        | TennisState
+        | GoalBallState
+        | BilliardState
+        | BocceState
         | null;
     /** Basketball only: the (at most 5-per-side) players currently on
      * court — deliberately not the whole roster, kept small since this is
@@ -235,7 +294,7 @@ export function isSoftballState(
 export function isRallySetsState(
     state: LiveSession['sport_state'],
 ): state is RallySetsState {
-    return state !== null && 'sets_won_a' in state;
+    return state !== null && 'set_target_points' in state;
 }
 
 export function isFootballState(
@@ -254,6 +313,58 @@ export function isWrestlingState(
     state: LiveSession['sport_state'],
 ): state is WrestlingState {
     return state !== null && 'total_periods' in state;
+}
+
+export function isTennisState(
+    state: LiveSession['sport_state'],
+): state is TennisState {
+    return state !== null && 'is_tiebreak' in state;
+}
+
+export function isGoalBallState(
+    state: LiveSession['sport_state'],
+): state is GoalBallState {
+    return state !== null && 'penalty_throws_a' in state;
+}
+
+export function isBilliardState(
+    state: LiveSession['sport_state'],
+): state is BilliardState {
+    return state !== null && 'racks_to_win' in state;
+}
+
+export function isBocceState(
+    state: LiveSession['sport_state'],
+): state is BocceState {
+    return state !== null && 'target_score' in state;
+}
+
+/**
+ * Formats a tennis game's raw point counters as the real Love/15/30/40/
+ * Deuce/Ad display — mirrors `ScoringSession::formatTennisPoints()` on
+ * the backend (used for the play-by-play description) exactly, so the
+ * live scoreboard and the play-by-play feed never show different labels
+ * for the same state. The raw counters only ever exceed 3 while both
+ * sides are tied at 3+ (deuce territory) — see
+ * `ScoringSessionController::applyTennisPoint()`.
+ */
+export function formatTennisPoints(
+    a: number,
+    b: number,
+    labelA: string,
+    labelB: string,
+): string {
+    if (a >= 3 && b >= 3) {
+        if (a === b) {
+            return 'Deuce';
+        }
+
+        return a > b ? `Ad ${labelA}` : `Ad ${labelB}`;
+    }
+
+    const labels = ['Love', '15', '30', '40'];
+
+    return `${labels[Math.min(a, 3)]}-${labels[Math.min(b, 3)]}`;
 }
 
 /**
@@ -880,6 +991,146 @@ function RacketGamesHistoryTable({
 }
 
 /**
+ * Tennis's completed-set history — same "real, append-only history"
+ * treatment as `RallySetsHistoryTable`/`RacketGamesHistoryTable`, with
+ * this sport's own "set" terminology (games won within that set, not
+ * points — a completed tennis set is always recorded as its final game
+ * count, e.g. 6-4 or 7-6).
+ */
+function TennisSetsHistoryTable({
+    session,
+    state,
+}: {
+    session: LiveSession;
+    state: TennisState;
+}) {
+    return (
+        <div className="w-full overflow-x-auto">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead className="w-16">Set</TableHead>
+                        <TableHead className="text-center">
+                            {session.side_a_label}
+                        </TableHead>
+                        <TableHead className="text-center">
+                            {session.side_b_label}
+                        </TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {state.sets.map((set) => (
+                        <TableRow key={set.set}>
+                            <TableCell className="font-medium">
+                                Set {set.set}
+                            </TableCell>
+                            <TableCell className="text-center font-semibold tabular-nums">
+                                {set.score_a}
+                            </TableCell>
+                            <TableCell className="text-center font-semibold tabular-nums">
+                                {set.score_b}
+                            </TableCell>
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </Table>
+        </div>
+    );
+}
+
+/**
+ * Billiard's completed-rack history — one row per rack played, just the
+ * declared winner (this app doesn't model individual balls/shots, so
+ * there's no per-rack score to show, unlike every other history table
+ * in this file).
+ */
+function BilliardRackHistoryTable({
+    session,
+    state,
+}: {
+    session: LiveSession;
+    state: BilliardState;
+}) {
+    return (
+        <div className="w-full overflow-x-auto">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead className="w-16">Rack</TableHead>
+                        <TableHead>Winner</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {state.racks
+                        .slice()
+                        .reverse()
+                        .map((rack) => (
+                            <TableRow key={rack.rack}>
+                                <TableCell className="font-medium">
+                                    Rack {rack.rack}
+                                </TableCell>
+                                <TableCell>
+                                    {rack.winner === 'a'
+                                        ? session.side_a_label
+                                        : session.side_b_label}
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                </TableBody>
+            </Table>
+        </div>
+    );
+}
+
+/**
+ * Bocce's completed-end history — one row per end, the side that won it
+ * and how many points that was worth (a real end always awards points to
+ * exactly one side, the other scores 0 — see
+ * `ScoringSessionController::bocceEnd()`).
+ */
+function BocceEndHistoryTable({
+    session,
+    state,
+}: {
+    session: LiveSession;
+    state: BocceState;
+}) {
+    return (
+        <div className="w-full overflow-x-auto">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead className="w-16">End</TableHead>
+                        <TableHead>Winner</TableHead>
+                        <TableHead className="text-center">Points</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {state.ends
+                        .slice()
+                        .reverse()
+                        .map((end) => (
+                            <TableRow key={end.end}>
+                                <TableCell className="font-medium">
+                                    End {end.end}
+                                </TableCell>
+                                <TableCell>
+                                    {end.winner === 'a'
+                                        ? session.side_a_label
+                                        : session.side_b_label}
+                                </TableCell>
+                                <TableCell className="text-center font-semibold tabular-nums">
+                                    {end.points}
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                </TableBody>
+            </Table>
+        </div>
+    );
+}
+
+/**
  * A manual score correction (delta + required reason) for one side —
  * shared by the operator console's generic controls and
  * `BasketballGameControl`'s team-level correction, so the two never drift.
@@ -1077,6 +1328,18 @@ export function LiveScoreDisplay({
     const wrestlingState = isWrestlingState(session.sport_state)
         ? session.sport_state
         : null;
+    const tennisState = isTennisState(session.sport_state)
+        ? session.sport_state
+        : null;
+    const goalBallState = isGoalBallState(session.sport_state)
+        ? session.sport_state
+        : null;
+    const billiardState = isBilliardState(session.sport_state)
+        ? session.sport_state
+        : null;
+    const bocceState = isBocceState(session.sport_state)
+        ? session.sport_state
+        : null;
     const cornerA: Corner = boxingState ? 'red' : null;
     const cornerB: Corner = boxingState ? 'blue' : null;
     const countdown: Countdown | null = basketballState
@@ -1204,6 +1467,16 @@ export function LiveScoreDisplay({
                                 {racketGamesState.current_game_score_a}
                             </span>
                         )}
+                        {tennisState && (
+                            <span className="text-xs text-muted-foreground">
+                                Games: {tennisState.current_set_games_a}
+                            </span>
+                        )}
+                        {goalBallState && goalBallState.penalty_throws_a > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                                Penalty throws: {goalBallState.penalty_throws_a}
+                            </span>
+                        )}
                     </TeamPanel>
 
                     <CenterPanel
@@ -1255,6 +1528,16 @@ export function LiveScoreDisplay({
                             <span className="text-xs text-muted-foreground">
                                 Game score:{' '}
                                 {racketGamesState.current_game_score_b}
+                            </span>
+                        )}
+                        {tennisState && (
+                            <span className="text-xs text-muted-foreground">
+                                Games: {tennisState.current_set_games_b}
+                            </span>
+                        )}
+                        {goalBallState && goalBallState.penalty_throws_b > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                                Penalty throws: {goalBallState.penalty_throws_b}
                             </span>
                         )}
                     </TeamPanel>
@@ -1379,6 +1662,83 @@ export function LiveScoreDisplay({
                             <RacketGamesHistoryTable
                                 session={session}
                                 state={racketGamesState}
+                            />
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {tennisState && (
+                <div className="flex w-full flex-col items-center gap-3">
+                    <p className="text-center text-sm font-medium text-muted-foreground">
+                        Set {tennisState.sets.length + 1} — Games{' '}
+                        {tennisState.current_set_games_a}–
+                        {tennisState.current_set_games_b}
+                        {tennisState.is_tiebreak ? (
+                            <>
+                                {' · Tiebreak '}
+                                {tennisState.tiebreak_points_a}–
+                                {tennisState.tiebreak_points_b}
+                            </>
+                        ) : (
+                            <>
+                                {' · '}
+                                {formatTennisPoints(
+                                    tennisState.current_game_points_a,
+                                    tennisState.current_game_points_b,
+                                    session.side_a_label,
+                                    session.side_b_label,
+                                )}
+                            </>
+                        )}
+                        {tennisState.possession && (
+                            <>
+                                {' · Serving: '}
+                                {tennisState.possession === 'a'
+                                    ? session.side_a_label
+                                    : session.side_b_label}
+                            </>
+                        )}
+                    </p>
+                    {tennisState.sets.length > 0 && (
+                        <div className="overflow-hidden rounded-xl border">
+                            <TennisSetsHistoryTable
+                                session={session}
+                                state={tennisState}
+                            />
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {billiardState && (
+                <div className="flex w-full flex-col items-center gap-3">
+                    <p className="text-center text-sm font-medium text-muted-foreground">
+                        Race to {billiardState.racks_to_win} racks — Rack{' '}
+                        {billiardState.racks.length + 1} in progress
+                    </p>
+                    {billiardState.racks.length > 0 && (
+                        <div className="mx-auto w-full max-w-md overflow-hidden rounded-xl border">
+                            <BilliardRackHistoryTable
+                                session={session}
+                                state={billiardState}
+                            />
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {bocceState && (
+                <div className="flex w-full flex-col items-center gap-3">
+                    <p className="text-center text-sm font-medium text-muted-foreground">
+                        First to {bocceState.target_score} points — End{' '}
+                        {bocceState.ends_played + 1} in progress
+                    </p>
+                    {bocceState.ends.length > 0 && (
+                        <div className="mx-auto w-full max-w-md overflow-hidden rounded-xl border">
+                            <BocceEndHistoryTable
+                                session={session}
+                                state={bocceState}
                             />
                         </div>
                     )}

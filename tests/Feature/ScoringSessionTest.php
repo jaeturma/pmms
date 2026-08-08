@@ -207,6 +207,102 @@ function wrestlingInitialState(): array
     ];
 }
 
+/**
+ * A scheduled match whose sport resolves to the tennis scoreboard.
+ */
+function tennisMatch(): EventMatch
+{
+    $sport = Sport::factory()->create(['name' => 'Tennis']);
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+
+    return EventMatch::factory()->create(['event_id' => $event->id, 'status' => MatchStatus::Scheduled]);
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function tennisInitialState(): array
+{
+    return [
+        'sets' => [],
+        'sets_won_a' => 0, 'sets_won_b' => 0,
+        'current_set_games_a' => 0, 'current_set_games_b' => 0,
+        'current_game_points_a' => 0, 'current_game_points_b' => 0,
+        'is_tiebreak' => false,
+        'tiebreak_points_a' => 0, 'tiebreak_points_b' => 0,
+        'sets_to_win' => 2,
+        'possession' => null,
+    ];
+}
+
+/**
+ * A scheduled match whose sport resolves to the goal ball scoreboard.
+ */
+function goalBallMatch(): EventMatch
+{
+    $sport = Sport::factory()->create(['name' => 'Goal Ball']);
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+
+    return EventMatch::factory()->create(['event_id' => $event->id, 'status' => MatchStatus::Scheduled]);
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function goalBallInitialState(): array
+{
+    return [
+        'penalty_throws_a' => 0, 'penalty_throws_b' => 0,
+        'minutes_per_half' => 6,
+    ];
+}
+
+/**
+ * A scheduled match whose sport resolves to the billiard scoreboard.
+ */
+function billiardMatch(): EventMatch
+{
+    $sport = Sport::factory()->create(['name' => 'Billiard']);
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+
+    return EventMatch::factory()->create(['event_id' => $event->id, 'status' => MatchStatus::Scheduled]);
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function billiardInitialState(): array
+{
+    return [
+        'racks' => [],
+        'racks_won_a' => 0, 'racks_won_b' => 0,
+        'racks_to_win' => 5,
+    ];
+}
+
+/**
+ * A scheduled match whose sport resolves to the bocce scoreboard.
+ */
+function bocceMatch(): EventMatch
+{
+    $sport = Sport::factory()->create(['name' => 'Bocce']);
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+
+    return EventMatch::factory()->create(['event_id' => $event->id, 'status' => MatchStatus::Scheduled]);
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function bocceInitialState(): array
+{
+    return [
+        'ends' => [],
+        'ends_played' => 0,
+        'target_score' => 12,
+    ];
+}
+
 test('guests are redirected from the scoring session endpoint', function () {
     $match = EventMatch::factory()->create();
 
@@ -2282,7 +2378,7 @@ test('starting a session for taekwondo, wushu, or pencak silat resolves the comb
         'board_type' => 'combat_rounds',
         'sport_state' => boxingInitialSportState(),
     ]);
-})->with(['Taekwondo', 'Wushu', 'Pencak Silat']);
+})->with(['Taekwondo', 'Wushu', 'Pencak Silat', 'Arnis']);
 
 test('round(), roundClock(), and bell() all work for a combat-rounds session, previously boxing-only', function () {
     $match = combatRoundsMatch();
@@ -2636,6 +2732,897 @@ test('a wrestling match session can be forced to the generic board at start', fu
     $this->actingAs($admin)
         ->post("/matches/{$match->id}/scoring-sessions", [
             'side_a_label' => 'Red', 'side_b_label' => 'Blue', 'board_type' => 'generic',
+        ])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    expect($session->toLivePayload())->toMatchArray(['board_type' => 'generic', 'sport_state' => null]);
+});
+
+// Live tennis scoreboard control (real Love/15/30/40/deuce/advantage
+// scoring, 6-game sets with a tiebreak at 6-6, best-of-N sets)
+
+test('starting a session for a tennis match initializes the real scoring-state defaults and the board type', function () {
+    $match = tennisMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Red', 'side_b_label' => 'Blue'])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    expect($session->toLivePayload())->toMatchArray([
+        'board_type' => 'tennis',
+        'sport_state' => tennisInitialState(),
+    ]);
+});
+
+test('winning 4 points to love wins the game with no deuce needed', function () {
+    $match = tennisMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => [...tennisInitialState(), 'current_game_points_a' => 3],
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/tennis-point", ['side' => 'a'])
+        ->assertSessionHasNoErrors();
+
+    $fresh = $session->fresh();
+
+    expect($fresh->sport_state)->toMatchArray([
+        'current_set_games_a' => 1, 'current_set_games_b' => 0,
+        'current_game_points_a' => 0, 'current_game_points_b' => 0,
+    ]);
+});
+
+test('a game at deuce requires a real 2-point lead to win, not just reaching 4', function () {
+    $match = tennisMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => [...tennisInitialState(), 'current_game_points_a' => 3, 'current_game_points_b' => 3],
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    // Advantage A (4-3) — not yet a win.
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/tennis-point", ['side' => 'a']);
+    expect($session->fresh()->sport_state)->toMatchArray([
+        'current_game_points_a' => 4, 'current_game_points_b' => 3, 'current_set_games_a' => 0,
+    ]);
+
+    // Back to deuce (4-4).
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/tennis-point", ['side' => 'b']);
+    expect($session->fresh()->sport_state)->toMatchArray(['current_game_points_a' => 4, 'current_game_points_b' => 4]);
+
+    // Advantage A again (5-4).
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/tennis-point", ['side' => 'a']);
+    expect($session->fresh()->sport_state)->toMatchArray(['current_set_games_a' => 0]);
+
+    // A wins the game (6-4, a real 2-point lead).
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/tennis-point", ['side' => 'a']);
+    expect($session->fresh()->sport_state)->toMatchArray([
+        'current_set_games_a' => 1, 'current_game_points_a' => 0, 'current_game_points_b' => 0,
+    ]);
+});
+
+test('winning the 12th game to tie 6-6 triggers a tiebreak instead of ending the set', function () {
+    $match = tennisMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => [
+            ...tennisInitialState(),
+            'current_set_games_a' => 5, 'current_set_games_b' => 6,
+            'current_game_points_a' => 3, 'current_game_points_b' => 0,
+        ],
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/tennis-point", ['side' => 'a'])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toMatchArray([
+        'current_set_games_a' => 6, 'current_set_games_b' => 6,
+        'is_tiebreak' => true, 'tiebreak_points_a' => 0, 'tiebreak_points_b' => 0,
+    ]);
+});
+
+test('winning the tiebreak completes the set 7-6 and increments sets won', function () {
+    $match = tennisMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => [
+            ...tennisInitialState(),
+            'current_set_games_a' => 6, 'current_set_games_b' => 6,
+            'is_tiebreak' => true, 'tiebreak_points_a' => 6, 'tiebreak_points_b' => 5,
+        ],
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/tennis-point", ['side' => 'a'])
+        ->assertSessionHasNoErrors();
+
+    $fresh = $session->fresh();
+
+    expect($fresh->sport_state)->toMatchArray([
+        'sets' => [['set' => 1, 'score_a' => 7, 'score_b' => 6]],
+        'sets_won_a' => 1, 'sets_won_b' => 0,
+        'current_set_games_a' => 0, 'current_set_games_b' => 0,
+        'is_tiebreak' => false, 'tiebreak_points_a' => 0, 'tiebreak_points_b' => 0,
+    ])
+        ->and($fresh->score_a)->toBe(1)
+        ->and(AuditLog::query()->where('action', 'scoring.set_completed')->count())->toBe(1);
+});
+
+test('winning 6 games with a 2-game lead completes the set outright, no tiebreak', function () {
+    $match = tennisMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => [
+            ...tennisInitialState(),
+            'current_set_games_a' => 5, 'current_set_games_b' => 4,
+            'current_game_points_a' => 3, 'current_game_points_b' => 0,
+        ],
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/tennis-point", ['side' => 'a'])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toMatchArray([
+        'sets' => [['set' => 1, 'score_a' => 6, 'score_b' => 4]],
+        'sets_won_a' => 1,
+        'is_tiebreak' => false,
+    ]);
+});
+
+test('7-5 also completes the set, a real 2-game lead past 6 games', function () {
+    $match = tennisMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => [
+            ...tennisInitialState(),
+            'current_set_games_a' => 6, 'current_set_games_b' => 5,
+            'current_game_points_a' => 3, 'current_game_points_b' => 0,
+        ],
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/tennis-point", ['side' => 'a'])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toMatchArray([
+        'sets' => [['set' => 1, 'score_a' => 7, 'score_b' => 5]],
+        'sets_won_a' => 1,
+    ]);
+});
+
+test('undo reverses the most recent point', function () {
+    $match = tennisMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => tennisInitialState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/tennis-point", ['side' => 'a']);
+    expect($session->fresh()->sport_state['current_game_points_a'])->toBe(1);
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/tennis-undo", [])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toMatchArray(['current_game_points_a' => 0, 'current_game_points_b' => 0]);
+});
+
+test('undo reverses a point that had just completed a set, restoring sets won and the score column', function () {
+    $match = tennisMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => [
+            ...tennisInitialState(),
+            'current_set_games_a' => 5, 'current_set_games_b' => 4,
+            'current_game_points_a' => 3, 'current_game_points_b' => 0,
+        ],
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/tennis-point", ['side' => 'a']);
+    expect($session->fresh()->sport_state['sets_won_a'])->toBe(1)
+        ->and($session->fresh()->score_a)->toBe(1);
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/tennis-undo", [])
+        ->assertSessionHasNoErrors();
+
+    $fresh = $session->fresh();
+
+    expect($fresh->sport_state)->toMatchArray([
+        'sets' => [], 'sets_won_a' => 0, 'sets_won_b' => 0,
+        'current_set_games_a' => 5, 'current_set_games_b' => 4,
+        'current_game_points_a' => 3, 'current_game_points_b' => 0,
+    ])
+        ->and($fresh->score_a)->toBe(0)
+        ->and($fresh->toLivePayload()['playByPlay'][0]['score_a'])->toBe(0);
+});
+
+test('undo is a harmless no-op when there is nothing to undo', function () {
+    $match = tennisMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => tennisInitialState(),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/tennis-undo", [])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toBe(tennisInitialState());
+});
+
+test('the tennis-point and tennis-undo endpoints are rejected for a non-tennis scoring session', function () {
+    $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
+    $session = ScoringSession::factory()->create(['match_id' => $match->id]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/tennis-point", ['side' => 'a'])
+        ->assertStatus(422);
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/tennis-undo", [])
+        ->assertStatus(422);
+});
+
+test('non-managers cannot record or undo a tennis point', function (User $user) {
+    $match = tennisMatch();
+    $session = ScoringSession::factory()->create(['match_id' => $match->id, 'sport_state' => tennisInitialState()]);
+
+    $this->actingAs($user)
+        ->patch("/scoring-sessions/{$session->id}/tennis-point", ['side' => 'a'])
+        ->assertForbidden();
+
+    $this->actingAs($user)
+        ->patch("/scoring-sessions/{$session->id}/tennis-undo", [])
+        ->assertForbidden();
+})->with([
+    'viewer' => fn () => User::factory()->create(),
+    'organizer' => fn () => User::factory()->organizer()->create(),
+    'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+]);
+
+test('a tennis point cannot be recorded once the session has ended', function () {
+    $match = tennisMatch();
+    $session = ScoringSession::factory()->ended()->create(['match_id' => $match->id, 'sport_state' => tennisInitialState()]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/tennis-point", ['side' => 'a'])
+        ->assertSessionHasErrors('status');
+});
+
+test('a manager can update the sets-to-win setting, only 2 or 3 accepted', function () {
+    $match = tennisMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => tennisInitialState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/settings", ['sets_to_win' => 3])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toMatchArray(['sets_to_win' => 3]);
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/settings", ['sets_to_win' => 4])
+        ->assertSessionHasErrors('sets_to_win');
+});
+
+test('a manager can set and clear the serve indicator for a tennis match, reusing the possession endpoint', function () {
+    $match = tennisMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => tennisInitialState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/possession", ['side' => 'a']);
+    expect($session->fresh()->sport_state['possession'])->toBe('a');
+});
+
+test('the play-by-play feed describes deuce, advantage, and an undo in real tennis terms', function () {
+    $match = tennisMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'side_a_label' => 'Red',
+        'side_b_label' => 'Blue',
+        'sport_state' => [...tennisInitialState(), 'current_game_points_a' => 3, 'current_game_points_b' => 3],
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/tennis-point", ['side' => 'a']);
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/tennis-undo", []);
+
+    $plays = $session->refresh()->toLivePayload()['playByPlay'];
+
+    expect($plays)->toHaveCount(2)
+        ->and($plays[0]['description'])->toBe('Last point undone')
+        ->and($plays[1]['description'])->toBe('+1 — Red (Games 0-0, Ad Red)');
+});
+
+test('a tennis match session can be forced to the generic board at start', function () {
+    $match = tennisMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", [
+            'side_a_label' => 'Red', 'side_b_label' => 'Blue', 'board_type' => 'generic',
+        ])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    expect($session->toLivePayload())->toMatchArray(['board_type' => 'generic', 'sport_state' => null]);
+});
+
+// Live goal ball scoreboard control
+
+test('starting a session for a goal ball match initializes penalty-throw tallies and the board type', function () {
+    $match = goalBallMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Home', 'side_b_label' => 'Away'])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    expect($session->toLivePayload())->toMatchArray([
+        'board_type' => 'goal_ball',
+        'sport_state' => goalBallInitialState(),
+    ]);
+});
+
+test('a goal ball goal is recorded through the generic score endpoint, unchanged for this board', function () {
+    $match = goalBallMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => goalBallInitialState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/score", ['type' => 'point', 'side' => 'a', 'delta' => 1])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->score_a)->toBe(1);
+});
+
+test('a manager can issue a penalty throw and reset the tallies', function () {
+    $match = goalBallMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => goalBallInitialState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/penalty-throw", ['action' => 'add', 'side' => 'a'])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/penalty-throw", ['action' => 'add', 'side' => 'b'])
+        ->assertSessionHasNoErrors();
+
+    $fresh = $session->fresh();
+
+    expect($fresh->sport_state)->toMatchArray([
+        'penalty_throws_a' => 1, 'penalty_throws_b' => 1,
+    ])
+        ->and($fresh->playByPlay()[0]['description'])->toBe('Penalty throw — Side B')
+        ->and($fresh->playByPlay()[1]['description'])->toBe('Penalty throw — Side A')
+        ->and(AuditLog::query()->where('action', 'scoring.penalty_throw_issued')->count())->toBe(2);
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/penalty-throw", ['action' => 'reset'])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toMatchArray([
+        'penalty_throws_a' => 0, 'penalty_throws_b' => 0,
+    ]);
+});
+
+test('a penalty throw requires a side when adding', function () {
+    $match = goalBallMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => goalBallInitialState(),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/penalty-throw", ['action' => 'add'])
+        ->assertSessionHasErrors(['side']);
+});
+
+test('the penalty-throw endpoint is rejected for a non-goal-ball scoring session', function () {
+    $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
+    $session = ScoringSession::factory()->create(['match_id' => $match->id]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/penalty-throw", ['action' => 'add', 'side' => 'a'])
+        ->assertStatus(422);
+});
+
+test('non-managers cannot issue a penalty throw', function (User $user) {
+    $match = goalBallMatch();
+    $session = ScoringSession::factory()->create(['match_id' => $match->id, 'sport_state' => goalBallInitialState()]);
+
+    $this->actingAs($user)
+        ->patch("/scoring-sessions/{$session->id}/penalty-throw", ['action' => 'add', 'side' => 'a'])
+        ->assertForbidden();
+})->with([
+    'viewer' => fn () => User::factory()->create(),
+    'organizer' => fn () => User::factory()->organizer()->create(),
+    'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+]);
+
+test('a penalty throw cannot be recorded once the session has ended', function () {
+    $match = goalBallMatch();
+    $session = ScoringSession::factory()->ended()->create(['match_id' => $match->id, 'sport_state' => goalBallInitialState()]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/penalty-throw", ['action' => 'add', 'side' => 'a'])
+        ->assertSessionHasErrors('status');
+});
+
+test('a manager can update the minutes-per-half setting for goal ball', function () {
+    $match = goalBallMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => goalBallInitialState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/settings", ['minutes_per_half' => 8])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toMatchArray(['minutes_per_half' => 8]);
+});
+
+test('the half stepper reuses the generic period endpoint for goal ball', function () {
+    $match = goalBallMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => goalBallInitialState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/period", ['period_label' => '2nd Half'])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->period_label)->toBe('2nd Half');
+});
+
+test('the scoreboard page exposes board type and penalty-throw state for a goal ball match', function () {
+    $match = goalBallMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Home', 'side_b_label' => 'Away'])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)
+        ->get("/matches/{$match->id}/scoreboard")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('session.board_type', 'goal_ball')
+            ->where('session.sport_state.penalty_throws_a', 0));
+});
+
+test('a goal ball match session can be forced to the generic board at start', function () {
+    $match = goalBallMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", [
+            'side_a_label' => 'Home', 'side_b_label' => 'Away', 'board_type' => 'generic',
+        ])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    expect($session->toLivePayload())->toMatchArray(['board_type' => 'generic', 'sport_state' => null]);
+});
+
+// Live billiard scoreboard control
+
+test('starting a session for a billiard match initializes rack tracking and the board type', function () {
+    $match = billiardMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Home', 'side_b_label' => 'Away'])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    expect($session->toLivePayload())->toMatchArray([
+        'board_type' => 'billiard',
+        'sport_state' => billiardInitialState(),
+    ]);
+});
+
+test('a manager can award racks to either side, appending to history and tracking the running total', function () {
+    $match = billiardMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => billiardInitialState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/billiard-rack", ['side' => 'a'])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/billiard-rack", ['side' => 'a'])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/billiard-rack", ['side' => 'b'])
+        ->assertSessionHasNoErrors();
+
+    $fresh = $session->fresh();
+
+    expect($fresh->sport_state)->toMatchArray([
+        'racks' => [
+            ['rack' => 1, 'winner' => 'a'],
+            ['rack' => 2, 'winner' => 'a'],
+            ['rack' => 3, 'winner' => 'b'],
+        ],
+        'racks_won_a' => 2, 'racks_won_b' => 1,
+    ])
+        ->and($fresh->score_a)->toBe(2)
+        ->and($fresh->score_b)->toBe(1)
+        ->and($fresh->playByPlay()[0]['description'])->toBe('Rack 3: Side B wins (leads 2-1)')
+        ->and(AuditLog::query()->where('action', 'scoring.rack_completed')->count())->toBe(3);
+});
+
+test('a manager can undo the most recently awarded rack', function () {
+    $match = billiardMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => [
+            'racks' => [
+                ['rack' => 1, 'winner' => 'a'],
+                ['rack' => 2, 'winner' => 'b'],
+            ],
+            'racks_won_a' => 1, 'racks_won_b' => 1,
+            'racks_to_win' => 5,
+        ],
+        'score_a' => 1,
+        'score_b' => 1,
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/billiard-undo-rack")
+        ->assertSessionHasNoErrors();
+
+    $fresh = $session->fresh();
+
+    expect($fresh->sport_state)->toMatchArray([
+        'racks' => [['rack' => 1, 'winner' => 'a']],
+        'racks_won_a' => 1, 'racks_won_b' => 0,
+    ])
+        ->and($fresh->score_a)->toBe(1)
+        ->and($fresh->score_b)->toBe(0)
+        ->and($fresh->playByPlay()[0]['description'])->toBe('Last rack undone');
+});
+
+test('undoing a rack is a harmless no-op when no racks have been played', function () {
+    $match = billiardMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => billiardInitialState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/billiard-undo-rack")
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toMatchArray(billiardInitialState());
+});
+
+test('the billiard-rack endpoint requires a valid side', function () {
+    $match = billiardMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => billiardInitialState(),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/billiard-rack", [])
+        ->assertSessionHasErrors(['side']);
+});
+
+test('the billiard-rack and billiard-undo-rack endpoints are rejected for a non-billiard scoring session', function () {
+    $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
+    $session = ScoringSession::factory()->create(['match_id' => $match->id]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/billiard-rack", ['side' => 'a'])
+        ->assertStatus(422);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/billiard-undo-rack")
+        ->assertStatus(422);
+});
+
+test('non-managers cannot award or undo a billiard rack', function (User $user) {
+    $match = billiardMatch();
+    $session = ScoringSession::factory()->create(['match_id' => $match->id, 'sport_state' => billiardInitialState()]);
+
+    $this->actingAs($user)
+        ->patch("/scoring-sessions/{$session->id}/billiard-rack", ['side' => 'a'])
+        ->assertForbidden();
+
+    $this->actingAs($user)
+        ->patch("/scoring-sessions/{$session->id}/billiard-undo-rack")
+        ->assertForbidden();
+})->with([
+    'viewer' => fn () => User::factory()->create(),
+    'organizer' => fn () => User::factory()->organizer()->create(),
+    'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+]);
+
+test('a billiard rack cannot be recorded once the session has ended', function () {
+    $match = billiardMatch();
+    $session = ScoringSession::factory()->ended()->create(['match_id' => $match->id, 'sport_state' => billiardInitialState()]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/billiard-rack", ['side' => 'a'])
+        ->assertSessionHasErrors('status');
+});
+
+test('a manager can update the racks-to-win setting', function () {
+    $match = billiardMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => billiardInitialState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/settings", ['racks_to_win' => 7])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toMatchArray(['racks_to_win' => 7]);
+});
+
+test('the scoreboard page exposes board type and rack state for a billiard match', function () {
+    $match = billiardMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Home', 'side_b_label' => 'Away'])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)
+        ->get("/matches/{$match->id}/scoreboard")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('session.board_type', 'billiard')
+            ->where('session.sport_state.racks_to_win', 5));
+});
+
+test('a billiard match session can be forced to the generic board at start', function () {
+    $match = billiardMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", [
+            'side_a_label' => 'Home', 'side_b_label' => 'Away', 'board_type' => 'generic',
+        ])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    expect($session->toLivePayload())->toMatchArray(['board_type' => 'generic', 'sport_state' => null]);
+});
+
+// Live bocce scoreboard control
+
+test('starting a session for a bocce match initializes end tracking and the board type', function () {
+    $match = bocceMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Home', 'side_b_label' => 'Away'])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    expect($session->toLivePayload())->toMatchArray([
+        'board_type' => 'bocce',
+        'sport_state' => bocceInitialState(),
+    ]);
+});
+
+test('a manager can award end points to either side, appending to history and tracking the running score', function () {
+    $match = bocceMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => bocceInitialState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/bocce-end", ['side' => 'a', 'points' => 3])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/bocce-end", ['side' => 'b', 'points' => 1])
+        ->assertSessionHasNoErrors();
+
+    $fresh = $session->fresh();
+
+    expect($fresh->sport_state)->toMatchArray([
+        'ends' => [
+            ['end' => 1, 'winner' => 'a', 'points' => 3],
+            ['end' => 2, 'winner' => 'b', 'points' => 1],
+        ],
+        'ends_played' => 2,
+    ])
+        ->and($fresh->score_a)->toBe(3)
+        ->and($fresh->score_b)->toBe(1)
+        ->and($fresh->playByPlay()[0]['description'])->toBe('End 2: Side B +1 (score 3-1)')
+        ->and(AuditLog::query()->where('action', 'scoring.end_completed')->count())->toBe(2);
+});
+
+test('a manager can undo the most recently completed end', function () {
+    $match = bocceMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => [
+            'ends' => [
+                ['end' => 1, 'winner' => 'a', 'points' => 3],
+                ['end' => 2, 'winner' => 'b', 'points' => 2],
+            ],
+            'ends_played' => 2,
+            'target_score' => 12,
+        ],
+        'score_a' => 3,
+        'score_b' => 2,
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/bocce-undo-end")
+        ->assertSessionHasNoErrors();
+
+    $fresh = $session->fresh();
+
+    expect($fresh->sport_state)->toMatchArray([
+        'ends' => [['end' => 1, 'winner' => 'a', 'points' => 3]],
+        'ends_played' => 1,
+    ])
+        ->and($fresh->score_a)->toBe(3)
+        ->and($fresh->score_b)->toBe(0)
+        ->and($fresh->playByPlay()[0]['description'])->toBe('Last end undone');
+});
+
+test('undoing an end is a harmless no-op when no ends have been played', function () {
+    $match = bocceMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => bocceInitialState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/bocce-undo-end")
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toMatchArray(bocceInitialState());
+});
+
+test('the bocce-end endpoint requires a valid side and a positive points value', function () {
+    $match = bocceMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => bocceInitialState(),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/bocce-end", ['side' => 'a', 'points' => 0])
+        ->assertSessionHasErrors(['points']);
+});
+
+test('the bocce-end and bocce-undo-end endpoints are rejected for a non-bocce scoring session', function () {
+    $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
+    $session = ScoringSession::factory()->create(['match_id' => $match->id]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/bocce-end", ['side' => 'a', 'points' => 1])
+        ->assertStatus(422);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/bocce-undo-end")
+        ->assertStatus(422);
+});
+
+test('non-managers cannot award or undo a bocce end', function (User $user) {
+    $match = bocceMatch();
+    $session = ScoringSession::factory()->create(['match_id' => $match->id, 'sport_state' => bocceInitialState()]);
+
+    $this->actingAs($user)
+        ->patch("/scoring-sessions/{$session->id}/bocce-end", ['side' => 'a', 'points' => 1])
+        ->assertForbidden();
+
+    $this->actingAs($user)
+        ->patch("/scoring-sessions/{$session->id}/bocce-undo-end")
+        ->assertForbidden();
+})->with([
+    'viewer' => fn () => User::factory()->create(),
+    'organizer' => fn () => User::factory()->organizer()->create(),
+    'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+]);
+
+test('a bocce end cannot be recorded once the session has ended', function () {
+    $match = bocceMatch();
+    $session = ScoringSession::factory()->ended()->create(['match_id' => $match->id, 'sport_state' => bocceInitialState()]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/bocce-end", ['side' => 'a', 'points' => 1])
+        ->assertSessionHasErrors('status');
+});
+
+test('a manager can update the target-score setting', function () {
+    $match = bocceMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => bocceInitialState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/settings", ['target_score' => 21])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toMatchArray(['target_score' => 21]);
+});
+
+test('the scoreboard page exposes board type and end state for a bocce match', function () {
+    $match = bocceMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Home', 'side_b_label' => 'Away'])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)
+        ->get("/matches/{$match->id}/scoreboard")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('session.board_type', 'bocce')
+            ->where('session.sport_state.target_score', 12));
+});
+
+test('a bocce match session can be forced to the generic board at start', function () {
+    $match = bocceMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", [
+            'side_a_label' => 'Home', 'side_b_label' => 'Away', 'board_type' => 'generic',
         ])
         ->assertSessionHasNoErrors();
 

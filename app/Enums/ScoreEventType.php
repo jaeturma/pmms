@@ -26,6 +26,13 @@ enum ScoreEventType: string
     case GameComplete = 'game_complete';
     case WrestlingPoint = 'wrestling_point';
     case Fall = 'fall';
+    case TennisPoint = 'tennis_point';
+    case TennisUndo = 'tennis_undo';
+    case PenaltyThrow = 'penalty_throw';
+    case RackComplete = 'rack_complete';
+    case RackUndo = 'rack_undo';
+    case EndComplete = 'end_complete';
+    case EndUndo = 'end_undo';
 
     public function label(): string
     {
@@ -52,6 +59,13 @@ enum ScoreEventType: string
             self::GameComplete => 'Game complete',
             self::WrestlingPoint => 'Wrestling point',
             self::Fall => 'Fall',
+            self::TennisPoint => 'Tennis point',
+            self::TennisUndo => 'Tennis undo',
+            self::PenaltyThrow => 'Penalty throw',
+            self::RackComplete => 'Rack complete',
+            self::RackUndo => 'Rack undone',
+            self::EndComplete => 'End complete',
+            self::EndUndo => 'End undone',
         };
     }
 }

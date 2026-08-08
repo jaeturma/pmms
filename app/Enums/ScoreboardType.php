@@ -18,6 +18,10 @@ enum ScoreboardType: string
     case RacketGames = 'racket_games';
     case CombatRounds = 'combat_rounds';
     case Wrestling = 'wrestling';
+    case Tennis = 'tennis';
+    case GoalBall = 'goal_ball';
+    case Billiard = 'billiard';
+    case Bocce = 'bocce';
 
     public static function forSport(?string $sportName): self
     {
@@ -28,8 +32,12 @@ enum ScoreboardType: string
             'volleyball', 'sepak takraw' => self::VolleyballSepakTakraw,
             'football', 'futsal' => self::FootballFutsal,
             'table tennis', 'badminton' => self::RacketGames,
-            'taekwondo', 'wushu', 'pencak silat' => self::CombatRounds,
+            'taekwondo', 'wushu', 'pencak silat', 'arnis' => self::CombatRounds,
             'wrestling' => self::Wrestling,
+            'tennis' => self::Tennis,
+            'goal ball' => self::GoalBall,
+            'billiard' => self::Billiard,
+            'bocce' => self::Bocce,
             default => self::Generic,
         };
     }
@@ -44,8 +52,12 @@ enum ScoreboardType: string
             self::VolleyballSepakTakraw => 'Volleyball / Sepak Takraw',
             self::FootballFutsal => 'Football / Futsal',
             self::RacketGames => 'Table Tennis / Badminton',
-            self::CombatRounds => 'Taekwondo / Wushu / Pencak Silat',
+            self::CombatRounds => 'Taekwondo / Wushu / Pencak Silat / Arnis',
             self::Wrestling => 'Wrestling',
+            self::Tennis => 'Tennis',
+            self::GoalBall => 'Goal Ball',
+            self::Billiard => 'Billiard',
+            self::Bocce => 'Bocce',
         };
     }
 }

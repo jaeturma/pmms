@@ -174,7 +174,7 @@ class ScoringSessionController extends Controller
                 'team_color_a' => '#dc2626', 'team_color_b' => '#2563eb',
                 'horn_sounded_at' => null, 'quarters' => 4,
             ],
-            // Taekwondo/Wushu/Pencak Silat (CombatRounds) share the exact
+            // Taekwondo/Wushu/Pencak Silat/Arnis (CombatRounds) share the exact
             // same round/rest-clock + bell + judged-round-points shape as
             // boxing — all four are genuinely 3-round, red/blue-corner
             // combat sports at the level of detail this app models, not a
@@ -205,6 +205,30 @@ class ScoringSessionController extends Controller
                 'period_duration_seconds' => 180, 'rest_duration_seconds' => 30, 'total_periods' => 2,
                 'clock_seconds' => 180, 'clock_updated_at' => null, 'clock_phase' => 'period',
                 'fall_side' => null, 'fall_declared_at' => null,
+            ],
+            ScoreboardType::Tennis => [
+                'sets' => [],
+                'sets_won_a' => 0, 'sets_won_b' => 0,
+                'current_set_games_a' => 0, 'current_set_games_b' => 0,
+                'current_game_points_a' => 0, 'current_game_points_b' => 0,
+                'is_tiebreak' => false,
+                'tiebreak_points_a' => 0, 'tiebreak_points_b' => 0,
+                'sets_to_win' => 2,
+                'possession' => null,
+            ],
+            ScoreboardType::GoalBall => [
+                'penalty_throws_a' => 0, 'penalty_throws_b' => 0,
+                'minutes_per_half' => 6,
+            ],
+            ScoreboardType::Billiard => [
+                'racks' => [],
+                'racks_won_a' => 0, 'racks_won_b' => 0,
+                'racks_to_win' => 5,
+            ],
+            ScoreboardType::Bocce => [
+                'ends' => [],
+                'ends_played' => 0,
+                'target_score' => 12,
             ],
             default => null,
         };
@@ -457,7 +481,7 @@ class ScoringSessionController extends Controller
 
     /**
      * Record a judged round score for both sides at once (boxing
-     * scoreboard — WP-07-05 — and taekwondo/wushu/pencak silat, which
+     * scoreboard — WP-07-05 — and taekwondo/wushu/pencak silat/arnis, which
      * share this exact round-clock+judged-round-points shape), 10-point-
      * must style. Appends to the round-by-round history in `sport_state`
      * and adds to the session's running `score_a`/`score_b` total — the
@@ -718,6 +742,275 @@ class ScoringSessionController extends Controller
             $session,
             [...$this->context($session), ...$data],
         );
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Record or reset a penalty throw tally — goal ball only. A penalty
+     * throw (illegal defense, quick-throw/8-second violation, noise foul,
+     * etc.) gives the opposing team an uncontested shot defended by only
+     * the offending player; this app doesn't model who defends or
+     * auto-award the resulting goal (that's a real scoring chance, not a
+     * guaranteed one), so the operator still scores it with the ordinary
+     * `score()` endpoint if it goes in — this endpoint only tracks the
+     * tally, same "count, don't auto-resolve" shape as basketball's foul().
+     */
+    public function penaltyThrow(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertGoalBall($session);
+
+        $data = $request->validate([
+            'action' => ['required', Rule::in(['add', 'reset'])],
+            'side' => ['required_if:action,add', 'nullable', Rule::in(['a', 'b'])],
+        ]);
+
+        $state = $session->sport_state ?? ['penalty_throws_a' => 0, 'penalty_throws_b' => 0];
+
+        if ($data['action'] === 'add') {
+            $column = "penalty_throws_{$data['side']}";
+            $state[$column] = ($state[$column] ?? 0) + 1;
+        } else {
+            $state['penalty_throws_a'] = 0;
+            $state['penalty_throws_b'] = 0;
+        }
+
+        $session->forceFill(['sport_state' => $state])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::PenaltyThrow,
+            'payload' => [
+                ...$data,
+                'penalty_throws_a' => $state['penalty_throws_a'],
+                'penalty_throws_b' => $state['penalty_throws_b'],
+            ],
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record(
+            $data['action'] === 'add' ? 'scoring.penalty_throw_issued' : 'scoring.penalty_throws_reset',
+            $session,
+            [...$this->context($session), ...$data],
+        );
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Award a completed rack to a side — billiard only. Unlike every other
+     * family in this app, a rack has no in-progress running score to speak
+     * of (this app doesn't model individual balls/shots), so there's no
+     * point-by-point endpoint here at all: the operator simply declares
+     * who won the rack just played, once it's over.
+     */
+    public function billiardRack(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertBilliard($session);
+
+        $data = $request->validate([
+            'side' => ['required', Rule::in(['a', 'b'])],
+        ]);
+
+        $state = $session->sport_state ?? ['racks' => [], 'racks_won_a' => 0, 'racks_won_b' => 0, 'racks_to_win' => 5];
+        $rack = ['rack' => count($state['racks']) + 1, 'winner' => $data['side']];
+        $state['racks'][] = $rack;
+        $column = "racks_won_{$data['side']}";
+        $state[$column] = ($state[$column] ?? 0) + 1;
+
+        $session->forceFill([
+            'sport_state' => $state,
+            'score_a' => $state['racks_won_a'],
+            'score_b' => $state['racks_won_b'],
+        ])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::RackComplete,
+            'payload' => [
+                'rack' => $rack['rack'],
+                'winner' => $data['side'],
+                'racks_won_a' => $state['racks_won_a'],
+                'racks_won_b' => $state['racks_won_b'],
+            ],
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record('scoring.rack_completed', $session, [...$this->context($session), ...$rack]);
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Undo the most recently awarded rack — billiard only. Racks are a
+     * plain append-only list (not a derived state machine like tennis'
+     * games/sets), so undo is just "pop the last entry and decrement its
+     * winner's count," no snapshot needed. A harmless no-op with no racks
+     * played yet, same convention as tennisUndo().
+     */
+    public function billiardUndoRack(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertBilliard($session);
+
+        $state = $session->sport_state ?? [];
+
+        if (empty($state['racks'])) {
+            return back();
+        }
+
+        $lastRack = array_pop($state['racks']);
+        $column = "racks_won_{$lastRack['winner']}";
+        $state[$column] = max(0, ($state[$column] ?? 0) - 1);
+
+        $session->forceFill([
+            'sport_state' => $state,
+            'score_a' => $state['racks_won_a'],
+            'score_b' => $state['racks_won_b'],
+        ])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::RackUndo,
+            'payload' => [
+                'rack' => $lastRack['rack'],
+                'winner' => $lastRack['winner'],
+                'racks_won_a' => $state['racks_won_a'],
+                'racks_won_b' => $state['racks_won_b'],
+            ],
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record('scoring.rack_undone', $session, [...$this->context($session), ...$lastRack]);
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Award the points from a completed end to one side — bocce only. A
+     * real end always awards points to exactly one side (whichever team's
+     * balls finished closest to the jack; the other side scores 0 for
+     * that end), so this always increments a single side's score, never
+     * splits points across both. How many points a given end is worth
+     * varies by local rules/ball count (not a fixed number this app can
+     * assert), so the operator enters it — this endpoint only enforces
+     * that it's a positive whole number, not a specific maximum.
+     */
+    public function bocceEnd(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertBocce($session);
+
+        $data = $request->validate([
+            'side' => ['required', Rule::in(['a', 'b'])],
+            'points' => ['required', 'integer', 'min:1', 'max:20'],
+        ]);
+
+        $state = $session->sport_state ?? ['ends' => [], 'ends_played' => 0, 'target_score' => 12];
+        $end = ['end' => count($state['ends']) + 1, 'winner' => $data['side'], 'points' => $data['points']];
+        $state['ends'][] = $end;
+        $state['ends_played'] = count($state['ends']);
+
+        $column = $data['side'] === 'a' ? 'score_a' : 'score_b';
+        $newValue = $session->{$column} + $data['points'];
+
+        $session->forceFill([
+            $column => $newValue,
+            'sport_state' => $state,
+        ])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::EndComplete,
+            'payload' => [
+                'end' => $end['end'],
+                'winner' => $data['side'],
+                'points' => $data['points'],
+                'score_a' => $data['side'] === 'a' ? $newValue : $session->score_a,
+                'score_b' => $data['side'] === 'b' ? $newValue : $session->score_b,
+            ],
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record('scoring.end_completed', $session, [...$this->context($session), ...$end]);
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Undo the most recently completed end — bocce only. Same "pop the
+     * last append-only entry and reverse its effect" shape as
+     * billiardUndoRack(), no snapshot needed since an end's point award is
+     * a plain, fully-reversible delta to one side's score.
+     */
+    public function bocceUndoEnd(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertBocce($session);
+
+        $state = $session->sport_state ?? [];
+
+        if (empty($state['ends'])) {
+            return back();
+        }
+
+        $lastEnd = array_pop($state['ends']);
+        $state['ends_played'] = count($state['ends']);
+
+        $column = $lastEnd['winner'] === 'a' ? 'score_a' : 'score_b';
+        $newValue = max(0, $session->{$column} - $lastEnd['points']);
+
+        $session->forceFill([
+            $column => $newValue,
+            'sport_state' => $state,
+        ])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::EndUndo,
+            'payload' => [
+                'end' => $lastEnd['end'],
+                'winner' => $lastEnd['winner'],
+                'points' => $lastEnd['points'],
+                'score_a' => $lastEnd['winner'] === 'a' ? $newValue : $session->score_a,
+                'score_b' => $lastEnd['winner'] === 'b' ? $newValue : $session->score_b,
+            ],
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record('scoring.end_undone', $session, [...$this->context($session), ...$lastEnd]);
 
         broadcast(new ScoreUpdated($session))->toOthers();
 
@@ -1013,6 +1306,222 @@ class ScoringSessionController extends Controller
     }
 
     /**
+     * Record a tennis point — the standard universal format only (real
+     * Love/15/30/40/deuce/advantage scoring within a game, 6-game sets
+     * with a tiebreak at 6-6 played to 7 points win-by-2, best-of-N sets)
+     * — deliberately not the tournament-specific "no-ad"/"match tiebreak"
+     * variants, same restraint as every other sport-specific rule in this
+     * controller (badminton's fixed cap, softball's no-baserunner model):
+     * those are real, different formats, not just configuration of this
+     * one, and guessing which a given meet uses would be fabrication, not
+     * a reasonable default.
+     *
+     * Unlike every other sport's correction path, a simple point delta
+     * doesn't make sense here — points/games/sets/tiebreak are a single
+     * derived state machine, not an independent running total. Instead,
+     * every call captures the pre-mutation state as `sport_state.
+     * _undo_snapshot` (a single level of nesting, never itself carrying a
+     * further snapshot) so a mis-tap can be reversed exactly via
+     * tennisUndo() below — a real, bounded "undo my last tap", not a full
+     * history browser.
+     */
+    public function tennisPoint(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertTennis($session);
+
+        $data = $request->validate([
+            'side' => ['required', Rule::in(['a', 'b'])],
+        ]);
+
+        $state = $session->sport_state ?? [];
+        $snapshot = $state;
+        unset($snapshot['_undo_snapshot']);
+
+        $state = $this->applyTennisPoint($state, $data['side']);
+        $state['_undo_snapshot'] = $snapshot;
+
+        $session->forceFill([
+            'sport_state' => $state,
+            'score_a' => $state['sets_won_a'],
+            'score_b' => $state['sets_won_b'],
+        ])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::TennisPoint,
+            'payload' => [
+                'side' => $data['side'],
+                'current_set_games_a' => $state['current_set_games_a'],
+                'current_set_games_b' => $state['current_set_games_b'],
+                'current_game_points_a' => $state['current_game_points_a'],
+                'current_game_points_b' => $state['current_game_points_b'],
+                'is_tiebreak' => $state['is_tiebreak'],
+            ],
+            'recorded_by' => $user->id,
+        ]);
+
+        if (count($state['sets']) > count($snapshot['sets'] ?? [])) {
+            $completedSet = end($state['sets']);
+
+            ScoreEvent::create([
+                'scoring_session_id' => $session->id,
+                'type' => ScoreEventType::SetComplete,
+                'payload' => [
+                    'set' => $completedSet['set'],
+                    'score_a' => $completedSet['score_a'],
+                    'score_b' => $completedSet['score_b'],
+                    'sets_won_a' => $state['sets_won_a'],
+                    'sets_won_b' => $state['sets_won_b'],
+                ],
+                'recorded_by' => $user->id,
+            ]);
+
+            $this->audit->record('scoring.set_completed', $session, [...$this->context($session), ...$completedSet]);
+        }
+
+        $this->audit->record('scoring.tennis_point_scored', $session, [...$this->context($session), 'side' => $data['side']]);
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Applies one point to `$side`, running the full game → set →
+     * tiebreak state machine. Points always increment by exactly 1 (real
+     * tennis has no "+2" concept the way basketball/wrestling do) — the
+     * raw counters climb past the real 0/15/30/40 range once a game
+     * reaches deuce (e.g. 4-3 represents "advantage"), the frontend
+     * formats that for display; this method only needs the win
+     * conditions, not the display labels.
+     *
+     * @param  array<string, mixed>  $state
+     * @return array<string, mixed>
+     */
+    private function applyTennisPoint(array $state, string $side): array
+    {
+        $other = $side === 'a' ? 'b' : 'a';
+
+        if ($state['is_tiebreak']) {
+            $state["tiebreak_points_{$side}"]++;
+            $mine = $state["tiebreak_points_{$side}"];
+            $theirs = $state["tiebreak_points_{$other}"];
+
+            if ($mine >= 7 && $mine - $theirs >= 2) {
+                $state["current_set_games_{$side}"]++;
+                $state = $this->finalizeTennisSet($state, $side);
+            }
+
+            return $state;
+        }
+
+        $state["current_game_points_{$side}"]++;
+        $mine = $state["current_game_points_{$side}"];
+        $theirs = $state["current_game_points_{$other}"];
+
+        if ($mine >= 4 && $mine - $theirs >= 2) {
+            $state["current_set_games_{$side}"]++;
+            $state['current_game_points_a'] = 0;
+            $state['current_game_points_b'] = 0;
+
+            $gamesMine = $state["current_set_games_{$side}"];
+            $gamesTheirs = $state["current_set_games_{$other}"];
+
+            if ($gamesMine === 6 && $gamesTheirs === 6) {
+                $state['is_tiebreak'] = true;
+                $state['tiebreak_points_a'] = 0;
+                $state['tiebreak_points_b'] = 0;
+            } elseif ($gamesMine >= 6 && $gamesMine - $gamesTheirs >= 2) {
+                $state = $this->finalizeTennisSet($state, $side);
+            }
+        }
+
+        return $state;
+    }
+
+    /**
+     * Appends the just-finished set to `sport_state.sets`, increments
+     * `sets_won_{side}`, and resets the current-set counters — shared by
+     * both the tiebreak and the normal-game win paths in
+     * applyTennisPoint() above.
+     *
+     * @param  array<string, mixed>  $state
+     * @return array<string, mixed>
+     */
+    private function finalizeTennisSet(array $state, string $side): array
+    {
+        $setNumber = count($state['sets']) + 1;
+        $state['sets'][] = [
+            'set' => $setNumber,
+            'score_a' => $state['current_set_games_a'],
+            'score_b' => $state['current_set_games_b'],
+        ];
+
+        $state["sets_won_{$side}"]++;
+        $state['current_set_games_a'] = 0;
+        $state['current_set_games_b'] = 0;
+        $state['is_tiebreak'] = false;
+        $state['tiebreak_points_a'] = 0;
+        $state['tiebreak_points_b'] = 0;
+
+        return $state;
+    }
+
+    /**
+     * Reverses the most recent tennisPoint() call — restores
+     * `sport_state._undo_snapshot` verbatim (dropping its own nested key,
+     * so this only ever undoes one step, never a chain) and re-syncs
+     * `score_a`/`score_b` to the restored `sets_won_*`. A no-op (still
+     * returns success) if there's nothing to undo, e.g. right after the
+     * session started.
+     */
+    public function tennisUndo(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertTennis($session);
+
+        $state = $session->sport_state ?? [];
+
+        if (! isset($state['_undo_snapshot'])) {
+            return back();
+        }
+
+        $restored = $state['_undo_snapshot'];
+        unset($restored['_undo_snapshot']);
+
+        $session->forceFill([
+            'sport_state' => $restored,
+            'score_a' => $restored['sets_won_a'],
+            'score_b' => $restored['sets_won_b'],
+        ])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::TennisUndo,
+            'payload' => [
+                'sets_won_a' => $restored['sets_won_a'],
+                'sets_won_b' => $restored['sets_won_b'],
+            ],
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record('scoring.tennis_point_undone', $session, $this->context($session));
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
      * Advance the count/outs (softball/baseball scoreboard only —
      * WP-07-06). `out`/`strike` reset the count for the next batter; a
      * third strike is itself an out; a third out ends the half-inning
@@ -1125,7 +1634,7 @@ class ScoringSessionController extends Controller
      * not a play, so this doesn't append a score_events row/play-by-play
      * line, same reasoning as gameClock()/shotClock()/roundClock() below.
      * Basketball: minutes per period, shot clock duration, team colors,
-     * quarters. Boxing (and taekwondo/wushu/pencak silat, which share
+     * quarters. Boxing (and taekwondo/wushu/pencak silat/arnis, which share
      * boxing's exact round-clock shape): round/rest duration, total
      * rounds. Softball/baseball: team colors and the regulation innings
      * count (a display
@@ -1186,6 +1695,18 @@ class ScoringSessionController extends Controller
                 'rest_duration_seconds' => ['required', 'integer', 'min:10', 'max:300'],
                 'total_periods' => ['required', 'integer', 'min:1', 'max:5'],
             ]),
+            ScoreboardType::Tennis => $request->validate([
+                'sets_to_win' => ['required', 'integer', Rule::in([2, 3])],
+            ]),
+            ScoreboardType::GoalBall => $request->validate([
+                'minutes_per_half' => ['required', 'integer', 'min:3', 'max:20'],
+            ]),
+            ScoreboardType::Billiard => $request->validate([
+                'racks_to_win' => ['required', 'integer', 'min:1', 'max:15'],
+            ]),
+            ScoreboardType::Bocce => $request->validate([
+                'target_score' => ['required', 'integer', 'min:1', 'max:50'],
+            ]),
             default => abort(422, __('This action is not available for this board type.')),
         };
 
@@ -1218,10 +1739,11 @@ class ScoringSessionController extends Controller
             ScoreboardType::Basketball,
             ScoreboardType::VolleyballSepakTakraw,
             ScoreboardType::RacketGames,
+            ScoreboardType::Tennis,
         ];
 
         if (! in_array($session->boardType(), $allowedBoardTypes, true)) {
-            abort(422, __('This action is only available for a basketball, volleyball/sepak takraw, or table tennis/badminton scoring session.'));
+            abort(422, __('This action is only available for a basketball, volleyball/sepak takraw, table tennis/badminton, or tennis scoring session.'));
         }
 
         $data = $request->validate([
@@ -1352,7 +1874,7 @@ class ScoringSessionController extends Controller
     }
 
     /**
-     * Sound the bell — boxing and taekwondo/wushu/pencak silat (CombatRounds),
+     * Sound the bell — boxing and taekwondo/wushu/pencak silat/arnis (CombatRounds),
      * the sport-correct term for the same "signal" concern basketball's
      * horn() covers. Rings to start/end a round or rest period; no other
      * state change, viewers flash on a fresh `bell_sounded_at`.
@@ -1660,7 +2182,7 @@ class ScoringSessionController extends Controller
     }
 
     /**
-     * Boxing and CombatRounds (taekwondo/wushu/pencak silat) share this
+     * Boxing and CombatRounds (taekwondo/wushu/pencak silat/arnis) share this
      * one assertion — see the round()/roundClock()/bell() docblocks and
      * store()'s CombatRounds branch for why the two board types are
      * treated identically throughout this controller.
@@ -1668,7 +2190,7 @@ class ScoringSessionController extends Controller
     private function assertBoxingOrCombatRounds(ScoringSession $session): void
     {
         if (! in_array($session->boardType(), [ScoreboardType::Boxing, ScoreboardType::CombatRounds], true)) {
-            abort(422, __('This action is only available for a boxing, taekwondo, wushu, or pencak silat scoring session.'));
+            abort(422, __('This action is only available for a boxing, taekwondo, wushu, pencak silat, or arnis scoring session.'));
         }
     }
 
@@ -1704,6 +2226,34 @@ class ScoringSessionController extends Controller
     {
         if ($session->boardType() !== ScoreboardType::Wrestling) {
             abort(422, __('This action is only available for a wrestling scoring session.'));
+        }
+    }
+
+    private function assertTennis(ScoringSession $session): void
+    {
+        if ($session->boardType() !== ScoreboardType::Tennis) {
+            abort(422, __('This action is only available for a tennis scoring session.'));
+        }
+    }
+
+    private function assertGoalBall(ScoringSession $session): void
+    {
+        if ($session->boardType() !== ScoreboardType::GoalBall) {
+            abort(422, __('This action is only available for a goal ball scoring session.'));
+        }
+    }
+
+    private function assertBilliard(ScoringSession $session): void
+    {
+        if ($session->boardType() !== ScoreboardType::Billiard) {
+            abort(422, __('This action is only available for a billiard scoring session.'));
+        }
+    }
+
+    private function assertBocce(ScoringSession $session): void
+    {
+        if ($session->boardType() !== ScoreboardType::Bocce) {
+            abort(422, __('This action is only available for a bocce scoring session.'));
         }
     }
 
