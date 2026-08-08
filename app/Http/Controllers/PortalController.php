@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\AgeDivision;
 use App\Enums\MatchStatus;
+use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetStatus;
 use App\Enums\ResultStatus;
 use App\Enums\ScoringSessionStatus;
@@ -16,16 +17,20 @@ use App\Models\EventMatch;
 use App\Models\EventResult;
 use App\Models\EventSchedule;
 use App\Models\Meet;
+use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
 use App\Models\ResultPlacement;
 use App\Models\School;
 use App\Models\ScoringSession;
 use App\Models\Sport;
+use App\Models\SportCategory;
 use App\Models\Venue;
 use App\Services\MedalTallyService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -862,7 +867,7 @@ class PortalController extends Controller
         $meet = Meet::query()->published()->active()->first();
 
         $base = [
-            'sport' => ['slug' => $slug->value, 'name' => $slug->sportName()],
+            'sport' => $sport === null ? $this->emptySportProfile($slug) : $this->sportProfile($slug, $sport, $meet),
             'meet' => $meet === null ? null : $this->meetSummary($meet),
             // WP-12-08 (brief §12): a real, stable canonical URL per sport
             // route — `route()` resolves through `APP_URL`, so this is an
@@ -894,6 +899,167 @@ class PortalController extends Controller
             'upcomingGames' => $upcomingGames,
             'venues' => $venues,
         ]);
+    }
+
+    /**
+     * The mini portal's upper-section profile — photo/description/
+     * categories/personnel, built from real `Sport`/`MeetSport`/
+     * `MeetSportAssignment`/`sport_user` data (see
+     * `docs/reports/public-sports-and-mini-portals-review.md`). Venue and
+     * schedule information reuse `sportPortalData()`'s own
+     * `venues`/`todayGames`/`upcomingGames` — not duplicated here.
+     *
+     * @return array<string, mixed>
+     */
+    private function sportProfile(SportPortalSlug $slug, Sport $sport, ?Meet $meet): array
+    {
+        $meetSport = $meet === null
+            ? null
+            : MeetSport::query()->where('meet_id', $meet->id)->where('sport_id', $sport->id)->first();
+
+        return [
+            'slug' => $slug->value,
+            'name' => $slug->sportName(),
+            'is_paragames' => str_starts_with($sport->name, 'Paragames'),
+            'short_description' => $sport->short_description,
+            'description' => $sport->description,
+            'photo_url' => $sport->photoUrl(),
+            'categories' => $this->sportProfileCategories($sport, $meetSport),
+            'tournament_management' => $meetSport === null ? [] : $this->sportProfileTournamentManagement($meetSport),
+            'technical_officials' => $this->sportProfileTechnicalOfficials($sport),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function emptySportProfile(SportPortalSlug $slug): array
+    {
+        return [
+            'slug' => $slug->value,
+            'name' => $slug->sportName(),
+            'is_paragames' => str_starts_with($slug->sportName(), 'Paragames'),
+            'short_description' => null,
+            'description' => null,
+            'photo_url' => null,
+            'categories' => [],
+            'tournament_management' => [],
+            'technical_officials' => [],
+        ];
+    }
+
+    /**
+     * Catalog-wide categories (`meet_sport_id` null) plus this specific
+     * meet's own scoped categories — same union `PortalSportsController::
+     * categoryCount()` counts, here returning the real rows for display.
+     *
+     * @return array<int, array{id: int, display_name: string, level: string|null, sex: string|null}>
+     */
+    private function sportProfileCategories(Sport $sport, ?MeetSport $meetSport): array
+    {
+        $catalogWide = SportCategory::query()
+            ->where('sport_id', $sport->id)
+            ->whereNull('meet_sport_id')
+            ->where('active', true)
+            ->get();
+
+        $meetScoped = $meetSport === null
+            ? collect()
+            : $meetSport->categories()->where('active', true)->get();
+
+        return $catalogWide->concat($meetScoped)
+            ->sortBy('display_name')
+            ->map(fn (SportCategory $category): array => [
+                'id' => $category->id,
+                'display_name' => $category->display_name,
+                'level' => $category->level?->label(),
+                'sex' => $category->sex?->label(),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Tournament Manager/Assistant/Track/Field/Boys/Girls/Category TM,
+     * Tournament Secretary, and Tournament ICT assignments for this
+     * meet's inclusion of the sport — `TechnicalOfficial`-role rows are
+     * excluded here (public Technical Officials come from `sport_user`
+     * instead, see `sportProfileTechnicalOfficials()`, since that's the
+     * table with real current data). Public-safe fields only: name, role
+     * label, category, lead flag — never phone/email/address/birth date/
+     * employee id/medical/account.
+     *
+     * @return array<int, array{name: string, role_label: string, category: string|null, is_lead: bool}>
+     */
+    private function sportProfileTournamentManagement(MeetSport $meetSport): array
+    {
+        return MeetSportAssignment::query()
+            ->where('meet_sport_id', $meetSport->id)
+            ->where('role', '!=', MeetSportAssignmentRole::TechnicalOfficial->value)
+            ->with(['user:id,name', 'sportCategory:id,display_name'])
+            ->get()
+            ->sortBy(fn (MeetSportAssignment $assignment): int => $this->tournamentManagementRolePriority($assignment->role))
+            ->map(fn (MeetSportAssignment $assignment): array => [
+                'name' => $assignment->user->name,
+                'role_label' => $assignment->role->label(),
+                'category' => $assignment->sportCategory?->display_name,
+                'is_lead' => $assignment->is_lead,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Display order for Tournament Management roles — Manager first,
+     * Technical Official last (though that role is filtered out before
+     * this is ever called), matching the order the brief itself lists
+     * them in rather than the enum's declaration order (which happens to
+     * already match, but this stays explicit rather than relying on it).
+     */
+    private function tournamentManagementRolePriority(MeetSportAssignmentRole $role): int
+    {
+        return match ($role) {
+            MeetSportAssignmentRole::TournamentManager => 0,
+            MeetSportAssignmentRole::AssistantTournamentManager => 1,
+            MeetSportAssignmentRole::TrackTournamentManager => 2,
+            MeetSportAssignmentRole::FieldTournamentManager => 3,
+            MeetSportAssignmentRole::BoysTournamentManager => 4,
+            MeetSportAssignmentRole::GirlsTournamentManager => 5,
+            MeetSportAssignmentRole::CategoryTournamentManager => 6,
+            MeetSportAssignmentRole::TournamentSecretary => 7,
+            MeetSportAssignmentRole::TournamentICT => 8,
+            MeetSportAssignmentRole::TechnicalOfficial => 9,
+        };
+    }
+
+    /**
+     * Technical Officials for this sport — `sport_user` (meet-unscoped,
+     * see `Sport::technicalOfficials()`), the table with real live-
+     * authorization-backing data today. `duty` renders as the generic
+     * "Technical Official" label on the frontend when `null` (no admin
+     * form sets it yet — see the `sport_user.duty` migration). Queried
+     * directly against the pivot table rather than through
+     * `Sport::technicalOfficials()`'s `->withPivot('duty')` accessor —
+     * Eloquent's dynamic `pivot` property isn't statically typed, and a
+     * dedicated typed pivot model would force `Sport::technicalOfficials()`
+     * itself (used elsewhere for `sync()`/id-listing) into a narrower,
+     * unrelated return type just for this one read.
+     *
+     * @return array<int, array{name: string, duty: string|null}>
+     */
+    private function sportProfileTechnicalOfficials(Sport $sport): array
+    {
+        return DB::table('sport_user')
+            ->join('users', 'users.id', '=', 'sport_user.user_id')
+            ->where('sport_user.sport_id', $sport->id)
+            ->orderBy('users.name')
+            ->get(['users.name as name', 'sport_user.duty as duty'])
+            ->map(fn (object $row): array => [
+                'name' => (string) $row->name,
+                'duty' => $row->duty === null ? null : (string) $row->duty,
+            ])
+            ->values()
+            ->all();
     }
 
     /**

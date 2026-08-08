@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\MeetSportAssignmentRole;
 use App\Models\Athlete;
 use App\Models\Delegation;
 use App\Models\Entry;
@@ -8,10 +9,14 @@ use App\Models\EventMatch;
 use App\Models\EventResult;
 use App\Models\EventSchedule;
 use App\Models\Meet;
+use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
 use App\Models\ResultPlacement;
 use App\Models\School;
 use App\Models\ScoringSession;
 use App\Models\Sport;
+use App\Models\SportCategory;
+use App\Models\User;
 use App\Models\Venue;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia;
@@ -471,4 +476,116 @@ test('a Chess match with no live session never fabricates a score', function () 
             ->where('completedGames.0.score_a', null)
             ->where('completedGames.0.score_b', null)
             ->where('completedGames.0.mark', null));
+});
+
+test('the mini portal profile carries real description/photo/paragames fields from the Sport row', function () {
+    Meet::factory()->active()->published()->featured()->create();
+    Sport::query()->create([
+        'name' => 'Paragames - Athletics',
+        'short_description' => 'A short blurb.',
+        'description' => 'A full description.',
+    ]);
+
+    $this->get('/paragames-athletics')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('sport.slug', 'paragames-athletics')
+            ->where('sport.is_paragames', true)
+            ->where('sport.short_description', 'A short blurb.')
+            ->where('sport.description', 'A full description.')
+            ->where('sport.photo_url', null));
+});
+
+test('mini portal categories combine catalog-wide and this meet-scoped rows, sorted by name', function () {
+    $meet = Meet::factory()->active()->published()->featured()->create();
+    $sport = basketballSport();
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $sport->id]);
+
+    SportCategory::factory()->create(['sport_id' => $sport->id, 'meet_sport_id' => null, 'display_name' => 'Zonal Catalog Category']);
+    SportCategory::factory()->create(['sport_id' => $sport->id, 'meet_sport_id' => $meetSport->id, 'display_name' => 'Alpha Meet Category']);
+    // An inactive category is real data but never shown publicly.
+    SportCategory::factory()->create(['sport_id' => $sport->id, 'meet_sport_id' => null, 'active' => false, 'display_name' => 'Hidden Category']);
+
+    $this->get('/basketball')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('sport.categories', 2)
+            ->where('sport.categories.0.display_name', 'Alpha Meet Category')
+            ->where('sport.categories.1.display_name', 'Zonal Catalog Category'));
+});
+
+test('tournament management shows real MeetSportAssignment rows, excluding Technical Official, ordered Manager-first', function () {
+    $meet = Meet::factory()->active()->published()->featured()->create();
+    $sport = basketballSport();
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $sport->id]);
+    $category = SportCategory::factory()->create(['sport_id' => $sport->id, 'meet_sport_id' => $meetSport->id]);
+
+    $secretary = User::factory()->create(['name' => 'Secretary Person']);
+    $manager = User::factory()->create(['name' => 'Manager Person']);
+    $categoryManager = User::factory()->create(['name' => 'Category Manager Person']);
+    $technicalOfficial = User::factory()->create(['name' => 'TO Person']);
+
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $secretary->id,
+        'role' => MeetSportAssignmentRole::TournamentSecretary,
+    ]);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $manager->id,
+        'role' => MeetSportAssignmentRole::TournamentManager,
+        'is_lead' => true,
+    ]);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'sport_category_id' => $category->id,
+        'user_id' => $categoryManager->id,
+        'role' => MeetSportAssignmentRole::CategoryTournamentManager,
+    ]);
+    // TechnicalOfficial-role assignments are excluded here — public
+    // Technical Officials come from `sport_user` instead.
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $technicalOfficial->id,
+        'role' => MeetSportAssignmentRole::TechnicalOfficial,
+    ]);
+
+    $this->get('/basketball')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('sport.tournament_management', 3)
+            ->where('sport.tournament_management.0.name', 'Manager Person')
+            ->where('sport.tournament_management.0.role_label', 'Tournament Manager')
+            ->where('sport.tournament_management.0.is_lead', true)
+            ->where('sport.tournament_management.1.role_label', 'Category Tournament Manager')
+            ->where('sport.tournament_management.1.category', $category->display_name)
+            ->where('sport.tournament_management.2.role_label', 'Tournament Secretary'));
+});
+
+test('technical officials come from sport_user with a real duty label, defaulting to null when unset', function () {
+    Meet::factory()->active()->published()->featured()->create();
+    $sport = basketballSport();
+
+    $withDuty = User::factory()->create(['name' => 'Referee Person']);
+    $withoutDuty = User::factory()->create(['name' => 'Plain Official']);
+
+    $sport->technicalOfficials()->attach($withDuty->id, ['duty' => 'Referee']);
+    $sport->technicalOfficials()->attach($withoutDuty->id);
+
+    $this->get('/basketball')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('sport.technical_officials', 2)
+            ->where('sport.technical_officials.0.name', 'Plain Official')
+            ->where('sport.technical_officials.0.duty', null)
+            ->where('sport.technical_officials.1.name', 'Referee Person')
+            ->where('sport.technical_officials.1.duty', 'Referee'));
+});
+
+test('sport routes now cover the full 28-sport catalog, not just the original 12', function () {
+    Meet::factory()->active()->published()->featured()->create();
+    Sport::query()->create(['name' => 'Archery']);
+
+    $this->get('/archery')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('sport.slug', 'archery')
+            ->where('sport.name', 'Archery'));
 });

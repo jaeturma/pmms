@@ -13,9 +13,15 @@ import { PortalScheduleList } from '@/apps/portal/components/schedule-list';
 import { PortalSectionHeader } from '@/apps/portal/components/section-header';
 import { PortalSoftballScoreboard } from '@/apps/portal/components/softball-scoreboard';
 import { PortalSoftballSidebar } from '@/apps/portal/components/softball-sidebar';
+import { PortalSportCategories } from '@/apps/portal/components/sport-categories';
+import { PortalSportDescription } from '@/apps/portal/components/sport-description';
 import { PortalSportEventStrip } from '@/apps/portal/components/sport-event-strip';
+import { PortalSportIcon } from '@/apps/portal/components/sport-icon';
+import { PortalSportPhoto } from '@/apps/portal/components/sport-photo';
 import { PortalStandingsTable } from '@/apps/portal/components/standings-table';
+import { PortalTechnicalOfficials } from '@/apps/portal/components/technical-officials';
 import { PortalTournamentBracket } from '@/apps/portal/components/tournament-bracket';
+import { PortalTournamentManagement } from '@/apps/portal/components/tournament-management';
 import { PortalVenueInformation } from '@/apps/portal/components/venue-information';
 import {
     capitalize,
@@ -148,6 +154,18 @@ export default function PortalSportPortal({
         return () => clearInterval(interval);
     }, [visible, meet]);
 
+    const heroIcon = (
+        <PortalSportIcon slug={sport.slug} className="size-16 shrink-0 border-2 border-[var(--portal-ink-foreground)]/20 [&>svg]:size-8 sm:size-20 sm:[&>svg]:size-10" />
+    );
+    const heroMeta = (
+        <>
+            <span>{sport.is_paragames ? 'Paragames' : 'Regular Sport'}</span>
+            <span>
+                {sport.categories.length} {sport.categories.length === 1 ? 'category' : 'categories'}
+            </span>
+        </>
+    );
+
     if (meet === null) {
         return (
             <>
@@ -158,11 +176,26 @@ export default function PortalSportPortal({
                         href={canonicalUrl}
                     />
                 </Head>
-                <div className="flex min-h-[60vh] flex-col gap-8">
+                <div className="flex flex-col gap-8">
                     <PortalHero
+                        icon={heroIcon}
                         title={sport.name}
                         description="Live scores, schedules, and standings for this sport."
+                        meta={heroMeta}
                     />
+                    <PortalSportPhoto photoUrl={sport.photo_url} sportName={sport.name} />
+                    <section className="space-y-3">
+                        <PortalSectionHeader title="About" />
+                        <PortalSportDescription description={sport.description} />
+                    </section>
+                    <section className="space-y-3">
+                        <PortalSectionHeader title="Competition categories" />
+                        <PortalSportCategories categories={sport.categories} />
+                    </section>
+                    <section className="space-y-3">
+                        <PortalSectionHeader title="Technical officials" />
+                        <PortalTechnicalOfficials officials={sport.technical_officials} />
+                    </section>
                     <PortalEmptyState
                         icon={Trophy}
                         title="No meet is active right now"
@@ -227,10 +260,57 @@ export default function PortalSportPortal({
                     </div>
                 ) : (
                     <PortalHero
+                        icon={heroIcon}
                         title={sport.name}
                         description={`Live scores, schedules, and standings for ${sport.name} at ${meet.name}.`}
+                        meta={
+                            <>
+                                {heroMeta}
+                                {liveNow !== null && (
+                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--portal-live)] px-2.5 py-1 text-xs font-bold text-[var(--portal-live-foreground)]">
+                                        LIVE NOW
+                                    </span>
+                                )}
+                            </>
+                        }
                     />
                 )}
+
+                <PortalSportPhoto photoUrl={sport.photo_url} sportName={sport.name} />
+
+                <section className="space-y-3">
+                    <PortalSectionHeader title="About" />
+                    <PortalSportDescription description={sport.description} />
+                </section>
+
+                <section className="space-y-3">
+                    <PortalSectionHeader title="Competition categories" />
+                    <PortalSportCategories categories={sport.categories} />
+                </section>
+
+                <section className="space-y-3">
+                    <PortalSectionHeader title="Venue information" />
+                    <PortalVenueInformation venues={venues} />
+                </section>
+
+                <section className="space-y-3">
+                    <PortalSectionHeader title="Schedule summary" />
+                    <PortalScheduleList
+                        games={[...todayGames, ...upcomingGames].slice(0, 3)}
+                        emptyTitle="Nothing scheduled yet"
+                        emptyDescription="This sport's schedule appears here once set."
+                    />
+                </section>
+
+                <section className="space-y-3">
+                    <PortalSectionHeader title="Tournament management" />
+                    <PortalTournamentManagement assignments={sport.tournament_management} />
+                </section>
+
+                <section className="space-y-3">
+                    <PortalSectionHeader title="Technical officials" />
+                    <PortalTechnicalOfficials officials={sport.technical_officials} />
+                </section>
 
                 <section className="space-y-3">
                     {!showSportStrip && (
@@ -321,11 +401,6 @@ export default function PortalSportPortal({
                         <PortalSectionHeader title="Tournament bracket" />
                         <PortalTournamentBracket rounds={null} />
                     </div>
-                </section>
-
-                <section className="space-y-3">
-                    <PortalSectionHeader title="Venue information" />
-                    <PortalVenueInformation venues={venues} />
                 </section>
             </div>
         </>

@@ -41,6 +41,7 @@ use App\Http\Controllers\MeetController;
 use App\Http\Controllers\MeetSportAssignmentController;
 use App\Http\Controllers\PersonnelController;
 use App\Http\Controllers\PortalController;
+use App\Http\Controllers\PortalSportsController;
 use App\Http\Controllers\PortalTeamsController;
 use App\Http\Controllers\ProtestController;
 use App\Http\Controllers\ReadinessChecklistController;
@@ -64,6 +65,7 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('throttle:60,1')->group(function () {
     Route::get('/', [PortalController::class, 'home'])->name('home');
     Route::get('districts/{district}/logo', [DistrictController::class, 'logo'])->name('districts.logo');
+    Route::get('sports/{sport}/photo', [SportController::class, 'photo'])->name('sports.photo');
     Route::get('division/logo', [DivisionController::class, 'logo'])->name('division.logo');
     Route::get('division/hero-icon', [DivisionController::class, 'heroIcon'])->name('division.hero-icon');
     Route::get('meets/{meet}', [PortalController::class, 'meet'])
@@ -118,9 +120,24 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('teams/{municipality}', [PortalTeamsController::class, 'show'])->name('public.teams.show');
     Route::get('teams/{municipality}/players-coaches', [PortalTeamsController::class, 'playersCoaches'])->name('public.teams.players-coaches');
 
+    // Public sports directory — the full 28-sport catalog, browsable by
+    // Regular Sports/Paragames, each card linking to its own permanent
+    // mini portal below. Deliberately NOT `/sports` — that URI is already
+    // claimed by the authenticated admin catalog route (`sports.index`,
+    // registered later in this file with an identical bare "sports" URI).
+    // Laravel's route collection silently overwrites on identical
+    // method+URI, so registering both at `/sports` made guests hit the
+    // admin route's `auth` middleware and bounce to `/login` — confirmed
+    // with a real request before choosing this path instead of touching
+    // the existing admin route. Registered ahead of the `{sportSlug}`
+    // catch-all for readability; not actually order-dependent since
+    // "sports-directory" isn't one of `SportPortalSlug::values()`.
+    Route::get('sports-directory', [PortalSportsController::class, 'index'])->name('public.sports-directory');
+
     // Phase 12: permanent, meet-agnostic sport-portal routes
-    // (`/basketball`, etc.) — constrained to the 12 known slugs so this
-    // can never intercept any other top-level route.
+    // (`/basketball`, etc.) — constrained to the full 28-sport catalog
+    // (`SportPortalSlug::values()`) so this can never intercept any other
+    // top-level route.
     Route::get('{sportSlug}/poll', [PortalController::class, 'sportPortalPoll'])
         ->whereIn('sportSlug', SportPortalSlug::values())
         ->name('public.sport-portal.poll');

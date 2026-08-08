@@ -18,6 +18,7 @@ import {
     search as publicSearch,
     sportPortal,
     sports as publicSports,
+    sportsDirectory as publicSportsDirectory,
     tally as publicTally,
     teams as publicTeams,
 } from '@/routes/public';
@@ -62,13 +63,21 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
     }
 
     // Meet-agnostic, like the sport-portal routes below — a municipality's
-    // profile stays reachable at the same URL regardless of which meet is
-    // currently active, so this doesn't need to wait on `nav`.
-    items.push({
-        label: 'Teams',
-        href: publicTeams().url,
-        active: activePath.startsWith('/teams'),
-    });
+    // profile/the sports catalog stays reachable at the same URL
+    // regardless of which meet is currently active, so these don't need
+    // to wait on `nav`.
+    items.push(
+        {
+            label: 'Sports',
+            href: publicSportsDirectory().url,
+            active: activePath.startsWith('/sports-directory'),
+        },
+        {
+            label: 'Teams',
+            href: publicTeams().url,
+            active: activePath.startsWith('/teams'),
+        },
+    );
 
     const sportItems = PORTAL_SPORTS.map((sport) => ({
         label: sport.name,

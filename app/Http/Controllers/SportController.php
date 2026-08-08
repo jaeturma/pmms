@@ -11,9 +11,11 @@ use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class SportController extends Controller
 {
@@ -144,6 +146,23 @@ class SportController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Technical officials updated.')]);
 
         return back();
+    }
+
+    /**
+     * Serve a sport's public photo — same guest-accessible, policy-free
+     * "just stream the file" shape as `DistrictController::logo()`. No
+     * upload path exists yet to actually set `photo_upload_id` (out of
+     * this WP's scope — admin-side, not the public portal), so this
+     * currently 404s for every sport; it's here so the public mini
+     * portal's `photoUrl()` has somewhere real to point once one does.
+     */
+    public function photo(Sport $sport): HttpResponse
+    {
+        $upload = $sport->photo;
+
+        abort_if($upload === null, 404);
+
+        return Storage::disk($upload->disk)->response($upload->path, $upload->original_name);
     }
 
     /**

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { cn } from '@/apps/portal/lib/utils';
 
 type PortalHeroProps = {
+    icon?: ReactNode;
     eyebrow?: string;
     title: string;
     description?: string;
@@ -19,7 +20,7 @@ type PortalHeroProps = {
  * padding so content still lines up with the rest of the page instead of
  * touching the true edge.
  */
-export function PortalHero({ eyebrow, title, description, meta, actions, className }: PortalHeroProps) {
+export function PortalHero({ icon, eyebrow, title, description, meta, actions, className }: PortalHeroProps) {
     return (
         <section
             className={cn(
@@ -27,13 +28,20 @@ export function PortalHero({ eyebrow, title, description, meta, actions, classNa
                 className,
             )}
         >
-            {eyebrow && (
-                <p className="text-xs font-semibold tracking-wide text-[var(--portal-ink-foreground)]/70 uppercase">
-                    {eyebrow}
-                </p>
-            )}
-            <h1 className="mt-2 text-2xl font-bold uppercase sm:text-4xl">{title}</h1>
-            {description && <p className="mt-3 max-w-2xl text-sm text-[var(--portal-ink-foreground)]/80 sm:text-base">{description}</p>}
+            <div className={cn(icon && 'flex items-start gap-4 sm:items-center sm:gap-5')}>
+                {icon}
+                <div className="min-w-0">
+                    {eyebrow && (
+                        <p className="text-xs font-semibold tracking-wide text-[var(--portal-ink-foreground)]/70 uppercase">
+                            {eyebrow}
+                        </p>
+                    )}
+                    <h1 className="mt-2 text-2xl font-bold uppercase sm:text-4xl">{title}</h1>
+                    {description && (
+                        <p className="mt-3 max-w-2xl text-sm text-[var(--portal-ink-foreground)]/80 sm:text-base">{description}</p>
+                    )}
+                </div>
+            </div>
             {meta && <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[var(--portal-ink-foreground)]/80">{meta}</div>}
             {actions && <div className="mt-6 flex flex-wrap gap-3">{actions}</div>}
         </section>

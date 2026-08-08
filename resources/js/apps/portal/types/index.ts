@@ -78,11 +78,6 @@ export type PortalLiveMatch = {
     status_label: string;
 };
 
-export type PortalSport = {
-    slug: string;
-    name: string;
-};
-
 export type PortalGame = {
     id: number;
     round_label: string | null;
@@ -386,4 +381,63 @@ export type PortalMatchSummary = {
     scheduled_date: string | null;
     starts_at: string | null;
     scheduled_start_at: string | null;
+};
+
+/** `PortalSportsController::sportCards()` — one card per catalog sport
+ * on the `/sports-directory` browse page. */
+export type PortalSportCard = {
+    id: number;
+    slug: string;
+    name: string;
+    short_description: string | null;
+    photo_url: string | null;
+    is_paragames: boolean;
+    category_count: number;
+    is_live: boolean;
+};
+
+/** A Tournament Management assignment — Tournament Manager/Assistant/
+ * Track/Field/Boys/Girls/Category TM, Tournament Secretary, or
+ * Tournament ICT — for one sport's mini portal. Public-safe fields only:
+ * never phone/email/address/birth date/employee id/medical/account. */
+export type PortalSportPersonnelAssignment = {
+    name: string;
+    role_label: string;
+    category: string | null;
+    is_lead: boolean;
+};
+
+/** A Technical Official for one sport's mini portal — `duty` is `null`
+ * until an admin sets it (see `sport_user.duty`); the frontend renders
+ * that as the generic "Technical Official" label, never a fabricated
+ * duty. Public-safe fields only, same rule as
+ * `PortalSportPersonnelAssignment`. */
+export type PortalTechnicalOfficial = {
+    name: string;
+    duty: string | null;
+};
+
+export type PortalSportCategorySummary = {
+    id: number;
+    display_name: string;
+    level: string | null;
+    sex: string | null;
+};
+
+/** `sport-portal.tsx`'s `sport` prop, extended (WP: public sports
+ * directory & mini portals) with the mini portal's new upper-section
+ * fields — photo/description/categories/personnel — layered above the
+ * page's existing live/competition props (`venues`/`todayGames`/
+ * `upcomingGames` already cover Venue Information/Schedule Summary, so
+ * those aren't duplicated here). */
+export type PortalSport = {
+    slug: string;
+    name: string;
+    is_paragames: boolean;
+    short_description: string | null;
+    description: string | null;
+    photo_url: string | null;
+    categories: PortalSportCategorySummary[];
+    tournament_management: PortalSportPersonnelAssignment[];
+    technical_officials: PortalTechnicalOfficial[];
 };
