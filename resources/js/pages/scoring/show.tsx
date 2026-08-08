@@ -7,23 +7,31 @@ import { BasketballGameControl } from '@/components/basketball-game-control';
 import { BoxingGameControl } from '@/components/boxing-game-control';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
+import { FootballFutsalGameControl } from '@/components/football-futsal-game-control';
 import { LiveBadge } from '@/components/live-badge';
 import type { LiveSession, Participant } from '@/components/live-score-display';
 import {
     CorrectionDialog,
     isBasketballState,
     isBoxingState,
+    isFootballState,
+    isRacketGamesState,
+    isRallySetsState,
     isSoftballState,
+    isWrestlingState,
     LiveScoreDisplay,
     PlayByPlayList,
 } from '@/components/live-score-display';
 import { PageHeader } from '@/components/page-header';
+import { RacketGamesGameControl } from '@/components/racket-games-game-control';
 import { SoftballBaseballGameControl } from '@/components/softball-baseball-game-control';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { VolleyballSepakTakrawGameControl } from '@/components/volleyball-sepak-takraw-game-control';
+import { WrestlingGameControl } from '@/components/wrestling-game-control';
 import { index as matchesIndex } from '@/routes/matches';
 import {
     end as endRoute,
@@ -61,7 +69,15 @@ type Props = {
     };
     suggestedLabels: [string | null, string | null];
     suggestedBoardType:
-        'generic' | 'basketball' | 'boxing' | 'softball_baseball';
+        | 'generic'
+        | 'basketball'
+        | 'boxing'
+        | 'softball_baseball'
+        | 'volleyball_sepak_takraw'
+        | 'football_futsal'
+        | 'racket_games'
+        | 'combat_rounds'
+        | 'wrestling';
     session: Session | null;
     channel: string;
     canManage: boolean;
@@ -201,6 +217,22 @@ export default function ScoringBoard({
             : null;
     const softballState =
         session && isSoftballState(session.sport_state)
+            ? session.sport_state
+            : null;
+    const rallySetsState =
+        session && isRallySetsState(session.sport_state)
+            ? session.sport_state
+            : null;
+    const footballState =
+        session && isFootballState(session.sport_state)
+            ? session.sport_state
+            : null;
+    const racketGamesState =
+        session && isRacketGamesState(session.sport_state)
+            ? session.sport_state
+            : null;
+    const wrestlingState =
+        session && isWrestlingState(session.sport_state)
             ? session.sport_state
             : null;
 
@@ -356,11 +388,43 @@ export default function ScoringBoard({
                             />
                         )}
 
+                        {isManager && isActive && rallySetsState && (
+                            <VolleyballSepakTakrawGameControl
+                                session={session}
+                                state={rallySetsState}
+                            />
+                        )}
+
+                        {isManager && isActive && footballState && (
+                            <FootballFutsalGameControl
+                                session={session}
+                                state={footballState}
+                            />
+                        )}
+
+                        {isManager && isActive && racketGamesState && (
+                            <RacketGamesGameControl
+                                session={session}
+                                state={racketGamesState}
+                            />
+                        )}
+
+                        {isManager && isActive && wrestlingState && (
+                            <WrestlingGameControl
+                                session={session}
+                                state={wrestlingState}
+                            />
+                        )}
+
                         {isManager &&
                             isActive &&
                             !basketballState &&
                             !boxingState &&
-                            !softballState && (
+                            !softballState &&
+                            !rallySetsState &&
+                            !footballState &&
+                            !racketGamesState &&
+                            !wrestlingState && (
                                 <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 print:hidden">
                                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                         <div className="flex flex-col items-center gap-2">
@@ -486,7 +550,11 @@ export default function ScoringBoard({
                             isActive &&
                             (basketballState ||
                                 boxingState ||
-                                softballState) && (
+                                softballState ||
+                                rallySetsState ||
+                                footballState ||
+                                racketGamesState ||
+                                wrestlingState) && (
                                 <div className="mx-auto flex w-full max-w-2xl justify-center print:hidden">
                                     <ConfirmDialog
                                         trigger={

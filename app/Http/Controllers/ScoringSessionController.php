@@ -174,7 +174,16 @@ class ScoringSessionController extends Controller
                 'team_color_a' => '#dc2626', 'team_color_b' => '#2563eb',
                 'horn_sounded_at' => null, 'quarters' => 4,
             ],
-            ScoreboardType::Boxing => [
+            // Taekwondo/Wushu/Pencak Silat (CombatRounds) share the exact
+            // same round/rest-clock + bell + judged-round-points shape as
+            // boxing — all four are genuinely 3-round, red/blue-corner
+            // combat sports at the level of detail this app models, not a
+            // fabricated resemblance. Deliberately not varying the
+            // defaults per sport the way e.g. volleyball/sepak takraw
+            // does — real round/rest duration varies more by age
+            // division/weight class than by sport, and the operator can
+            // already adjust it via settings().
+            ScoreboardType::Boxing, ScoreboardType::CombatRounds => [
                 'rounds' => [],
                 'round_duration_seconds' => 120, 'rest_duration_seconds' => 60, 'total_rounds' => 3,
                 'clock_seconds' => 120, 'clock_updated_at' => null, 'clock_phase' => 'round',
@@ -184,6 +193,18 @@ class ScoringSessionController extends Controller
                 'inning' => 1, 'half' => 'top', 'outs' => 0, 'balls' => 0, 'strikes' => 0, 'innings' => [],
                 'innings_scheduled' => 7,
                 'team_color_a' => '#dc2626', 'team_color_b' => '#2563eb',
+            ],
+            ScoreboardType::VolleyballSepakTakraw => $this->initialRallySetsState($match->event->sport->name),
+            ScoreboardType::FootballFutsal => [
+                'yellow_cards_a' => 0, 'yellow_cards_b' => 0,
+                'red_cards_a' => 0, 'red_cards_b' => 0,
+                'minutes_per_half' => mb_strtolower($match->event->sport->name) === 'futsal' ? 20 : 45,
+            ],
+            ScoreboardType::RacketGames => $this->initialRacketGamesState($match->event->sport->name),
+            ScoreboardType::Wrestling => [
+                'period_duration_seconds' => 180, 'rest_duration_seconds' => 30, 'total_periods' => 2,
+                'clock_seconds' => 180, 'clock_updated_at' => null, 'clock_phase' => 'period',
+                'fall_side' => null, 'fall_declared_at' => null,
             ],
             default => null,
         };
@@ -436,18 +457,20 @@ class ScoringSessionController extends Controller
 
     /**
      * Record a judged round score for both sides at once (boxing
-     * scoreboard only — WP-07-05), 10-point-must style. Appends to the
-     * round-by-round history in `sport_state` and adds to the session's
-     * running `score_a`/`score_b` total — the same cumulative total every
-     * board type displays. Past rounds are not individually editable here;
-     * a mis-scored round is fixed the same way as any other board type,
-     * through the generic `score` correction endpoint.
+     * scoreboard — WP-07-05 — and taekwondo/wushu/pencak silat, which
+     * share this exact round-clock+judged-round-points shape), 10-point-
+     * must style. Appends to the round-by-round history in `sport_state`
+     * and adds to the session's running `score_a`/`score_b` total — the
+     * same cumulative total every board type displays. Past rounds are
+     * not individually editable here; a mis-scored round is fixed the
+     * same way as any other board type, through the generic `score`
+     * correction endpoint.
      */
     public function round(Request $request, ScoringSession $session): RedirectResponse
     {
         $this->authorizeManageSession($request, $session);
         $this->assertActive($session);
-        $this->assertBoxing($session);
+        $this->assertBoxingOrCombatRounds($session);
 
         $data = $request->validate([
             'score_a' => ['required', 'integer', 'min:0', 'max:10'],
@@ -483,6 +506,506 @@ class ScoringSessionController extends Controller
         ]);
 
         $this->audit->record('scoring.round_scored', $session, [...$this->context($session), 'round' => $roundNumber, ...$data]);
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Record a rally point or a correction to the current set's live score
+     * — volleyball/sepak takraw only. Unlike boxing's round() (a whole
+     * round judged and entered at once), a set is built up point by point,
+     * so this is closer in shape to the generic score() endpoint, just
+     * targeting `sport_state.current_set_score_*` instead of the session's
+     * own `score_a`/`score_b` columns — those instead track **sets won**
+     * for this sport (the number the main scoreboard shows), only ever
+     * changed here when a point completes a set. A `point` (not
+     * `correction`) delta that brings a side to the set's target with a
+     * 2-point lead finalizes the set: appends to `sport_state.sets`,
+     * increments `sets_won_*`, resets the live set score to 0-0, and syncs
+     * `score_a`/`score_b` to the new `sets_won_*` — this app never
+     * auto-ends the session even once a side reaches the sets needed to
+     * win a match, same restraint as every other sport-specific rule here
+     * (the operator still ends it manually). A `correction` only adjusts
+     * the live set score and never triggers set completion, so a
+     * mis-tapped point can be undone without accidentally finalizing a set
+     * a moment too early.
+     */
+    public function rallyPoint(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertVolleyballSepakTakraw($session);
+
+        $data = $request->validate([
+            'type' => ['required', Rule::in([ScoreEventType::Point->value, ScoreEventType::Correction->value])],
+            'side' => ['required', Rule::in(['a', 'b'])],
+            'delta' => ['required', 'integer'],
+            'reason' => ['required_if:type,'.ScoreEventType::Correction->value, 'nullable', 'string', 'max:500'],
+        ]);
+
+        if ($session->sport_state === null) {
+            $session->loadMissing('match.event.sport');
+        }
+
+        $state = $session->sport_state ?? $this->initialRallySetsState($session->match->event->sport->name);
+        $column = $data['side'] === 'a' ? 'current_set_score_a' : 'current_set_score_b';
+        $state[$column] = max(0, $state[$column] + $data['delta']);
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            // Always RallyPoint, even for a correction — this action
+            // targets `current_set_score_*`, not the session's own
+            // `score_a`/`score_b`, so it must never share the generic
+            // Correction type (playByPlay()'s reconstruction treats that
+            // type as a main-score delta; sharing it would corrupt the
+            // sets-won running total). `is_correction` distinguishes the
+            // two within this one type instead.
+            'type' => ScoreEventType::RallyPoint,
+            'payload' => [
+                'side' => $data['side'],
+                'delta' => $data['delta'],
+                'is_correction' => $data['type'] === ScoreEventType::Correction->value,
+                'reason' => $data['reason'] ?? null,
+                'current_set_score_a' => $state['current_set_score_a'],
+                'current_set_score_b' => $state['current_set_score_b'],
+                'set' => count($state['sets']) + 1,
+            ],
+            'recorded_by' => $user->id,
+        ]);
+
+        $setCompleted = null;
+
+        if ($data['type'] === ScoreEventType::Point->value) {
+            $setCompleted = $this->finalizeSetIfWon($state);
+        }
+
+        $session->forceFill([
+            'sport_state' => $state,
+            'score_a' => $state['sets_won_a'],
+            'score_b' => $state['sets_won_b'],
+        ])->save();
+
+        if ($setCompleted !== null) {
+            ScoreEvent::create([
+                'scoring_session_id' => $session->id,
+                'type' => ScoreEventType::SetComplete,
+                'payload' => $setCompleted,
+                'recorded_by' => $user->id,
+            ]);
+
+            $this->audit->record('scoring.set_completed', $session, [...$this->context($session), ...$setCompleted]);
+        }
+
+        $this->audit->record(
+            $data['type'] === ScoreEventType::Correction->value ? 'scoring.rally_point_corrected' : 'scoring.rally_point_scored',
+            $session,
+            [...$this->context($session), 'side' => $data['side'], 'delta' => $data['delta'], 'reason' => $data['reason'] ?? null],
+        );
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Whether the just-updated live set score reaches this set's target
+     * with the required 2-point lead — the deciding set (both sides one
+     * set away from winning the match) uses `deciding_set_target_points`
+     * instead of the regular `set_target_points`, the same real rule
+     * volleyball/sepak takraw both use. Mutates `$state` in place (appends
+     * to `sets`, increments `sets_won_*`, resets the live set score) and
+     * returns the completed set's summary for the caller's own
+     * `score_events`/audit row, or `null` if the set isn't over yet.
+     *
+     * @param  array<string, mixed>  &$state
+     * @return array{set: int, score_a: int, score_b: int, sets_won_a: int, sets_won_b: int}|null
+     */
+    private function finalizeSetIfWon(array &$state): ?array
+    {
+        $isDecidingSet = ($state['sets_won_a'] + $state['sets_won_b']) === (2 * $state['sets_to_win'] - 2);
+        $target = $isDecidingSet ? $state['deciding_set_target_points'] : $state['set_target_points'];
+
+        $a = $state['current_set_score_a'];
+        $b = $state['current_set_score_b'];
+
+        if (max($a, $b) < $target || abs($a - $b) < 2) {
+            return null;
+        }
+
+        $setNumber = count($state['sets']) + 1;
+        $state['sets'][] = ['set' => $setNumber, 'score_a' => $a, 'score_b' => $b];
+
+        if ($a > $b) {
+            $state['sets_won_a']++;
+        } else {
+            $state['sets_won_b']++;
+        }
+
+        $state['current_set_score_a'] = 0;
+        $state['current_set_score_b'] = 0;
+
+        return [
+            'set' => $setNumber,
+            'score_a' => $a,
+            'score_b' => $b,
+            'sets_won_a' => $state['sets_won_a'],
+            'sets_won_b' => $state['sets_won_b'],
+        ];
+    }
+
+    /**
+     * Record or reset a card tally — football/futsal only, the same
+     * add/reset team-tally shape as basketball's foul() above (`add`
+     * increments one of four counters — yellow/red × side; `reset` zeroes
+     * all four, e.g. an operator correcting a mis-tap, since this app
+     * never auto-clears cards at a real stoppage the way it does for
+     * basketball's per-quarter fouls). No roster/per-player attribution,
+     * matching this WP's scope decision for every sport after basketball
+     * (team-level tallies only).
+     */
+    public function card(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertFootballFutsal($session);
+
+        $data = $request->validate([
+            'action' => ['required', Rule::in(['add', 'reset'])],
+            'side' => ['required_if:action,add', 'nullable', Rule::in(['a', 'b'])],
+            'type' => ['required_if:action,add', 'nullable', Rule::in(['yellow', 'red'])],
+        ]);
+
+        $state = $session->sport_state ?? [
+            'yellow_cards_a' => 0, 'yellow_cards_b' => 0,
+            'red_cards_a' => 0, 'red_cards_b' => 0,
+        ];
+
+        if ($data['action'] === 'add') {
+            $column = "{$data['type']}_cards_{$data['side']}";
+            $state[$column] = ($state[$column] ?? 0) + 1;
+        } else {
+            $state['yellow_cards_a'] = 0;
+            $state['yellow_cards_b'] = 0;
+            $state['red_cards_a'] = 0;
+            $state['red_cards_b'] = 0;
+        }
+
+        $session->forceFill(['sport_state' => $state])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::Card,
+            'payload' => [
+                ...$data,
+                'yellow_cards_a' => $state['yellow_cards_a'],
+                'yellow_cards_b' => $state['yellow_cards_b'],
+                'red_cards_a' => $state['red_cards_a'],
+                'red_cards_b' => $state['red_cards_b'],
+            ],
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record(
+            $data['action'] === 'add' ? 'scoring.card_issued' : 'scoring.cards_reset',
+            $session,
+            [...$this->context($session), ...$data],
+        );
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Record a game point or a correction to the current game's live score
+     * — table tennis/badminton only. Same shape as volleyball/sepak
+     * takraw's rallyPoint() (point-by-point toward a `sport_state.
+     * current_game_score_*`, corrections never trigger completion,
+     * `score_a`/`score_b` track **games won** not points), kept as its
+     * own endpoint/event type rather than reusing rallyPoint()'s because
+     * the win condition genuinely differs: badminton's hard cap at 30
+     * (finalizeGameIfWon() below) has no equivalent in volleyball's rules,
+     * and sharing one endpoint for two different win-condition shapes
+     * would be more error-prone than two small, clear ones.
+     */
+    public function gamePoint(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertRacketGames($session);
+
+        $data = $request->validate([
+            'type' => ['required', Rule::in([ScoreEventType::Point->value, ScoreEventType::Correction->value])],
+            'side' => ['required', Rule::in(['a', 'b'])],
+            'delta' => ['required', 'integer'],
+            'reason' => ['required_if:type,'.ScoreEventType::Correction->value, 'nullable', 'string', 'max:500'],
+        ]);
+
+        if ($session->sport_state === null) {
+            $session->loadMissing('match.event.sport');
+        }
+
+        $state = $session->sport_state ?? $this->initialRacketGamesState($session->match->event->sport->name);
+        $column = $data['side'] === 'a' ? 'current_game_score_a' : 'current_game_score_b';
+        $state[$column] = max(0, $state[$column] + $data['delta']);
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            // Always GamePoint, even for a correction — same reasoning as
+            // rallyPoint()'s RallyPoint type: this targets
+            // `current_game_score_*`, not the session's own `score_a`/
+            // `score_b`, so it must never share the generic Correction
+            // type (playByPlay()'s reconstruction would misread it as a
+            // main-score delta and corrupt the games-won running total).
+            'type' => ScoreEventType::GamePoint,
+            'payload' => [
+                'side' => $data['side'],
+                'delta' => $data['delta'],
+                'is_correction' => $data['type'] === ScoreEventType::Correction->value,
+                'reason' => $data['reason'] ?? null,
+                'current_game_score_a' => $state['current_game_score_a'],
+                'current_game_score_b' => $state['current_game_score_b'],
+                'game' => count($state['games']) + 1,
+            ],
+            'recorded_by' => $user->id,
+        ]);
+
+        $gameCompleted = null;
+
+        if ($data['type'] === ScoreEventType::Point->value) {
+            $gameCompleted = $this->finalizeGameIfWon($state);
+        }
+
+        $session->forceFill([
+            'sport_state' => $state,
+            'score_a' => $state['games_won_a'],
+            'score_b' => $state['games_won_b'],
+        ])->save();
+
+        if ($gameCompleted !== null) {
+            ScoreEvent::create([
+                'scoring_session_id' => $session->id,
+                'type' => ScoreEventType::GameComplete,
+                'payload' => $gameCompleted,
+                'recorded_by' => $user->id,
+            ]);
+
+            $this->audit->record('scoring.game_completed', $session, [...$this->context($session), ...$gameCompleted]);
+        }
+
+        $this->audit->record(
+            $data['type'] === ScoreEventType::Correction->value ? 'scoring.game_point_corrected' : 'scoring.game_point_scored',
+            $session,
+            [...$this->context($session), 'side' => $data['side'], 'delta' => $data['delta'], 'reason' => $data['reason'] ?? null],
+        );
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Whether the just-updated live game score is over — either side
+     * reaching `hard_cap_points` (badminton's 30-point ceiling; `0` means
+     * no cap, table tennis) wins immediately regardless of lead, otherwise
+     * the normal target-with-a-2-point-lead rule applies (both sports use
+     * the same target for every game, including the decider — no
+     * volleyball-style reduced deciding-game target here). Mutates
+     * `$state` in place and returns the completed game's summary, or
+     * `null` if the game isn't over yet.
+     *
+     * @param  array<string, mixed>  &$state
+     * @return array{game: int, score_a: int, score_b: int, games_won_a: int, games_won_b: int}|null
+     */
+    private function finalizeGameIfWon(array &$state): ?array
+    {
+        $a = $state['current_game_score_a'];
+        $b = $state['current_game_score_b'];
+        $cap = $state['hard_cap_points'];
+        $target = $state['game_target_points'];
+
+        $capReached = $cap > 0 && max($a, $b) >= $cap;
+        $targetReachedWithLead = max($a, $b) >= $target && abs($a - $b) >= 2;
+
+        if (! $capReached && ! $targetReachedWithLead) {
+            return null;
+        }
+
+        $gameNumber = count($state['games']) + 1;
+        $state['games'][] = ['game' => $gameNumber, 'score_a' => $a, 'score_b' => $b];
+
+        if ($a > $b) {
+            $state['games_won_a']++;
+        } else {
+            $state['games_won_b']++;
+        }
+
+        $state['current_game_score_a'] = 0;
+        $state['current_game_score_b'] = 0;
+
+        return [
+            'game' => $gameNumber,
+            'score_a' => $a,
+            'score_b' => $b,
+            'games_won_a' => $state['games_won_a'],
+            'games_won_b' => $state['games_won_b'],
+        ];
+    }
+
+    /**
+     * Record a named-move wrestling point — wrestling only. Unlike boxing's
+     * round() (a whole round judged and entered at once) or the rally-
+     * point sports' current-set/current-game tracking, wrestling's
+     * `score_a`/`score_b` columns are a plain running point total, the
+     * same semantic as basketball/football's — so, deliberately, a
+     * correction does NOT get its own endpoint here; a mis-tapped point
+     * is fixed through the existing generic `scoring.score` correction
+     * endpoint exactly like basketball/football already do, since there's
+     * no risk of misreading the correction as the wrong kind of delta
+     * (unlike rallyPoint()/gamePoint(), which had to avoid the generic
+     * Correction type because THEIR score_a/b means sets/games won, not
+     * points). The `move` is real, structured data for the bout sheet/
+     * play-by-play (e.g. "+2 Takedown — Red"), not just a label — this
+     * app doesn't hardcode a per-move point value (real values vary by
+     * wrestling style/rule set), the operator supplies `points` for
+     * whichever move actually happened.
+     */
+    public function wrestlingPoint(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertWrestling($session);
+
+        $data = $request->validate([
+            'side' => ['required', Rule::in(['a', 'b'])],
+            'move' => ['required', Rule::in(['takedown', 'escape', 'reversal', 'near_fall', 'penalty'])],
+            'points' => ['required', 'integer', 'min:1', 'max:5'],
+        ]);
+
+        $column = $data['side'] === 'a' ? 'score_a' : 'score_b';
+        $newValue = $session->{$column} + $data['points'];
+
+        $session->forceFill([$column => $newValue])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::WrestlingPoint,
+            'payload' => [
+                'side' => $data['side'],
+                'move' => $data['move'],
+                'points' => $data['points'],
+                'result' => $newValue,
+            ],
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record('scoring.wrestling_point_scored', $session, [...$this->context($session), ...$data]);
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Set the wrestling period/rest countdown clock — wrestling only.
+     * Same manual anchor+ticker shape and `phase`-vs-`seconds` split as
+     * boxing's roundClock() above, just wrestling's own field names
+     * (period, not round — real wrestling terminology) since this WP
+     * gave wrestling its own board type rather than reusing boxing's.
+     */
+    public function periodClock(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertWrestling($session);
+
+        $data = $request->validate([
+            'phase' => ['nullable', Rule::in(['period', 'rest'])],
+            'seconds' => ['nullable', 'integer', 'min:0', 'max:600'],
+        ]);
+
+        $state = $session->sport_state ?? [];
+
+        if (($data['phase'] ?? null) !== null) {
+            $state['clock_phase'] = $data['phase'];
+            $state['clock_seconds'] = $data['phase'] === 'period'
+                ? ($state['period_duration_seconds'] ?? 180)
+                : ($state['rest_duration_seconds'] ?? 30);
+        } elseif (($data['seconds'] ?? null) !== null) {
+            $state['clock_seconds'] = $data['seconds'];
+        }
+
+        $state['clock_updated_at'] = now()->toIso8601String();
+
+        $session->forceFill(['sport_state' => $state])->save();
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Declare or clear a fall (pin) — wrestling only. A fall is a real,
+     * decisive event worth logging (`fall_side`/`fall_declared_at` in
+     * `sport_state`, plus a `score_events` row for the permanent record),
+     * but — same restraint as every other sport-specific rule in this
+     * controller — it never auto-ends the session or implies an official
+     * result; the operator still ends the session manually, and the
+     * actual win/loss is still encoded separately through Phase 3's own
+     * result flow. `clear` undoes a mis-tapped declaration.
+     */
+    public function fall(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertWrestling($session);
+
+        $data = $request->validate([
+            'action' => ['required', Rule::in(['declare', 'clear'])],
+            'side' => ['required_if:action,declare', 'nullable', Rule::in(['a', 'b'])],
+        ]);
+
+        $state = $session->sport_state ?? [];
+
+        if ($data['action'] === 'declare') {
+            $state['fall_side'] = $data['side'];
+            $state['fall_declared_at'] = now()->toIso8601String();
+        } else {
+            $state['fall_side'] = null;
+            $state['fall_declared_at'] = null;
+        }
+
+        $session->forceFill(['sport_state' => $state])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::Fall,
+            'payload' => $data,
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record(
+            $data['action'] === 'declare' ? 'scoring.fall_declared' : 'scoring.fall_cleared',
+            $session,
+            [...$this->context($session), ...$data],
+        );
 
         broadcast(new ScoreUpdated($session))->toOthers();
 
@@ -602,11 +1125,25 @@ class ScoringSessionController extends Controller
      * not a play, so this doesn't append a score_events row/play-by-play
      * line, same reasoning as gameClock()/shotClock()/roundClock() below.
      * Basketball: minutes per period, shot clock duration, team colors,
-     * quarters. Boxing: round/rest duration, total rounds. Softball/
-     * baseball: team colors and the regulation innings count (a display
+     * quarters. Boxing (and taekwondo/wushu/pencak silat, which share
+     * boxing's exact round-clock shape): round/rest duration, total
+     * rounds. Softball/baseball: team colors and the regulation innings
+     * count (a display
      * label only — this app doesn't enforce a game length or auto-end a
      * session from it, same restraint as every other sport-specific rule
-     * documented in docs/live-scoring.md).
+     * documented in docs/live-scoring.md). Volleyball/sepak takraw: the
+     * regular and deciding-set target points, and sets needed to win —
+     * changing these mid-set is a real, if unusual, operator action (e.g.
+     * correcting a meet's local variant), not something this app blocks.
+     * Football/futsal: minutes per half — a display label only, same
+     * restraint as softball's regulation-innings count; the match clock
+     * itself is the plain elapsed-time `RunningClock` every board type
+     * already gets for free, not a new per-sport countdown. Table tennis/
+     * badminton: the target points per game, the hard-cap point (0 =
+     * none, badminton's real 30-point ceiling), and games needed to win.
+     * Wrestling: period/rest duration and total periods — its own
+     * board type (not boxing's), so its own field names (period, not
+     * round).
      */
     public function settings(Request $request, ScoringSession $session): RedirectResponse
     {
@@ -621,7 +1158,7 @@ class ScoringSessionController extends Controller
                 'team_color_b' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
                 'quarters' => ['required', 'integer', Rule::in([2, 4])],
             ]),
-            ScoreboardType::Boxing => $request->validate([
+            ScoreboardType::Boxing, ScoreboardType::CombatRounds => $request->validate([
                 'round_duration_seconds' => ['required', 'integer', 'min:30', 'max:600'],
                 'rest_duration_seconds' => ['required', 'integer', 'min:15', 'max:300'],
                 'total_rounds' => ['required', 'integer', 'min:1', 'max:12'],
@@ -630,6 +1167,24 @@ class ScoringSessionController extends Controller
                 'team_color_a' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
                 'team_color_b' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
                 'innings_scheduled' => ['required', 'integer', 'min:3', 'max:15'],
+            ]),
+            ScoreboardType::VolleyballSepakTakraw => $request->validate([
+                'set_target_points' => ['required', 'integer', 'min:5', 'max:50'],
+                'deciding_set_target_points' => ['required', 'integer', 'min:5', 'max:50'],
+                'sets_to_win' => ['required', 'integer', 'min:1', 'max:5'],
+            ]),
+            ScoreboardType::FootballFutsal => $request->validate([
+                'minutes_per_half' => ['required', 'integer', 'min:5', 'max:60'],
+            ]),
+            ScoreboardType::RacketGames => $request->validate([
+                'game_target_points' => ['required', 'integer', 'min:5', 'max:50'],
+                'hard_cap_points' => ['required', 'integer', 'min:0', 'max:60'],
+                'games_to_win' => ['required', 'integer', 'min:1', 'max:5'],
+            ]),
+            ScoreboardType::Wrestling => $request->validate([
+                'period_duration_seconds' => ['required', 'integer', 'min:30', 'max:600'],
+                'rest_duration_seconds' => ['required', 'integer', 'min:10', 'max:300'],
+                'total_periods' => ['required', 'integer', 'min:1', 'max:5'],
             ]),
             default => abort(422, __('This action is not available for this board type.')),
         };
@@ -646,13 +1201,28 @@ class ScoringSessionController extends Controller
     }
 
     /**
-     * Set or clear the possession arrow — basketball only.
+     * Set or clear the possession/serve arrow — basketball (possession)
+     * and every rally/point-scoring board's serve indicator (volleyball/
+     * sepak takraw, table tennis/badminton) only. Same `sport_state.
+     * possession` key and endpoint for all of them — a serve indicator is
+     * the same "which side" concept as a possession arrow, just a
+     * different on-court meaning, so this is shared rather than
+     * duplicated per sport.
      */
     public function possession(Request $request, ScoringSession $session): RedirectResponse
     {
         $this->authorizeManageSession($request, $session);
         $this->assertActive($session);
-        $this->assertBasketball($session);
+
+        $allowedBoardTypes = [
+            ScoreboardType::Basketball,
+            ScoreboardType::VolleyballSepakTakraw,
+            ScoreboardType::RacketGames,
+        ];
+
+        if (! in_array($session->boardType(), $allowedBoardTypes, true)) {
+            abort(422, __('This action is only available for a basketball, volleyball/sepak takraw, or table tennis/badminton scoring session.'));
+        }
 
         $data = $request->validate([
             'side' => ['nullable', Rule::in(['a', 'b'])],
@@ -738,7 +1308,8 @@ class ScoringSessionController extends Controller
     }
 
     /**
-     * Set the boxing round/rest countdown clock — boxing only. Manual, not
+     * Set the round/rest countdown clock — boxing and taekwondo/wushu/
+     * pencak silat (CombatRounds), which share this exact shape. Manual, not
      * server-ticking, the same anchor+ticker shape as basketball's
      * gameClock()/shotClock() above. Two distinct actions in one endpoint:
      * passing `phase` starts that phase fresh (clock reset to the
@@ -753,7 +1324,7 @@ class ScoringSessionController extends Controller
     {
         $this->authorizeManageSession($request, $session);
         $this->assertActive($session);
-        $this->assertBoxing($session);
+        $this->assertBoxingOrCombatRounds($session);
 
         $data = $request->validate([
             'phase' => ['nullable', Rule::in(['round', 'rest'])],
@@ -781,16 +1352,16 @@ class ScoringSessionController extends Controller
     }
 
     /**
-     * Sound the bell — boxing only, the sport-correct term for the same
-     * "signal" concern basketball's horn() covers. Rings to start/end a
-     * round or rest period; no other state change, viewers flash on a
-     * fresh `bell_sounded_at`.
+     * Sound the bell — boxing and taekwondo/wushu/pencak silat (CombatRounds),
+     * the sport-correct term for the same "signal" concern basketball's
+     * horn() covers. Rings to start/end a round or rest period; no other
+     * state change, viewers flash on a fresh `bell_sounded_at`.
      */
     public function bell(Request $request, ScoringSession $session): RedirectResponse
     {
         $this->authorizeManageSession($request, $session);
         $this->assertActive($session);
-        $this->assertBoxing($session);
+        $this->assertBoxingOrCombatRounds($session);
 
         $state = $session->sport_state ?? [];
         $state['bell_sounded_at'] = now()->toIso8601String();
@@ -814,14 +1385,19 @@ class ScoringSessionController extends Controller
     }
 
     /**
-     * Sound a manual horn/buzzer signal — basketball only. No other state
-     * change; viewers flash on a fresh `horn_sounded_at`.
+     * Sound a manual horn/buzzer signal — basketball and wrestling only
+     * (wrestling's real mat-side signal is a horn/buzzer too, the correct
+     * term for it — unlike boxing/combat-rounds, which use "Bell"). No
+     * other state change; viewers flash on a fresh `horn_sounded_at`.
      */
     public function horn(Request $request, ScoringSession $session): RedirectResponse
     {
         $this->authorizeManageSession($request, $session);
         $this->assertActive($session);
-        $this->assertBasketball($session);
+
+        if (! in_array($session->boardType(), [ScoreboardType::Basketball, ScoreboardType::Wrestling], true)) {
+            abort(422, __('This action is only available for a basketball or wrestling scoring session.'));
+        }
 
         $state = $session->sport_state ?? [];
         $state['horn_sounded_at'] = now()->toIso8601String();
@@ -953,6 +1529,57 @@ class ScoringSessionController extends Controller
     }
 
     /**
+     * Rally-point defaults differ by sport even though both share one
+     * board: Volleyball is standard best-of-5 (25 points, win by 2, a
+     * deciding 5th set to 15); Sepak Takraw is standard best-of-3 (21
+     * points, deciding 3rd set also to 21) — real per-sport conventions,
+     * both fully operator-adjustable afterward via `settings()`.
+     *
+     * @return array<string, mixed>
+     */
+    private function initialRallySetsState(string $sportName): array
+    {
+        $isSepakTakraw = mb_strtolower($sportName) === 'sepak takraw';
+
+        return [
+            'sets' => [],
+            'current_set_score_a' => 0, 'current_set_score_b' => 0,
+            'sets_won_a' => 0, 'sets_won_b' => 0,
+            'set_target_points' => $isSepakTakraw ? 21 : 25,
+            'deciding_set_target_points' => $isSepakTakraw ? 21 : 15,
+            'sets_to_win' => $isSepakTakraw ? 2 : 3,
+            'possession' => null,
+        ];
+    }
+
+    /**
+     * Racket-games defaults differ by sport: Table Tennis is standard
+     * best-of-5 games to 11 points (win by 2, uncapped — a very long
+     * deuce is real and allowed); Badminton is standard best-of-3 games
+     * to 21 points, win by 2, but hard-capped at 30 (the leader at 30
+     * wins outright even without a 2-point lead) — `hard_cap_points: 0`
+     * means "no cap" (Table Tennis). Unlike volleyball/sepak takraw,
+     * neither sport reduces the target for a deciding game, so there's
+     * no separate `deciding_*_target_points` field here.
+     *
+     * @return array<string, mixed>
+     */
+    private function initialRacketGamesState(string $sportName): array
+    {
+        $isBadminton = mb_strtolower($sportName) === 'badminton';
+
+        return [
+            'games' => [],
+            'current_game_score_a' => 0, 'current_game_score_b' => 0,
+            'games_won_a' => 0, 'games_won_b' => 0,
+            'game_target_points' => $isBadminton ? 21 : 11,
+            'hard_cap_points' => $isBadminton ? 30 : 0,
+            'games_to_win' => $isBadminton ? 2 : 3,
+            'possession' => null,
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $state
      * @return array<string, mixed>
      */
@@ -1032,10 +1659,16 @@ class ScoringSessionController extends Controller
         }
     }
 
-    private function assertBoxing(ScoringSession $session): void
+    /**
+     * Boxing and CombatRounds (taekwondo/wushu/pencak silat) share this
+     * one assertion — see the round()/roundClock()/bell() docblocks and
+     * store()'s CombatRounds branch for why the two board types are
+     * treated identically throughout this controller.
+     */
+    private function assertBoxingOrCombatRounds(ScoringSession $session): void
     {
-        if ($session->boardType() !== ScoreboardType::Boxing) {
-            abort(422, __('This action is only available for a boxing scoring session.'));
+        if (! in_array($session->boardType(), [ScoreboardType::Boxing, ScoreboardType::CombatRounds], true)) {
+            abort(422, __('This action is only available for a boxing, taekwondo, wushu, or pencak silat scoring session.'));
         }
     }
 
@@ -1043,6 +1676,34 @@ class ScoringSessionController extends Controller
     {
         if ($session->boardType() !== ScoreboardType::SoftballBaseball) {
             abort(422, __('This action is only available for a softball/baseball scoring session.'));
+        }
+    }
+
+    private function assertVolleyballSepakTakraw(ScoringSession $session): void
+    {
+        if ($session->boardType() !== ScoreboardType::VolleyballSepakTakraw) {
+            abort(422, __('This action is only available for a volleyball/sepak takraw scoring session.'));
+        }
+    }
+
+    private function assertFootballFutsal(ScoringSession $session): void
+    {
+        if ($session->boardType() !== ScoreboardType::FootballFutsal) {
+            abort(422, __('This action is only available for a football/futsal scoring session.'));
+        }
+    }
+
+    private function assertRacketGames(ScoringSession $session): void
+    {
+        if ($session->boardType() !== ScoreboardType::RacketGames) {
+            abort(422, __('This action is only available for a table tennis/badminton scoring session.'));
+        }
+    }
+
+    private function assertWrestling(ScoringSession $session): void
+    {
+        if ($session->boardType() !== ScoreboardType::Wrestling) {
+            abort(422, __('This action is only available for a wrestling scoring session.'));
         }
     }
 

@@ -19,6 +19,13 @@ enum ScoreEventType: string
     case Substitution = 'substitution';
     case Horn = 'horn';
     case Bell = 'bell';
+    case RallyPoint = 'rally_point';
+    case SetComplete = 'set_complete';
+    case Card = 'card';
+    case GamePoint = 'game_point';
+    case GameComplete = 'game_complete';
+    case WrestlingPoint = 'wrestling_point';
+    case Fall = 'fall';
 
     public function label(): string
     {
@@ -38,6 +45,13 @@ enum ScoreEventType: string
             self::Substitution => 'Substitution',
             self::Horn => 'Horn',
             self::Bell => 'Bell',
+            self::RallyPoint => 'Rally point',
+            self::SetComplete => 'Set complete',
+            self::Card => 'Card',
+            self::GamePoint => 'Game point',
+            self::GameComplete => 'Game complete',
+            self::WrestlingPoint => 'Wrestling point',
+            self::Fall => 'Fall',
         };
     }
 }

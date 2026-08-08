@@ -368,7 +368,11 @@ test('the live board type follows the real sport — dedicated boards where they
     ['Boxing', 'boxing'],
     ['Baseball', 'softball_baseball'],
     ['Softball', 'softball_baseball'],
-    ['Volleyball', 'generic'],
+    ['Volleyball', 'volleyball_sepak_takraw'],
+    ['Sepak Takraw', 'volleyball_sepak_takraw'],
+    ['Football', 'football_futsal'],
+    ['Table Tennis', 'racket_games'],
+    ['Badminton', 'racket_games'],
     ['Chess', 'generic'],
 ]);
 

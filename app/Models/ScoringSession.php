@@ -287,6 +287,21 @@ class ScoringSession extends Model
                 } elseif (($payload['side'] ?? null) === 'b') {
                     $runningB = max(0, $runningB + $delta);
                 }
+            } elseif ($event->type === ScoreEventType::WrestlingPoint) {
+                // Wrestling's own points-scored event — additive like
+                // Point above, just under a real move-specific type
+                // instead of the generic one (a wrestling correction
+                // still goes through the generic Correction type/branch
+                // above, since wrestling's score_a/b is a plain running
+                // total with no risk of misreading it the way rally-
+                // point/game-point sports' corrections had to avoid).
+                $points = (int) ($payload['points'] ?? 0);
+
+                if (($payload['side'] ?? null) === 'a') {
+                    $runningA += $points;
+                } elseif (($payload['side'] ?? null) === 'b') {
+                    $runningB += $points;
+                }
             } elseif ($event->type === ScoreEventType::InningRun) {
                 $runs = (int) ($payload['runs'] ?? 0);
 
@@ -298,6 +313,19 @@ class ScoringSession extends Model
             } elseif ($event->type === ScoreEventType::RoundScore) {
                 $runningA += (int) ($payload['score_a'] ?? 0);
                 $runningB += (int) ($payload['score_b'] ?? 0);
+            } elseif ($event->type === ScoreEventType::SetComplete) {
+                // Volleyball/sepak takraw: the running score here is sets
+                // won, not points — `payload` already carries the exact
+                // new totals (not a delta), unlike RoundScore/InningRun
+                // above, so this assigns rather than adds.
+                $runningA = (int) ($payload['sets_won_a'] ?? $runningA);
+                $runningB = (int) ($payload['sets_won_b'] ?? $runningB);
+            } elseif ($event->type === ScoreEventType::GameComplete) {
+                // Table tennis/badminton: same "assign the real total,
+                // don't add a delta" reasoning as SetComplete above — the
+                // running score here is games won.
+                $runningA = (int) ($payload['games_won_a'] ?? $runningA);
+                $runningB = (int) ($payload['games_won_b'] ?? $runningB);
             }
 
             $rows[] = [
@@ -393,6 +421,69 @@ class ScoringSession extends Model
             ),
             ScoreEventType::Horn => 'Horn sounded',
             ScoreEventType::Bell => 'Bell sounded',
+            ScoreEventType::RallyPoint => sprintf(
+                '%s%s%d — %s (Set %s: %d-%d)',
+                ($payload['is_correction'] ?? false) ? 'Correction: ' : '',
+                ((int) ($payload['delta'] ?? 0)) >= 0 ? '+' : '',
+                (int) ($payload['delta'] ?? 0),
+                $sideLabel($payload['side'] ?? null) ?? 'Unknown',
+                (string) ($payload['set'] ?? '?'),
+                (int) ($payload['current_set_score_a'] ?? 0),
+                (int) ($payload['current_set_score_b'] ?? 0),
+            ),
+            ScoreEventType::SetComplete => sprintf(
+                'Set %s: %s %d – %d %s (leads %d-%d)',
+                (string) ($payload['set'] ?? '?'),
+                $this->side_a_label,
+                (int) ($payload['score_a'] ?? 0),
+                (int) ($payload['score_b'] ?? 0),
+                $this->side_b_label,
+                (int) ($payload['sets_won_a'] ?? 0),
+                (int) ($payload['sets_won_b'] ?? 0),
+            ),
+            ScoreEventType::Card => ($payload['action'] ?? null) === 'reset'
+                ? 'Cards reset'
+                : sprintf(
+                    '%s card — %s',
+                    ucfirst((string) ($payload['type'] ?? 'unknown')),
+                    $sideLabel($payload['side'] ?? null) ?? 'Unknown',
+                ),
+            ScoreEventType::GamePoint => sprintf(
+                '%s%s%d — %s (Game %s: %d-%d)',
+                ($payload['is_correction'] ?? false) ? 'Correction: ' : '',
+                ((int) ($payload['delta'] ?? 0)) >= 0 ? '+' : '',
+                (int) ($payload['delta'] ?? 0),
+                $sideLabel($payload['side'] ?? null) ?? 'Unknown',
+                (string) ($payload['game'] ?? '?'),
+                (int) ($payload['current_game_score_a'] ?? 0),
+                (int) ($payload['current_game_score_b'] ?? 0),
+            ),
+            ScoreEventType::GameComplete => sprintf(
+                'Game %s: %s %d – %d %s (leads %d-%d)',
+                (string) ($payload['game'] ?? '?'),
+                $this->side_a_label,
+                (int) ($payload['score_a'] ?? 0),
+                (int) ($payload['score_b'] ?? 0),
+                $this->side_b_label,
+                (int) ($payload['games_won_a'] ?? 0),
+                (int) ($payload['games_won_b'] ?? 0),
+            ),
+            ScoreEventType::WrestlingPoint => sprintf(
+                '+%d %s — %s',
+                (int) ($payload['points'] ?? 0),
+                match ($payload['move'] ?? null) {
+                    'takedown' => 'Takedown',
+                    'escape' => 'Escape',
+                    'reversal' => 'Reversal',
+                    'near_fall' => 'Near fall',
+                    'penalty' => 'Penalty',
+                    default => 'Point',
+                },
+                $sideLabel($payload['side'] ?? null) ?? 'Unknown',
+            ),
+            ScoreEventType::Fall => ($payload['action'] ?? null) === 'clear'
+                ? 'Fall cleared'
+                : sprintf('Fall — %s', $sideLabel($payload['side'] ?? null) ?? 'Unknown'),
             default => $event->type->label(),
         };
     }

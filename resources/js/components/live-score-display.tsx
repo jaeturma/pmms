@@ -90,6 +90,64 @@ export type SoftballState = {
     team_color_b: string;
 };
 
+export type RallySet = {
+    set: number;
+    score_a: number;
+    score_b: number;
+};
+
+export type RallySetsState = {
+    sets: RallySet[];
+    current_set_score_a: number;
+    current_set_score_b: number;
+    sets_won_a: number;
+    sets_won_b: number;
+    set_target_points: number;
+    deciding_set_target_points: number;
+    sets_to_win: number;
+    possession: 'a' | 'b' | null;
+};
+
+export type FootballState = {
+    yellow_cards_a: number;
+    yellow_cards_b: number;
+    red_cards_a: number;
+    red_cards_b: number;
+    minutes_per_half: number;
+};
+
+export type RacketGame = {
+    game: number;
+    score_a: number;
+    score_b: number;
+};
+
+export type RacketGamesState = {
+    games: RacketGame[];
+    current_game_score_a: number;
+    current_game_score_b: number;
+    games_won_a: number;
+    games_won_b: number;
+    game_target_points: number;
+    /** 0 means no cap (table tennis); a real ceiling otherwise
+     * (badminton's 30 points — wins outright even without a 2-point
+     * lead). */
+    hard_cap_points: number;
+    games_to_win: number;
+    possession: 'a' | 'b' | null;
+};
+
+export type WrestlingState = {
+    period_duration_seconds: number;
+    rest_duration_seconds: number;
+    total_periods: number;
+    clock_seconds: number;
+    clock_updated_at: string | null;
+    clock_phase: 'period' | 'rest';
+    fall_side: 'a' | 'b' | null;
+    fall_declared_at: string | null;
+};
+
 export type RosterPlayer = {
     id: number;
     name: string;
@@ -109,8 +167,25 @@ export type LiveSession = {
     score_b: number;
     period_label: string | null;
     status_note: string | null;
-    board_type: 'generic' | 'basketball' | 'boxing' | 'softball_baseball';
-    sport_state: BasketballState | BoxingState | SoftballState | null;
+    board_type:
+        | 'generic'
+        | 'basketball'
+        | 'boxing'
+        | 'softball_baseball'
+        | 'volleyball_sepak_takraw'
+        | 'football_futsal'
+        | 'racket_games'
+        | 'combat_rounds'
+        | 'wrestling';
+    sport_state:
+        | BasketballState
+        | BoxingState
+        | SoftballState
+        | RallySetsState
+        | FootballState
+        | RacketGamesState
+        | WrestlingState
+        | null;
     /** Basketball only: the (at most 5-per-side) players currently on
      * court — deliberately not the whole roster, kept small since this is
      * embedded in the live-polled payload. The full roster (bench
@@ -155,6 +230,30 @@ export function isSoftballState(
     state: LiveSession['sport_state'],
 ): state is SoftballState {
     return state !== null && 'innings' in state;
+}
+
+export function isRallySetsState(
+    state: LiveSession['sport_state'],
+): state is RallySetsState {
+    return state !== null && 'sets_won_a' in state;
+}
+
+export function isFootballState(
+    state: LiveSession['sport_state'],
+): state is FootballState {
+    return state !== null && 'yellow_cards_a' in state;
+}
+
+export function isRacketGamesState(
+    state: LiveSession['sport_state'],
+): state is RacketGamesState {
+    return state !== null && 'games_won_a' in state;
+}
+
+export function isWrestlingState(
+    state: LiveSession['sport_state'],
+): state is WrestlingState {
+    return state !== null && 'total_periods' in state;
 }
 
 /**
@@ -315,6 +414,39 @@ export function CountDots({
                     )}
                 />
             ))}
+        </span>
+    );
+}
+
+/** Football/futsal's yellow/red card tally — real square swatches (the
+ * actual card shape/colors, not a generic dot) since there are only ever
+ * a handful per team, unlike fouls/balls/strikes' higher-volume dots. Only
+ * renders a count once it's non-zero, so a clean scoreline stays clean. */
+function CardTally({ yellow, red }: { yellow: number; red: number }) {
+    if (yellow === 0 && red === 0) {
+        return null;
+    }
+
+    return (
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            {yellow > 0 && (
+                <span className="flex items-center gap-1">
+                    <span
+                        className="size-2.5 rounded-[2px] bg-yellow-400"
+                        aria-hidden="true"
+                    />
+                    {yellow}
+                </span>
+            )}
+            {red > 0 && (
+                <span className="flex items-center gap-1">
+                    <span
+                        className="size-2.5 rounded-[2px] bg-red-600"
+                        aria-hidden="true"
+                    />
+                    {red}
+                </span>
+            )}
         </span>
     );
 }
@@ -655,6 +787,99 @@ function BoxingRoundTable({
 }
 
 /**
+ * Volleyball/sepak takraw's completed-set history — one row per finished
+ * set's final point score, the same "real, append-only history" treatment
+ * as `BoxingRoundTable`. The live/in-progress set isn't a row here (it has
+ * no final score yet) — shown separately above as "Set N — live score".
+ */
+function RallySetsHistoryTable({
+    session,
+    state,
+}: {
+    session: LiveSession;
+    state: RallySetsState;
+}) {
+    return (
+        <div className="w-full overflow-x-auto">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead className="w-16">Set</TableHead>
+                        <TableHead className="text-center">
+                            {session.side_a_label}
+                        </TableHead>
+                        <TableHead className="text-center">
+                            {session.side_b_label}
+                        </TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {state.sets.map((set) => (
+                        <TableRow key={set.set}>
+                            <TableCell className="font-medium">
+                                Set {set.set}
+                            </TableCell>
+                            <TableCell className="text-center font-semibold tabular-nums">
+                                {set.score_a}
+                            </TableCell>
+                            <TableCell className="text-center font-semibold tabular-nums">
+                                {set.score_b}
+                            </TableCell>
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </Table>
+        </div>
+    );
+}
+
+/**
+ * Table tennis/badminton's completed-game history — same "real,
+ * append-only history" treatment as `RallySetsHistoryTable`, just with
+ * this sport family's own "game" terminology instead of "set".
+ */
+function RacketGamesHistoryTable({
+    session,
+    state,
+}: {
+    session: LiveSession;
+    state: RacketGamesState;
+}) {
+    return (
+        <div className="w-full overflow-x-auto">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead className="w-16">Game</TableHead>
+                        <TableHead className="text-center">
+                            {session.side_a_label}
+                        </TableHead>
+                        <TableHead className="text-center">
+                            {session.side_b_label}
+                        </TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {state.games.map((game) => (
+                        <TableRow key={game.game}>
+                            <TableCell className="font-medium">
+                                Game {game.game}
+                            </TableCell>
+                            <TableCell className="text-center font-semibold tabular-nums">
+                                {game.score_a}
+                            </TableCell>
+                            <TableCell className="text-center font-semibold tabular-nums">
+                                {game.score_b}
+                            </TableCell>
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </Table>
+        </div>
+    );
+}
+
+/**
  * A manual score correction (delta + required reason) for one side —
  * shared by the operator console's generic controls and
  * `BasketballGameControl`'s team-level correction, so the two never drift.
@@ -840,6 +1065,18 @@ export function LiveScoreDisplay({
     const softballState = isSoftballState(session.sport_state)
         ? session.sport_state
         : null;
+    const rallySetsState = isRallySetsState(session.sport_state)
+        ? session.sport_state
+        : null;
+    const footballState = isFootballState(session.sport_state)
+        ? session.sport_state
+        : null;
+    const racketGamesState = isRacketGamesState(session.sport_state)
+        ? session.sport_state
+        : null;
+    const wrestlingState = isWrestlingState(session.sport_state)
+        ? session.sport_state
+        : null;
     const cornerA: Corner = boxingState ? 'red' : null;
     const cornerB: Corner = boxingState ? 'blue' : null;
     const countdown: Countdown | null = basketballState
@@ -857,7 +1094,16 @@ export function LiveScoreDisplay({
                         ? 'Round clock'
                         : 'Rest clock',
             }
-          : null;
+          : wrestlingState
+            ? {
+                  seconds: wrestlingState.clock_seconds,
+                  anchor: wrestlingState.clock_updated_at,
+                  label:
+                      wrestlingState.clock_phase === 'period'
+                          ? 'Period clock'
+                          : 'Rest clock',
+              }
+            : null;
 
     return (
         <>
@@ -941,6 +1187,23 @@ export function LiveScoreDisplay({
                                 )}
                             </span>
                         )}
+                        {rallySetsState && (
+                            <span className="text-xs text-muted-foreground">
+                                Set score: {rallySetsState.current_set_score_a}
+                            </span>
+                        )}
+                        {footballState && (
+                            <CardTally
+                                yellow={footballState.yellow_cards_a}
+                                red={footballState.red_cards_a}
+                            />
+                        )}
+                        {racketGamesState && (
+                            <span className="text-xs text-muted-foreground">
+                                Game score:{' '}
+                                {racketGamesState.current_game_score_a}
+                            </span>
+                        )}
                     </TeamPanel>
 
                     <CenterPanel
@@ -977,9 +1240,38 @@ export function LiveScoreDisplay({
                                 )}
                             </span>
                         )}
+                        {rallySetsState && (
+                            <span className="text-xs text-muted-foreground">
+                                Set score: {rallySetsState.current_set_score_b}
+                            </span>
+                        )}
+                        {footballState && (
+                            <CardTally
+                                yellow={footballState.yellow_cards_b}
+                                red={footballState.red_cards_b}
+                            />
+                        )}
+                        {racketGamesState && (
+                            <span className="text-xs text-muted-foreground">
+                                Game score:{' '}
+                                {racketGamesState.current_game_score_b}
+                            </span>
+                        )}
                     </TeamPanel>
                 </div>
             </div>
+
+            {wrestlingState && wrestlingState.fall_side && (
+                <div
+                    role="status"
+                    className="flex items-center justify-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm font-semibold text-destructive"
+                >
+                    FALL —{' '}
+                    {wrestlingState.fall_side === 'a'
+                        ? session.side_a_label
+                        : session.side_b_label}
+                </div>
+            )}
 
             {boxingState && boxingState.rounds.length > 0 && (
                 <div className="mx-auto w-full max-w-md">
@@ -1038,6 +1330,58 @@ export function LiveScoreDisplay({
                             state={softballState}
                         />
                     </div>
+                </div>
+            )}
+
+            {rallySetsState && (
+                <div className="flex w-full flex-col items-center gap-3">
+                    <p className="text-center text-sm font-medium text-muted-foreground">
+                        Set {rallySetsState.sets.length + 1} — live score{' '}
+                        {rallySetsState.current_set_score_a}–
+                        {rallySetsState.current_set_score_b}
+                        {rallySetsState.possession && (
+                            <>
+                                {' · Serving: '}
+                                {rallySetsState.possession === 'a'
+                                    ? session.side_a_label
+                                    : session.side_b_label}
+                            </>
+                        )}
+                    </p>
+                    {rallySetsState.sets.length > 0 && (
+                        <div className="overflow-hidden rounded-xl border">
+                            <RallySetsHistoryTable
+                                session={session}
+                                state={rallySetsState}
+                            />
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {racketGamesState && (
+                <div className="flex w-full flex-col items-center gap-3">
+                    <p className="text-center text-sm font-medium text-muted-foreground">
+                        Game {racketGamesState.games.length + 1} — live score{' '}
+                        {racketGamesState.current_game_score_a}–
+                        {racketGamesState.current_game_score_b}
+                        {racketGamesState.possession && (
+                            <>
+                                {' · Serving: '}
+                                {racketGamesState.possession === 'a'
+                                    ? session.side_a_label
+                                    : session.side_b_label}
+                            </>
+                        )}
+                    </p>
+                    {racketGamesState.games.length > 0 && (
+                        <div className="overflow-hidden rounded-xl border">
+                            <RacketGamesHistoryTable
+                                session={session}
+                                state={racketGamesState}
+                            />
+                        </div>
+                    )}
                 </div>
             )}
 

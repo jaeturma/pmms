@@ -463,6 +463,21 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // Boxing-only: the round/rest countdown clock and the bell signal.
         Route::patch('scoring-sessions/{session}/round-clock', [ScoringSessionController::class, 'roundClock'])->name('scoring.round-clock');
         Route::patch('scoring-sessions/{session}/bell', [ScoringSessionController::class, 'bell'])->name('scoring.bell');
+
+        // Volleyball/Sepak Takraw-only: rally-point scoring within a set.
+        Route::patch('scoring-sessions/{session}/rally-point', [ScoringSessionController::class, 'rallyPoint'])->name('scoring.rally-point');
+
+        // Football/Futsal-only: yellow/red card tallies.
+        Route::patch('scoring-sessions/{session}/card', [ScoringSessionController::class, 'card'])->name('scoring.card');
+
+        // Table Tennis/Badminton-only: point scoring within a game.
+        Route::patch('scoring-sessions/{session}/game-point', [ScoringSessionController::class, 'gamePoint'])->name('scoring.game-point');
+
+        // Wrestling-only: named-move point scoring, the period/rest clock,
+        // and declaring/clearing a fall.
+        Route::patch('scoring-sessions/{session}/wrestling-point', [ScoringSessionController::class, 'wrestlingPoint'])->name('scoring.wrestling-point');
+        Route::patch('scoring-sessions/{session}/period-clock', [ScoringSessionController::class, 'periodClock'])->name('scoring.period-clock');
+        Route::patch('scoring-sessions/{session}/fall', [ScoringSessionController::class, 'fall'])->name('scoring.fall');
     });
 
     // A Technical Official may encode a result directly for their own
