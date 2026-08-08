@@ -1,6 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
 import { Menu, Radio, X } from 'lucide-react';
 import { useState } from 'react';
+import { PortalThemeToggle } from '@/apps/portal/components/theme-toggle';
 import { PortalNavDropdown } from '@/apps/portal/layout/portal-nav-dropdown';
 import { PortalNavigation } from '@/apps/portal/layout/portal-navigation';
 import type { PortalNavItem } from '@/apps/portal/layout/portal-navigation';
@@ -129,6 +130,7 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
                     >
                         {props.auth.user ? 'Dashboard' : 'Staff login'}
                     </Link>
+                    <PortalThemeToggle />
                     <button
                         type="button"
                         className="inline-flex size-9 items-center justify-center rounded-[calc(var(--portal-radius)-0.25rem)] text-[var(--portal-accent-foreground)] hover:bg-[var(--portal-accent-foreground)]/10 md:hidden"
