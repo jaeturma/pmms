@@ -4,6 +4,7 @@ import { Pause, Play, Radio, Square } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { BasketballGameControl } from '@/components/basketball-game-control';
+import { BoxingGameControl } from '@/components/boxing-game-control';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import { LiveBadge } from '@/components/live-badge';
@@ -17,28 +18,18 @@ import {
     PlayByPlayList,
 } from '@/components/live-score-display';
 import { PageHeader } from '@/components/page-header';
+import { SoftballBaseballGameControl } from '@/components/softball-baseball-game-control';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-    Dialog,
-    DialogContent,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { index as matchesIndex } from '@/routes/matches';
 import {
-    count as countRoute,
     end as endRoute,
-    inningRun as inningRunRoute,
     pause as pauseRoute,
     period as periodRoute,
     resume as resumeRoute,
-    round as roundRoute,
     score as scoreRoute,
     show as pollRoute,
     start as startRoute,
@@ -76,132 +67,6 @@ type Props = {
     canManage: boolean;
     participants: [Participant | null, Participant | null];
 };
-
-function RoundScoreDialog({
-    labelA,
-    labelB,
-    nextRound,
-    onSubmit,
-}: {
-    labelA: string;
-    labelB: string;
-    nextRound: number;
-    onSubmit: (scoreA: number, scoreB: number) => void;
-}) {
-    const [open, setOpen] = useState(false);
-    const [scoreA, setScoreA] = useState('10');
-    const [scoreB, setScoreB] = useState('9');
-
-    const submit = (e: FormEvent) => {
-        e.preventDefault();
-        onSubmit(Number(scoreA), Number(scoreB));
-        setOpen(false);
-        setScoreA('10');
-        setScoreB('9');
-    };
-
-    return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                    Record round {nextRound}
-                </Button>
-            </DialogTrigger>
-            <DialogContent>
-                <form onSubmit={submit}>
-                    <DialogHeader>
-                        <DialogTitle>Round {nextRound} score</DialogTitle>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4 sm:grid-cols-2">
-                        <div className="grid gap-2">
-                            <Label htmlFor="round-score-a">{labelA}</Label>
-                            <Input
-                                id="round-score-a"
-                                type="number"
-                                min={0}
-                                max={10}
-                                value={scoreA}
-                                onChange={(e) => setScoreA(e.target.value)}
-                                required
-                            />
-                        </div>
-                        <div className="grid gap-2">
-                            <Label htmlFor="round-score-b">{labelB}</Label>
-                            <Input
-                                id="round-score-b"
-                                type="number"
-                                min={0}
-                                max={10}
-                                value={scoreB}
-                                onChange={(e) => setScoreB(e.target.value)}
-                                required
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button type="submit">Save round score</Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
-    );
-}
-
-function RunDialog({
-    side,
-    label,
-    onSubmit,
-}: {
-    side: 'a' | 'b';
-    label: string;
-    onSubmit: (runs: number) => void;
-}) {
-    const [open, setOpen] = useState(false);
-    const [runs, setRuns] = useState('1');
-
-    const submit = (e: FormEvent) => {
-        e.preventDefault();
-        onSubmit(Number(runs));
-        setOpen(false);
-        setRuns('1');
-    };
-
-    return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                    Record run(s)
-                </Button>
-            </DialogTrigger>
-            <DialogContent>
-                <form onSubmit={submit}>
-                    <DialogHeader>
-                        <DialogTitle>Record runs — {label}</DialogTitle>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor={`runs-${side}`}>
-                                Runs scored this inning
-                            </Label>
-                            <Input
-                                id={`runs-${side}`}
-                                type="number"
-                                min={1}
-                                max={20}
-                                value={runs}
-                                onChange={(e) => setRuns(e.target.value)}
-                                required
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button type="submit">Save</Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
-    );
-}
 
 export default function ScoringBoard({
     match,
@@ -320,42 +185,6 @@ export default function ScoringBoard({
         router.patch(
             scoreRoute(session.id).url,
             { type: 'correction', side, delta, reason },
-            { preserveScroll: true },
-        );
-    };
-
-    const recordRound = (scoreA: number, scoreB: number) => {
-        if (session === null) {
-            return;
-        }
-
-        router.patch(
-            roundRoute(session.id).url,
-            { score_a: scoreA, score_b: scoreB },
-            { preserveScroll: true },
-        );
-    };
-
-    const recordRun = (side: 'a' | 'b', runs: number) => {
-        if (session === null) {
-            return;
-        }
-
-        router.patch(
-            inningRunRoute(session.id).url,
-            { side, runs },
-            { preserveScroll: true },
-        );
-    };
-
-    const recordCount = (action: 'out' | 'ball' | 'strike' | 'reset_count') => {
-        if (session === null) {
-            return;
-        }
-
-        router.patch(
-            countRoute(session.id).url,
-            { action },
             { preserveScroll: true },
         );
     };
@@ -513,157 +342,152 @@ export default function ScoringBoard({
                             />
                         )}
 
-                        {isManager && isActive && !basketballState && (
-                            <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 print:hidden">
-                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                    <div className="flex flex-col items-center gap-2">
-                                        <div className="flex flex-wrap justify-center gap-2">
-                                            {[1, 2, 3].map((points) => (
-                                                <Button
-                                                    key={points}
-                                                    variant="outline"
-                                                    aria-label={`Add ${points} point${points > 1 ? 's' : ''}, ${session.side_a_label}`}
-                                                    onClick={() =>
-                                                        addPoints('a', points)
-                                                    }
-                                                >
-                                                    +{points}
-                                                </Button>
-                                            ))}
-                                        </div>
-                                        {softballState && (
-                                            <RunDialog
+                        {isManager && isActive && boxingState && (
+                            <BoxingGameControl
+                                session={session}
+                                state={boxingState}
+                            />
+                        )}
+
+                        {isManager && isActive && softballState && (
+                            <SoftballBaseballGameControl
+                                session={session}
+                                state={softballState}
+                            />
+                        )}
+
+                        {isManager &&
+                            isActive &&
+                            !basketballState &&
+                            !boxingState &&
+                            !softballState && (
+                                <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 print:hidden">
+                                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                        <div className="flex flex-col items-center gap-2">
+                                            <div className="flex flex-wrap justify-center gap-2">
+                                                {[1, 2, 3].map((points) => (
+                                                    <Button
+                                                        key={points}
+                                                        variant="outline"
+                                                        aria-label={`Add ${points} point${points > 1 ? 's' : ''}, ${session.side_a_label}`}
+                                                        onClick={() =>
+                                                            addPoints(
+                                                                'a',
+                                                                points,
+                                                            )
+                                                        }
+                                                    >
+                                                        +{points}
+                                                    </Button>
+                                                ))}
+                                            </div>
+                                            <CorrectionDialog
                                                 side="a"
                                                 label={session.side_a_label}
-                                                onSubmit={(runs) =>
-                                                    recordRun('a', runs)
+                                                onSubmit={(delta, reason) =>
+                                                    correct('a', delta, reason)
                                                 }
                                             />
-                                        )}
-                                        <CorrectionDialog
-                                            side="a"
-                                            label={session.side_a_label}
-                                            onSubmit={(delta, reason) =>
-                                                correct('a', delta, reason)
-                                            }
-                                        />
-                                    </div>
-                                    <div className="flex flex-col items-center gap-2">
-                                        <div className="flex flex-wrap justify-center gap-2">
-                                            {[1, 2, 3].map((points) => (
-                                                <Button
-                                                    key={points}
-                                                    variant="outline"
-                                                    aria-label={`Add ${points} point${points > 1 ? 's' : ''}, ${session.side_b_label}`}
-                                                    onClick={() =>
-                                                        addPoints('b', points)
-                                                    }
-                                                >
-                                                    +{points}
-                                                </Button>
-                                            ))}
                                         </div>
-                                        {softballState && (
-                                            <RunDialog
+                                        <div className="flex flex-col items-center gap-2">
+                                            <div className="flex flex-wrap justify-center gap-2">
+                                                {[1, 2, 3].map((points) => (
+                                                    <Button
+                                                        key={points}
+                                                        variant="outline"
+                                                        aria-label={`Add ${points} point${points > 1 ? 's' : ''}, ${session.side_b_label}`}
+                                                        onClick={() =>
+                                                            addPoints(
+                                                                'b',
+                                                                points,
+                                                            )
+                                                        }
+                                                    >
+                                                        +{points}
+                                                    </Button>
+                                                ))}
+                                            </div>
+                                            <CorrectionDialog
                                                 side="b"
                                                 label={session.side_b_label}
-                                                onSubmit={(runs) =>
-                                                    recordRun('b', runs)
+                                                onSubmit={(delta, reason) =>
+                                                    correct('b', delta, reason)
                                                 }
                                             />
+                                        </div>
+                                    </div>
+
+                                    <PeriodForm session={session} />
+
+                                    <div className="flex justify-center gap-2">
+                                        {session.status === 'paused' ? (
+                                            <Button
+                                                variant="outline"
+                                                onClick={() =>
+                                                    router.patch(
+                                                        resumeRoute(session.id)
+                                                            .url,
+                                                        {},
+                                                        {
+                                                            preserveScroll: true,
+                                                        },
+                                                    )
+                                                }
+                                            >
+                                                <Play aria-hidden="true" />
+                                                Resume
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                variant="outline"
+                                                onClick={() =>
+                                                    router.patch(
+                                                        pauseRoute(session.id)
+                                                            .url,
+                                                        {},
+                                                        {
+                                                            preserveScroll: true,
+                                                        },
+                                                    )
+                                                }
+                                            >
+                                                <Pause aria-hidden="true" />
+                                                Pause
+                                            </Button>
                                         )}
-                                        <CorrectionDialog
-                                            side="b"
-                                            label={session.side_b_label}
-                                            onSubmit={(delta, reason) =>
-                                                correct('b', delta, reason)
+                                        <ConfirmDialog
+                                            trigger={
+                                                <Button variant="destructive">
+                                                    <Square aria-hidden="true" />
+                                                    End
+                                                </Button>
+                                            }
+                                            title="End live scoring?"
+                                            description="This ends the live session only. You'll still need to encode the official result separately."
+                                            confirmLabel="End"
+                                            destructive
+                                            onConfirm={() =>
+                                                router.patch(
+                                                    endRoute(session.id).url,
+                                                    {},
+                                                    { preserveScroll: true },
+                                                )
                                             }
                                         />
                                     </div>
                                 </div>
+                            )}
 
-                                {boxingState && (
-                                    <div className="flex justify-center">
-                                        <RoundScoreDialog
-                                            labelA={session.side_a_label}
-                                            labelB={session.side_b_label}
-                                            nextRound={
-                                                boxingState.rounds.length + 1
-                                            }
-                                            onSubmit={recordRound}
-                                        />
-                                    </div>
-                                )}
-
-                                {softballState && (
-                                    <div className="flex flex-wrap justify-center gap-2">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => recordCount('out')}
-                                        >
-                                            +1 Out
-                                        </Button>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => recordCount('ball')}
-                                        >
-                                            +1 Ball
-                                        </Button>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() =>
-                                                recordCount('strike')
-                                            }
-                                        >
-                                            +1 Strike
-                                        </Button>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() =>
-                                                recordCount('reset_count')
-                                            }
-                                        >
-                                            Reset count
-                                        </Button>
-                                    </div>
-                                )}
-
-                                <PeriodForm session={session} />
-
-                                <div className="flex justify-center gap-2">
-                                    {session.status === 'paused' ? (
-                                        <Button
-                                            variant="outline"
-                                            onClick={() =>
-                                                router.patch(
-                                                    resumeRoute(session.id).url,
-                                                    {},
-                                                    { preserveScroll: true },
-                                                )
-                                            }
-                                        >
-                                            <Play aria-hidden="true" />
-                                            Resume
-                                        </Button>
-                                    ) : (
-                                        <Button
-                                            variant="outline"
-                                            onClick={() =>
-                                                router.patch(
-                                                    pauseRoute(session.id).url,
-                                                    {},
-                                                    { preserveScroll: true },
-                                                )
-                                            }
-                                        >
-                                            <Pause aria-hidden="true" />
-                                            Pause
-                                        </Button>
-                                    )}
+                        {/* Every sport-specific control above has its own
+                            Whistle (pause/resume) but none has an End
+                            control of its own — this is the one shared
+                            spot every board type ends its session from. */}
+                        {isManager &&
+                            isActive &&
+                            (basketballState ||
+                                boxingState ||
+                                softballState) && (
+                                <div className="mx-auto flex w-full max-w-2xl justify-center print:hidden">
                                     <ConfirmDialog
                                         trigger={
                                             <Button variant="destructive">
@@ -684,8 +508,7 @@ export default function ScoringBoard({
                                         }
                                     />
                                 </div>
-                            </div>
-                        )}
+                            )}
 
                         {isManager && isActive && (
                             <div className="mx-auto w-full max-w-2xl print:hidden">

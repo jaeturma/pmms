@@ -392,6 +392,7 @@ class ScoringSession extends Model
                 $sideLabel($payload['side'] ?? null) ?? 'Unknown',
             ),
             ScoreEventType::Horn => 'Horn sounded',
+            ScoreEventType::Bell => 'Bell sounded',
             default => $event->type->label(),
         };
     }

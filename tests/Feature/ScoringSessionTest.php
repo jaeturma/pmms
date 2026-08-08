@@ -63,6 +63,19 @@ function boxingMatch(): EventMatch
 }
 
 /**
+ * @return array<string, mixed>
+ */
+function boxingInitialSportState(): array
+{
+    return [
+        'rounds' => [],
+        'round_duration_seconds' => 120, 'rest_duration_seconds' => 60, 'total_rounds' => 3,
+        'clock_seconds' => 120, 'clock_updated_at' => null, 'clock_phase' => 'round',
+        'bell_sounded_at' => null,
+    ];
+}
+
+/**
  * A scheduled match whose sport resolves to the softball/baseball
  * scoreboard (App\Enums\ScoreboardType — WP-07-06).
  */
@@ -740,7 +753,12 @@ test('starting a session for a boxing match initializes an empty round history a
 
     expect($session->toLivePayload())->toMatchArray([
         'board_type' => 'boxing',
-        'sport_state' => ['rounds' => []],
+        'sport_state' => [
+            'rounds' => [],
+            'round_duration_seconds' => 120, 'rest_duration_seconds' => 60, 'total_rounds' => 3,
+            'clock_seconds' => 120, 'clock_updated_at' => null, 'clock_phase' => 'round',
+            'bell_sounded_at' => null,
+        ],
     ]);
 });
 
@@ -914,7 +932,121 @@ test('the scoreboard page exposes board type and round history for a boxing matc
         ->get("/matches/{$match->id}/scoreboard")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('session.board_type', 'boxing')
-            ->where('session.sport_state', ['rounds' => [['round' => 1, 'score_a' => 10, 'score_b' => 9]]]));
+            ->where('session.sport_state', [
+                'rounds' => [['round' => 1, 'score_a' => 10, 'score_b' => 9]],
+                'round_duration_seconds' => 120, 'rest_duration_seconds' => 60, 'total_rounds' => 3,
+                'clock_seconds' => 120, 'clock_updated_at' => null, 'clock_phase' => 'round',
+                'bell_sounded_at' => null,
+            ]));
+});
+
+test('a manager can start a fresh round or rest phase on the round clock', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => boxingInitialSportState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/round-clock", ['phase' => 'rest'])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)
+        ->toMatchArray(['clock_phase' => 'rest', 'clock_seconds' => 60]);
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/round-clock", ['phase' => 'round'])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)
+        ->toMatchArray(['clock_phase' => 'round', 'clock_seconds' => 120]);
+});
+
+test('a manager can manually adjust the round clock without changing phase', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => boxingInitialSportState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/round-clock", ['seconds' => 45])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)
+        ->toMatchArray(['clock_phase' => 'round', 'clock_seconds' => 45]);
+});
+
+test('the round-clock and bell endpoints are rejected for a non-boxing scoring session', function () {
+    $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
+    $session = ScoringSession::factory()->create(['match_id' => $match->id]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/round-clock", ['seconds' => 30])
+        ->assertStatus(422);
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/bell", [])
+        ->assertStatus(422);
+});
+
+test('a manager can sound the bell and it is recorded in play-by-play', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => boxingInitialSportState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/bell", []);
+
+    expect($session->fresh()->sport_state['bell_sounded_at'])->not->toBeNull()
+        ->and($session->fresh()->playByPlay()[0]['description'])->toBe('Bell sounded');
+});
+
+test('a manager can update boxing game settings', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => boxingInitialSportState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/settings", [
+            'round_duration_seconds' => 90,
+            'rest_duration_seconds' => 30,
+            'total_rounds' => 5,
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toMatchArray([
+        'round_duration_seconds' => 90,
+        'rest_duration_seconds' => 30,
+        'total_rounds' => 5,
+    ]);
+});
+
+test('a round score cannot be recorded once every scheduled round is already judged', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => [...boxingInitialSportState(), 'total_rounds' => 1],
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 10, 'score_b' => 9])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 10, 'score_b' => 9])
+        ->assertSessionHasErrors('score_a');
+
+    expect($session->fresh()->sport_state['rounds'])->toHaveCount(1);
 });
 
 // WP-07-06: Softball/Baseball live scoreboard
@@ -931,7 +1063,11 @@ test('starting a session for a softball or baseball match initializes the count/
 
     expect($session->toLivePayload())->toMatchArray([
         'board_type' => 'softball_baseball',
-        'sport_state' => ['inning' => 1, 'half' => 'top', 'outs' => 0, 'balls' => 0, 'strikes' => 0, 'innings' => []],
+        'sport_state' => [
+            'inning' => 1, 'half' => 'top', 'outs' => 0, 'balls' => 0, 'strikes' => 0, 'innings' => [],
+            'innings_scheduled' => 7,
+            'team_color_a' => '#dc2626', 'team_color_b' => '#2563eb',
+        ],
     ]);
 })->with(['Softball', 'Baseball']);
 
@@ -1133,6 +1269,29 @@ test('the scoreboard page exposes board type and inning state for a softball mat
             ->where('session.board_type', 'softball_baseball')
             ->where('session.sport_state.inning', 1)
             ->where('session.sport_state.half', 'top'));
+});
+
+test('a manager can update softball/baseball game settings', function () {
+    $match = softballMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => ['inning' => 1, 'half' => 'top', 'outs' => 0, 'balls' => 0, 'strikes' => 0, 'innings' => [], 'innings_scheduled' => 7, 'team_color_a' => '#dc2626', 'team_color_b' => '#2563eb'],
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/settings", [
+            'team_color_a' => '#111111',
+            'team_color_b' => '#222222',
+            'innings_scheduled' => 6,
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state)->toMatchArray([
+        'team_color_a' => '#111111',
+        'team_color_b' => '#222222',
+        'innings_scheduled' => 6,
+    ]);
 });
 
 // WP-08-12: real play-by-play descriptions for softball/baseball's own event types

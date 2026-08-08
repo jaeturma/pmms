@@ -18,6 +18,7 @@ enum ScoreEventType: string
     case Possession = 'possession';
     case Substitution = 'substitution';
     case Horn = 'horn';
+    case Bell = 'bell';
 
     public function label(): string
     {
@@ -36,6 +37,7 @@ enum ScoreEventType: string
             self::Possession => 'Possession',
             self::Substitution => 'Substitution',
             self::Horn => 'Horn',
+            self::Bell => 'Bell',
         };
     }
 }

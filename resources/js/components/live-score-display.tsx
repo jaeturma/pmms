@@ -63,6 +63,13 @@ export type BoxingRound = {
 
 export type BoxingState = {
     rounds: BoxingRound[];
+    round_duration_seconds: number;
+    rest_duration_seconds: number;
+    total_rounds: number;
+    clock_seconds: number;
+    clock_updated_at: string | null;
+    clock_phase: 'round' | 'rest';
+    bell_sounded_at: string | null;
 };
 
 export type SoftballInning = {
@@ -78,6 +85,9 @@ export type SoftballState = {
     balls: number;
     strikes: number;
     innings: SoftballInning[];
+    innings_scheduled: number;
+    team_color_a: string;
+    team_color_b: string;
 };
 
 export type RosterPlayer = {
@@ -285,7 +295,7 @@ export function formatClock(totalSeconds: number): string {
  * matching the reference's visual language. `count` can exceed `max`
  * (e.g. fouls past the bonus threshold) — every dot just stays filled.
  */
-function CountDots({
+export function CountDots({
     count,
     max,
     colorClass,
@@ -426,22 +436,23 @@ function TeamPanel({
  * shared center panel (rather than a basketball-only one) is simpler than
  * branching the whole scoreboard layout per sport.
  */
+/** A sport-specific manual countdown to show instead of the generic
+ * elapsed-since-start stopwatch — basketball's game clock or boxing's
+ * round/rest clock. `null` falls back to `RunningClock`. */
+type Countdown = { seconds: number; anchor: string | null; label: string };
+
 function CenterPanel({
     session,
     periodLabel,
     statusNote,
     fullscreen,
-    basketballState,
+    countdown,
 }: {
     session: LiveSession;
     periodLabel: string | null;
     statusNote: string | null;
     fullscreen: boolean;
-    /** When set, the main clock shows this side's real countdown (game
-     * clock) instead of the generic elapsed-since-start stopwatch — a
-     * basketball scoreboard's prominent clock should read down to zero
-     * like a real one, not count up from tip-off. */
-    basketballState: BasketballState | null;
+    countdown: Countdown | null;
 }) {
     return (
         <div
@@ -472,16 +483,16 @@ function CenterPanel({
                     // width and sizes to its own content. Bumped up a
                     // step (owner instruction) — the clock is the single
                     // most-glanced-at number on the board.
-                    fullscreen ? 'text-5xl sm:text-7xl' : 'text-4xl sm:text-5xl',
+                    fullscreen
+                        ? 'text-5xl sm:text-7xl'
+                        : 'text-4xl sm:text-5xl',
                 )}
-                aria-label={
-                    basketballState ? 'Game clock' : 'Running time'
-                }
+                aria-label={countdown?.label ?? 'Running time'}
             >
-                {basketballState ? (
+                {countdown ? (
                     <CountdownClock
-                        baseSeconds={basketballState.game_clock_seconds}
-                        anchor={basketballState.game_clock_updated_at}
+                        baseSeconds={countdown.seconds}
+                        anchor={countdown.anchor}
                         running={session.status === 'in_progress'}
                     />
                 ) : (
@@ -722,7 +733,11 @@ export function CorrectionDialog({
  * itself by default (`hidePlayByPlay` prop) for every caller that doesn't
  * need to reposition it — the public/legacy scoreboard pages.
  */
-export function PlayByPlayList({ playByPlay }: { playByPlay: PlayByPlayEntry[] }) {
+export function PlayByPlayList({
+    playByPlay,
+}: {
+    playByPlay: PlayByPlayEntry[];
+}) {
     const [showAllPlays, setShowAllPlays] = useState(false);
     const visiblePlays = showAllPlays
         ? playByPlay
@@ -753,15 +768,16 @@ export function PlayByPlayList({ playByPlay }: { playByPlay: PlayByPlayEntry[] }
                     </li>
                 ))}
             </ul>
-            {!showAllPlays && playByPlay.length > PLAY_BY_PLAY_PREVIEW_COUNT && (
-                <Button
-                    variant="link"
-                    className="mt-1 h-auto p-0"
-                    onClick={() => setShowAllPlays(true)}
-                >
-                    View full play by play ({playByPlay.length} events) →
-                </Button>
-            )}
+            {!showAllPlays &&
+                playByPlay.length > PLAY_BY_PLAY_PREVIEW_COUNT && (
+                    <Button
+                        variant="link"
+                        className="mt-1 h-auto p-0"
+                        onClick={() => setShowAllPlays(true)}
+                    >
+                        View full play by play ({playByPlay.length} events) →
+                    </Button>
+                )}
         </div>
     );
 }
@@ -826,6 +842,22 @@ export function LiveScoreDisplay({
         : null;
     const cornerA: Corner = boxingState ? 'red' : null;
     const cornerB: Corner = boxingState ? 'blue' : null;
+    const countdown: Countdown | null = basketballState
+        ? {
+              seconds: basketballState.game_clock_seconds,
+              anchor: basketballState.game_clock_updated_at,
+              label: 'Game clock',
+          }
+        : boxingState
+          ? {
+                seconds: boxingState.clock_seconds,
+                anchor: boxingState.clock_updated_at,
+                label:
+                    boxingState.clock_phase === 'round'
+                        ? 'Round clock'
+                        : 'Rest clock',
+            }
+          : null;
 
     return (
         <>
@@ -916,7 +948,7 @@ export function LiveScoreDisplay({
                         periodLabel={session.period_label}
                         statusNote={session.status_note}
                         fullscreen={fullscreen}
-                        basketballState={basketballState}
+                        countdown={countdown}
                     />
 
                     <TeamPanel
@@ -952,7 +984,8 @@ export function LiveScoreDisplay({
             {boxingState && boxingState.rounds.length > 0 && (
                 <div className="mx-auto w-full max-w-md">
                     <p className="mb-2 text-center text-sm font-medium text-muted-foreground">
-                        Round-by-round
+                        Round-by-round ({boxingState.rounds.length} of{' '}
+                        {boxingState.total_rounds})
                     </p>
                     <div className="overflow-hidden rounded-xl border">
                         <BoxingRoundTable
@@ -966,7 +999,8 @@ export function LiveScoreDisplay({
             {softballState && (
                 <div className="flex w-full flex-col items-center gap-3">
                     <p className="text-center text-sm font-medium text-muted-foreground">
-                        Inning {softballState.inning} (
+                        Inning {softballState.inning} of{' '}
+                        {softballState.innings_scheduled} (
                         {softballState.half === 'top' ? 'Top' : 'Bottom'})
                     </p>
                     <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-center text-sm text-muted-foreground">

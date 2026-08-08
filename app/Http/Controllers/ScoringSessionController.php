@@ -174,9 +174,16 @@ class ScoringSessionController extends Controller
                 'team_color_a' => '#dc2626', 'team_color_b' => '#2563eb',
                 'horn_sounded_at' => null, 'quarters' => 4,
             ],
-            ScoreboardType::Boxing => ['rounds' => []],
+            ScoreboardType::Boxing => [
+                'rounds' => [],
+                'round_duration_seconds' => 120, 'rest_duration_seconds' => 60, 'total_rounds' => 3,
+                'clock_seconds' => 120, 'clock_updated_at' => null, 'clock_phase' => 'round',
+                'bell_sounded_at' => null,
+            ],
             ScoreboardType::SoftballBaseball => [
                 'inning' => 1, 'half' => 'top', 'outs' => 0, 'balls' => 0, 'strikes' => 0, 'innings' => [],
+                'innings_scheduled' => 7,
+                'team_color_a' => '#dc2626', 'team_color_b' => '#2563eb',
             ],
             default => null,
         };
@@ -448,6 +455,14 @@ class ScoringSessionController extends Controller
         ]);
 
         $state = $session->sport_state ?? ['rounds' => []];
+        $totalRounds = $state['total_rounds'] ?? null;
+
+        if ($totalRounds !== null && count($state['rounds']) >= $totalRounds) {
+            throw ValidationException::withMessages([
+                'score_a' => __('All :n scheduled rounds have already been recorded.', ['n' => $totalRounds]),
+            ]);
+        }
+
         $roundNumber = count($state['rounds']) + 1;
         $state['rounds'][] = ['round' => $roundNumber, ...$data];
 
@@ -583,24 +598,41 @@ class ScoringSessionController extends Controller
     }
 
     /**
-     * Update the game control settings (minutes per period, shot clock
-     * duration, team colors) — basketball only. A config change, not a
-     * play, so this doesn't append a score_events row/play-by-play line,
-     * same reasoning as gameClock()/shotClock() below.
+     * Update the game control settings — a per-board-type config change,
+     * not a play, so this doesn't append a score_events row/play-by-play
+     * line, same reasoning as gameClock()/shotClock()/roundClock() below.
+     * Basketball: minutes per period, shot clock duration, team colors,
+     * quarters. Boxing: round/rest duration, total rounds. Softball/
+     * baseball: team colors and the regulation innings count (a display
+     * label only — this app doesn't enforce a game length or auto-end a
+     * session from it, same restraint as every other sport-specific rule
+     * documented in docs/live-scoring.md).
      */
     public function settings(Request $request, ScoringSession $session): RedirectResponse
     {
         $this->authorizeManageSession($request, $session);
         $this->assertActive($session);
-        $this->assertBasketball($session);
 
-        $data = $request->validate([
-            'minutes_per_period' => ['required', 'integer', 'min:1', 'max:20'],
-            'shot_clock_duration' => ['required', 'integer', 'min:5', 'max:60'],
-            'team_color_a' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
-            'team_color_b' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
-            'quarters' => ['required', 'integer', Rule::in([2, 4])],
-        ]);
+        $data = match ($session->boardType()) {
+            ScoreboardType::Basketball => $request->validate([
+                'minutes_per_period' => ['required', 'integer', 'min:1', 'max:20'],
+                'shot_clock_duration' => ['required', 'integer', 'min:5', 'max:60'],
+                'team_color_a' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+                'team_color_b' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+                'quarters' => ['required', 'integer', Rule::in([2, 4])],
+            ]),
+            ScoreboardType::Boxing => $request->validate([
+                'round_duration_seconds' => ['required', 'integer', 'min:30', 'max:600'],
+                'rest_duration_seconds' => ['required', 'integer', 'min:15', 'max:300'],
+                'total_rounds' => ['required', 'integer', 'min:1', 'max:12'],
+            ]),
+            ScoreboardType::SoftballBaseball => $request->validate([
+                'team_color_a' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+                'team_color_b' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+                'innings_scheduled' => ['required', 'integer', 'min:3', 'max:15'],
+            ]),
+            default => abort(422, __('This action is not available for this board type.')),
+        };
 
         $state = [...($session->sport_state ?? []), ...$data];
 
@@ -699,6 +731,82 @@ class ScoringSessionController extends Controller
         $state['shot_clock_updated_at'] = now()->toIso8601String();
 
         $session->forceFill(['sport_state' => $state])->save();
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Set the boxing round/rest countdown clock — boxing only. Manual, not
+     * server-ticking, the same anchor+ticker shape as basketball's
+     * gameClock()/shotClock() above. Two distinct actions in one endpoint:
+     * passing `phase` starts that phase fresh (clock reset to the
+     * configured round or rest duration — the "ding, round 2 begins" or
+     * "ding, rest begins" moment); passing `seconds` instead just adjusts
+     * the current phase's remaining time (a manual correction), leaving
+     * `clock_phase` untouched. Not a score_events row — same restraint as
+     * basketball's clocks, a frequent manual correction would flood the
+     * feed.
+     */
+    public function roundClock(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertBoxing($session);
+
+        $data = $request->validate([
+            'phase' => ['nullable', Rule::in(['round', 'rest'])],
+            'seconds' => ['nullable', 'integer', 'min:0', 'max:600'],
+        ]);
+
+        $state = $session->sport_state ?? [];
+
+        if (($data['phase'] ?? null) !== null) {
+            $state['clock_phase'] = $data['phase'];
+            $state['clock_seconds'] = $data['phase'] === 'round'
+                ? ($state['round_duration_seconds'] ?? 120)
+                : ($state['rest_duration_seconds'] ?? 60);
+        } elseif (($data['seconds'] ?? null) !== null) {
+            $state['clock_seconds'] = $data['seconds'];
+        }
+
+        $state['clock_updated_at'] = now()->toIso8601String();
+
+        $session->forceFill(['sport_state' => $state])->save();
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Sound the bell — boxing only, the sport-correct term for the same
+     * "signal" concern basketball's horn() covers. Rings to start/end a
+     * round or rest period; no other state change, viewers flash on a
+     * fresh `bell_sounded_at`.
+     */
+    public function bell(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertBoxing($session);
+
+        $state = $session->sport_state ?? [];
+        $state['bell_sounded_at'] = now()->toIso8601String();
+
+        $session->forceFill(['sport_state' => $state])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::Bell,
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record('scoring.bell_sounded', $session, $this->context($session));
 
         broadcast(new ScoreUpdated($session))->toOthers();
 

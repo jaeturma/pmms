@@ -459,6 +459,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('scoring-sessions/{session}/shot-clock', [ScoringSessionController::class, 'shotClock'])->name('scoring.shot-clock');
         Route::patch('scoring-sessions/{session}/horn', [ScoringSessionController::class, 'horn'])->name('scoring.horn');
         Route::patch('scoring-sessions/{session}/lineup', [ScoringSessionController::class, 'lineup'])->name('scoring.lineup');
+
+        // Boxing-only: the round/rest countdown clock and the bell signal.
+        Route::patch('scoring-sessions/{session}/round-clock', [ScoringSessionController::class, 'roundClock'])->name('scoring.round-clock');
+        Route::patch('scoring-sessions/{session}/bell', [ScoringSessionController::class, 'bell'])->name('scoring.bell');
     });
 
     // A Technical Official may encode a result directly for their own
