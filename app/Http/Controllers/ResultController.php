@@ -6,6 +6,7 @@ use App\Enums\EntryStatus;
 use App\Enums\MeetStatus;
 use App\Enums\ResultStatus;
 use App\Enums\UserRole;
+use App\Http\Controllers\Concerns\ScopesToAssignedSport;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Models\Entry;
 use App\Models\Event;
@@ -25,7 +26,7 @@ use Inertia\Response;
 
 class ResultController extends Controller
 {
-    use SearchesAndPaginates;
+    use ScopesToAssignedSport, SearchesAndPaginates;
 
     public function __construct(private readonly AuditLogger $audit) {}
 
@@ -34,7 +35,8 @@ class ResultController extends Controller
      * roles; encoded results are working data, visible to managers, plus
      * (Phase 16) a Technical Official for their own sport's events only —
      * they encoded it, they should be able to see and revise it before a
-     * manager validates it.
+     * manager (or, since Phase 13, their sport's Tournament Manager)
+     * validates it.
      */
     public function index(Request $request): Response
     {
@@ -44,12 +46,18 @@ class ResultController extends Controller
         $canManage = Gate::allows('manage-meet-data');
         $isScopedTechnicalOfficial = $user->role === UserRole::TechnicalOfficial;
         $assignedSportIds = $isScopedTechnicalOfficial ? $user->sports()->pluck('sports.id') : collect();
+        $isTournamentManager = $user->role === UserRole::TournamentManager && $user->managedSport !== null;
+        $managedSportId = $isTournamentManager ? $user->managedSport->id : null;
 
         // `canEncode` is a strict superset of `canManage`: it governs
         // "sees encoded results and the encode form at all" (Admin/
         // Organizer, or a scoped TO), while `canManage` stays the
         // narrower "can also validate/correct/delete" gate the frontend
-        // already used for those three actions.
+        // already used for those three actions. A Tournament Manager gains
+        // neither — encoding stays a TO job, "can manage" is expressed
+        // per-row below instead of this global flag, since a TM's own
+        // encoded results share this list with every other sport's
+        // already-visible validated results.
         $canEncode = $canManage || $isScopedTechnicalOfficial;
 
         $meetId = $request->integer('meet_id');
@@ -67,13 +75,20 @@ class ResultController extends Controller
             ->orderByDesc('id');
 
         if (! $canManage) {
-            $query->where(function ($validatedOrOwnEncoded) use ($isScopedTechnicalOfficial, $assignedSportIds) {
+            $query->where(function ($validatedOrOwnEncoded) use ($isScopedTechnicalOfficial, $assignedSportIds, $managedSportId) {
                 $validatedOrOwnEncoded->where('status', ResultStatus::Validated->value);
 
                 if ($isScopedTechnicalOfficial) {
                     $validatedOrOwnEncoded->orWhere(function ($ownEncoded) use ($assignedSportIds) {
                         $ownEncoded->where('status', ResultStatus::Encoded->value)
                             ->whereHas('event', fn ($event) => $event->whereIn('sport_id', $assignedSportIds));
+                    });
+                }
+
+                if ($managedSportId !== null) {
+                    $validatedOrOwnEncoded->orWhere(function ($ownSportEncoded) use ($managedSportId) {
+                        $ownSportEncoded->where('status', ResultStatus::Encoded->value)
+                            ->whereHas('event', fn ($event) => $event->where('sport_id', $managedSportId));
                     });
                 }
             });
@@ -101,6 +116,14 @@ class ResultController extends Controller
                     'encoded_at' => $result->encoded_at->toDayDateTimeString(),
                     'validated_by' => $result->validatedBy?->name,
                     'validated_at' => $result->validated_at?->toDayDateTimeString(),
+                    // Superset of the page-level `canManage` prop: also true
+                    // for a Tournament Manager on their own sport's results
+                    // (Phase 13). Validated results from every sport are
+                    // visible on this shared list, but a TM may only
+                    // validate/correct/delete their own sport's — a global
+                    // boolean can't express that, so it's computed per row.
+                    'can_manage' => $canManage
+                        || ($isTournamentManager && $result->event->sport_id === $managedSportId),
                     'placements' => $result->placements
                         ->sortBy([['rank', 'asc']])
                         ->map(fn (ResultPlacement $placement): array => [
@@ -273,6 +296,8 @@ class ResultController extends Controller
      */
     public function validateResult(Request $request, EventResult $result): RedirectResponse
     {
+        $this->authorizeManage($request, $result);
+
         if ($result->isValidated()) {
             Inertia::flash('toast', [
                 'type' => 'error',
@@ -305,6 +330,8 @@ class ResultController extends Controller
      */
     public function correct(Request $request, EventResult $result): RedirectResponse
     {
+        $this->authorizeManage($request, $result);
+
         $validated = $request->validate([
             'reason' => ['required', 'string', 'max:500'],
         ]);
@@ -343,8 +370,10 @@ class ResultController extends Controller
     /**
      * Delete an unvalidated result (working data only).
      */
-    public function destroy(EventResult $result): RedirectResponse
+    public function destroy(Request $request, EventResult $result): RedirectResponse
     {
+        $this->authorizeManage($request, $result);
+
         if ($result->isValidated()) {
             Inertia::flash('toast', [
                 'type' => 'error',
@@ -404,6 +433,31 @@ class ResultController extends Controller
 
         abort_unless(
             $user->role === UserRole::TechnicalOfficial && $user->sports()->whereKey($sportId)->exists(),
+            403,
+        );
+    }
+
+    /**
+     * Admin/Organizer may validate/correct/delete any result; a Tournament
+     * Manager only a result whose sport is one they operate
+     * (`ScopesToAssignedSport::userOperatesSport()`) — the counterpart to
+     * `authorizeEncode()`'s TO scoping, for the separate manager-decision
+     * trio (Phase 13). A Technical Official has no access to this trio at
+     * all, same as before.
+     */
+    private function authorizeManage(Request $request, EventResult $result): void
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+            return;
+        }
+
+        $result->loadMissing('event');
+
+        abort_unless(
+            $user->role === UserRole::TournamentManager && $this->userOperatesSport($user, $result->event->sport_id),
             403,
         );
     }

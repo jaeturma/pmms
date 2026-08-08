@@ -78,6 +78,126 @@ test('a technical official only sees matches for their assigned sport, and canno
     expect($otherSportMatch->id)->not->toBe($ownSportMatch->id);
 });
 
+test('a tournament manager only sees matches for their managed sport, and can manage them', function () {
+    $ownSportMatch = EventMatch::factory()->create();
+    $otherSportMatch = EventMatch::factory()->create();
+
+    $manager = User::factory()->tournamentManager()->create();
+    $ownSportMatch->event->sport->forceFill(['tournament_manager_id' => $manager->id])->save();
+
+    $this->actingAs($manager)
+        ->get('/matches')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('matches.data', 1)
+            ->where('matches.data.0.id', $ownSportMatch->id)
+            // The list is already scoped to their own sport (unlike
+            // Schedule/Results, which stay unscoped and express a
+            // Tournament Manager's narrower access per-row instead), so
+            // `canManage` is safely page-level true here — every visible
+            // row is one they're allowed to manage.
+            ->where('canManage', true));
+
+    expect($otherSportMatch->id)->not->toBe($ownSportMatch->id);
+});
+
+test('a tournament manager can create, update, participants, status, and delete a match in their managed sport', function () {
+    $meet = Meet::factory()->active()->create();
+    $event = Event::factory()->create();
+    $meet->events()->attach($event);
+
+    $manager = User::factory()->tournamentManager()->create();
+    $event->sport->forceFill(['tournament_manager_id' => $manager->id])->save();
+
+    $this->actingAs($manager)
+        ->post('/matches', [
+            'meet_id' => $meet->id,
+            'event_id' => $event->id,
+            'event_schedule_id' => null,
+            'round_label' => 'Final',
+            'sequence' => 1,
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $match = EventMatch::query()->where('event_id', $event->id)->firstOrFail();
+
+    $this->actingAs($manager)
+        ->put("/matches/{$match->id}", [
+            'meet_id' => $meet->id,
+            'event_id' => $event->id,
+            'event_schedule_id' => null,
+            'round_label' => 'Semifinal',
+            'sequence' => 2,
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect($match->refresh()->round_label)->toBe('Semifinal');
+
+    $entry = confirmedEntryFor($match);
+
+    $this->actingAs($manager)
+        ->put("/matches/{$match->id}/participants", ['entry_ids' => [$entry->id]])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect($match->entries()->count())->toBe(1);
+
+    $this->actingAs($manager)
+        ->patch("/matches/{$match->id}/status", ['status' => 'walkover'])
+        ->assertRedirect();
+
+    expect($match->refresh()->status->value)->toBe('walkover');
+
+    $this->actingAs($manager)
+        ->delete("/matches/{$match->id}")
+        ->assertRedirect();
+
+    $this->assertDatabaseMissing('matches', ['id' => $match->id]);
+});
+
+test('a tournament manager cannot create, update, or manage a match outside their managed sport', function () {
+    $ownSportMatch = EventMatch::factory()->create();
+    $otherSportMatch = EventMatch::factory()->create();
+
+    $manager = User::factory()->tournamentManager()->create();
+    $ownSportMatch->event->sport->forceFill(['tournament_manager_id' => $manager->id])->save();
+
+    $this->actingAs($manager)
+        ->post('/matches', [
+            'meet_id' => $otherSportMatch->meet_id,
+            'event_id' => $otherSportMatch->event_id,
+            'event_schedule_id' => null,
+            'round_label' => 'Final',
+            'sequence' => 1,
+        ])
+        ->assertForbidden();
+
+    $this->actingAs($manager)
+        ->put("/matches/{$otherSportMatch->id}", [
+            'meet_id' => $otherSportMatch->meet_id,
+            'event_id' => $otherSportMatch->event_id,
+            'event_schedule_id' => null,
+            'round_label' => 'Semifinal',
+            'sequence' => 2,
+        ])
+        ->assertForbidden();
+
+    $this->actingAs($manager)
+        ->put("/matches/{$otherSportMatch->id}/participants", ['entry_ids' => []])
+        ->assertForbidden();
+
+    $this->actingAs($manager)
+        ->patch("/matches/{$otherSportMatch->id}/status", ['status' => 'walkover'])
+        ->assertForbidden();
+
+    $this->actingAs($manager)
+        ->delete("/matches/{$otherSportMatch->id}")
+        ->assertForbidden();
+
+    $this->assertDatabaseHas('matches', ['id' => $otherSportMatch->id]);
+});
+
 test('managers can create a match for an event in the meet', function () {
     $meet = Meet::factory()->active()->create();
     $event = Event::factory()->create();

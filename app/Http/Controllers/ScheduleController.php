@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\MeetStatus;
 use App\Enums\ScoringSessionStatus;
 use App\Enums\UserRole;
+use App\Http\Controllers\Concerns\ScopesToAssignedSport;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\ScheduleRequest;
 use App\Models\Event;
@@ -25,17 +26,26 @@ use Inertia\Response;
 
 class ScheduleController extends Controller
 {
-    use SearchesAndPaginates;
+    use ScopesToAssignedSport, SearchesAndPaginates;
 
     public function __construct(private readonly AuditLogger $audit) {}
 
     /**
-     * The meet schedule, filterable per day and per venue, readable by all roles.
+     * The meet schedule, filterable per day and per venue, readable by all
+     * roles. Unlike Matches/Results, the list itself is never sport-scoped
+     * (every role sees the whole meet schedule) — a Tournament Manager's
+     * narrower "own sport only" write access is expressed per-row via
+     * `can_manage` instead, since a global `canManage` boolean can't tell
+     * their own sport's slots from every other sport's on this shared list.
      */
     public function index(Request $request): Response
     {
         /** @var User $user */
         $user = $request->user();
+
+        $canManageAll = Gate::allows('manage-meet-data');
+        $isTournamentManager = $user->role === UserRole::TournamentManager && $user->managedSport !== null;
+        $managedSportId = $isTournamentManager ? $user->managedSport->id : null;
 
         $search = $this->searchTerm($request);
         $meetId = $request->integer('meet_id');
@@ -72,7 +82,7 @@ class ScheduleController extends Controller
 
         return Inertia::render('schedule/index', [
             'schedules' => $slots
-                ->through(function (EventSchedule $schedule) use ($matchesBySchedule): array {
+                ->through(function (EventSchedule $schedule) use ($matchesBySchedule, $canManageAll, $isTournamentManager, $managedSportId): array {
                     $match = $matchesBySchedule->get($schedule->id);
 
                     return [
@@ -98,6 +108,8 @@ class ScheduleController extends Controller
                         'note' => $schedule->note,
                         'match_id' => $match?->id,
                         'is_live' => $match !== null && $match->scoringSessions->isNotEmpty(),
+                        'can_manage' => $canManageAll
+                            || ($isTournamentManager && $schedule->event->sport_id === $managedSportId),
                     ];
                 }),
             'filters' => [
@@ -117,6 +129,7 @@ class ScheduleController extends Controller
                     'meets.id',
                     $schedulableMeets->pluck('id'),
                 ))
+                ->when($managedSportId !== null, fn ($query) => $query->where('sport_id', $managedSportId))
                 ->with(['sport:id,name', 'meets:id'])
                 ->get(['id', 'sport_id', 'name', 'gender', 'age_division'])
                 ->flatMap(fn (Event $event) => $event->meets->map(fn (Meet $meet): array => [
@@ -141,7 +154,7 @@ class ScheduleController extends Controller
                     'sport_id' => $category->sport_id,
                     'label' => $category->display_name,
                 ]),
-            'canManage' => Gate::allows('manage-meet-data'),
+            'canManage' => $canManageAll || $isTournamentManager,
         ]);
     }
 
@@ -150,9 +163,12 @@ class ScheduleController extends Controller
      */
     public function store(ScheduleRequest $request): RedirectResponse
     {
+        /** @var User $user */
+        $user = $request->user();
+
         $data = $request->slotData();
 
-        $this->assertSlotIsValid($data);
+        $this->assertSlotIsValid($data, $user);
 
         $schedule = EventSchedule::create($data);
 
@@ -168,9 +184,15 @@ class ScheduleController extends Controller
      */
     public function update(ScheduleRequest $request, EventSchedule $schedule): RedirectResponse
     {
+        /** @var User $user */
+        $user = $request->user();
+
+        $schedule->loadMissing('event');
+        abort_unless($this->canManageSlot($user, $schedule->event->sport_id), 403);
+
         $data = $request->slotData();
 
-        $this->assertSlotIsValid($data, $schedule);
+        $this->assertSlotIsValid($data, $user, $schedule);
 
         $schedule->update($data);
 
@@ -184,8 +206,14 @@ class ScheduleController extends Controller
     /**
      * Delete a schedule slot.
      */
-    public function destroy(EventSchedule $schedule): RedirectResponse
+    public function destroy(Request $request, EventSchedule $schedule): RedirectResponse
     {
+        /** @var User $user */
+        $user = $request->user();
+
+        $schedule->loadMissing('event');
+        abort_unless($this->canManageSlot($user, $schedule->event->sport_id), 403);
+
         if (! $this->meetIsSchedulable($schedule->meet)) {
             Inertia::flash('toast', [
                 'type' => 'error',
@@ -207,11 +235,15 @@ class ScheduleController extends Controller
     }
 
     /**
-     * Enforce the scheduling rules: meet window, event-in-meet, venue conflict.
+     * Enforce the scheduling rules: meet window, event-in-meet, venue
+     * conflict, and (for a Tournament Manager) that the target event's
+     * sport is one they operate — an Admin/Organizer may schedule any
+     * sport's events, so this only ever narrows a Tournament Manager, never
+     * broadens anyone.
      *
      * @param  array<string, mixed>  $data
      */
-    private function assertSlotIsValid(array $data, ?EventSchedule $ignore = null): void
+    private function assertSlotIsValid(array $data, User $user, ?EventSchedule $ignore = null): void
     {
         $meet = Meet::query()->findOrFail((int) $data['meet_id']);
 
@@ -226,6 +258,9 @@ class ScheduleController extends Controller
                 'event_id' => __('That event is not part of the selected meet.'),
             ]);
         }
+
+        $sportId = (int) Event::query()->whereKey($data['event_id'])->value('sport_id');
+        abort_unless($this->canManageSlot($user, $sportId), 403);
 
         $conflict = EventSchedule::query()
             ->where('venue_id', $data['venue_id'])
@@ -250,6 +285,20 @@ class ScheduleController extends Controller
     private function meetIsSchedulable(Meet $meet): bool
     {
         return in_array($meet->status, [MeetStatus::RegistrationClosed, MeetStatus::Active], true);
+    }
+
+    /**
+     * Admin/Organizer may manage any sport's slots; a Tournament Manager
+     * only a slot whose event is one they operate
+     * (`ScopesToAssignedSport::userOperatesSport()`).
+     */
+    private function canManageSlot(User $user, int $sportId): bool
+    {
+        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+            return true;
+        }
+
+        return $user->role === UserRole::TournamentManager && $this->userOperatesSport($user, $sportId);
     }
 
     /**

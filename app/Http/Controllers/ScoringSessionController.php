@@ -10,6 +10,7 @@ use App\Enums\ScoreEventType;
 use App\Enums\ScoringSessionStatus;
 use App\Enums\UserRole;
 use App\Events\ScoreUpdated;
+use App\Http\Controllers\Concerns\ScopesToAssignedSport;
 use App\Models\Entry;
 use App\Models\EventMatch;
 use App\Models\MatchRosterPlayer;
@@ -43,6 +44,8 @@ use Inertia\Response;
  */
 class ScoringSessionController extends Controller
 {
+    use ScopesToAssignedSport;
+
     public function __construct(private readonly AuditLogger $audit) {}
 
     /**
@@ -2275,16 +2278,16 @@ class ScoringSessionController extends Controller
 
     /**
      * Mirrors the "Matches — list" authorization row, plus a Technical
-     * Official scoped to their own assigned sport (view and manage use
-     * the identical scope here — a Technical Official has no reason to
-     * see a match outside the sport they're allowed to run scoring for).
+     * Official or Tournament Manager scoped to their own assigned sport
+     * (view and manage use the identical scope here — neither role has a
+     * reason to see a match outside the sport they operate).
      */
     private function authorizeView(Request $request, EventMatch $match): void
     {
         /** @var User $user */
         $user = $request->user();
 
-        if ($user->role === UserRole::TechnicalOfficial) {
+        if ($user->hasRole(UserRole::TechnicalOfficial, UserRole::TournamentManager)) {
             abort_unless($this->canManage($user, $match), 403);
 
             return;
@@ -2306,15 +2309,15 @@ class ScoringSessionController extends Controller
     }
 
     /**
-     * Admin may manage any match's scoring; a Technical Official only a
-     * match whose sport is one they're assigned to (`User::sports()`); an
-     * Organizer only a match whose meet+sport they hold an active
-     * Tournament Secretary or Tournament ICT `MeetSportAssignment` for —
-     * a plain Organizer with no such assignment is still denied. Shared
-     * by `board()`'s `canManage` flag, `authorizeView()`'s Technical
-     * Official branch, and every mutating action's own authorization
-     * check below — one definition of "who may run this match's
-     * scoreboard."
+     * Admin may manage any match's scoring; a Technical Official or
+     * Tournament Manager only a match whose sport they operate
+     * (`ScopesToAssignedSport::userOperatesSport()`); an Organizer only a
+     * match whose meet+sport they hold an active Tournament Secretary or
+     * Tournament ICT `MeetSportAssignment` for — a plain Organizer with no
+     * such assignment is still denied. Shared by `board()`'s `canManage`
+     * flag, `authorizeView()`'s Technical Official branch, and every
+     * mutating action's own authorization check below — one definition of
+     * "who may run this match's scoreboard."
      */
     private function canManage(User $user, EventMatch $match): bool
     {
@@ -2328,8 +2331,8 @@ class ScoringSessionController extends Controller
         // is a no-op once a relation is marked loaded, regardless of which
         // columns it was loaded with. A plain access either reuses an
         // already-fully-loaded `event` or lazy-loads the full row once.
-        if ($user->role === UserRole::TechnicalOfficial) {
-            return $user->sports()->whereKey($match->event->sport_id)->exists();
+        if ($user->hasRole(UserRole::TechnicalOfficial, UserRole::TournamentManager)) {
+            return $this->userOperatesSport($user, $match->event->sport_id);
         }
 
         if ($user->role !== UserRole::Organizer) {

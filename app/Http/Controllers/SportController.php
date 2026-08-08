@@ -32,7 +32,7 @@ class SportController extends Controller
 
         $query = Sport::query()
             ->withCount('events')
-            ->with('technicalOfficials:id,name,email')
+            ->with(['technicalOfficials:id,name,email', 'tournamentManager:id,name,email'])
             ->orderBy('name');
 
         $this->applySearch($query, $search, ['name']);
@@ -50,10 +50,18 @@ class SportController extends Controller
                             'name' => $official->name,
                         ])
                         ->values(),
+                    'tournament_manager' => $sport->tournamentManager === null ? null : [
+                        'id' => $sport->tournamentManager->id,
+                        'name' => $sport->tournamentManager->name,
+                    ],
                 ]),
             'filters' => ['search' => $search],
             'technicalOfficialOptions' => User::query()
                 ->where('role', UserRole::TechnicalOfficial->value)
+                ->orderBy('name')
+                ->get(['id', 'name', 'email']),
+            'tournamentManagerOptions' => User::query()
+                ->where('role', UserRole::TournamentManager->value)
                 ->orderBy('name')
                 ->get(['id', 'name', 'email']),
             'canManage' => Gate::allows('manage-meet-data'),
@@ -144,6 +152,36 @@ class SportController extends Controller
         ]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Technical officials updated.')]);
+
+        return back();
+    }
+
+    /**
+     * Assign (or clear) this sport's single Tournament Manager — a
+     * nullable 1:1, unlike `syncTechnicalOfficials()`'s full-replace
+     * many-to-many, since exactly one TM per sport is the real constraint
+     * (see the migration's own docblock).
+     */
+    public function syncTournamentManager(Request $request, Sport $sport): RedirectResponse
+    {
+        Gate::authorize('manage-meet-data');
+
+        $validated = $request->validate([
+            'user_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('users', 'id')->where('role', UserRole::TournamentManager->value),
+            ],
+        ]);
+
+        $sport->forceFill(['tournament_manager_id' => $validated['user_id'] ?? null])->save();
+
+        $this->audit->record('sport.tournament_manager_assigned', $sport, [
+            'name' => $sport->name,
+            'tournament_manager_id' => $sport->tournament_manager_id,
+        ]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Tournament manager updated.')]);
 
         return back();
     }

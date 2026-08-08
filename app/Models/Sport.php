@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $short_description
  * @property string|null $description
  * @property int|null $photo_upload_id
+ * @property int|null $tournament_manager_id
  * @property bool $active
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -100,5 +101,17 @@ class Sport extends Model
     public function photoUrl(): ?string
     {
         return $this->photo_upload_id === null ? null : route('sports.photo', $this);
+    }
+
+    /**
+     * The one user (if any) holding the catalog-wide `TournamentManager`
+     * login role for this sport — see the migration's own docblock for why
+     * this is a nullable FK rather than a pivot.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function tournamentManager(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'tournament_manager_id');
     }
 }

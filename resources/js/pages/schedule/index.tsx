@@ -56,6 +56,7 @@ type ScheduleSlot = {
     note: string | null;
     match_id: number | null;
     is_live: boolean;
+    can_manage: boolean;
 };
 
 type Option = { id: number; label: string };
@@ -584,40 +585,47 @@ export default function Schedule({
                                         </TableCell>
                                         {canManage && (
                                             <TableCell className="text-right">
-                                                <div className="flex justify-end gap-2">
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() =>
-                                                            openEdit(slot)
-                                                        }
-                                                    >
-                                                        Edit
-                                                    </Button>
-                                                    <ConfirmDialog
-                                                        trigger={
-                                                            <Button
-                                                                variant="destructive"
-                                                                size="sm"
-                                                            >
-                                                                Delete
-                                                            </Button>
-                                                        }
-                                                        title="Delete schedule slot?"
-                                                        description="This removes the slot from the schedule. The event itself is not affected."
-                                                        confirmLabel="Delete"
-                                                        destructive
-                                                        onConfirm={() =>
-                                                            router.delete(
-                                                                destroy(slot.id)
-                                                                    .url,
-                                                                {
-                                                                    preserveScroll: true,
-                                                                },
-                                                            )
-                                                        }
-                                                    />
-                                                </div>
+                                                {slot.can_manage ? (
+                                                    <div className="flex justify-end gap-2">
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() =>
+                                                                openEdit(slot)
+                                                            }
+                                                        >
+                                                            Edit
+                                                        </Button>
+                                                        <ConfirmDialog
+                                                            trigger={
+                                                                <Button
+                                                                    variant="destructive"
+                                                                    size="sm"
+                                                                >
+                                                                    Delete
+                                                                </Button>
+                                                            }
+                                                            title="Delete schedule slot?"
+                                                            description="This removes the slot from the schedule. The event itself is not affected."
+                                                            confirmLabel="Delete"
+                                                            destructive
+                                                            onConfirm={() =>
+                                                                router.delete(
+                                                                    destroy(
+                                                                        slot.id,
+                                                                    ).url,
+                                                                    {
+                                                                        preserveScroll: true,
+                                                                    },
+                                                                )
+                                                            }
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-sm text-muted-foreground">
+                                                        —
+                                                    </span>
+                                                )}
                                             </TableCell>
                                         )}
                                     </TableRow>

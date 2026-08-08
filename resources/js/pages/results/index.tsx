@@ -66,6 +66,12 @@ type Result = {
     encoded_at: string;
     validated_by: string | null;
     validated_at: string | null;
+    /** Superset of the page-level `canManage` prop — also true for a
+     * Tournament Manager on their own sport's result (Phase 13). Gates the
+     * per-row Validate/Delete/Correct actions instead of the page-level
+     * prop, since a TM shares this list with every other sport's already-
+     * visible validated results. */
+    can_manage: boolean;
     placements: Placement[];
 };
 
@@ -90,11 +96,15 @@ type Props = {
     activeMeets: Option[];
     encodedEventKeys: string[];
     entryOptions: EntryOption[];
+    /** Admin/Organizer only — kept for parity with other registry pages'
+     * props even though this page's own UI now reads the per-row
+     * `Result.can_manage` instead (a Tournament Manager's validate/correct/
+     * delete access is scoped per result, not page-wide). */
     canManage: boolean;
     /** Superset of `canManage` — also true for a Technical Official
      * viewing/encoding results for their own assigned sport (Phase 16).
-     * Governs the encode form and the "Edit" action; validate/correct/
-     * delete stay gated on `canManage` alone. */
+     * Governs the encode form and the "Edit" action. Tournament Manager
+     * does not gain this — encoding stays a Technical Official job. */
     canEncode: boolean;
 };
 
@@ -446,7 +456,6 @@ export default function Results({
     activeMeets,
     encodedEventKeys,
     entryOptions,
-    canManage,
     canEncode,
 }: Props) {
     const [formOpen, setFormOpen] = useState(false);
@@ -631,7 +640,7 @@ export default function Results({
                                                     >
                                                         Edit
                                                     </Button>
-                                                    {canManage && (
+                                                    {result.can_manage && (
                                                         <>
                                                             <ConfirmDialog
                                                                 trigger={
@@ -698,7 +707,7 @@ export default function Results({
                                                 </Link>
                                             </Button>
                                         )}
-                                        {canManage &&
+                                        {result.can_manage &&
                                             result.status === 'validated' && (
                                                 <Button
                                                     variant="outline"

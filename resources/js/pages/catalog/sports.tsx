@@ -22,6 +22,13 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import {
     Table,
     TableBody,
     TableCell,
@@ -36,10 +43,16 @@ import {
     restore,
     store,
     technicalOfficials as syncTechnicalOfficials,
+    tournamentManager as syncTournamentManager,
     update,
 } from '@/routes/sports';
 
 type TechnicalOfficial = {
+    id: number;
+    name: string;
+};
+
+type TournamentManager = {
     id: number;
     name: string;
 };
@@ -50,9 +63,16 @@ type Sport = {
     active: boolean;
     events_count: number;
     technical_officials: TechnicalOfficial[];
+    tournament_manager: TournamentManager | null;
 };
 
 type TechnicalOfficialOption = {
+    id: number;
+    name: string;
+    email: string;
+};
+
+type TournamentManagerOption = {
     id: number;
     name: string;
     email: string;
@@ -62,6 +82,7 @@ type Props = {
     sports: Paginated<Sport>;
     filters: { search: string };
     technicalOfficialOptions: TechnicalOfficialOption[];
+    tournamentManagerOptions: TournamentManagerOption[];
     canManage: boolean;
 };
 
@@ -218,15 +239,98 @@ function TechnicalOfficialsDialog({
     );
 }
 
+function TournamentManagerDialog({
+    sport,
+    tournamentManagerOptions,
+    open,
+    onOpenChange,
+}: {
+    sport: Sport;
+    tournamentManagerOptions: TournamentManagerOption[];
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+}) {
+    const { data, setData, put, processing, errors, reset } = useForm({
+        user_id: sport.tournament_manager
+            ? String(sport.tournament_manager.id)
+            : '',
+    });
+
+    const save = () => {
+        put(syncTournamentManager(sport.id).url, {
+            preserveScroll: true,
+            onSuccess: () => {
+                reset();
+                onOpenChange(false);
+            },
+        });
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>
+                        Tournament manager for {sport.name}
+                    </DialogTitle>
+                </DialogHeader>
+                {tournamentManagerOptions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                        No user accounts have the Tournament Manager role yet.
+                    </p>
+                ) : (
+                    <div className="space-y-2">
+                        <Label htmlFor="tournament-manager-select">
+                            Tournament manager
+                        </Label>
+                        <Select
+                            value={data.user_id || 'none'}
+                            onValueChange={(value) =>
+                                setData(
+                                    'user_id',
+                                    value === 'none' ? '' : value,
+                                )
+                            }
+                        >
+                            <SelectTrigger id="tournament-manager-select">
+                                <SelectValue placeholder="None" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">None</SelectItem>
+                                {tournamentManagerOptions.map((option) => (
+                                    <SelectItem
+                                        key={option.id}
+                                        value={String(option.id)}
+                                    >
+                                        {option.name} ({option.email})
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <InputError message={errors.user_id} />
+                    </div>
+                )}
+                <DialogFooter>
+                    <Button onClick={save} disabled={processing}>
+                        Save tournament manager
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 export default function Sports({
     sports,
     filters,
     technicalOfficialOptions,
+    tournamentManagerOptions,
     canManage,
 }: Props) {
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<Sport | null>(null);
     const [officialsSport, setOfficialsSport] = useState<Sport | null>(null);
+    const [managerSport, setManagerSport] = useState<Sport | null>(null);
 
     const openCreate = () => {
         setEditing(null);
@@ -281,6 +385,7 @@ export default function Sports({
                                     <TableHead>Events</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead>Technical officials</TableHead>
+                                    <TableHead>Tournament manager</TableHead>
                                     {canManage && (
                                         <TableHead className="text-right">
                                             Actions
@@ -336,6 +441,29 @@ export default function Sports({
                                                             official.name,
                                                     )
                                                     .join(', ')
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            {canManage ? (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        setManagerSport(sport)
+                                                    }
+                                                >
+                                                    {sport.tournament_manager
+                                                        ? sport
+                                                              .tournament_manager
+                                                              .name
+                                                        : 'Assign'}
+                                                </Button>
+                                            ) : sport.tournament_manager ? (
+                                                sport.tournament_manager.name
+                                            ) : (
+                                                <span className="text-muted-foreground">
+                                                    None assigned
+                                                </span>
                                             )}
                                         </TableCell>
                                         {canManage && (
@@ -451,6 +579,16 @@ export default function Sports({
                     technicalOfficialOptions={technicalOfficialOptions}
                     open={officialsSport !== null}
                     onOpenChange={(open) => !open && setOfficialsSport(null)}
+                />
+            )}
+
+            {managerSport && (
+                <TournamentManagerDialog
+                    key={managerSport.id}
+                    sport={managerSport}
+                    tournamentManagerOptions={tournamentManagerOptions}
+                    open={managerSport !== null}
+                    onOpenChange={(open) => !open && setManagerSport(null)}
                 />
             )}
         </>

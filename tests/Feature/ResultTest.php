@@ -467,6 +467,97 @@ test('a technical official cannot encode a result for a sport they are not assig
     expect(EventResult::query()->count())->toBe(0);
 });
 
+test('a tournament manager sees their own sport\'s encoded results plus all validated results, and cannot encode', function () {
+    $ownSport = Sport::factory()->create();
+    $otherSport = Sport::factory()->create();
+    $ownEvent = Event::factory()->create(['sport_id' => $ownSport->id]);
+    $otherEvent = Event::factory()->create(['sport_id' => $otherSport->id]);
+
+    $ownEncoded = EventResult::factory()->create(['event_id' => $ownEvent->id]);
+    EventResult::factory()->create(['event_id' => $otherEvent->id]);
+    $validated = EventResult::factory()->validated()->create(['event_id' => $otherEvent->id]);
+
+    $manager = User::factory()->tournamentManager()->create();
+    $ownSport->forceFill(['tournament_manager_id' => $manager->id])->save();
+
+    $this->actingAs($manager)
+        ->get('/results')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('results.data', 2)
+            ->where('results.data.0.id', $validated->id)
+            ->where('results.data.0.can_manage', false)
+            ->where('results.data.1.id', $ownEncoded->id)
+            ->where('results.data.1.can_manage', true)
+            ->where('canManage', false)
+            ->where('canEncode', false));
+
+    ['meet' => $meet, 'event' => $encodeableEvent, 'entries' => $entries] = resultFixture(1);
+    $encodeableEvent->forceFill(['sport_id' => $ownSport->id])->save();
+
+    $this->actingAs($manager)
+        ->post('/results', [
+            'meet_id' => $meet->id,
+            'event_id' => $encodeableEvent->id,
+            'placements' => [
+                ['entry_id' => $entries[0]->id, 'rank' => 1, 'mark' => null, 'is_tie' => false],
+            ],
+        ])
+        ->assertForbidden();
+});
+
+test('a tournament manager can validate, correct, and delete a result in their managed sport', function () {
+    $sport = Sport::factory()->create();
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+
+    $manager = User::factory()->tournamentManager()->create();
+    $sport->forceFill(['tournament_manager_id' => $manager->id])->save();
+
+    $encoded = EventResult::factory()->create(['event_id' => $event->id]);
+
+    $this->actingAs($manager)
+        ->patch("/results/{$encoded->id}/validate")
+        ->assertRedirect();
+
+    expect($encoded->refresh()->status)->toBe(ResultStatus::Validated);
+
+    $this->actingAs($manager)
+        ->patch("/results/{$encoded->id}/correct", ['reason' => 'lane infringement'])
+        ->assertSessionHasNoErrors();
+
+    expect($encoded->refresh()->status)->toBe(ResultStatus::Encoded);
+
+    $this->actingAs($manager)
+        ->delete("/results/{$encoded->id}")
+        ->assertRedirect();
+
+    $this->assertDatabaseMissing('event_results', ['id' => $encoded->id]);
+});
+
+test('a tournament manager cannot validate, correct, or delete a result outside their managed sport', function () {
+    $ownSport = Sport::factory()->create();
+    $manager = User::factory()->tournamentManager()->create();
+    $ownSport->forceFill(['tournament_manager_id' => $manager->id])->save();
+
+    $otherEncoded = EventResult::factory()->create();
+    $otherValidated = EventResult::factory()->validated()->create();
+
+    $this->actingAs($manager)
+        ->patch("/results/{$otherEncoded->id}/validate")
+        ->assertForbidden();
+
+    $this->actingAs($manager)
+        ->patch("/results/{$otherValidated->id}/correct", ['reason' => 'anything'])
+        ->assertForbidden();
+
+    $this->actingAs($manager)
+        ->delete("/results/{$otherEncoded->id}")
+        ->assertForbidden();
+
+    expect($otherEncoded->refresh()->status)->toBe(ResultStatus::Encoded)
+        ->and($otherValidated->refresh()->status)->toBe(ResultStatus::Validated);
+});
+
 test('entries with recorded placements cannot be deleted', function () {
     $placement = ResultPlacement::factory()->create();
     $entry = $placement->entry;

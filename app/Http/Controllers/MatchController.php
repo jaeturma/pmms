@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\EntryStatus;
 use App\Enums\MatchStatus;
 use App\Enums\UserRole;
+use App\Http\Controllers\Concerns\ScopesToAssignedSport;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\MatchRequest;
 use App\Models\Entry;
@@ -24,27 +25,31 @@ use Inertia\Response;
 
 class MatchController extends Controller
 {
-    use SearchesAndPaginates;
+    use ScopesToAssignedSport, SearchesAndPaginates;
 
     public function __construct(private readonly AuditLogger $audit) {}
 
     /**
      * Match list, mirroring entry visibility: managers see all, officers
      * only matches involving their delegation, viewers none. A Technical
-     * Official is a different kind of scoped access (their assigned
-     * sport(s), not a delegation) and doesn't go through Entry's viewAny
-     * gate at all — they have no business seeing the Entries page this
-     * gate also protects, only the matches for the sport they run scoring
-     * for.
+     * Official or Tournament Manager is a different kind of scoped access
+     * (the sport(s) they operate, not a delegation) and doesn't go through
+     * Entry's viewAny gate at all — neither has any business seeing the
+     * Entries page this gate also protects, only the matches for the
+     * sport(s) they operate.
      */
     public function index(Request $request): Response
     {
         /** @var User $user */
         $user = $request->user();
 
-        if ($user->role !== UserRole::TechnicalOfficial) {
+        if (! $user->hasRole(UserRole::TechnicalOfficial, UserRole::TournamentManager)) {
             Gate::authorize('viewAny', Entry::class);
         }
+
+        $canManageAll = Gate::allows('manage-meet-data');
+        $isTournamentManager = $user->role === UserRole::TournamentManager && $user->managedSport !== null;
+        $managedSportId = $isTournamentManager ? $user->managedSport->id : null;
 
         $meetId = $request->integer('meet_id');
         $eventId = $request->integer('event_id');
@@ -68,11 +73,12 @@ class MatchController extends Controller
             );
         }
 
-        if ($user->role === UserRole::TechnicalOfficial) {
-            $query->whereHas(
-                'event',
-                fn ($events) => $events->whereIn('sport_id', $user->sports()->pluck('sports.id')),
-            );
+        if ($user->hasRole(UserRole::TechnicalOfficial, UserRole::TournamentManager)) {
+            $sportIds = $user->role === UserRole::TechnicalOfficial
+                ? $user->sports()->pluck('sports.id')
+                : collect([$user->managedSport?->id])->filter();
+
+            $query->whereHas('event', fn ($events) => $events->whereIn('sport_id', $sportIds));
         }
 
         if ($meetId > 0) {
@@ -129,6 +135,7 @@ class MatchController extends Controller
                 ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]),
             'eventOptionsByMeet' => Event::query()
                 ->whereHas('meets')
+                ->when($managedSportId !== null, fn ($query) => $query->where('sport_id', $managedSportId))
                 ->with(['sport:id,name', 'meets:id'])
                 ->get(['id', 'sport_id', 'name', 'gender', 'age_division'])
                 ->flatMap(fn (Event $event) => $event->meets->map(fn (Meet $meet): array => [
@@ -138,6 +145,10 @@ class MatchController extends Controller
                 ]))
                 ->values(),
             'scheduleOptions' => EventSchedule::query()
+                ->when(
+                    $managedSportId !== null,
+                    fn ($query) => $query->whereHas('event', fn ($event) => $event->where('sport_id', $managedSportId)),
+                )
                 ->with('venue:id,name')
                 ->get()
                 ->map(fn (EventSchedule $slot): array => [
@@ -155,6 +166,10 @@ class MatchController extends Controller
                 ->values(),
             'entryOptions' => Entry::query()
                 ->where('status', EntryStatus::Confirmed->value)
+                ->when(
+                    $managedSportId !== null,
+                    fn ($query) => $query->whereHas('event', fn ($event) => $event->where('sport_id', $managedSportId)),
+                )
                 ->with([
                     'athlete:id,first_name,last_name,school_id',
                     'athlete.school:id,name',
@@ -169,7 +184,7 @@ class MatchController extends Controller
                 ])
                 ->sortBy('label')
                 ->values(),
-            'canManage' => Gate::allows('manage-meet-data'),
+            'canManage' => $canManageAll || $isTournamentManager,
         ]);
     }
 
@@ -180,6 +195,7 @@ class MatchController extends Controller
     {
         $data = $request->validated();
 
+        $this->authorizeManage($request, (int) Event::query()->whereKey($data['event_id'])->value('sport_id'));
         $this->assertMatchIsValid($data);
 
         $match = EventMatch::create($data);
@@ -198,6 +214,12 @@ class MatchController extends Controller
     {
         $data = $request->validated();
 
+        $match->loadMissing('event');
+        $this->authorizeManage(
+            $request,
+            $match->event->sport_id,
+            (int) Event::query()->whereKey($data['event_id'])->value('sport_id'),
+        );
         $this->assertMatchIsValid($data);
 
         $match->update($data);
@@ -214,6 +236,9 @@ class MatchController extends Controller
      */
     public function syncParticipants(Request $request, EventMatch $match): RedirectResponse
     {
+        $match->loadMissing('event');
+        $this->authorizeManage($request, $match->event->sport_id);
+
         $validated = $request->validate([
             'entry_ids' => ['array'],
             'entry_ids.*' => ['integer', 'distinct', Rule::exists('entries', 'id')],
@@ -288,6 +313,9 @@ class MatchController extends Controller
      */
     public function updateStatus(Request $request, EventMatch $match): RedirectResponse
     {
+        $match->loadMissing('event');
+        $this->authorizeManage($request, $match->event->sport_id);
+
         $validated = $request->validate([
             'status' => ['required', Rule::enum(MatchStatus::class)],
         ]);
@@ -320,8 +348,11 @@ class MatchController extends Controller
     /**
      * Delete a match.
      */
-    public function destroy(EventMatch $match): RedirectResponse
+    public function destroy(Request $request, EventMatch $match): RedirectResponse
     {
+        $match->loadMissing('event');
+        $this->authorizeManage($request, $match->event->sport_id);
+
         $context = $this->context($match);
 
         $match->delete();
@@ -331,6 +362,31 @@ class MatchController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Match deleted.')]);
 
         return back();
+    }
+
+    /**
+     * Admin/Organizer may manage any match; a Tournament Manager only a
+     * match whose sport(s) — the match's current sport and, on `update()`,
+     * any target sport in the payload — they operate
+     * (`ScopesToAssignedSport::userOperatesSport()`). A Technical Official
+     * has no match-management access at all: their scope is running an
+     * existing match's live scoring, not creating/editing/deleting the
+     * match record itself.
+     */
+    private function authorizeManage(Request $request, int ...$sportIds): void
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+            return;
+        }
+
+        abort_unless(
+            $user->role === UserRole::TournamentManager
+                && collect($sportIds)->every(fn (int $sportId): bool => $this->userOperatesSport($user, $sportId)),
+            403,
+        );
     }
 
     /**

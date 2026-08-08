@@ -30,25 +30,18 @@ function forbiddenActor(string $role): User
     return match ($role) {
         'delegation officer' => User::factory()->delegationOfficer()->create(),
         'technical official' => User::factory()->technicalOfficial()->create(),
+        'tournament manager' => User::factory()->tournamentManager()->create(),
         'coach' => User::factory()->coach()->create(),
         default => User::factory()->create(),
     };
 }
 
 /**
- * A Technical Official is scoped only to live scoring for their assigned
- * sport (see ScoringSessionTest.php for that behavior) — every action
- * below is still denied to them, same as a viewer or delegation officer.
+ * @return array<string, Closure(): array{0: string, 1: string}>
  */
-test('meet-data management is denied to viewers, delegation officers, and technical officials', function (string $role, array $case) {
-    [$method, $uri] = $case;
-
-    $this->actingAs(forbiddenActor($role))
-        ->{$method}($uri)
-        ->assertForbidden();
-})
-    ->with(['viewer', 'delegation officer', 'technical official', 'coach'])
-    ->with([
+function forbiddenActionCases(): array
+{
+    return [
         'district create' => fn (): array => ['post', '/districts'],
         'district update' => fn (): array => ['put', '/districts/'.District::factory()->create()->id],
         'district archive' => fn (): array => ['patch', '/districts/'.District::factory()->create()->id.'/archive'],
@@ -65,6 +58,7 @@ test('meet-data management is denied to viewers, delegation officers, and techni
         'sport restore' => fn (): array => ['patch', '/sports/'.Sport::factory()->create()->id.'/restore'],
         'sport delete' => fn (): array => ['delete', '/sports/'.Sport::factory()->create()->id],
         'sport technical officials' => fn (): array => ['put', '/sports/'.Sport::factory()->create()->id.'/technical-officials'],
+        'sport tournament manager' => fn (): array => ['put', '/sports/'.Sport::factory()->create()->id.'/tournament-manager'],
         'event create' => fn (): array => ['post', '/events'],
         'event update' => fn (): array => ['put', '/events/'.Event::factory()->create()->id],
         'event archive' => fn (): array => ['patch', '/events/'.Event::factory()->create()->id.'/archive'],
@@ -121,7 +115,51 @@ test('meet-data management is denied to viewers, delegation officers, and techni
         'announcement publish' => fn (): array => ['patch', '/announcements/'.Announcement::factory()->create()->id.'/publish'],
         'announcement unpublish' => fn (): array => ['patch', '/announcements/'.Announcement::factory()->published()->create()->id.'/unpublish'],
         'announcement delete' => fn (): array => ['delete', '/announcements/'.Announcement::factory()->create()->id],
-    ]);
+    ];
+}
+
+/**
+ * A Technical Official is scoped only to live scoring for their assigned
+ * sport (see ScoringSessionTest.php for that behavior) — every action
+ * below is still denied to them, same as a viewer or delegation officer.
+ */
+test('meet-data management is denied to viewers, delegation officers, technical officials, and coaches', function (string $role, array $case) {
+    [$method, $uri] = $case;
+
+    $this->actingAs(forbiddenActor($role))
+        ->{$method}($uri)
+        ->assertForbidden();
+})
+    ->with(['viewer', 'delegation officer', 'technical official', 'coach'])
+    ->with(forbiddenActionCases());
+
+/**
+ * A Tournament Manager is deliberately created here with no managed sport
+ * (`tournament_manager_id` never set on any `Sport`), so their own
+ * schedule/match/result scope (`ScheduleController::canManageSlot()`/
+ * `MatchController::authorizeManage()`/`ResultController::authorizeManage()`)
+ * never applies to this sweep's factory-created records either — every
+ * action below is still denied to them too. Excludes 'schedule create',
+ * 'schedule update', 'match create', and 'match update': since Phase 13 a
+ * Tournament Manager passes those routes' middleware (unlike the other
+ * roles above), so this sweep's empty request body now fails `ScheduleRequest`/
+ * `MatchRequest` validation before the controller's own scope check ever
+ * runs — a 302 redirect, not the 403 this sweep asserts. Dedicated coverage
+ * for those four with a valid-but-wrong-sport body lives in
+ * `ScheduleTest.php`/`MatchTest.php` instead, the same pattern already used
+ * below for a Technical Official's 'result encode'/'result update' carve-out.
+ */
+test('meet-data management is denied to a tournament manager with no managed sport', function (array $case) {
+    [$method, $uri] = $case;
+
+    $this->actingAs(User::factory()->tournamentManager()->create())
+        ->{$method}($uri)
+        ->assertForbidden();
+})->with(
+    collect(forbiddenActionCases())
+        ->except(['schedule create', 'schedule update', 'match create', 'match update'])
+        ->all(),
+);
 
 test('viewers cannot reach minor-related data', function (string $uri) {
     $this->actingAs(User::factory()->create())

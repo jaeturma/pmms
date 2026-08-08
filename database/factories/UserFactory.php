@@ -90,6 +90,21 @@ class UserFactory extends Factory
     }
 
     /**
+     * Indicate that the user is a Tournament Manager — the one login held
+     * for a sport via `sports.tournament_manager_id`, see
+     * `Sport::tournamentManager()`/`User::managedSport()`. Assign the
+     * managed sport separately (`$sport->forceFill(['tournament_manager_id'
+     * => $user->id])->save()`), same as `technicalOfficial()`'s own sport
+     * assignment being a separate step via `sports()->attach()`.
+     */
+    public function tournamentManager(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => UserRole::TournamentManager,
+        ]);
+    }
+
+    /**
      * Indicate that the user is a Coach — scoped to whichever delegation
      * their own `Personnel` roster row (`personnel.user_id`) belongs to,
      * see `Delegation::hasCoach()`.

@@ -107,6 +107,18 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     }
 
     /**
+     * The one sport (if any) this Tournament Manager holds the catalog-wide
+     * `TournamentManager` login role for — the inverse of
+     * `Sport::tournamentManager()`. Meaningless for every other role.
+     *
+     * @return HasOne<Sport, $this>
+     */
+    public function managedSport(): HasOne
+    {
+        return $this->hasOne(Sport::class, 'tournament_manager_id');
+    }
+
+    /**
      * @return HasMany<ManagementTeamMember, $this>
      */
     public function managementTeamMemberships(): HasMany

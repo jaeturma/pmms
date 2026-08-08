@@ -178,6 +178,112 @@ test('back-to-back slots and other venues do not conflict', function () {
     expect(EventSchedule::query()->count())->toBe(3);
 });
 
+test('a tournament manager can schedule a slot for their managed sport but not another sport', function () {
+    $meet = Meet::factory()->active()->create();
+    $ownEvent = Event::factory()->create();
+    $meet->events()->attach($ownEvent);
+    $otherEvent = Event::factory()->create();
+    $meet->events()->attach($otherEvent);
+
+    $manager = User::factory()->tournamentManager()->create();
+    $ownEvent->sport->forceFill(['tournament_manager_id' => $manager->id])->save();
+
+    $ownInput = validSlotInput($meet);
+    $ownInput['event_id'] = $ownEvent->id;
+
+    $this->actingAs($manager)
+        ->post('/schedule', $ownInput)
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('event_schedules', ['event_id' => $ownEvent->id]);
+
+    $otherInput = validSlotInput($meet);
+    $otherInput['event_id'] = $otherEvent->id;
+    $otherInput['venue_id'] = Venue::factory()->create()->id;
+
+    $this->actingAs($manager)
+        ->post('/schedule', $otherInput)
+        ->assertForbidden();
+
+    $this->assertDatabaseMissing('event_schedules', ['event_id' => $otherEvent->id]);
+});
+
+test('a tournament manager can update and delete a slot in their managed sport but not another', function () {
+    $manager = User::factory()->tournamentManager()->create();
+
+    $ownSlot = EventSchedule::factory()->create([
+        'scheduled_date' => '2026-08-10',
+        'starts_at' => '08:00:00',
+        'ends_at' => '10:00:00',
+    ]);
+    $ownSlot->event->sport->forceFill(['tournament_manager_id' => $manager->id])->save();
+
+    $this->actingAs($manager)
+        ->put("/schedule/{$ownSlot->id}", [
+            'meet_id' => $ownSlot->meet_id,
+            'event_id' => $ownSlot->event_id,
+            'venue_id' => $ownSlot->venue_id,
+            'scheduled_date' => '2026-08-10',
+            'starts_at' => '09:00',
+            'ends_at' => '11:00',
+            'note' => null,
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect($ownSlot->refresh()->starts_at)->toBe('09:00:00');
+
+    $this->actingAs($manager)
+        ->delete("/schedule/{$ownSlot->id}")
+        ->assertRedirect();
+
+    $this->assertDatabaseMissing('event_schedules', ['id' => $ownSlot->id]);
+
+    $otherSlot = EventSchedule::factory()->create();
+
+    $this->actingAs($manager)
+        ->put("/schedule/{$otherSlot->id}", [
+            'meet_id' => $otherSlot->meet_id,
+            'event_id' => $otherSlot->event_id,
+            'venue_id' => $otherSlot->venue_id,
+            'scheduled_date' => $otherSlot->scheduled_date->toDateString(),
+            'starts_at' => '09:00',
+            'ends_at' => '11:00',
+            'note' => null,
+        ])
+        ->assertForbidden();
+
+    $this->actingAs($manager)
+        ->delete("/schedule/{$otherSlot->id}")
+        ->assertForbidden();
+
+    $this->assertDatabaseHas('event_schedules', ['id' => $otherSlot->id]);
+});
+
+test('a tournament manager gets a page-level manage flag and per-row scoping to their own sport', function () {
+    $manager = User::factory()->tournamentManager()->create();
+
+    $ownSlot = EventSchedule::factory()->create();
+    $ownSlot->event->update(['name' => 'Own Sport Event']);
+    $ownSlot->event->sport->forceFill(['tournament_manager_id' => $manager->id])->save();
+
+    $otherSlot = EventSchedule::factory()->create();
+    $otherSlot->event->update(['name' => 'Other Sport Event']);
+
+    $this->actingAs($manager)
+        ->get('/schedule?search=Own+Sport+Event')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('canManage', true)
+            ->where('schedules.data.0.can_manage', true));
+
+    $this->actingAs($manager)
+        ->get('/schedule?search=Other+Sport+Event')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('canManage', true)
+            ->where('schedules.data.0.can_manage', false));
+});
+
 test('viewers and delegation officers cannot manage the schedule', function (User $user) {
     $this->actingAs($user)
         ->post('/schedule', validSlotInput())

@@ -150,3 +150,61 @@ test('viewers and delegation officers cannot assign technical officials', functi
     'viewer' => fn () => User::factory()->create(),
     'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
 ]);
+
+test('the sports catalog lists tournament manager options and the current assignment', function () {
+    $sport = Sport::factory()->create();
+    $manager = User::factory()->tournamentManager()->create();
+    $sport->forceFill(['tournament_manager_id' => $manager->id])->save();
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->get('/sports')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('sports.data.0.tournament_manager.id', $manager->id)
+            ->has('tournamentManagerOptions', 1));
+});
+
+test('organizers can assign a tournament manager to a sport', function () {
+    $sport = Sport::factory()->create();
+    $manager = User::factory()->tournamentManager()->create();
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->put("/sports/{$sport->id}/tournament-manager", ['user_id' => $manager->id])
+        ->assertRedirect();
+
+    expect($sport->refresh()->tournament_manager_id)->toBe($manager->id)
+        ->and(AuditLog::query()->where('action', 'sport.tournament_manager_assigned')->exists())->toBeTrue();
+});
+
+test('organizers can clear a sport\'s tournament manager', function () {
+    $manager = User::factory()->tournamentManager()->create();
+    $sport = Sport::factory()->create();
+    $sport->forceFill(['tournament_manager_id' => $manager->id])->save();
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->put("/sports/{$sport->id}/tournament-manager", ['user_id' => null])
+        ->assertRedirect();
+
+    expect($sport->refresh()->tournament_manager_id)->toBeNull();
+});
+
+test('assigning a tournament manager rejects a user id that is not a tournament manager', function () {
+    $sport = Sport::factory()->create();
+    $notAManager = User::factory()->delegationOfficer()->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put("/sports/{$sport->id}/tournament-manager", ['user_id' => $notAManager->id])
+        ->assertSessionHasErrors('user_id');
+
+    expect($sport->refresh()->tournament_manager_id)->toBeNull();
+});
+
+test('viewers and delegation officers cannot assign a tournament manager', function (User $user) {
+    $sport = Sport::factory()->create();
+
+    $this->actingAs($user)
+        ->put("/sports/{$sport->id}/tournament-manager", ['user_id' => null])
+        ->assertForbidden();
+})->with([
+    'viewer' => fn () => User::factory()->create(),
+    'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+]);

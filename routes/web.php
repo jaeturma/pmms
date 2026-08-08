@@ -378,6 +378,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('sports/{sport}/archive', [SportController::class, 'archive'])->name('sports.archive');
         Route::patch('sports/{sport}/restore', [SportController::class, 'restore'])->name('sports.restore');
         Route::put('sports/{sport}/technical-officials', [SportController::class, 'syncTechnicalOfficials'])->name('sports.technical-officials');
+        Route::put('sports/{sport}/tournament-manager', [SportController::class, 'syncTournamentManager'])->name('sports.tournament-manager');
         Route::delete('sports/{sport}', [SportController::class, 'destroy'])->name('sports.destroy');
 
         Route::post('events', [EventController::class, 'store'])->name('events.store');
@@ -391,10 +392,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('venues/{venue}/archive', [VenueController::class, 'archive'])->name('venues.archive');
         Route::patch('venues/{venue}/restore', [VenueController::class, 'restore'])->name('venues.restore');
         Route::delete('venues/{venue}', [VenueController::class, 'destroy'])->name('venues.destroy');
-
-        Route::post('schedule', [ScheduleController::class, 'store'])->name('schedule.store');
-        Route::put('schedule/{schedule}', [ScheduleController::class, 'update'])->name('schedule.update');
-        Route::delete('schedule/{schedule}', [ScheduleController::class, 'destroy'])->name('schedule.destroy');
 
         Route::post('meet-sport-assignments', [MeetSportAssignmentController::class, 'store'])->name('meet-sport-assignments.store');
         Route::patch('meet-sport-assignments/{meetSportAssignment}/status', [MeetSportAssignmentController::class, 'updateStatus'])->name('meet-sport-assignments.status');
@@ -424,12 +421,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('accreditations', [AccreditationController::class, 'store'])->name('accreditation.store');
         Route::delete('accreditations/{accreditation}', [AccreditationController::class, 'destroy'])->name('accreditation.destroy');
 
-        Route::post('matches', [MatchController::class, 'store'])->name('matches.store');
-        Route::put('matches/{match}', [MatchController::class, 'update'])->name('matches.update');
-        Route::put('matches/{match}/participants', [MatchController::class, 'syncParticipants'])->name('matches.participants');
-        Route::patch('matches/{match}/status', [MatchController::class, 'updateStatus'])->name('matches.status');
-        Route::delete('matches/{match}', [MatchController::class, 'destroy'])->name('matches.destroy');
-
         Route::patch('protests/{protest}/review', [ProtestController::class, 'review'])->name('protests.review');
         Route::patch('protests/{protest}/decide', [ProtestController::class, 'decide'])->name('protests.decide');
 
@@ -447,20 +438,40 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('incidents/{incident}/reopen', [IncidentController::class, 'reopen'])->name('incidents.reopen');
         Route::delete('incidents/{incident}', [IncidentController::class, 'destroy'])->name('incidents.destroy');
 
+    });
+
+    // Schedule/Match management and result validate/correct/delete admit a
+    // Tournament Manager, not just Admin/Organizer, unlike the flat
+    // `role:admin,organizer` group above — each controller's own per-record
+    // check (`ScopesToAssignedSport::userOperatesSport()`) then narrows a
+    // Tournament Manager to their own managed sport only, the same
+    // "coarse role gate here, precise scope in the controller" shape as the
+    // live-scoring and result-encoding carve-outs already use.
+    Route::middleware('role:admin,organizer,tournament_manager')->group(function () {
+        Route::post('schedule', [ScheduleController::class, 'store'])->name('schedule.store');
+        Route::put('schedule/{schedule}', [ScheduleController::class, 'update'])->name('schedule.update');
+        Route::delete('schedule/{schedule}', [ScheduleController::class, 'destroy'])->name('schedule.destroy');
+
+        Route::post('matches', [MatchController::class, 'store'])->name('matches.store');
+        Route::put('matches/{match}', [MatchController::class, 'update'])->name('matches.update');
+        Route::put('matches/{match}/participants', [MatchController::class, 'syncParticipants'])->name('matches.participants');
+        Route::patch('matches/{match}/status', [MatchController::class, 'updateStatus'])->name('matches.status');
+        Route::delete('matches/{match}', [MatchController::class, 'destroy'])->name('matches.destroy');
+
         Route::patch('results/{result}/validate', [ResultController::class, 'validateResult'])->name('results.validate');
         Route::patch('results/{result}/correct', [ResultController::class, 'correct'])->name('results.correct');
         Route::delete('results/{result}', [ResultController::class, 'destroy'])->name('results.destroy');
     });
 
     // Live scoring mutations are their own role group, not folded into the
-    // block above: a Technical Official may run the scoreboard but must not
-    // gain any of that block's other meet-data-management permissions. An
-    // Organizer only gains scoreboard access when specifically assigned as
-    // Tournament Secretary/ICT for the match's meet+sport — a plain
-    // Organizer is still denied. Per-match/session sport scoping (not just
-    // this coarse role check) happens inside ScoringSessionController's own
-    // canManage().
-    Route::middleware('role:admin,organizer,technical_official')->group(function () {
+    // block above: a Technical Official or Tournament Manager may run the
+    // scoreboard but must not gain any of that block's other
+    // meet-data-management permissions. An Organizer only gains scoreboard
+    // access when specifically assigned as Tournament Secretary/ICT for the
+    // match's meet+sport — a plain Organizer is still denied. Per-match/
+    // session sport scoping (not just this coarse role check) happens
+    // inside ScoringSessionController's own canManage().
+    Route::middleware('role:admin,organizer,technical_official,tournament_manager')->group(function () {
         Route::post('matches/{match}/scoring-sessions', [ScoringSessionController::class, 'store'])->name('scoring.start');
         Route::patch('scoring-sessions/{session}/score', [ScoringSessionController::class, 'score'])->name('scoring.score');
         Route::patch('scoring-sessions/{session}/period', [ScoringSessionController::class, 'period'])->name('scoring.period');

@@ -405,6 +405,37 @@ test('a technical official cannot run scoring for a match outside their assigned
         ->assertForbidden();
 });
 
+test('a tournament manager can run a full basketball scoring session for their managed sport', function () {
+    $match = basketballMatch();
+    $manager = User::factory()->tournamentManager()->create();
+    $match->event->sport->forceFill(['tournament_manager_id' => $manager->id])->save();
+
+    $this->actingAs($manager)
+        ->get("/matches/{$match->id}/scoreboard")
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page->where('canManage', true));
+
+    $this->actingAs($manager)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'A', 'side_b_label' => 'B'])
+        ->assertRedirect();
+});
+
+test('a tournament manager cannot run scoring for a match outside their managed sport', function () {
+    $basketball = basketballMatch();
+    $boxing = boxingMatch();
+
+    $manager = User::factory()->tournamentManager()->create();
+    $basketball->event->sport->forceFill(['tournament_manager_id' => $manager->id])->save();
+
+    $this->actingAs($manager)
+        ->post("/matches/{$boxing->id}/scoring-sessions", ['side_a_label' => 'A', 'side_b_label' => 'B'])
+        ->assertForbidden();
+
+    $this->actingAs($manager)
+        ->get("/matches/{$boxing->id}/scoreboard")
+        ->assertForbidden();
+});
+
 test('an organizer assigned as tournament secretary can run a scoring session for their assigned meet+sport', function () {
     $match = basketballMatch();
 

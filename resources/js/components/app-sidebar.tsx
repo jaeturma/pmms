@@ -281,6 +281,33 @@ const technicalOfficialNavItems: NavItem[] = [
     },
 ];
 
+// A Tournament Manager builds and runs their own sport's schedule/matches/
+// results (Phase 13) — a wider job than a Technical Official's live-
+// scoring-only scope, so it gets its own minimal nav rather than reusing
+// `technicalOfficialNavItems` or the full `mainNavItems` registry console.
+const tournamentManagerNavItems: NavItem[] = [
+    {
+        title: 'Dashboard',
+        href: dashboard(),
+        icon: LayoutGrid,
+    },
+    {
+        title: 'Schedule',
+        href: scheduleIndex(),
+        icon: CalendarDays,
+    },
+    {
+        title: 'Matches',
+        href: matchesIndex(),
+        icon: Swords,
+    },
+    {
+        title: 'Results',
+        href: resultsIndex(),
+        icon: Award,
+    },
+];
+
 export function AppSidebar() {
     const { auth, division } = usePage().props;
 
@@ -294,20 +321,22 @@ export function AppSidebar() {
     const navItems =
         role === 'technical_official'
             ? technicalOfficialNavItems
-            : [
-                  ...mainNavItems.map((item) =>
-                      item.title === 'Districts'
-                          ? {
-                                ...item,
-                                title: pluralizeAreaLabel(division.areaLabel),
-                            }
-                          : item,
-                  ),
-                  ...(role === 'admin' || role === 'organizer'
-                      ? managerNavItems
-                      : []),
-                  ...(role === 'admin' ? adminNavItems : []),
-              ];
+            : role === 'tournament_manager'
+              ? tournamentManagerNavItems
+              : [
+                    ...mainNavItems.map((item) =>
+                        item.title === 'Districts'
+                            ? {
+                                  ...item,
+                                  title: pluralizeAreaLabel(division.areaLabel),
+                              }
+                            : item,
+                    ),
+                    ...(role === 'admin' || role === 'organizer'
+                        ? managerNavItems
+                        : []),
+                    ...(role === 'admin' ? adminNavItems : []),
+                ];
 
     return (
         <Sidebar collapsible="icon">
