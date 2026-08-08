@@ -261,7 +261,12 @@ export type PortalAthleticsSlot = {
     event: string;
     venue: string;
     status: 'completed' | 'ongoing' | 'upcoming';
-    top_placements: Array<{ rank: number; athlete: string; school: string; mark: string | null }>;
+    top_placements: Array<{
+        rank: number;
+        athlete: string;
+        school: string;
+        mark: string | null;
+    }>;
     official_as_of: string | null;
 };
 
@@ -296,6 +301,77 @@ export type PortalPaginatorLink = {
 export type PortalPaginatedAnnouncement = {
     data: PortalAnnouncement[];
     links: PortalPaginatorLink[];
+};
+
+export type PortalMunicipalityMedals = {
+    gold: number;
+    silver: number;
+    bronze: number;
+    total: number;
+};
+
+export type PortalMunicipalityTeam = {
+    id: number;
+    slug: string;
+    name: string;
+    nickname: string | null;
+    congressional_district: string | null;
+    logo_url: string | null;
+    athlete_count: number;
+    sport_count: number;
+    medals: PortalMunicipalityMedals;
+};
+
+export type PortalMunicipalityProfile = {
+    id: number;
+    slug: string;
+    name: string;
+    nickname: string | null;
+    congressional_district: string | null;
+    logo_url: string | null;
+    athlete_count: number;
+    sport_count: number;
+};
+
+export type PortalMunicipalityMedalBreakdown = {
+    elementary: PortalMunicipalityMedals;
+    secondary: PortalMunicipalityMedals;
+    paragames: PortalMunicipalityMedals;
+    total: PortalMunicipalityMedals;
+};
+
+export type PortalMedalWinner = {
+    medal: 'gold' | 'silver' | 'bronze' | 'other';
+    participant_type: 'athlete' | 'team';
+    athlete_name: string | null;
+    team_name: string | null;
+    roster: string[];
+    sport: string;
+    event: string;
+    gender: string;
+    level: string;
+    school: string | null;
+};
+
+export type PortalTeamAthlete = {
+    name: string;
+    event: string;
+    level: 'elementary' | 'secondary';
+    category: string;
+    school: string;
+};
+
+export type PortalTeamCoach = {
+    name: string;
+    role: string;
+    school: string;
+};
+
+export type PortalSportPersonnel = {
+    sport: string;
+    is_paragames: boolean;
+    athletes: PortalTeamAthlete[];
+    coaches: PortalTeamCoach[];
 };
 
 export type PortalMatchSummary = {

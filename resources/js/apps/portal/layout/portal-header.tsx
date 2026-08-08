@@ -1,6 +1,11 @@
 import { Link, usePage } from '@inertiajs/react';
 import { Menu, Radio, X } from 'lucide-react';
 import { useState } from 'react';
+import { PortalNavDropdown } from '@/apps/portal/layout/portal-nav-dropdown';
+import { PortalNavigation } from '@/apps/portal/layout/portal-navigation';
+import type { PortalNavItem } from '@/apps/portal/layout/portal-navigation';
+import { PORTAL_SPORTS } from '@/apps/portal/lib/sport-terminology';
+import type { PortalNavShared } from '@/apps/portal/types';
 import { dashboard, home, login } from '@/routes';
 import {
     about as publicAbout,
@@ -13,11 +18,8 @@ import {
     sportPortal,
     sports as publicSports,
     tally as publicTally,
+    teams as publicTeams,
 } from '@/routes/public';
-import { PortalNavigation, type PortalNavItem } from '@/apps/portal/layout/portal-navigation';
-import { PortalNavDropdown } from '@/apps/portal/layout/portal-nav-dropdown';
-import { PORTAL_SPORTS } from '@/apps/portal/lib/sport-terminology';
-import type { PortalNavShared } from '@/apps/portal/types';
 
 type PortalHeaderPageProps = {
     auth: { user: { id: number } | null };
@@ -34,15 +36,38 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
     const [menuOpen, setMenuOpen] = useState(false);
     const nav = props.publicNav;
 
-    const items: PortalNavItem[] = [{ label: 'Home', href: home().url, active: activePath === '/' }];
+    const items: PortalNavItem[] = [
+        { label: 'Home', href: home().url, active: activePath === '/' },
+    ];
 
     if (nav) {
         items.push(
-            { label: 'Schedule', href: publicMeet(nav.meetId).url, active: activePath === publicMeet(nav.meetId).url },
-            { label: 'Results', href: publicResults(nav.meetId).url, active: activePath === publicResults(nav.meetId).url },
-            { label: 'Medal Tally', href: publicTally(nav.meetId).url, active: activePath === publicTally(nav.meetId).url },
+            {
+                label: 'Schedule',
+                href: publicMeet(nav.meetId).url,
+                active: activePath === publicMeet(nav.meetId).url,
+            },
+            {
+                label: 'Results',
+                href: publicResults(nav.meetId).url,
+                active: activePath === publicResults(nav.meetId).url,
+            },
+            {
+                label: 'Medal Tally',
+                href: publicTally(nav.meetId).url,
+                active: activePath === publicTally(nav.meetId).url,
+            },
         );
     }
+
+    // Meet-agnostic, like the sport-portal routes below — a municipality's
+    // profile stays reachable at the same URL regardless of which meet is
+    // currently active, so this doesn't need to wait on `nav`.
+    items.push({
+        label: 'Teams',
+        href: publicTeams().url,
+        active: activePath.startsWith('/teams'),
+    });
 
     const sportItems = PORTAL_SPORTS.map((sport) => ({
         label: sport.name,
@@ -63,7 +88,10 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
     return (
         <header className="sticky top-0 z-40 bg-[var(--portal-accent)] text-[var(--portal-accent-foreground)] shadow-md">
             <div className="flex h-16 w-full items-center justify-between gap-4 px-4 sm:px-6 lg:px-10 xl:px-16 2xl:px-24">
-                <Link href={home().url} className="flex min-w-0 items-center gap-2 text-base font-bold text-[var(--portal-accent-foreground)]">
+                <Link
+                    href={home().url}
+                    className="flex min-w-0 items-center gap-2 text-base font-bold text-[var(--portal-accent-foreground)]"
+                >
                     {props.division.logoUrl ? (
                         <img
                             src={props.division.logoUrl}
@@ -75,13 +103,17 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
                             PM
                         </span>
                     )}
-                    <span className="min-w-0 truncate">{nav?.meetName ?? 'Provincial Meet Portal'}</span>
+                    <span className="min-w-0 truncate">
+                        {nav?.meetName ?? 'Provincial Meet Portal'}
+                    </span>
                 </Link>
 
                 <div className="hidden items-center md:flex">
                     <PortalNavigation items={items} />
                     <PortalNavDropdown label="Sports" items={sportItems} />
-                    {moreItems.length > 0 && <PortalNavDropdown label="More" items={moreItems} />}
+                    {moreItems.length > 0 && (
+                        <PortalNavDropdown label="More" items={moreItems} />
+                    )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -104,7 +136,11 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
                         aria-expanded={menuOpen}
                         onClick={() => setMenuOpen((value) => !value)}
                     >
-                        {menuOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
+                        {menuOpen ? (
+                            <X aria-hidden="true" />
+                        ) : (
+                            <Menu aria-hidden="true" />
+                        )}
                     </button>
                 </div>
             </div>
@@ -112,7 +148,17 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
             {menuOpen && (
                 <div className="border-t border-[var(--portal-accent-foreground)]/20 px-4 py-3 md:hidden">
                     <PortalNavigation
-                        items={[...items, ...sportItems.map((item) => ({ ...item, active: false })), ...moreItems.map((item) => ({ ...item, active: false }))]}
+                        items={[
+                            ...items,
+                            ...sportItems.map((item) => ({
+                                ...item,
+                                active: false,
+                            })),
+                            ...moreItems.map((item) => ({
+                                ...item,
+                                active: false,
+                            })),
+                        ]}
                         className="flex-col items-stretch gap-1"
                         itemClassName="w-full"
                         onNavigate={() => setMenuOpen(false)}

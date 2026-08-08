@@ -41,6 +41,7 @@ use App\Http\Controllers\MeetController;
 use App\Http\Controllers\MeetSportAssignmentController;
 use App\Http\Controllers\PersonnelController;
 use App\Http\Controllers\PortalController;
+use App\Http\Controllers\PortalTeamsController;
 use App\Http\Controllers\ProtestController;
 use App\Http\Controllers\ReadinessChecklistController;
 use App\Http\Controllers\ReportController;
@@ -107,6 +108,15 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('meets/{meet}/matches/{match}/scoreboard/poll', [PortalController::class, 'scoreboardPoll'])
         ->whereNumber(['meet', 'match'])
         ->name('public.scoreboard.poll');
+
+    // Public municipal teams/delegations directory — permanent,
+    // meet-agnostic routes (same "resolve to whichever meet is currently
+    // active" pattern as the Phase 12 sport-portal routes below), not
+    // nested under /meets/{meet} since a municipality's identity persists
+    // across meets even though the data shown is always the active one's.
+    Route::get('teams', [PortalTeamsController::class, 'index'])->name('public.teams');
+    Route::get('teams/{municipality}', [PortalTeamsController::class, 'show'])->name('public.teams.show');
+    Route::get('teams/{municipality}/players-coaches', [PortalTeamsController::class, 'playersCoaches'])->name('public.teams.players-coaches');
 
     // Phase 12: permanent, meet-agnostic sport-portal routes
     // (`/basketball`, etc.) — constrained to the 12 known slugs so this

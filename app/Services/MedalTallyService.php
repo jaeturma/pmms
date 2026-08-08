@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\AgeDivision;
 use App\Enums\ResultStatus;
 use App\Models\ResultPlacement;
 use App\Models\SchoolDistrict;
@@ -194,8 +195,13 @@ class MedalTallyService
     /**
      * @return Builder<ResultPlacement>
      */
-    private function basePlacements(?int $meetId, ?int $sportId, ?string $ageDivision): Builder
-    {
+    private function basePlacements(
+        ?int $meetId,
+        ?int $sportId,
+        ?string $ageDivision,
+        ?int $districtId = null,
+        ?bool $paragames = null,
+    ): Builder {
         return ResultPlacement::query()
             ->whereIn('rank', [1, 2, 3])
             ->whereHas('result', fn ($result) => $result
@@ -214,7 +220,136 @@ class MedalTallyService
                     'entry.event',
                     fn ($event) => $event->where('age_division', $ageDivision),
                 ),
-            );
+            )
+            // The placed athlete's own school's municipality — not the
+            // delegation's — same "grouped by the athlete's real school"
+            // reasoning `standings()` already documents, so a Province-
+            // division municipality's medals resolve correctly regardless
+            // of which pooled school the medalist actually attends.
+            ->when(
+                $districtId !== null,
+                fn ($query) => $query->whereHas(
+                    'entry.athlete.school',
+                    fn ($school) => $school->where('district_id', $districtId),
+                ),
+            )
+            // Paragames is a real, seeded Sport-name prefix
+            // ('Paragames - Athletics', 'Paragames - Swimming' —
+            // `SportsCatalogSeeder`), not an `AgeDivision` case — this app
+            // has no separate Paragames classification field. `true` scopes
+            // to Paragames sports only; `false` explicitly excludes them
+            // (so the Elementary/Secondary tabs never double-count a
+            // Paragames medal that also happens to carry an Elementary/
+            // Secondary `age_division`); `null` (default) applies no filter
+            // at all.
+            ->when($paragames === true, fn ($query) => $query->whereHas(
+                'entry.event.sport',
+                fn ($sport) => $sport->where('name', 'like', 'Paragames%'),
+            ))
+            ->when($paragames === false, fn ($query) => $query->whereHas(
+                'entry.event.sport',
+                fn ($sport) => $sport->where('name', 'not like', 'Paragames%'),
+            ));
+    }
+
+    /**
+     * Gold/silver/bronze/total for one municipality, split into the public
+     * portal's four category tabs. Elementary/Secondary explicitly exclude
+     * Paragames-sport placements (see `basePlacements()`'s `$paragames`
+     * doc) so a Paragames medal is never double-counted across two tabs;
+     * `total` applies no age-division or Paragames filter at all, so it
+     * always equals elementary+secondary+paragames combined.
+     *
+     * @return array{elementary: array{gold:int,silver:int,bronze:int,total:int}, secondary: array{gold:int,silver:int,bronze:int,total:int}, paragames: array{gold:int,silver:int,bronze:int,total:int}, total: array{gold:int,silver:int,bronze:int,total:int}}
+     */
+    public function municipalityMedalBreakdown(int $meetId, int $districtId): array
+    {
+        return [
+            'elementary' => $this->medals(
+                $this->basePlacements($meetId, null, AgeDivision::Elementary->value, $districtId, false)->get(),
+            ),
+            'secondary' => $this->medals(
+                $this->basePlacements($meetId, null, AgeDivision::Secondary->value, $districtId, false)->get(),
+            ),
+            'paragames' => $this->medals(
+                $this->basePlacements($meetId, null, null, $districtId, true)->get(),
+            ),
+            'total' => $this->medals(
+                $this->basePlacements($meetId, null, null, $districtId, null)->get(),
+            ),
+        ];
+    }
+
+    /**
+     * The individual medal-winning placements for one municipality —
+     * unlike every aggregate method above, this returns one row per medal
+     * actually won, for the public municipality profile's "Medal Winners"
+     * list. `$category` matches the same four tabs as
+     * `municipalityMedalBreakdown()` (`null` = every category, unfiltered).
+     *
+     * A team-event medal (`Event::is_team_event`) is recorded in this app
+     * as N individual `ResultPlacement` rows — one per rostered, Confirmed-
+     * Entry athlete — all sharing the same result and rank, tied together
+     * via `is_tie` (see `ResultController::assertPlacementsValid()`; there
+     * is no single "team" placement row anywhere in the schema). So this
+     * groups placements by `(event_result_id, rank)` and renders any group
+     * belonging to a team event as one team-medal row (roster names carried
+     * separately) rather than N duplicate individual rows.
+     *
+     * @return array<int, array{medal: string, participant_type: string, athlete_name: ?string, team_name: ?string, roster: array<int, string>, sport: string, event: string, gender: string, level: string, school: ?string}>
+     */
+    public function municipalityMedalWinners(int $meetId, int $districtId, ?string $category = null): array
+    {
+        [$ageDivision, $paragames] = match ($category) {
+            'elementary' => [AgeDivision::Elementary->value, false],
+            'secondary' => [AgeDivision::Secondary->value, false],
+            'paragames' => [null, true],
+            default => [null, null],
+        };
+
+        $placements = $this->basePlacements($meetId, null, $ageDivision, $districtId, $paragames)
+            ->with(['result.event.sport', 'entry.athlete.school.district'])
+            ->get();
+
+        return $placements
+            ->groupBy(fn (ResultPlacement $placement): string => "{$placement->event_result_id}-{$placement->rank}")
+            ->map(function (Collection $group): array {
+                /** @var ResultPlacement $first */
+                $first = $group->first();
+                $event = $first->result->event;
+                $isTeam = $event->is_team_event;
+                $school = $first->entry->athlete->school;
+
+                return [
+                    'medal' => match ($first->rank) {
+                        1 => 'gold',
+                        2 => 'silver',
+                        3 => 'bronze',
+                        default => 'other',
+                    },
+                    'participant_type' => $isTeam ? 'team' : 'athlete',
+                    'athlete_name' => $isTeam ? null : $first->entry->athlete->fullName(),
+                    'team_name' => $isTeam
+                        ? sprintf('%s %s Team', $school->district->name, $event->sport->name)
+                        : null,
+                    'roster' => $isTeam
+                        ? $group->map(fn (ResultPlacement $p): string => $p->entry->athlete->fullName())->values()->all()
+                        : [],
+                    'sport' => $event->sport->name,
+                    'event' => $event->name,
+                    'gender' => $event->gender->label(),
+                    'level' => $event->age_division->label(),
+                    'school' => $school->name,
+                ];
+            })
+            ->sortBy(fn (array $row): int => match ($row['medal']) {
+                'gold' => 1,
+                'silver' => 2,
+                'bronze' => 3,
+                default => 4,
+            })
+            ->values()
+            ->all();
     }
 
     /**
