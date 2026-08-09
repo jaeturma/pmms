@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Event;
+use App\Models\Meet;
 use App\Models\SportCategory;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -18,7 +19,6 @@ class ScheduleRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'meet_id' => ['required', 'integer', Rule::exists('meets', 'id')],
             'event_id' => ['required', 'integer', Rule::exists('events', 'id')],
             'sport_category_id' => [
                 'nullable',
@@ -87,8 +87,10 @@ class ScheduleRequest extends FormRequest
     }
 
     /**
-     * Slot data with times normalized to H:i:s, matching column storage so
-     * string comparisons stay correct on every database driver.
+     * Slot data with times normalized to H:i:s (matching column storage so
+     * string comparisons stay correct on every database driver) and
+     * `meet_id` filled in automatically — this deployment only ever
+     * schedules against `Meet::current()`, so nobody picks a meet.
      *
      * @return array<string, mixed>
      */
@@ -97,6 +99,7 @@ class ScheduleRequest extends FormRequest
         $data = $this->validated();
         $data['starts_at'] .= ':00';
         $data['ends_at'] .= ':00';
+        $data['meet_id'] = Meet::current()->id;
 
         return $data;
     }

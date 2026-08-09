@@ -158,17 +158,6 @@ test('the assignments page is viewable by any authenticated role, including view
         ->assertInertia(fn (AssertableInertia $page) => $page->where('canManage', true));
 });
 
-test('the assignments page can be filtered by meet', function () {
-    $meetSportA = MeetSport::factory()->create();
-    $meetSportB = MeetSport::factory()->create();
-    MeetSportAssignment::factory()->create(['meet_sport_id' => $meetSportA->id]);
-    MeetSportAssignment::factory()->create(['meet_sport_id' => $meetSportB->id]);
-
-    $this->actingAs(User::factory()->admin()->create())
-        ->get("/meet-sport-assignments?meet_id={$meetSportA->meet_id}")
-        ->assertInertia(fn (AssertableInertia $page) => $page->has('assignments', 1));
-});
-
 test('organizers can create an assignment', function () {
     $meetSport = MeetSport::factory()->create();
     $official = User::factory()->technicalOfficial()->create();

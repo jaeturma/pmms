@@ -51,12 +51,10 @@ class MatchController extends Controller
         $isTournamentManager = $user->role === UserRole::TournamentManager && $user->managedSport !== null;
         $managedSportId = $isTournamentManager ? $user->managedSport->id : null;
 
-        $meetId = $request->integer('meet_id');
         $eventId = $request->integer('event_id');
 
         $query = EventMatch::query()
             ->with([
-                'meet:id,name',
                 'event.sport:id,name',
                 'schedule.venue:id,name',
                 'entries.athlete:id,first_name,last_name,school_id',
@@ -81,10 +79,6 @@ class MatchController extends Controller
             $query->whereHas('event', fn ($events) => $events->whereIn('sport_id', $sportIds));
         }
 
-        if ($meetId > 0) {
-            $query->where('meet_id', $meetId);
-        }
-
         if ($eventId > 0) {
             $query->where('event_id', $eventId);
         }
@@ -93,10 +87,8 @@ class MatchController extends Controller
             'matches' => $query->paginate($this->registryPageSize)->withQueryString()
                 ->through(fn (EventMatch $match): array => [
                     'id' => $match->id,
-                    'meet_id' => $match->meet_id,
                     'event_id' => $match->event_id,
                     'event_schedule_id' => $match->event_schedule_id,
-                    'meet' => $match->meet->name,
                     'event' => $this->eventLabel($match->event),
                     'round_label' => $match->round_label,
                     'sequence' => $match->sequence,
@@ -128,21 +120,17 @@ class MatchController extends Controller
                     'is_scheduled' => $match->status === MatchStatus::Scheduled,
                 ]),
             'filters' => [
-                'meet_id' => $meetId > 0 ? $meetId : null,
                 'event_id' => $eventId > 0 ? $eventId : null,
             ],
-            'meetOptions' => Meet::query()->orderBy('name')->get(['id', 'name'])
-                ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]),
-            'eventOptionsByMeet' => Event::query()
-                ->whereHas('meets')
+            'eventOptions' => Event::query()
+                ->whereHas('meets', fn ($meets) => $meets->whereKey(Meet::current()->id))
                 ->when($managedSportId !== null, fn ($query) => $query->where('sport_id', $managedSportId))
-                ->with(['sport:id,name', 'meets:id'])
+                ->with('sport:id,name')
                 ->get(['id', 'sport_id', 'name', 'gender', 'age_division'])
-                ->flatMap(fn (Event $event) => $event->meets->map(fn (Meet $meet): array => [
+                ->map(fn (Event $event): array => [
                     'id' => $event->id,
-                    'meet_id' => $meet->id,
                     'label' => $this->eventLabel($event),
-                ]))
+                ])
                 ->values(),
             'scheduleOptions' => EventSchedule::query()
                 ->when(
@@ -153,7 +141,6 @@ class MatchController extends Controller
                 ->get()
                 ->map(fn (EventSchedule $slot): array => [
                     'id' => $slot->id,
-                    'meet_id' => $slot->meet_id,
                     'event_id' => $slot->event_id,
                     'label' => sprintf(
                         '%s %s–%s · %s',
@@ -173,13 +160,11 @@ class MatchController extends Controller
                 ->with([
                     'athlete:id,first_name,last_name,school_id',
                     'athlete.school:id,name',
-                    'delegation:id,meet_id',
                 ])
                 ->get()
                 ->map(fn (Entry $entry): array => [
                     'id' => $entry->id,
                     'event_id' => $entry->event_id,
-                    'meet_id' => $entry->delegation->meet_id,
                     'label' => "{$entry->athlete->fullName()} — {$entry->athlete->school->name}",
                 ])
                 ->sortBy('label')
@@ -396,7 +381,7 @@ class MatchController extends Controller
      */
     private function assertMatchIsValid(array $data): void
     {
-        $meet = Meet::query()->findOrFail((int) $data['meet_id']);
+        $meet = Meet::current();
 
         if (! $meet->events()->whereKey($data['event_id'])->exists()) {
             throw ValidationException::withMessages([

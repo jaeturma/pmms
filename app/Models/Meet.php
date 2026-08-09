@@ -187,4 +187,30 @@ class Meet extends Model
     {
         return $this->status === MeetStatus::RegistrationOpen;
     }
+
+    /**
+     * The single meet this deployment runs — same singleton idiom as
+     * `Division::current()`. This system is dedicated to one meet at a
+     * time (rename/redate this row for next year's meet, or when reused
+     * for another province, rather than creating a second row); ordered
+     * by `id` so the oldest row wins even if stray rows exist.
+     *
+     * `status` is deliberately left out of the create payload — it's not
+     * Fillable (only `MeetController::updateStatus()` may set it), so
+     * mass assignment would silently drop it, leaving the in-memory
+     * model's `status` null even though the `meets.status` column's own
+     * `default('draft')` applies at the database level. `refresh()`
+     * after a fresh create pulls that default back in.
+     */
+    public static function current(): self
+    {
+        $meet = static::query()->orderBy('id')->firstOrCreate([], [
+            'name' => 'Meet',
+            'school_year' => now()->format('Y').'-'.now()->addYear()->format('Y'),
+            'starts_at' => now(),
+            'ends_at' => now()->addDays(4),
+        ]);
+
+        return $meet->wasRecentlyCreated ? $meet->refresh() : $meet;
+    }
 }

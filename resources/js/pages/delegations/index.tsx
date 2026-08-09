@@ -57,7 +57,6 @@ type Officer = {
 type Delegation = {
     id: number;
     registrant: string;
-    meet: string;
     head_name: string;
     head_phone: string | null;
     head_email: string | null;
@@ -86,7 +85,7 @@ type OfficerOption = {
 type Props = {
     delegations: Paginated<Delegation>;
     filters: { search: string };
-    meetOptions: Option[];
+    registrationOpen: boolean;
     schoolOptions: Option[];
     districtOptions: Option[];
     officerOptions: OfficerOption[];
@@ -100,7 +99,7 @@ const statusVariants: Record<string, 'default' | 'secondary' | 'outline'> = {
 };
 
 function CreateDelegationDialog({
-    meetOptions,
+    registrationOpen,
     schoolOptions,
     districtOptions,
     isProvince,
@@ -108,7 +107,7 @@ function CreateDelegationDialog({
     open,
     onOpenChange,
 }: {
-    meetOptions: Option[];
+    registrationOpen: boolean;
     schoolOptions: Option[];
     districtOptions: Option[];
     isProvince: boolean;
@@ -117,7 +116,6 @@ function CreateDelegationDialog({
     onOpenChange: (open: boolean) => void;
 }) {
     const { data, setData, post, processing, errors, reset } = useForm({
-        meet_id: '',
         school_id: '',
         district_id: '',
         head_name: '',
@@ -146,37 +144,12 @@ function CreateDelegationDialog({
                 <DialogHeader>
                     <DialogTitle>Register delegation</DialogTitle>
                 </DialogHeader>
-                {meetOptions.length === 0 ? (
+                {!registrationOpen ? (
                     <p className="text-sm text-muted-foreground">
-                        No meet currently has open registration. Open a meet's
-                        registration first.
+                        Registration is not currently open.
                     </p>
                 ) : (
                     <form onSubmit={submitForm} className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="delegation-meet">Meet</Label>
-                            <Select
-                                value={data.meet_id}
-                                onValueChange={(value) =>
-                                    setData('meet_id', value)
-                                }
-                            >
-                                <SelectTrigger id="delegation-meet">
-                                    <SelectValue placeholder="Select a meet" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {meetOptions.map((meet) => (
-                                        <SelectItem
-                                            key={meet.id}
-                                            value={String(meet.id)}
-                                        >
-                                            {meet.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <InputError message={errors.meet_id} />
-                        </div>
                         <div className="space-y-2">
                             <Label htmlFor="delegation-registrant">
                                 {areaLabel}
@@ -429,7 +402,7 @@ function OfficersDialog({
 export default function Delegations({
     delegations,
     filters,
-    meetOptions,
+    registrationOpen,
     schoolOptions,
     districtOptions,
     officerOptions,
@@ -485,7 +458,6 @@ export default function Delegations({
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>{registrantLabel}</TableHead>
-                                    <TableHead>Meet</TableHead>
                                     <TableHead>Head</TableHead>
                                     <TableHead>Officers</TableHead>
                                     <TableHead>Status</TableHead>
@@ -500,7 +472,6 @@ export default function Delegations({
                                         <TableCell className="font-medium">
                                             {delegation.registrant}
                                         </TableCell>
-                                        <TableCell>{delegation.meet}</TableCell>
                                         <TableCell>
                                             {delegation.head_name}
                                         </TableCell>
@@ -701,7 +672,7 @@ export default function Delegations({
             </div>
 
             <CreateDelegationDialog
-                meetOptions={meetOptions}
+                registrationOpen={registrationOpen}
                 schoolOptions={schoolOptions}
                 districtOptions={districtOptions}
                 isProvince={isProvince}

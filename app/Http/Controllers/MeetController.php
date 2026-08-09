@@ -21,36 +21,34 @@ class MeetController extends Controller
     public function __construct(private readonly AuditLogger $audit) {}
 
     /**
-     * List all meets.
+     * The one meet this deployment runs — a settings page, not a list.
+     * See `Meet::current()`.
      */
     public function index(): Response
     {
+        $meet = Meet::current()->load('events:id');
+
         return Inertia::render('meets/index', [
-            'meets' => Meet::query()
-                ->with('events:id')
-                ->orderByDesc('starts_at')
-                ->get()
-                ->map(fn (Meet $meet): array => [
-                    'id' => $meet->id,
-                    'name' => $meet->name,
-                    'school_year' => $meet->school_year,
-                    'starts_at' => $meet->starts_at->toDateString(),
-                    'ends_at' => $meet->ends_at->toDateString(),
-                    'venue' => $meet->venue,
-                    'status' => $meet->status->value,
-                    'status_label' => $meet->status->label(),
-                    'is_published' => $meet->is_published,
-                    'is_active' => $meet->is_active,
-                    'event_ids' => $meet->events->pluck('id')->all(),
-                    'allowed_transitions' => array_map(
-                        fn (MeetStatus $status): array => [
-                            'value' => $status->value,
-                            'label' => $status->actionLabel(),
-                        ],
-                        $meet->status->allowedTransitions(),
-                    ),
-                ])
-                ->values(),
+            'meet' => [
+                'id' => $meet->id,
+                'name' => $meet->name,
+                'school_year' => $meet->school_year,
+                'starts_at' => $meet->starts_at->toDateString(),
+                'ends_at' => $meet->ends_at->toDateString(),
+                'venue' => $meet->venue,
+                'status' => $meet->status->value,
+                'status_label' => $meet->status->label(),
+                'is_published' => $meet->is_published,
+                'is_active' => $meet->is_active,
+                'event_ids' => $meet->events->pluck('id')->all(),
+                'allowed_transitions' => array_map(
+                    fn (MeetStatus $status): array => [
+                        'value' => $status->value,
+                        'label' => $status->actionLabel(),
+                    ],
+                    $meet->status->allowedTransitions(),
+                ),
+            ],
             'eventOptions' => Event::query()
                 ->where('active', true)
                 ->with('sport:id,name')
@@ -73,21 +71,7 @@ class MeetController extends Controller
     }
 
     /**
-     * Create a meet (always starts as draft).
-     */
-    public function store(MeetRequest $request): RedirectResponse
-    {
-        $meet = Meet::create($request->validated());
-
-        $this->audit->record('meet.created', $meet, ['name' => $meet->name]);
-
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Meet created.')]);
-
-        return back();
-    }
-
-    /**
-     * Update a meet's details (status changes go through updateStatus).
+     * Update the meet's details (status changes go through updateStatus).
      */
     public function update(MeetRequest $request, Meet $meet): RedirectResponse
     {
@@ -287,29 +271,6 @@ class MeetController extends Controller
         $this->audit->record('meet.deactivated', $meet, ['name' => $meet->name]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Meet removed from the public landing page.')]);
-
-        return back();
-    }
-
-    /**
-     * Delete a meet that is still a draft.
-     */
-    public function destroy(Meet $meet): RedirectResponse
-    {
-        if ($meet->status !== MeetStatus::Draft) {
-            Inertia::flash('toast', [
-                'type' => 'error',
-                'message' => __('Only draft meets can be deleted.'),
-            ]);
-
-            return back();
-        }
-
-        $meet->delete();
-
-        $this->audit->record('meet.deleted', $meet, ['name' => $meet->name]);
-
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Meet deleted.')]);
 
         return back();
     }

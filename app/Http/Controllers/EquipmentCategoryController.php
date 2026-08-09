@@ -20,7 +20,6 @@ use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -53,30 +52,19 @@ class EquipmentCategoryController extends Controller
 
         abort_unless($this->policy->viewAny($user), 403);
 
-        $meetId = $request->integer('meet_id');
         $accessibleMeetIds = $this->accessibleMeetIds($user);
 
         $query = EquipmentCategory::query()
             ->with([
-                'meet:id,name',
                 'items.venue:id,name',
                 'items.issues.venue:id,name',
                 'items.issues.returns',
             ])
             ->when($accessibleMeetIds !== null, fn ($q) => $q->whereIn('meet_id', $accessibleMeetIds))
-            ->when($meetId > 0, fn ($q) => $q->where('meet_id', $meetId))
             ->orderBy('name');
-
-        $meetOptions = Meet::query()
-            ->when($accessibleMeetIds !== null, fn ($q) => $q->whereIn('id', $accessibleMeetIds))
-            ->orderByDesc('id')
-            ->get(['id', 'name'])
-            ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]);
 
         return Inertia::render('equipment/index', [
             'categories' => $query->get()->map(fn (EquipmentCategory $category): array => $this->categoryRow($category)),
-            'filters' => ['meet_id' => $meetId > 0 ? $meetId : null],
-            'meetOptions' => $meetOptions,
             'venueOptions' => Venue::query()->where('active', true)->orderBy('name')->get(['id', 'name'])
                 ->map(fn (Venue $venue): array => ['id' => $venue->id, 'label' => $venue->name]),
             'conditionOptions' => array_map(
@@ -91,14 +79,12 @@ class EquipmentCategoryController extends Controller
     }
 
     /**
-     * @return array{id: int, meet_id: int, meet: string, name: string, description: string|null, is_consumable: bool, items: array<int, array<string, mixed>>}
+     * @return array{id: int, name: string, description: string|null, is_consumable: bool, items: array<int, array<string, mixed>>}
      */
     private function categoryRow(EquipmentCategory $category): array
     {
         return [
             'id' => $category->id,
-            'meet_id' => $category->meet_id,
-            'meet' => $category->meet->name,
             'name' => $category->name,
             'description' => $category->description,
             'is_consumable' => $category->is_consumable,
@@ -162,17 +148,16 @@ class EquipmentCategoryController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'meet_id' => ['required', 'integer', Rule::exists('meets', 'id')],
             'name' => ['required', 'string', 'max:120'],
             'description' => ['nullable', 'string', 'max:1000'],
             'is_consumable' => ['boolean'],
         ]);
 
-        $meet = Meet::query()->findOrFail((int) $validated['meet_id']);
+        $meet = Meet::current();
         abort_unless($this->policy->manage($request->user(), $meet), 403);
 
         if (EquipmentCategory::query()
-            ->where('meet_id', $validated['meet_id'])
+            ->where('meet_id', $meet->id)
             ->where('name', $validated['name'])
             ->exists()) {
             throw ValidationException::withMessages([
@@ -181,7 +166,7 @@ class EquipmentCategoryController extends Controller
         }
 
         $category = EquipmentCategory::create([
-            'meet_id' => $validated['meet_id'],
+            'meet_id' => $meet->id,
             'name' => $validated['name'],
             'description' => $validated['description'] ?? null,
             'is_consumable' => $request->boolean('is_consumable'),

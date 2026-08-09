@@ -1,4 +1,4 @@
-import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import {
     Contact,
     Crown,
@@ -16,13 +16,6 @@ import { PageHeader } from '@/components/page-header';
 import { StatCard } from '@/components/stat-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
 import {
     Table,
     TableBody,
@@ -129,8 +122,6 @@ type Props = {
     operations: OperationsRow[];
     performance: Performance;
     venues: VenueRow[];
-    filters: { school_year: string | null };
-    schoolYearOptions: string[];
     generatedAt: string;
 };
 
@@ -140,19 +131,10 @@ export default function ManagementDashboard({
     operations,
     performance,
     venues,
-    filters,
-    schoolYearOptions,
     generatedAt,
 }: Props) {
     const { division } = usePage().props;
     const areaLabel = division.areaLabel;
-
-    const applySchoolYear = (value: string) => {
-        router.get(index().url, value !== 'all' ? { school_year: value } : {}, {
-            preserveState: true,
-            preserveScroll: true,
-        });
-    };
 
     return (
         <>
@@ -160,51 +142,16 @@ export default function ManagementDashboard({
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
                     title="Management dashboard"
-                    description="Cross-meet oversight for administrators and organizers."
+                    description="Oversight for administrators and organizers."
                     actions={
                         <Button variant="outline" asChild>
-                            <Link
-                                href={
-                                    managementReport({
-                                        query: filters.school_year
-                                            ? {
-                                                  school_year:
-                                                      filters.school_year,
-                                              }
-                                            : {},
-                                    }).url
-                                }
-                            >
+                            <Link href={managementReport().url}>
                                 <Printer aria-hidden="true" />
                                 Printable report
                             </Link>
                         </Button>
                     }
                 />
-
-                {schoolYearOptions.length > 0 && (
-                    <Select
-                        value={filters.school_year ?? 'all'}
-                        onValueChange={applySchoolYear}
-                    >
-                        <SelectTrigger
-                            className="w-56"
-                            aria-label="Filter by school year"
-                        >
-                            <SelectValue placeholder="All school years" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">
-                                All school years
-                            </SelectItem>
-                            {schoolYearOptions.map((schoolYear) => (
-                                <SelectItem key={schoolYear} value={schoolYear}>
-                                    {schoolYear}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                )}
 
                 <p className="text-sm text-muted-foreground">
                     Generated {generatedAt}.

@@ -28,27 +28,20 @@ class IncidentController extends Controller
     public function index(Request $request): Response
     {
         $status = $request->string('status')->toString();
-        $meetId = $request->integer('meet_id');
 
         $query = Incident::query()
-            ->with(['meet:id,name', 'venue:id,name', 'reportedBy:id,name'])
+            ->with(['venue:id,name', 'reportedBy:id,name'])
             ->orderByDesc('id');
 
         if ($status !== '' && $status !== 'all') {
             $query->where('status', $status);
         }
 
-        if ($meetId > 0) {
-            $query->where('meet_id', $meetId);
-        }
-
         return Inertia::render('incidents/index', [
             'incidents' => $query->paginate($this->registryPageSize)->withQueryString()
                 ->through(fn (Incident $incident): array => [
                     'id' => $incident->id,
-                    'meet_id' => $incident->meet_id,
                     'venue_id' => $incident->venue_id,
-                    'meet' => $incident->meet->name,
                     'venue' => $incident->venue?->name,
                     'description' => $incident->description,
                     'severity' => $incident->severity->value,
@@ -62,7 +55,6 @@ class IncidentController extends Controller
                 ]),
             'filters' => [
                 'status' => $status !== '' ? $status : null,
-                'meet_id' => $meetId > 0 ? $meetId : null,
             ],
             'severityOptions' => array_map(
                 fn (IncidentSeverity $severity): array => [
@@ -71,8 +63,6 @@ class IncidentController extends Controller
                 ],
                 IncidentSeverity::cases(),
             ),
-            'meetOptions' => Meet::query()->orderBy('name')->get(['id', 'name'])
-                ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]),
             'venueOptions' => Venue::query()->where('active', true)->orderBy('name')->get(['id', 'name'])
                 ->map(fn (Venue $venue): array => ['id' => $venue->id, 'label' => $venue->name]),
         ]);
@@ -185,13 +175,14 @@ class IncidentController extends Controller
      */
     private function validated(Request $request): array
     {
-        return $request->validate([
-            'meet_id' => ['required', 'integer', Rule::exists('meets', 'id')],
+        $validated = $request->validate([
             'venue_id' => ['nullable', 'integer', Rule::exists('venues', 'id')],
             'description' => ['required', 'string', 'max:500'],
             'severity' => ['required', Rule::enum(IncidentSeverity::class)],
             'medical_referral' => ['boolean'],
         ]);
+
+        return [...$validated, 'meet_id' => Meet::current()->id];
     }
 
     /**

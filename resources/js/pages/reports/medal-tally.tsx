@@ -37,9 +37,9 @@ type DistrictRow = {
 type Props = {
     schools: SchoolRow[];
     districts: DistrictRow[];
-    meet: string | null;
+    meet: string;
     sport: string | null;
-    filters: { meet_id: number | null; sport_id: number | null };
+    filters: { sport_id: number | null };
     generatedAt: string;
 };
 
@@ -55,7 +55,6 @@ export default function MedalTallyReport({
     const areaLabel = division.areaLabel;
 
     const query = {
-        ...(filters.meet_id ? { meet_id: filters.meet_id } : {}),
         ...(filters.sport_id ? { sport_id: filters.sport_id } : {}),
     };
 
@@ -65,7 +64,7 @@ export default function MedalTallyReport({
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
                     title="Medal tally report"
-                    description={`${meet ?? 'All meets'} · ${sport ?? 'All sports'} — validated results only`}
+                    description={`${meet} · ${sport ?? 'All sports'} — validated results only`}
                     actions={
                         <ReportActions downloadUrl={download({ query }).url} />
                     }

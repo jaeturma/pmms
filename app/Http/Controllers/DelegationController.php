@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Enums\DelegationStatus;
 use App\Enums\DivisionType;
-use App\Enums\MeetStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\DelegationStoreRequest;
@@ -41,14 +40,14 @@ class DelegationController extends Controller
         $search = $this->searchTerm($request);
 
         $query = Delegation::query()
-            ->with(['school:id,name', 'district:id,name', 'meet:id,name', 'officers:id,name'])
+            ->with(['school:id,name', 'district:id,name', 'officers:id,name'])
             ->orderByDesc('id');
 
         if ($user->role === UserRole::DelegationOfficer) {
             $query->whereHas('officers', fn ($officers) => $officers->whereKey($user->getKey()));
         }
 
-        $this->applySearch($query, $search, ['head_name', 'school.name', 'district.name', 'meet.name']);
+        $this->applySearch($query, $search, ['head_name', 'school.name', 'district.name']);
 
         $division = Division::current();
 
@@ -58,7 +57,6 @@ class DelegationController extends Controller
                 ->through(fn (Delegation $delegation): array => [
                     'id' => $delegation->id,
                     'registrant' => $delegation->registrantName(),
-                    'meet' => $delegation->meet->name,
                     'head_name' => $delegation->head_name,
                     'head_phone' => $delegation->head_phone,
                     'head_email' => $delegation->head_email,
@@ -77,10 +75,7 @@ class DelegationController extends Controller
                     'can_delete' => $user->can('delete', $delegation),
                     'can_assign' => $user->can('assignOfficers', $delegation),
                 ]),
-            'meetOptions' => Meet::query()
-                ->where('status', MeetStatus::RegistrationOpen->value)
-                ->orderByDesc('starts_at')
-                ->get(['id', 'name']),
+            'registrationOpen' => Meet::current()->isRegistrationOpen(),
             'schoolOptions' => $division->type === DivisionType::City
                 ? School::query()
                     ->where('active', true)
@@ -106,7 +101,7 @@ class DelegationController extends Controller
      */
     public function store(DelegationStoreRequest $request): RedirectResponse
     {
-        $meet = Meet::query()->findOrFail($request->integer('meet_id'));
+        $meet = Meet::current();
 
         if (! $meet->isRegistrationOpen()) {
             Inertia::flash('toast', [

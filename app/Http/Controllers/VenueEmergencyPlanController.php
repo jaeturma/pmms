@@ -24,15 +24,14 @@ class VenueEmergencyPlanController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'meet_id' => ['required', 'integer', Rule::exists('meets', 'id')],
             'venue_id' => ['required', 'integer', Rule::exists('venues', 'id')],
             'plan_detail' => ['required', 'string', 'max:2000'],
         ]);
 
-        $meet = Meet::query()->findOrFail((int) $validated['meet_id']);
+        $meet = Meet::current();
         abort_unless($this->policy->manage($request->user(), $meet), 403);
 
-        $plan = VenueEmergencyPlan::create($validated);
+        $plan = VenueEmergencyPlan::create([...$validated, 'meet_id' => $meet->id]);
 
         $this->audit->record('venue_emergency_plan.created', $plan, ['meet' => $meet->name]);
 

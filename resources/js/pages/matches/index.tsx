@@ -58,10 +58,8 @@ type Transition = {
 
 type Match = {
     id: number;
-    meet_id: number;
     event_id: number;
     event_schedule_id: number | null;
-    meet: string;
     event: string;
     round_label: string;
     sequence: number;
@@ -75,17 +73,14 @@ type Match = {
 
 type Option = { id: number; label: string };
 
-type EventOption = Option & { meet_id: number };
+type ScheduleOption = Option & { event_id: number };
 
-type ScheduleOption = Option & { meet_id: number; event_id: number };
-
-type EntryOption = Option & { meet_id: number; event_id: number };
+type EntryOption = Option & { event_id: number };
 
 type Props = {
     matches: Paginated<Match>;
-    filters: { meet_id: number | null; event_id: number | null };
-    meetOptions: Option[];
-    eventOptionsByMeet: EventOption[];
+    filters: { event_id: number | null };
+    eventOptions: Option[];
     scheduleOptions: ScheduleOption[];
     entryOptions: EntryOption[];
     canManage: boolean;
@@ -100,22 +95,19 @@ const statusVariants: Record<string, 'default' | 'secondary' | 'outline'> = {
 
 function MatchFormDialog({
     match,
-    meetOptions,
-    eventOptionsByMeet,
+    eventOptions,
     scheduleOptions,
     open,
     onOpenChange,
 }: {
     match: Match | null;
-    meetOptions: Option[];
-    eventOptionsByMeet: EventOption[];
+    eventOptions: Option[];
     scheduleOptions: ScheduleOption[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
     const { data, setData, post, put, processing, errors, reset, transform } =
         useForm({
-            meet_id: match ? String(match.meet_id) : '',
             event_id: match ? String(match.event_id) : '',
             event_schedule_id: match?.event_schedule_id
                 ? String(match.event_schedule_id)
@@ -132,14 +124,8 @@ function MatchFormDialog({
                 : current.event_schedule_id,
     }));
 
-    const eventOptions = eventOptionsByMeet.filter(
-        (option) => String(option.meet_id) === data.meet_id,
-    );
-
     const slotOptions = scheduleOptions.filter(
-        (option) =>
-            String(option.meet_id) === data.meet_id &&
-            String(option.event_id) === data.event_id,
+        (option) => String(option.event_id) === data.event_id,
     );
 
     const submit = (e: FormEvent) => {
@@ -170,32 +156,6 @@ function MatchFormDialog({
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
                     <div className="space-y-2">
-                        <Label htmlFor="match-meet">Meet</Label>
-                        <Select
-                            value={data.meet_id}
-                            onValueChange={(value) => {
-                                setData('meet_id', value);
-                                setData('event_id', '');
-                                setData('event_schedule_id', 'none');
-                            }}
-                        >
-                            <SelectTrigger id="match-meet">
-                                <SelectValue placeholder="Select a meet" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {meetOptions.map((option) => (
-                                    <SelectItem
-                                        key={option.id}
-                                        value={String(option.id)}
-                                    >
-                                        {option.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <InputError message={errors.meet_id} />
-                    </div>
-                    <div className="space-y-2">
                         <Label htmlFor="match-event">Event</Label>
                         <Select
                             value={data.event_id}
@@ -203,16 +163,9 @@ function MatchFormDialog({
                                 setData('event_id', value);
                                 setData('event_schedule_id', 'none');
                             }}
-                            disabled={!data.meet_id}
                         >
                             <SelectTrigger id="match-event">
-                                <SelectValue
-                                    placeholder={
-                                        data.meet_id
-                                            ? 'Select an event'
-                                            : 'Select a meet first'
-                                    }
-                                />
+                                <SelectValue placeholder="Select an event" />
                             </SelectTrigger>
                             <SelectContent>
                                 {eventOptions.map((option) => (
@@ -309,9 +262,7 @@ function ParticipantsDialog({
     });
 
     const options = entryOptions.filter(
-        (option) =>
-            option.meet_id === match.meet_id &&
-            option.event_id === match.event_id,
+        (option) => option.event_id === match.event_id,
     );
 
     const toggle = (entryId: number, checked: boolean) => {
@@ -383,8 +334,7 @@ function ParticipantsDialog({
 export default function Matches({
     matches,
     filters,
-    meetOptions,
-    eventOptionsByMeet,
+    eventOptions,
     scheduleOptions,
     entryOptions,
     canManage,
@@ -403,18 +353,10 @@ export default function Matches({
         setFormOpen(true);
     };
 
-    const applyFilters = (overrides: {
-        meet_id?: string;
-        event_id?: string;
-    }) => {
+    const applyFilters = (overrides: { event_id?: string }) => {
         const params: Record<string, string> = {};
 
-        const meetId = overrides.meet_id ?? String(filters.meet_id ?? '');
         const eventId = overrides.event_id ?? String(filters.event_id ?? '');
-
-        if (meetId && meetId !== 'all') {
-            params.meet_id = meetId;
-        }
 
         if (eventId && eventId !== 'all') {
             params.event_id = eventId;
@@ -427,18 +369,8 @@ export default function Matches({
     };
 
     const filterParams = {
-        ...(filters.meet_id ? { meet_id: String(filters.meet_id) } : {}),
         ...(filters.event_id ? { event_id: String(filters.event_id) } : {}),
     };
-
-    const eventFilterOptions = filters.meet_id
-        ? eventOptionsByMeet.filter(
-              (option) => option.meet_id === filters.meet_id,
-          )
-        : eventOptionsByMeet.filter(
-              (option, i, all) =>
-                  all.findIndex((other) => other.id === option.id) === i,
-          );
 
     return (
         <>
@@ -459,30 +391,6 @@ export default function Matches({
 
                 <div className="flex flex-wrap gap-2">
                     <Select
-                        value={String(filters.meet_id ?? 'all')}
-                        onValueChange={(value) =>
-                            applyFilters({ meet_id: value, event_id: 'all' })
-                        }
-                    >
-                        <SelectTrigger
-                            className="w-56"
-                            aria-label="Filter by meet"
-                        >
-                            <SelectValue placeholder="All meets" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All meets</SelectItem>
-                            {meetOptions.map((option) => (
-                                <SelectItem
-                                    key={option.id}
-                                    value={String(option.id)}
-                                >
-                                    {option.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <Select
                         value={String(filters.event_id ?? 'all')}
                         onValueChange={(value) =>
                             applyFilters({ event_id: value })
@@ -496,9 +404,9 @@ export default function Matches({
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All events</SelectItem>
-                            {eventFilterOptions.map((option) => (
+                            {eventOptions.map((option) => (
                                 <SelectItem
-                                    key={`${option.meet_id}-${option.id}`}
+                                    key={option.id}
                                     value={String(option.id)}
                                 >
                                     {option.label}
@@ -540,13 +448,8 @@ export default function Matches({
                             <TableBody>
                                 {matches.data.map((match) => (
                                     <TableRow key={match.id}>
-                                        <TableCell>
-                                            <p className="font-medium">
-                                                {match.event}
-                                            </p>
-                                            <p className="text-sm text-muted-foreground">
-                                                {match.meet}
-                                            </p>
+                                        <TableCell className="font-medium">
+                                            {match.event}
                                         </TableCell>
                                         <TableCell className="whitespace-nowrap">
                                             {match.round_label} · #
@@ -718,8 +621,7 @@ export default function Matches({
             <MatchFormDialog
                 key={editing?.id ?? 'create'}
                 match={editing}
-                meetOptions={meetOptions}
-                eventOptionsByMeet={eventOptionsByMeet}
+                eventOptions={eventOptions}
                 scheduleOptions={scheduleOptions}
                 open={formOpen}
                 onOpenChange={setFormOpen}

@@ -46,9 +46,7 @@ import {
 
 type Incident = {
     id: number;
-    meet_id: number;
     venue_id: number | null;
-    meet: string;
     venue: string | null;
     description: string;
     severity: string;
@@ -67,9 +65,8 @@ type ValueOption = { value: string; label: string };
 
 type Props = {
     incidents: Paginated<Incident>;
-    filters: { status: string | null; meet_id: number | null };
+    filters: { status: string | null };
     severityOptions: ValueOption[];
-    meetOptions: Option[];
     venueOptions: Option[];
 };
 
@@ -85,21 +82,18 @@ const severityVariants: Record<
 function IncidentFormDialog({
     incident,
     severityOptions,
-    meetOptions,
     venueOptions,
     open,
     onOpenChange,
 }: {
     incident: Incident | null;
     severityOptions: ValueOption[];
-    meetOptions: Option[];
     venueOptions: Option[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
     const { data, setData, post, put, processing, errors, reset, transform } =
         useForm({
-            meet_id: incident ? String(incident.meet_id) : '',
             venue_id: incident?.venue_id ? String(incident.venue_id) : 'none',
             description: incident?.description ?? '',
             severity: incident?.severity ?? 'minor',
@@ -138,60 +132,32 @@ function IncidentFormDialog({
                     </DialogTitle>
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                            <Label htmlFor="incident-meet">Meet</Label>
-                            <Select
-                                value={data.meet_id}
-                                onValueChange={(value) =>
-                                    setData('meet_id', value)
-                                }
-                            >
-                                <SelectTrigger id="incident-meet">
-                                    <SelectValue placeholder="Select a meet" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {meetOptions.map((option) => (
-                                        <SelectItem
-                                            key={option.id}
-                                            value={String(option.id)}
-                                        >
-                                            {option.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <InputError message={errors.meet_id} />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="incident-venue">
-                                Venue (optional)
-                            </Label>
-                            <Select
-                                value={data.venue_id}
-                                onValueChange={(value) =>
-                                    setData('venue_id', value)
-                                }
-                            >
-                                <SelectTrigger id="incident-venue">
-                                    <SelectValue placeholder="No venue" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">
-                                        No venue
+                    <div className="space-y-2">
+                        <Label htmlFor="incident-venue">
+                            Venue (optional)
+                        </Label>
+                        <Select
+                            value={data.venue_id}
+                            onValueChange={(value) =>
+                                setData('venue_id', value)
+                            }
+                        >
+                            <SelectTrigger id="incident-venue">
+                                <SelectValue placeholder="No venue" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">No venue</SelectItem>
+                                {venueOptions.map((option) => (
+                                    <SelectItem
+                                        key={option.id}
+                                        value={String(option.id)}
+                                    >
+                                        {option.label}
                                     </SelectItem>
-                                    {venueOptions.map((option) => (
-                                        <SelectItem
-                                            key={option.id}
-                                            value={String(option.id)}
-                                        >
-                                            {option.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <InputError message={errors.venue_id} />
-                        </div>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <InputError message={errors.venue_id} />
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="incident-description">
@@ -260,7 +226,6 @@ export default function Incidents({
     incidents,
     filters,
     severityOptions,
-    meetOptions,
     venueOptions,
 }: Props) {
     const [formOpen, setFormOpen] = useState(false);
@@ -276,18 +241,13 @@ export default function Incidents({
         setFormOpen(true);
     };
 
-    const applyFilters = (overrides: { status?: string; meet_id?: string }) => {
+    const applyFilters = (overrides: { status?: string }) => {
         const params: Record<string, string> = {};
 
         const status = overrides.status ?? filters.status ?? '';
-        const meetId = overrides.meet_id ?? String(filters.meet_id ?? '');
 
         if (status && status !== 'all') {
             params.status = status;
-        }
-
-        if (meetId && meetId !== 'all') {
-            params.meet_id = meetId;
         }
 
         router.get(index().url, params, {
@@ -298,7 +258,6 @@ export default function Incidents({
 
     const filterParams = {
         ...(filters.status ? { status: filters.status } : {}),
-        ...(filters.meet_id ? { meet_id: String(filters.meet_id) } : {}),
     };
 
     return (
@@ -335,30 +294,6 @@ export default function Incidents({
                             <SelectItem value="resolved">Resolved</SelectItem>
                         </SelectContent>
                     </Select>
-                    <Select
-                        value={String(filters.meet_id ?? 'all')}
-                        onValueChange={(value) =>
-                            applyFilters({ meet_id: value })
-                        }
-                    >
-                        <SelectTrigger
-                            className="w-56"
-                            aria-label="Filter by meet"
-                        >
-                            <SelectValue placeholder="All meets" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All meets</SelectItem>
-                            {meetOptions.map((option) => (
-                                <SelectItem
-                                    key={option.id}
-                                    value={String(option.id)}
-                                >
-                                    {option.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
                 </div>
 
                 {incidents.data.length === 0 ? (
@@ -376,7 +311,7 @@ export default function Incidents({
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Description</TableHead>
-                                    <TableHead>Meet / Venue</TableHead>
+                                    <TableHead>Venue</TableHead>
                                     <TableHead>Severity</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead className="text-right">
@@ -399,9 +334,6 @@ export default function Incidents({
                                             </p>
                                         </TableCell>
                                         <TableCell className="max-w-48">
-                                            <p className="truncate">
-                                                {incident.meet}
-                                            </p>
                                             <p className="truncate text-sm text-muted-foreground">
                                                 {incident.venue ?? '—'}
                                             </p>
@@ -530,7 +462,6 @@ export default function Incidents({
                 key={editing?.id ?? 'create'}
                 incident={editing}
                 severityOptions={severityOptions}
-                meetOptions={meetOptions}
                 venueOptions={venueOptions}
                 open={formOpen}
                 onOpenChange={setFormOpen}

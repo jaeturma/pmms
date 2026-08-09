@@ -90,7 +90,6 @@ type Props = {
         schools: SchoolStandingRow[];
     };
     venues: VenueRow[];
-    schoolYear: string | null;
     generatedAt: string;
 };
 
@@ -100,13 +99,10 @@ export default function ManagementReport({
     operations,
     performance,
     venues,
-    schoolYear,
     generatedAt,
 }: Props) {
     const { division } = usePage().props;
     const areaLabel = division.areaLabel;
-
-    const query = schoolYear ? { school_year: schoolYear } : {};
 
     return (
         <>
@@ -114,13 +110,8 @@ export default function ManagementReport({
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
                     title="Management dashboard report"
-                    description={
-                        schoolYear
-                            ? `School year ${schoolYear}`
-                            : 'All school years'
-                    }
                     actions={
-                        <ReportActions downloadUrl={download({ query }).url} />
+                        <ReportActions downloadUrl={download().url} />
                     }
                 />
 

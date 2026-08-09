@@ -1,6 +1,6 @@
 import { Head, router, useForm } from '@inertiajs/react';
 import { ClipboardList, Plus, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
@@ -42,7 +42,6 @@ import {
 
 type Assignment = {
     id: number;
-    meet: string;
     sport: string;
     category: string | null;
     user: string;
@@ -56,14 +55,11 @@ type Assignment = {
     status_label: string;
 };
 
-type Option = { id: number; label: string };
-type MeetSportOption = { id: number; meet_id: number; label: string };
+type MeetSportOption = { id: number; label: string };
 type ValueLabel = { value: string; label: string };
 
 type Props = {
     assignments: Assignment[];
-    filters: { meet_id: number | null };
-    meetOptions: Option[];
     meetSportOptions: MeetSportOption[];
     roleOptions: ValueLabel[];
     statusOptions: ValueLabel[];
@@ -81,19 +77,16 @@ const statusVariant: Record<string, 'default' | 'outline' | 'destructive'> = {
 function CreateDialog({
     open,
     onOpenChange,
-    meetOptions,
     meetSportOptions,
     roleOptions,
     userOptions,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    meetOptions: Option[];
     meetSportOptions: MeetSportOption[];
     roleOptions: ValueLabel[];
     userOptions: Array<{ id: number; label: string }>;
 }) {
-    const [meetId, setMeetId] = useState('');
     const { data, setData, post, processing, errors, reset } = useForm<{
         meet_sport_id: string;
         user_id: string;
@@ -110,21 +103,12 @@ function CreateDialog({
         end_date: '',
     });
 
-    const sportsForMeet = useMemo(
-        () =>
-            meetSportOptions.filter(
-                (option) => String(option.meet_id) === meetId,
-            ),
-        [meetSportOptions, meetId],
-    );
-
     const submit = (e: FormEvent) => {
         e.preventDefault();
         post(store().url, {
             preserveScroll: true,
             onSuccess: () => {
                 reset();
-                setMeetId('');
                 onOpenChange(false);
             },
         });
@@ -136,7 +120,6 @@ function CreateDialog({
             onOpenChange={(next) => {
                 if (!next) {
                     reset();
-                    setMeetId('');
                 }
 
                 onOpenChange(next);
@@ -148,51 +131,24 @@ function CreateDialog({
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
                     <div className="space-y-2">
-                        <Label htmlFor="assignment-meet">Meet</Label>
-                        <Select
-                            value={meetId}
-                            onValueChange={(value) => {
-                                setMeetId(value);
-                                setData('meet_sport_id', '');
-                            }}
-                        >
-                            <SelectTrigger id="assignment-meet">
-                                <SelectValue placeholder="Select a meet" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {meetOptions.map((meet) => (
-                                    <SelectItem
-                                        key={meet.id}
-                                        value={String(meet.id)}
-                                    >
-                                        {meet.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="space-y-2">
                         <Label htmlFor="assignment-sport">Sport</Label>
                         <Select
                             value={data.meet_sport_id}
                             onValueChange={(value) =>
                                 setData('meet_sport_id', value)
                             }
-                            disabled={meetId === ''}
                         >
                             <SelectTrigger id="assignment-sport">
                                 <SelectValue
                                     placeholder={
-                                        meetId === ''
-                                            ? 'Select a meet first'
-                                            : sportsForMeet.length === 0
-                                              ? 'No sports on this meet yet'
-                                              : 'Select a sport'
+                                        meetSportOptions.length === 0
+                                            ? 'No sports on this meet yet'
+                                            : 'Select a sport'
                                     }
                                 />
                             </SelectTrigger>
                             <SelectContent>
-                                {sportsForMeet.map((option) => (
+                                {meetSportOptions.map((option) => (
                                     <SelectItem
                                         key={option.id}
                                         value={String(option.id)}
@@ -306,8 +262,6 @@ function CreateDialog({
 
 export default function MeetSportAssignments({
     assignments,
-    filters,
-    meetOptions,
     meetSportOptions,
     roleOptions,
     statusOptions,
@@ -316,21 +270,13 @@ export default function MeetSportAssignments({
 }: Props) {
     const [createOpen, setCreateOpen] = useState(false);
 
-    const applyMeetFilter = (value: string) => {
-        router.get(
-            index().url,
-            value === 'all' ? {} : { meet_id: value },
-            { preserveState: true, preserveScroll: true },
-        );
-    };
-
     return (
         <>
             <Head title="Tournament Assignments" />
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
                     title="Tournament Assignments"
-                    description="Tournament Manager, Secretary, ICT, and Technical Official assignments per meet and sport."
+                    description="Tournament Manager, Secretary, ICT, and Technical Official assignments per sport."
                     actions={
                         canManage && (
                             <Button onClick={() => setCreateOpen(true)}>
@@ -340,23 +286,6 @@ export default function MeetSportAssignments({
                         )
                     }
                 />
-
-                <Select
-                    value={filters.meet_id ? String(filters.meet_id) : 'all'}
-                    onValueChange={applyMeetFilter}
-                >
-                    <SelectTrigger className="w-64" aria-label="Filter by meet">
-                        <SelectValue placeholder="All meets" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All meets</SelectItem>
-                        {meetOptions.map((meet) => (
-                            <SelectItem key={meet.id} value={String(meet.id)}>
-                                {meet.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
 
                 {assignments.length === 0 ? (
                     <EmptyState
@@ -369,7 +298,6 @@ export default function MeetSportAssignments({
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Meet</TableHead>
                                     <TableHead>Sport</TableHead>
                                     <TableHead>Person</TableHead>
                                     <TableHead>Role</TableHead>
@@ -385,9 +313,6 @@ export default function MeetSportAssignments({
                                 {assignments.map((assignment) => (
                                     <TableRow key={assignment.id}>
                                         <TableCell className="font-medium">
-                                            {assignment.meet}
-                                        </TableCell>
-                                        <TableCell>
                                             {assignment.sport}
                                             {assignment.category && (
                                                 <span className="block text-xs text-muted-foreground">
@@ -478,7 +403,7 @@ export default function MeetSportAssignments({
                                                         </Button>
                                                     }
                                                     title="Remove assignment?"
-                                                    description={`${assignment.user} — ${assignment.role_label} for ${assignment.sport} (${assignment.meet})`}
+                                                    description={`${assignment.user} — ${assignment.role_label} for ${assignment.sport}`}
                                                     confirmLabel="Remove"
                                                     destructive
                                                     onConfirm={() =>
@@ -505,7 +430,6 @@ export default function MeetSportAssignments({
             <CreateDialog
                 open={createOpen}
                 onOpenChange={setCreateOpen}
-                meetOptions={meetOptions}
                 meetSportOptions={meetSportOptions}
                 roleOptions={roleOptions}
                 userOptions={userOptions}

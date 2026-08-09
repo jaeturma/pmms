@@ -41,11 +41,9 @@ import { board as scoringBoard } from '@/routes/scoring';
 
 type ScheduleSlot = {
     id: number;
-    meet_id: number;
     event_id: number;
     sport_category_id: number | null;
     venue_id: number;
-    meet: string;
     event: string;
     sport_category: string | null;
     venue: string;
@@ -61,7 +59,7 @@ type ScheduleSlot = {
 
 type Option = { id: number; label: string };
 
-type EventOption = Option & { meet_id: number; sport_id: number };
+type EventOption = Option & { sport_id: number };
 
 type SportCategoryOption = Option & { sport_id: number };
 
@@ -69,14 +67,12 @@ type Props = {
     schedules: Paginated<ScheduleSlot>;
     filters: {
         search: string;
-        meet_id: number | null;
         venue_id: number | null;
         date: string | null;
     };
-    meetFilterOptions: Option[];
     venueFilterOptions: Option[];
-    schedulableMeets: Option[];
-    eventOptionsByMeet: EventOption[];
+    meetIsSchedulable: boolean;
+    eventOptions: EventOption[];
     venueOptions: Option[];
     sportCategoryOptions: SportCategoryOption[];
     canManage: boolean;
@@ -84,23 +80,20 @@ type Props = {
 
 function SlotFormDialog({
     slot,
-    schedulableMeets,
-    eventOptionsByMeet,
+    eventOptions,
     venueOptions,
     sportCategoryOptions,
     open,
     onOpenChange,
 }: {
     slot: ScheduleSlot | null;
-    schedulableMeets: Option[];
-    eventOptionsByMeet: EventOption[];
+    eventOptions: EventOption[];
     venueOptions: Option[];
     sportCategoryOptions: SportCategoryOption[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
     const { data, setData, post, put, processing, errors, reset } = useForm({
-        meet_id: slot ? String(slot.meet_id) : '',
         event_id: slot ? String(slot.event_id) : '',
         sport_category_id: slot?.sport_category_id
             ? String(slot.sport_category_id)
@@ -112,11 +105,7 @@ function SlotFormDialog({
         note: slot?.note ?? '',
     });
 
-    const eventOptions = eventOptionsByMeet.filter(
-        (option) => String(option.meet_id) === data.meet_id,
-    );
-
-    const selectedEventSportId = eventOptionsByMeet.find(
+    const selectedEventSportId = eventOptions.find(
         (option) => String(option.id) === data.event_id,
     )?.sport_id;
 
@@ -152,31 +141,6 @@ function SlotFormDialog({
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
                     <div className="space-y-2">
-                        <Label htmlFor="slot-meet">Meet</Label>
-                        <Select
-                            value={data.meet_id}
-                            onValueChange={(value) => {
-                                setData('meet_id', value);
-                                setData('event_id', '');
-                            }}
-                        >
-                            <SelectTrigger id="slot-meet">
-                                <SelectValue placeholder="Select a meet" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {schedulableMeets.map((option) => (
-                                    <SelectItem
-                                        key={option.id}
-                                        value={String(option.id)}
-                                    >
-                                        {option.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <InputError message={errors.meet_id} />
-                    </div>
-                    <div className="space-y-2">
                         <Label htmlFor="slot-event">Event</Label>
                         <Select
                             value={data.event_id}
@@ -184,16 +148,9 @@ function SlotFormDialog({
                                 setData('event_id', value);
                                 setData('sport_category_id', '');
                             }}
-                            disabled={!data.meet_id}
                         >
                             <SelectTrigger id="slot-event">
-                                <SelectValue
-                                    placeholder={
-                                        data.meet_id
-                                            ? 'Select an event'
-                                            : 'Select a meet first'
-                                    }
-                                />
+                                <SelectValue placeholder="Select an event" />
                             </SelectTrigger>
                             <SelectContent>
                                 {eventOptions.map((option) => (
@@ -331,10 +288,9 @@ function SlotFormDialog({
 export default function Schedule({
     schedules,
     filters,
-    meetFilterOptions,
     venueFilterOptions,
-    schedulableMeets,
-    eventOptionsByMeet,
+    meetIsSchedulable,
+    eventOptions,
     venueOptions,
     sportCategoryOptions,
     canManage,
@@ -353,19 +309,13 @@ export default function Schedule({
     };
 
     const applyFilters = (overrides: {
-        meet_id?: string;
         venue_id?: string;
         date?: string;
     }) => {
         const params: Record<string, string> = {};
 
-        const meetId = overrides.meet_id ?? String(filters.meet_id ?? '');
         const venueId = overrides.venue_id ?? String(filters.venue_id ?? '');
         const date = overrides.date ?? filters.date ?? '';
-
-        if (meetId && meetId !== 'all') {
-            params.meet_id = meetId;
-        }
 
         if (venueId && venueId !== 'all') {
             params.venue_id = venueId;
@@ -386,7 +336,6 @@ export default function Schedule({
     };
 
     const selectParams = {
-        ...(filters.meet_id ? { meet_id: String(filters.meet_id) } : {}),
         ...(filters.venue_id ? { venue_id: String(filters.venue_id) } : {}),
         ...(filters.date ? { date: filters.date } : {}),
     };
@@ -419,7 +368,7 @@ export default function Schedule({
                                     Daily sheet
                                 </Link>
                             </Button>
-                            {canManage && schedulableMeets.length > 0 && (
+                            {canManage && meetIsSchedulable && (
                                 <Button onClick={openCreate}>
                                     <Plus />
                                     Add slot
@@ -436,30 +385,6 @@ export default function Schedule({
                         url={index().url}
                         extraParams={selectParams}
                     />
-                    <Select
-                        value={String(filters.meet_id ?? 'all')}
-                        onValueChange={(value) =>
-                            applyFilters({ meet_id: value })
-                        }
-                    >
-                        <SelectTrigger
-                            className="w-56"
-                            aria-label="Filter by meet"
-                        >
-                            <SelectValue placeholder="All meets" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All meets</SelectItem>
-                            {meetFilterOptions.map((option) => (
-                                <SelectItem
-                                    key={option.id}
-                                    value={String(option.id)}
-                                >
-                                    {option.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
                     <Select
                         value={String(filters.venue_id ?? 'all')}
                         onValueChange={(value) =>
@@ -500,7 +425,7 @@ export default function Schedule({
                         description="Scheduled events with their venues will appear here."
                         action={
                             canManage &&
-                            schedulableMeets.length > 0 && (
+                            meetIsSchedulable && (
                                 <Button onClick={openCreate}>Add slot</Button>
                             )
                         }
@@ -515,7 +440,6 @@ export default function Schedule({
                                     <TableHead>Event</TableHead>
                                     <TableHead>Category</TableHead>
                                     <TableHead>Venue</TableHead>
-                                    <TableHead>Meet</TableHead>
                                     <TableHead>Note</TableHead>
                                     <TableHead>Live</TableHead>
                                     {canManage && (
@@ -539,7 +463,6 @@ export default function Schedule({
                                             {slot.sport_category ?? '—'}
                                         </TableCell>
                                         <TableCell>{slot.venue}</TableCell>
-                                        <TableCell>{slot.meet}</TableCell>
                                         <TableCell className="max-w-48 truncate">
                                             {slot.note ?? '—'}
                                         </TableCell>
@@ -646,8 +569,7 @@ export default function Schedule({
             <SlotFormDialog
                 key={editing?.id ?? 'create'}
                 slot={editing}
-                schedulableMeets={schedulableMeets}
-                eventOptionsByMeet={eventOptionsByMeet}
+                eventOptions={eventOptions}
                 venueOptions={venueOptions}
                 sportCategoryOptions={sportCategoryOptions}
                 open={formOpen}

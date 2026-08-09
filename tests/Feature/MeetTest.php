@@ -22,8 +22,8 @@ test('guests are redirected from the meets page', function () {
     $this->get('/meets')->assertRedirect('/login');
 });
 
-test('the meets page renders with meets and event options', function () {
-    Meet::factory()->create();
+test('the meets page renders the current meet and event options', function () {
+    $meet = Meet::factory()->create();
     Event::factory()->create();
 
     $this->actingAs(User::factory()->create())
@@ -31,36 +31,22 @@ test('the meets page renders with meets and event options', function () {
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('meets/index')
-            ->has('meets', 1)
+            ->where('meet.id', $meet->id)
             ->has('eventOptions', 1)
             ->where('canManage', false));
 });
 
-test('organizers can create meets as drafts', function () {
+test('meets can no longer be created — the route no longer exists', function () {
     $this->actingAs(User::factory()->organizer()->create())
         ->post('/meets', validMeetPayload())
-        ->assertRedirect();
-
-    $this->assertDatabaseHas('meets', [
-        'name' => 'Provincial Meet 2026',
-        'status' => MeetStatus::Draft->value,
-    ]);
-
-    expect(AuditLog::query()->where('action', 'meet.created')->exists())->toBeTrue();
+        ->assertStatus(405);
 });
 
-test('viewers and delegation officers cannot create meets', function (User $user) {
-    $this->actingAs($user)
-        ->post('/meets', validMeetPayload())
-        ->assertForbidden();
-})->with([
-    'viewer' => fn () => User::factory()->create(),
-    'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
-]);
-
 test('meet validation rejects bad payloads', function (array $overrides, string $errorField) {
+    $meet = Meet::factory()->create();
+
     $this->actingAs(User::factory()->admin()->create())
-        ->post('/meets', [...validMeetPayload(), ...$overrides])
+        ->put("/meets/{$meet->id}", [...validMeetPayload(), ...$overrides])
         ->assertSessionHasErrors($errorField);
 })->with([
     'bad school year' => [['school_year' => 'SY 2025'], 'school_year'],
@@ -158,16 +144,12 @@ test('events attached to a meet cannot be deleted from the catalog', function ()
     $this->assertDatabaseHas('events', ['id' => $event->id]);
 });
 
-test('draft meets can be deleted but started meets cannot', function () {
-    $draft = Meet::factory()->create();
-    $open = Meet::factory()->registrationOpen()->create();
-    $admin = User::factory()->admin()->create();
+test('meets can no longer be deleted — the route no longer exists', function () {
+    $meet = Meet::factory()->create();
 
-    $this->actingAs($admin)->delete("/meets/{$draft->id}")->assertRedirect();
-    $this->assertDatabaseMissing('meets', ['id' => $draft->id]);
-
-    $this->actingAs($admin)->delete("/meets/{$open->id}")->assertRedirect();
-    $this->assertDatabaseHas('meets', ['id' => $open->id]);
+    $this->actingAs(User::factory()->admin()->create())
+        ->delete("/meets/{$meet->id}")
+        ->assertStatus(405);
 });
 
 test('activating a published meet deactivates any other active meet, audited', function () {
@@ -209,23 +191,23 @@ test('the registration window hook follows meet status', function () {
         ->and(Meet::factory()->create()->isRegistrationOpen())->toBeFalse();
 });
 
-test('the dashboard shows the current meet', function () {
-    Meet::factory()->completed()->create(['name' => 'Old Meet']);
-    Meet::factory()->registrationOpen()->create(['name' => 'Current Meet']);
+test('the dashboard shows the one meet this deployment runs', function () {
+    Meet::factory()->registrationOpen()->create(['name' => 'The Meet']);
 
     $this->actingAs(User::factory()->create())
         ->get('/dashboard')
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('dashboard')
-            ->where('currentMeet.name', 'Current Meet')
+            ->where('currentMeet.name', 'The Meet')
             ->where('currentMeet.status', 'registration_open'));
 });
 
-test('the dashboard shows no meet card when only completed meets exist', function () {
-    Meet::factory()->completed()->create();
+test('the dashboard still shows the meet card once the meet is completed', function () {
+    Meet::factory()->completed()->create(['name' => 'The Meet']);
 
     $this->actingAs(User::factory()->create())
         ->get('/dashboard')
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('currentMeet', null));
+            ->where('currentMeet.name', 'The Meet')
+            ->where('currentMeet.status', 'completed'));
 });

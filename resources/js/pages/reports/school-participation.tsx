@@ -1,15 +1,8 @@
-import { Head, router, usePage } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import { School } from 'lucide-react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { ReportActions } from '@/components/report-actions';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
 import {
     Table,
     TableBody,
@@ -34,31 +27,12 @@ type Row = {
 
 type Props = {
     rows: Row[];
-    filters: { meet_id: number | null };
-    meetOptions: { id: number; name: string }[];
     generatedAt: string;
 };
 
-export default function SchoolParticipation({
-    rows,
-    filters,
-    meetOptions,
-    generatedAt,
-}: Props) {
+export default function SchoolParticipation({ rows, generatedAt }: Props) {
     const { division } = usePage().props;
     const areaLabel = division.areaLabel;
-
-    const meetParams = filters.meet_id
-        ? { meet_id: String(filters.meet_id) }
-        : {};
-
-    const applyMeet = (value: string) => {
-        router.get(
-            participation().url,
-            value === 'all' ? {} : { meet_id: value },
-            { preserveState: true },
-        );
-    };
 
     const totals = rows.reduce(
         (acc, row) => ({
@@ -78,36 +52,9 @@ export default function SchoolParticipation({
                     title="School participation summary"
                     description="Delegations, athletes, personnel, and entries per school."
                     actions={
-                        <ReportActions
-                            downloadUrl={download({ query: meetParams }).url}
-                        />
+                        <ReportActions downloadUrl={download().url} />
                     }
                 />
-
-                <div className="flex flex-wrap items-center gap-3 print:hidden">
-                    <Select
-                        value={String(filters.meet_id ?? 'all')}
-                        onValueChange={applyMeet}
-                    >
-                        <SelectTrigger
-                            className="w-72"
-                            aria-label="Filter by meet"
-                        >
-                            <SelectValue placeholder="All meets" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All meets</SelectItem>
-                            {meetOptions.map((meet) => (
-                                <SelectItem
-                                    key={meet.id}
-                                    value={String(meet.id)}
-                                >
-                                    {meet.name}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
 
                 <p className="text-sm text-muted-foreground">
                     Generated {generatedAt}

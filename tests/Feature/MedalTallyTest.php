@@ -8,6 +8,7 @@ use App\Models\District;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\EventResult;
+use App\Models\Meet;
 use App\Models\ResultPlacement;
 use App\Models\School;
 use App\Models\Sport;
@@ -219,30 +220,31 @@ test('a municipal delegation\'s medals split correctly across its own schools', 
             ->where('districts.0.total', 2));
 });
 
-test('the tally can be filtered per meet and per sport', function () {
-    $resultA = EventResult::factory()->validated()->create();
-    $schoolA = School::factory()->create(['name' => 'Meet A School']);
+test('the tally is scoped to the one meet and can be filtered per sport', function () {
+    $resultA = EventResult::factory()->validated()->create(['meet_id' => Meet::current()->id]);
+    $schoolA = School::factory()->create(['name' => 'Current Meet School']);
     placeSchool($resultA, $schoolA, 1);
 
-    $resultB = EventResult::factory()->validated()->create();
-    $schoolB = School::factory()->create(['name' => 'Meet B School']);
+    $otherMeet = Meet::factory()->create();
+    $resultB = EventResult::factory()->validated()->create(['meet_id' => $otherMeet->id]);
+    $schoolB = School::factory()->create(['name' => 'Other Meet School']);
     placeSchool($resultB, $schoolB, 1);
 
     $viewer = User::factory()->create();
 
     $this->actingAs($viewer)
-        ->get("/tally?meet_id={$resultA->meet_id}")
+        ->get('/tally')
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('schools', 1)
-            ->where('schools.0.school', 'Meet A School'));
+            ->where('schools.0.school', 'Current Meet School'));
 
-    $sportId = $resultB->event->sport_id;
+    $sportId = $resultA->event->sport_id;
 
     $this->actingAs($viewer)
         ->get("/tally?sport_id={$sportId}")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('schools', 1)
-            ->where('schools.0.school', 'Meet B School'));
+            ->where('schools.0.school', 'Current Meet School'));
 });
 
 test('district points are weighted gold=3/silver=2/bronze=1 and never change the official rank order', function () {

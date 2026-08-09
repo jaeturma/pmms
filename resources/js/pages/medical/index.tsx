@@ -38,8 +38,6 @@ import {
 
 type Clearance = {
     id: number;
-    meet_id: number;
-    meet: string;
     person: string;
     person_type: 'athlete' | 'personnel';
     status: string;
@@ -61,7 +59,7 @@ type PendingAccessLog = {
     accessed_at: string;
 };
 
-type Option = { id: number; meet_id?: number; label: string };
+type Option = { id: number; label: string };
 type ValueLabel = { value: string; label: string };
 
 type EmergencyAccessReveal = {
@@ -75,9 +73,7 @@ type EmergencyAccessReveal = {
 
 type Props = {
     clearances: Clearance[];
-    filters: { meet_id: number | null };
-    meetOptions: Option[];
-    manageableMeetOptions: Option[];
+    canManage: boolean;
     athleteOptions: Option[];
     personnelOptions: Option[];
     statusOptions: ValueLabel[];
@@ -88,20 +84,17 @@ type Props = {
 function CreateClearanceDialog({
     open,
     onOpenChange,
-    manageableMeetOptions,
     athleteOptions,
     personnelOptions,
     statusOptions,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    manageableMeetOptions: Option[];
     athleteOptions: Option[];
     personnelOptions: Option[];
     statusOptions: ValueLabel[];
 }) {
     const { data, setData, post, processing, errors, reset } = useForm<{
-        meet_id: string;
         person_type: 'athlete' | 'personnel';
         athlete_id: string;
         personnel_id: string;
@@ -112,7 +105,6 @@ function CreateClearanceDialog({
         consent_confirmed: boolean;
         notes: string;
     }>({
-        meet_id: '',
         person_type: 'athlete',
         athlete_id: '',
         personnel_id: '',
@@ -135,13 +127,6 @@ function CreateClearanceDialog({
         });
     };
 
-    const meetAthletes = athleteOptions.filter(
-        (a) => a.meet_id === Number(data.meet_id),
-    );
-    const meetPersonnel = personnelOptions.filter(
-        (p) => p.meet_id === Number(data.meet_id),
-    );
-
     return (
         <Dialog
             open={open}
@@ -158,28 +143,6 @@ function CreateClearanceDialog({
                     <DialogTitle>Add clearance record</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="clearance-meet">Meet</Label>
-                        <Select
-                            value={data.meet_id}
-                            onValueChange={(value) => setData('meet_id', value)}
-                        >
-                            <SelectTrigger id="clearance-meet">
-                                <SelectValue placeholder="Select a meet" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {manageableMeetOptions.map((meet) => (
-                                    <SelectItem
-                                        key={meet.id}
-                                        value={String(meet.id)}
-                                    >
-                                        {meet.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <InputError message={errors.meet_id} />
-                    </div>
                     <div className="space-y-2">
                         <Label htmlFor="clearance-person-type">
                             Person type
@@ -217,7 +180,7 @@ function CreateClearanceDialog({
                                     <SelectValue placeholder="Select an athlete" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {meetAthletes.map((a) => (
+                                    {athleteOptions.map((a) => (
                                         <SelectItem
                                             key={a.id}
                                             value={String(a.id)}
@@ -244,7 +207,7 @@ function CreateClearanceDialog({
                                     <SelectValue placeholder="Select a personnel record" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {meetPersonnel.map((p) => (
+                                    {personnelOptions.map((p) => (
                                         <SelectItem
                                             key={p.id}
                                             value={String(p.id)}
@@ -590,9 +553,6 @@ function ClearanceRow({
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                     <span className="font-medium">{clearance.person}</span>{' '}
-                    <span className="text-muted-foreground">
-                        — {clearance.meet}
-                    </span>{' '}
                     <Badge variant="outline">{clearance.status_label}</Badge>
                 </div>
                 <div className="flex gap-2">
@@ -663,9 +623,7 @@ function ClearanceRow({
 
 export default function Medical({
     clearances,
-    filters,
-    meetOptions,
-    manageableMeetOptions,
+    canManage,
     athleteOptions,
     personnelOptions,
     statusOptions,
@@ -687,22 +645,15 @@ export default function Medical({
         });
     }, []);
 
-    const applyMeetFilter = (value: string) => {
-        router.get(index().url, value === 'all' ? {} : { meet_id: value }, {
-            preserveState: true,
-            preserveScroll: true,
-        });
-    };
-
     return (
         <>
             <Head title="Medical" />
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
                     title="Medical"
-                    description="Medical clearance roster — known conditions, emergency contacts, and consent per meet."
+                    description="Medical clearance roster — known conditions, emergency contacts, and consent."
                     actions={
-                        manageableMeetOptions.length > 0 && (
+                        canManage && (
                             <Button onClick={() => setCreateOpen(true)}>
                                 <Plus aria-hidden="true" />
                                 Add clearance record
@@ -710,23 +661,6 @@ export default function Medical({
                         )
                     }
                 />
-
-                <Select
-                    value={filters.meet_id ? String(filters.meet_id) : 'all'}
-                    onValueChange={applyMeetFilter}
-                >
-                    <SelectTrigger className="w-64" aria-label="Filter by meet">
-                        <SelectValue placeholder="All meets" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All meets</SelectItem>
-                        {meetOptions.map((meet) => (
-                            <SelectItem key={meet.id} value={String(meet.id)}>
-                                {meet.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
 
                 {pendingAccessLogs.length > 0 && (
                     <Card>
@@ -787,9 +721,7 @@ export default function Medical({
                                 canRequestEmergencyAccess={
                                     canRequestEmergencyAccess
                                 }
-                                canManage={manageableMeetOptions.some(
-                                    (m) => m.id === clearance.meet_id,
-                                )}
+                                canManage={canManage}
                                 statusOptions={statusOptions}
                             />
                         ))}
@@ -800,7 +732,6 @@ export default function Medical({
             <CreateClearanceDialog
                 open={createOpen}
                 onOpenChange={setCreateOpen}
-                manageableMeetOptions={manageableMeetOptions}
                 athleteOptions={athleteOptions}
                 personnelOptions={personnelOptions}
                 statusOptions={statusOptions}

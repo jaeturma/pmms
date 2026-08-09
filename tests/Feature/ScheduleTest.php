@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\MeetStatus;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
@@ -13,6 +14,16 @@ use App\Models\SportCategory;
 use App\Models\User;
 use App\Models\Venue;
 use Inertia\Testing\AssertableInertia;
+
+/**
+ * This deployment runs one meet (`Meet::current()`), scheduled by default —
+ * mirrors the old `validSlotInput()` default of a freshly-created active
+ * meet. Tests exercising a different lifecycle status override this by
+ * force-filling `Meet::current()` before calling `validSlotInput()`.
+ */
+beforeEach(function () {
+    Meet::current()->forceFill(['status' => MeetStatus::Active])->save();
+});
 
 /**
  * A confirmed entry for the given match's event, in its own approved
@@ -32,16 +43,15 @@ function scheduleTestConfirmedEntryFor(EventMatch $match): Entry
 }
 
 /**
- * @return array{meet_id: int, event_id: int, venue_id: int, scheduled_date: string, starts_at: string, ends_at: string, note: null}
+ * @return array{event_id: int, venue_id: int, scheduled_date: string, starts_at: string, ends_at: string, note: null}
  */
-function validSlotInput(?Meet $meet = null, ?Venue $venue = null): array
+function validSlotInput(?Venue $venue = null): array
 {
-    $meet ??= Meet::factory()->active()->create();
+    $meet = Meet::current();
     $event = Event::factory()->create();
     $meet->events()->attach($event);
 
     return [
-        'meet_id' => $meet->id,
         'event_id' => $event->id,
         'venue_id' => ($venue ?? Venue::factory()->create())->id,
         'scheduled_date' => '2026-08-10',
@@ -72,34 +82,38 @@ test('the schedule renders for every role with the manage flag', function () {
             ->where('canManage', true));
 });
 
-test('managers can schedule an event of a registration-closed or active meet', function (Meet $meet) {
+test('managers can schedule an event of a registration-closed or active meet', function (MeetStatus $status) {
+    Meet::current()->forceFill(['status' => $status])->save();
+
     $this->actingAs(User::factory()->organizer()->create())
-        ->post('/schedule', validSlotInput($meet))
+        ->post('/schedule', validSlotInput())
         ->assertRedirect()
         ->assertSessionHasNoErrors();
 
     $this->assertDatabaseHas('event_schedules', [
-        'meet_id' => $meet->id,
+        'meet_id' => Meet::current()->id,
         'starts_at' => '08:00:00',
         'ends_at' => '10:00:00',
     ]);
 
     expect(AuditLog::query()->where('action', 'schedule.created')->exists())->toBeTrue();
 })->with([
-    'registration closed' => fn () => Meet::factory()->registrationClosed()->create(),
-    'active' => fn () => Meet::factory()->active()->create(),
+    'registration closed' => MeetStatus::RegistrationClosed,
+    'active' => MeetStatus::Active,
 ]);
 
-test('scheduling is rejected while the meet is draft, registration-open, or completed', function (Meet $meet) {
+test('scheduling is rejected while the meet is draft, registration-open, or completed', function (MeetStatus $status) {
+    Meet::current()->forceFill(['status' => $status])->save();
+
     $this->actingAs(User::factory()->admin()->create())
-        ->post('/schedule', validSlotInput($meet))
+        ->post('/schedule', validSlotInput())
         ->assertSessionHasErrors('meet_id');
 
     $this->assertDatabaseCount('event_schedules', 0);
 })->with([
-    'draft' => fn () => Meet::factory()->create(),
-    'registration open' => fn () => Meet::factory()->registrationOpen()->create(),
-    'completed' => fn () => Meet::factory()->completed()->create(),
+    'draft' => MeetStatus::Draft,
+    'registration open' => MeetStatus::RegistrationOpen,
+    'completed' => MeetStatus::Completed,
 ]);
 
 test('events not attached to the meet cannot be scheduled', function () {
@@ -179,7 +193,7 @@ test('back-to-back slots and other venues do not conflict', function () {
 });
 
 test('a tournament manager can schedule a slot for their managed sport but not another sport', function () {
-    $meet = Meet::factory()->active()->create();
+    $meet = Meet::current();
     $ownEvent = Event::factory()->create();
     $meet->events()->attach($ownEvent);
     $otherEvent = Event::factory()->create();
@@ -188,7 +202,7 @@ test('a tournament manager can schedule a slot for their managed sport but not a
     $manager = User::factory()->tournamentManager()->create();
     $ownEvent->sport->forceFill(['tournament_manager_id' => $manager->id])->save();
 
-    $ownInput = validSlotInput($meet);
+    $ownInput = validSlotInput();
     $ownInput['event_id'] = $ownEvent->id;
 
     $this->actingAs($manager)
@@ -198,7 +212,7 @@ test('a tournament manager can schedule a slot for their managed sport but not a
 
     $this->assertDatabaseHas('event_schedules', ['event_id' => $ownEvent->id]);
 
-    $otherInput = validSlotInput($meet);
+    $otherInput = validSlotInput();
     $otherInput['event_id'] = $otherEvent->id;
     $otherInput['venue_id'] = Venue::factory()->create()->id;
 
@@ -213,6 +227,7 @@ test('a tournament manager can update and delete a slot in their managed sport b
     $manager = User::factory()->tournamentManager()->create();
 
     $ownSlot = EventSchedule::factory()->create([
+        'meet_id' => Meet::current()->id,
         'scheduled_date' => '2026-08-10',
         'starts_at' => '08:00:00',
         'ends_at' => '10:00:00',
@@ -221,7 +236,6 @@ test('a tournament manager can update and delete a slot in their managed sport b
 
     $this->actingAs($manager)
         ->put("/schedule/{$ownSlot->id}", [
-            'meet_id' => $ownSlot->meet_id,
             'event_id' => $ownSlot->event_id,
             'venue_id' => $ownSlot->venue_id,
             'scheduled_date' => '2026-08-10',
@@ -297,6 +311,7 @@ test('viewers and delegation officers cannot manage the schedule', function (Use
 
 test('managers can update a slot without conflicting with itself', function () {
     $slot = EventSchedule::factory()->create([
+        'meet_id' => Meet::current()->id,
         'scheduled_date' => '2026-08-10',
         'starts_at' => '08:00:00',
         'ends_at' => '10:00:00',
@@ -304,7 +319,6 @@ test('managers can update a slot without conflicting with itself', function () {
 
     $this->actingAs(User::factory()->admin()->create())
         ->put("/schedule/{$slot->id}", [
-            'meet_id' => $slot->meet_id,
             'event_id' => $slot->event_id,
             'venue_id' => $slot->venue_id,
             'scheduled_date' => '2026-08-10',
@@ -368,12 +382,12 @@ test('the schedule can be filtered per day and per venue', function () {
 });
 
 test('managers can attach a sport category matching the event\'s sport', function () {
-    $meet = Meet::factory()->active()->create();
+    $meet = Meet::current();
     $event = Event::factory()->create();
     $meet->events()->attach($event);
     $category = SportCategory::factory()->create(['sport_id' => $event->sport_id]);
 
-    $input = validSlotInput($meet);
+    $input = validSlotInput();
     $input['event_id'] = $event->id;
     $input['sport_category_id'] = $category->id;
 
@@ -389,12 +403,12 @@ test('managers can attach a sport category matching the event\'s sport', functio
 });
 
 test('a sport category belonging to a different sport is rejected', function () {
-    $meet = Meet::factory()->active()->create();
+    $meet = Meet::current();
     $event = Event::factory()->create();
     $meet->events()->attach($event);
     $otherSportCategory = SportCategory::factory()->create();
 
-    $input = validSlotInput($meet);
+    $input = validSlotInput();
     $input['event_id'] = $event->id;
     $input['sport_category_id'] = $otherSportCategory->id;
 
@@ -406,12 +420,12 @@ test('a sport category belonging to a different sport is rejected', function () 
 });
 
 test('an inactive sport category cannot be attached', function () {
-    $meet = Meet::factory()->active()->create();
+    $meet = Meet::current();
     $event = Event::factory()->create();
     $meet->events()->attach($event);
     $category = SportCategory::factory()->create(['sport_id' => $event->sport_id, 'active' => false]);
 
-    $input = validSlotInput($meet);
+    $input = validSlotInput();
     $input['event_id'] = $event->id;
     $input['sport_category_id'] = $category->id;
 
@@ -430,7 +444,7 @@ test('a scheduled slot with no sport category still works exactly as before', fu
 });
 
 test('the schedule payload exposes the sport category label for the admin form', function () {
-    $meet = Meet::factory()->active()->create();
+    $meet = Meet::current();
     $event = Event::factory()->create();
     $meet->events()->attach($event);
     $category = SportCategory::factory()->create([

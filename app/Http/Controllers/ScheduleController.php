@@ -48,18 +48,13 @@ class ScheduleController extends Controller
         $managedSportId = $isTournamentManager ? $user->managedSport->id : null;
 
         $search = $this->searchTerm($request);
-        $meetId = $request->integer('meet_id');
         $venueId = $request->integer('venue_id');
         $date = $request->string('date')->toString();
 
         $query = EventSchedule::query()
-            ->with(['event.sport:id,name', 'sportCategory:id,display_name', 'venue:id,name', 'meet:id,name'])
+            ->with(['event.sport:id,name', 'sportCategory:id,display_name', 'venue:id,name'])
             ->orderBy('scheduled_date')
             ->orderBy('starts_at');
-
-        if ($meetId > 0) {
-            $query->where('meet_id', $meetId);
-        }
 
         if ($venueId > 0) {
             $query->where('venue_id', $venueId);
@@ -71,10 +66,8 @@ class ScheduleController extends Controller
 
         $this->applySearch($query, $search, ['event.name']);
 
-        $schedulableMeets = Meet::query()
-            ->whereIn('status', [MeetStatus::RegistrationClosed->value, MeetStatus::Active->value])
-            ->orderBy('name')
-            ->get(['id', 'name']);
+        $meet = Meet::current();
+        $meetIsSchedulable = in_array($meet->status, [MeetStatus::RegistrationClosed, MeetStatus::Active], true);
 
         $slots = $query->paginate($this->registryPageSize)->withQueryString();
 
@@ -87,11 +80,9 @@ class ScheduleController extends Controller
 
                     return [
                         'id' => $schedule->id,
-                        'meet_id' => $schedule->meet_id,
                         'event_id' => $schedule->event_id,
                         'sport_category_id' => $schedule->sport_category_id,
                         'venue_id' => $schedule->venue_id,
-                        'meet' => $schedule->meet->name,
                         'event' => sprintf(
                             '%s — %s (%s, %s)',
                             $schedule->event->sport->name,
@@ -114,27 +105,19 @@ class ScheduleController extends Controller
                 }),
             'filters' => [
                 'search' => $search,
-                'meet_id' => $meetId > 0 ? $meetId : null,
                 'venue_id' => $venueId > 0 ? $venueId : null,
                 'date' => $date !== '' ? $date : null,
             ],
-            'meetFilterOptions' => Meet::query()->orderBy('name')->get(['id', 'name'])
-                ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]),
             'venueFilterOptions' => Venue::query()->orderBy('name')->get(['id', 'name'])
                 ->map(fn (Venue $venue): array => ['id' => $venue->id, 'label' => $venue->name]),
-            'schedulableMeets' => $schedulableMeets
-                ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]),
-            'eventOptionsByMeet' => Event::query()
-                ->whereHas('meets', fn ($meets) => $meets->whereIn(
-                    'meets.id',
-                    $schedulableMeets->pluck('id'),
-                ))
+            'meetIsSchedulable' => $meetIsSchedulable,
+            'eventOptions' => Event::query()
+                ->whereHas('meets', fn ($meets) => $meets->whereKey($meet->id))
                 ->when($managedSportId !== null, fn ($query) => $query->where('sport_id', $managedSportId))
-                ->with(['sport:id,name', 'meets:id'])
+                ->with('sport:id,name')
                 ->get(['id', 'sport_id', 'name', 'gender', 'age_division'])
-                ->flatMap(fn (Event $event) => $event->meets->map(fn (Meet $meet): array => [
+                ->map(fn (Event $event): array => [
                     'id' => $event->id,
-                    'meet_id' => $meet->id,
                     'sport_id' => $event->sport_id,
                     'label' => sprintf(
                         '%s — %s (%s, %s)',
@@ -143,7 +126,7 @@ class ScheduleController extends Controller
                         $event->gender->label(),
                         $event->age_division->label(),
                     ),
-                ]))
+                ])
                 ->values(),
             'venueOptions' => Venue::query()->where('active', true)->orderBy('name')->get(['id', 'name'])
                 ->map(fn (Venue $venue): array => ['id' => $venue->id, 'label' => $venue->name]),
@@ -245,7 +228,7 @@ class ScheduleController extends Controller
      */
     private function assertSlotIsValid(array $data, User $user, ?EventSchedule $ignore = null): void
     {
-        $meet = Meet::query()->findOrFail((int) $data['meet_id']);
+        $meet = Meet::current();
 
         if (! $this->meetIsSchedulable($meet)) {
             throw ValidationException::withMessages([

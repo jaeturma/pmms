@@ -25,17 +25,16 @@ class EmergencyContactController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'meet_id' => ['required', 'integer', Rule::exists('meets', 'id')],
             'name' => ['required', 'string', 'max:120'],
             'role' => ['nullable', 'string', 'max:120'],
             'phone' => ['required', 'string', 'max:30'],
             'category' => ['nullable', Rule::enum(DrrmCategory::class)],
         ]);
 
-        $meet = Meet::query()->findOrFail((int) $validated['meet_id']);
+        $meet = Meet::current();
         abort_unless($this->policy->manage($request->user(), $meet), 403);
 
-        $contact = EmergencyContact::create($validated);
+        $contact = EmergencyContact::create([...$validated, 'meet_id' => $meet->id]);
 
         $this->audit->record('emergency_contact.created', $contact, ['meet' => $meet->name, 'name' => $contact->name]);
 

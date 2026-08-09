@@ -36,20 +36,15 @@ class ManagementTeamController extends Controller
      * same view-open/mutate-restricted shape as
      * `MeetSportAssignmentController::index()`.
      */
-    public function index(Request $request): Response
+    public function index(): Response
     {
-        $meetId = $request->integer('meet_id');
-
         $query = ManagementTeam::query()
-            ->with(['meet:id,name', 'members.user:id,name,email'])
-            ->when($meetId > 0, fn ($q) => $q->where('meet_id', $meetId))
+            ->with('members.user:id,name,email')
+            ->where('meet_id', Meet::current()->id)
             ->orderBy('team_type');
 
         return Inertia::render('management-teams/index', [
             'teams' => $query->get()->map(fn (ManagementTeam $team): array => $this->teamRow($team)),
-            'filters' => ['meet_id' => $meetId > 0 ? $meetId : null],
-            'meetOptions' => Meet::query()->orderByDesc('id')->get(['id', 'name'])
-                ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]),
             'teamTypeOptions' => array_map(
                 fn (ManagementTeamType $type): array => ['value' => $type->value, 'label' => $type->label()],
                 ManagementTeamType::cases(),
@@ -73,13 +68,12 @@ class ManagementTeamController extends Controller
     }
 
     /**
-     * @return array{id: int, meet: string, team_type: string, team_type_label: string, name: string, description: string|null, status: string, status_label: string, members: array<int, array{id: int, user: string, user_email: string, role_title: string|null, is_head: bool, responsibilities: string|null, status: string, status_label: string}>}
+     * @return array{id: int, team_type: string, team_type_label: string, name: string, description: string|null, status: string, status_label: string, members: array<int, array{id: int, user: string, user_email: string, role_title: string|null, is_head: bool, responsibilities: string|null, status: string, status_label: string}>}
      */
     private function teamRow(ManagementTeam $team): array
     {
         return [
             'id' => $team->id,
-            'meet' => $team->meet->name,
             'team_type' => $team->team_type->value,
             'team_type_label' => $team->team_type->label(),
             'name' => $team->name,
@@ -114,14 +108,15 @@ class ManagementTeamController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'meet_id' => ['required', 'integer', Rule::exists('meets', 'id')],
             'team_type' => ['required', Rule::enum(ManagementTeamType::class)],
             'name' => ['required', 'string', 'max:120'],
             'description' => ['nullable', 'string', 'max:1000'],
         ]);
 
+        $meet = Meet::current();
+
         if (ManagementTeam::query()
-            ->where('meet_id', $validated['meet_id'])
+            ->where('meet_id', $meet->id)
             ->where('team_type', $validated['team_type'])
             ->exists()) {
             throw ValidationException::withMessages([
@@ -130,17 +125,15 @@ class ManagementTeamController extends Controller
         }
 
         $team = ManagementTeam::create([
-            'meet_id' => $validated['meet_id'],
+            'meet_id' => $meet->id,
             'team_type' => $validated['team_type'],
             'name' => $validated['name'],
             'description' => $validated['description'] ?? null,
             'status' => ManagementTeamStatus::Forming,
         ]);
 
-        $team->load('meet:id,name');
-
         $this->audit->record('management_team.created', $team, [
-            'meet' => $team->meet->name,
+            'meet' => $meet->name,
             'team_type' => $team->team_type->value,
             'name' => $team->name,
         ]);

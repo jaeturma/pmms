@@ -21,8 +21,6 @@ use App\Models\Personnel;
 use App\Models\Protest;
 use App\Services\AuditLogger;
 use App\Services\MedalTallyService;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
@@ -45,31 +43,26 @@ class ManagementDashboardController extends Controller
 
     public function __construct(private readonly AuditLogger $audit) {}
 
-    public function index(Request $request, MedalTallyService $tally): Response
+    public function index(MedalTallyService $tally): Response
     {
-        $schoolYear = $this->schoolYearFilter($request);
-        $meets = $this->meetsInScope($schoolYear)->get();
+        $meets = collect([Meet::current()]);
 
         return Inertia::render('management/index', [
             ...$this->widgetData($meets, $tally),
-            'filters' => ['school_year' => $schoolYear],
-            'schoolYearOptions' => $this->schoolYearOptions(),
             'generatedAt' => now()->toDayDateTimeString(),
         ]);
     }
 
     /**
-     * Printable version of the management dashboard — same widgets, same
-     * school-year scope, print-styled page instead of the interactive one.
+     * Printable version of the management dashboard — same widgets,
+     * print-styled page instead of the interactive one.
      */
-    public function report(Request $request, MedalTallyService $tally): Response
+    public function report(MedalTallyService $tally): Response
     {
-        $schoolYear = $this->schoolYearFilter($request);
-        $meets = $this->meetsInScope($schoolYear)->get();
+        $meets = collect([Meet::current()]);
 
         return Inertia::render('reports/management', [
             ...$this->widgetData($meets, $tally),
-            'schoolYear' => $schoolYear,
             'generatedAt' => now()->toDayDateTimeString(),
         ]);
     }
@@ -80,14 +73,13 @@ class ManagementDashboardController extends Controller
      * shapes (unlike the tally report, which can share one header across
      * district/school rows).
      */
-    public function downloadReport(Request $request, MedalTallyService $tally): StreamedResponse
+    public function downloadReport(MedalTallyService $tally): StreamedResponse
     {
-        $schoolYear = $this->schoolYearFilter($request);
-        $meets = $this->meetsInScope($schoolYear)->get();
+        $meets = collect([Meet::current()]);
         $data = $this->widgetData($meets, $tally);
 
         $this->audit->record('report.management_exported', null, [
-            'school_year' => $schoolYear ?? 'all school years',
+            'meet' => Meet::current()->name,
         ]);
 
         $rows = [];
@@ -170,26 +162,6 @@ class ManagementDashboardController extends Controller
             'performance' => $this->performanceHistory($meets, $tally),
             'venues' => $this->venueUtilization($meets),
         ];
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    private function schoolYearOptions(): array
-    {
-        return Meet::query()
-            ->select('school_year')
-            ->distinct()
-            ->orderByDesc('school_year')
-            ->pluck('school_year')
-            ->all();
-    }
-
-    private function schoolYearFilter(Request $request): ?string
-    {
-        $schoolYear = $request->string('school_year')->toString();
-
-        return $schoolYear !== '' ? $schoolYear : null;
     }
 
     /**
@@ -417,19 +389,6 @@ class ManagementDashboardController extends Controller
             ->sortBy('venue')
             ->values()
             ->all();
-    }
-
-    /**
-     * Meets in scope for every Phase 5 widget, optionally narrowed to one
-     * school year. Every later WP's aggregate query starts here.
-     *
-     * @return Builder<Meet>
-     */
-    private function meetsInScope(?string $schoolYear): Builder
-    {
-        return Meet::query()
-            ->when($schoolYear !== null, fn ($query) => $query->where('school_year', $schoolYear))
-            ->orderByDesc('starts_at');
     }
 
     /**

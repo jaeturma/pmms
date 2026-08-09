@@ -47,12 +47,10 @@ class DrrmPlanController extends Controller
 
         abort_unless($this->policy->viewAny($user), 403);
 
-        $meetId = $request->integer('meet_id');
         $accessibleMeetIds = $this->accessibleMeetIds($user, ManagementTeamType::DRRM);
 
         $scopeToMeets = fn ($query) => $query
-            ->when($accessibleMeetIds !== null, fn ($q) => $q->whereIn('meet_id', $accessibleMeetIds))
-            ->when($meetId > 0, fn ($q) => $q->where('meet_id', $meetId));
+            ->when($accessibleMeetIds !== null, fn ($q) => $q->whereIn('meet_id', $accessibleMeetIds));
 
         $plans = $scopeToMeets(DrrmPlan::query()->with('meet:id,name'))->orderByDesc('id')->get();
         $venuePlans = $scopeToMeets(VenueEmergencyPlan::query()->with(['meet:id,name', 'venue:id,name']))->orderByDesc('id')->get();
@@ -64,12 +62,6 @@ class DrrmPlanController extends Controller
         $contacts = $scopeToMeets(EmergencyContact::query()->with('meet:id,name'))->orderByDesc('id')->get();
         $equipment = $scopeToMeets(DrrmEquipment::query()->with(['meet:id,name', 'venue:id,name']))->orderByDesc('id')->get();
         $checklists = $scopeToMeets(ReadinessChecklist::query()->with(['meet:id,name', 'completedBy:id,name']))->orderBy('category')->orderBy('id')->get();
-
-        $meetOptions = Meet::query()
-            ->when($accessibleMeetIds !== null, fn ($q) => $q->whereIn('id', $accessibleMeetIds))
-            ->orderByDesc('id')
-            ->get(['id', 'name'])
-            ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]);
 
         return Inertia::render('drrm/plans', [
             'plans' => $plans->map(fn (DrrmPlan $plan): array => [
@@ -125,8 +117,6 @@ class DrrmPlanController extends Controller
                 'is_complete' => $item->is_complete,
                 'completed_by' => $item->completedBy?->name,
             ]),
-            'filters' => ['meet_id' => $meetId > 0 ? $meetId : null],
-            'meetOptions' => $meetOptions,
             'venueOptions' => Venue::query()->where('active', true)->orderBy('name')->get(['id', 'name'])
                 ->map(fn (Venue $venue): array => ['id' => $venue->id, 'label' => $venue->name]),
             'categoryOptions' => array_map(
@@ -139,16 +129,15 @@ class DrrmPlanController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'meet_id' => ['required', 'integer', Rule::exists('meets', 'id')],
             'category' => ['required', Rule::enum(DrrmCategory::class)],
             'title' => ['required', 'string', 'max:120'],
             'description' => ['required', 'string', 'max:2000'],
         ]);
 
-        $meet = Meet::query()->findOrFail((int) $validated['meet_id']);
+        $meet = Meet::current();
         abort_unless($this->policy->manage($request->user(), $meet), 403);
 
-        $plan = DrrmPlan::create($validated);
+        $plan = DrrmPlan::create([...$validated, 'meet_id' => $meet->id]);
 
         $this->audit->record('drrm_plan.created', $plan, [
             'meet' => $meet->name,

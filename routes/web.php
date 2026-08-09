@@ -415,7 +415,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('management-team-members/{managementTeamMember}/status', [ManagementTeamMemberController::class, 'updateStatus'])->name('management-team-members.status');
         Route::delete('management-team-members/{managementTeamMember}', [ManagementTeamMemberController::class, 'destroy'])->name('management-team-members.destroy');
 
-        Route::post('meets', [MeetController::class, 'store'])->name('meets.store');
         Route::put('meets/{meet}', [MeetController::class, 'update'])->name('meets.update');
         Route::patch('meets/{meet}/status', [MeetController::class, 'updateStatus'])->name('meets.status');
         Route::patch('meets/{meet}/publish', [MeetController::class, 'publish'])->name('meets.publish');
@@ -423,7 +422,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('meets/{meet}/activate', [MeetController::class, 'activate'])->name('meets.activate');
         Route::patch('meets/{meet}/deactivate', [MeetController::class, 'deactivate'])->name('meets.deactivate');
         Route::put('meets/{meet}/events', [MeetController::class, 'syncEvents'])->name('meets.events');
-        Route::delete('meets/{meet}', [MeetController::class, 'destroy'])->name('meets.destroy');
 
         Route::post('delegations', [DelegationController::class, 'store'])->name('delegations.store');
         Route::delete('delegations/{delegation}', [DelegationController::class, 'destroy'])->name('delegations.destroy');

@@ -9,7 +9,6 @@ use App\Models\User;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -49,8 +48,6 @@ class AnnouncementController extends Controller
                     'author' => $announcement->author?->name,
                 ]),
             'filters' => ['search' => $search],
-            'meetOptions' => Meet::query()->orderBy('name')->get(['id', 'name'])
-                ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]),
         ]);
     }
 
@@ -160,11 +157,17 @@ class AnnouncementController extends Controller
      */
     private function validated(Request $request): array
     {
-        return $request->validate([
-            'meet_id' => ['nullable', 'integer', Rule::exists('meets', 'id')],
+        $validated = $request->validate([
+            'tied_to_meet' => ['boolean'],
             'title' => ['required', 'string', 'max:160'],
             'body' => ['required', 'string', 'max:2000'],
         ]);
+
+        return [
+            'meet_id' => $request->boolean('tied_to_meet') ? Meet::current()->id : null,
+            'title' => $validated['title'],
+            'body' => $validated['body'],
+        ];
     }
 
     /**

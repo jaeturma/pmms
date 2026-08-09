@@ -2,7 +2,6 @@
 
 namespace App\Http\Middleware;
 
-use App\Enums\MeetStatus;
 use App\Enums\ScoringSessionStatus;
 use App\Models\Division;
 use App\Models\Meet;
@@ -82,18 +81,11 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
-     * @return array{name: string, status_label: string, starts_at: string, ends_at: string, venue: string|null}|null
+     * @return array{name: string, status_label: string, starts_at: string, ends_at: string, venue: string|null}
      */
-    private function currentMeet(): ?array
+    private function currentMeet(): array
     {
-        $meet = Meet::query()
-            ->where('status', '!=', MeetStatus::Completed->value)
-            ->orderByDesc('starts_at')
-            ->first();
-
-        if ($meet === null) {
-            return null;
-        }
+        $meet = Meet::current();
 
         return [
             'name' => $meet->name,

@@ -48,13 +48,11 @@ class BilletingVenueController extends Controller
 
         abort_unless($this->policy->viewAny($user), 403);
 
-        $meetId = $request->integer('meet_id');
         $accessibleMeetIds = $this->accessibleMeetIds($user, ManagementTeamType::Billeting);
         $canManage = $accessibleMeetIds === null || $accessibleMeetIds->isNotEmpty();
 
         $query = BilletingVenue::query()
             ->with([
-                'meet:id,name',
                 'venue:id,name',
                 'assignments.delegation.school:id,name',
                 'assignments.delegation.district:id,name',
@@ -66,27 +64,18 @@ class BilletingVenueController extends Controller
             $query->whereHas('assignments.delegation.officers', fn ($q) => $q->whereKey($user->id));
         }
 
-        $query->when($meetId > 0, fn ($q) => $q->where('meet_id', $meetId));
-
         $venues = $query->orderBy('name')->get();
-
-        $meetOptions = Meet::query()
-            ->when($accessibleMeetIds !== null, fn ($q) => $q->whereIn('id', $accessibleMeetIds))
-            ->orderByDesc('id')
-            ->get(['id', 'name'])
-            ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]);
 
         return Inertia::render('billeting/index', [
             'venues' => $venues->map(fn (BilletingVenue $venue): array => $this->venueRow($venue, $user, $canManage)),
-            'filters' => ['meet_id' => $meetId > 0 ? $meetId : null],
-            'meetOptions' => $meetOptions,
             'venueOptions' => Venue::query()->where('active', true)->orderBy('name')->get(['id', 'name'])
                 ->map(fn (Venue $venue): array => ['id' => $venue->id, 'label' => $venue->name]),
             'delegationOptions' => $canManage
-                ? Delegation::query()->with(['school:id,name', 'district:id,name'])->get()
+                ? Delegation::query()->with(['school:id,name', 'district:id,name'])
+                    ->where('meet_id', Meet::current()->id)
+                    ->get()
                     ->map(fn (Delegation $delegation): array => [
                         'id' => $delegation->id,
-                        'meet_id' => $delegation->meet_id,
                         'label' => $delegation->registrantName(),
                     ])
                 : [],
@@ -105,8 +94,6 @@ class BilletingVenueController extends Controller
 
         return [
             'id' => $venue->id,
-            'meet_id' => $venue->meet_id,
-            'meet' => $venue->meet->name,
             'name' => $venue->name,
             'address' => $venue->address,
             'capacity' => $venue->capacity,
@@ -128,7 +115,6 @@ class BilletingVenueController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'meet_id' => ['required', 'integer', Rule::exists('meets', 'id')],
             'name' => ['required', 'string', 'max:120'],
             'address' => ['nullable', 'string', 'max:1000'],
             'capacity' => ['nullable', 'integer', 'min:1'],
@@ -138,11 +124,11 @@ class BilletingVenueController extends Controller
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $meet = Meet::query()->findOrFail((int) $validated['meet_id']);
+        $meet = Meet::current();
         abort_unless($this->policy->manage($request->user(), $meet), 403);
 
         if (BilletingVenue::query()
-            ->where('meet_id', $validated['meet_id'])
+            ->where('meet_id', $meet->id)
             ->where('name', $validated['name'])
             ->exists()) {
             throw ValidationException::withMessages([
@@ -150,7 +136,7 @@ class BilletingVenueController extends Controller
             ]);
         }
 
-        $venue = BilletingVenue::create($validated);
+        $venue = BilletingVenue::create([...$validated, 'meet_id' => $meet->id]);
 
         $this->audit->record('billeting_venue.created', $venue, [
             'meet' => $meet->name,

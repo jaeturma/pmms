@@ -15,7 +15,6 @@ use App\Policies\TransportPolicy;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -48,20 +47,18 @@ class VehicleController extends Controller
 
         abort_unless($this->policy->viewAny($user), 403);
 
-        $meetId = $request->integer('meet_id');
         $accessibleMeetIds = $this->accessibleMeetIds($user, ManagementTeamType::Transport);
         $canManage = $accessibleMeetIds === null || $accessibleMeetIds->isNotEmpty();
 
         $vehicleQuery = Vehicle::query()
             ->with([
-                'meet:id,name',
                 'trips.delegation.school:id,name',
                 'trips.delegation.district:id,name',
                 'trips.transportRequest',
             ]);
 
         $requestQuery = TransportRequest::query()
-            ->with(['meet:id,name', 'delegation.school:id,name', 'delegation.district:id,name'])
+            ->with(['delegation.school:id,name', 'delegation.district:id,name'])
             ->where('status', TransportRequestStatus::Pending);
 
         if ($accessibleMeetIds !== null && $accessibleMeetIds->isNotEmpty()) {
@@ -72,24 +69,13 @@ class VehicleController extends Controller
             $requestQuery->whereHas('delegation.officers', fn ($q) => $q->whereKey($user->id));
         }
 
-        $vehicleQuery->when($meetId > 0, fn ($q) => $q->where('meet_id', $meetId));
-        $requestQuery->when($meetId > 0, fn ($q) => $q->where('meet_id', $meetId));
-
         $vehicles = $vehicleQuery->orderBy('plate_number')->get();
         $requests = $requestQuery->orderBy('requested_at')->get();
-
-        $meetOptions = Meet::query()
-            ->when($accessibleMeetIds !== null, fn ($q) => $q->whereIn('id', $accessibleMeetIds))
-            ->orderByDesc('id')
-            ->get(['id', 'name'])
-            ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]);
 
         return Inertia::render('transport/index', [
             'vehicles' => $vehicles->map(fn (Vehicle $vehicle): array => $this->vehicleRow($vehicle, $user, $canManage)),
             'requests' => $requests->map(fn (TransportRequest $tr): array => [
                 'id' => $tr->id,
-                'meet_id' => $tr->meet_id,
-                'meet' => $tr->meet->name,
                 'delegation_id' => $tr->delegation_id,
                 'delegation' => $tr->delegation->registrantName(),
                 'pickup_location' => $tr->pickup_location,
@@ -98,14 +84,12 @@ class VehicleController extends Controller
                 'passenger_count' => $tr->passenger_count,
                 'notes' => $tr->notes,
             ])->values(),
-            'filters' => ['meet_id' => $meetId > 0 ? $meetId : null],
-            'meetOptions' => $meetOptions,
             'delegationOptions' => Delegation::query()->with(['school:id,name', 'district:id,name'])
+                ->where('meet_id', Meet::current()->id)
                 ->when(! $canManage, fn ($q) => $q->whereHas('officers', fn ($o) => $o->whereKey($user->id)))
                 ->get()
                 ->map(fn (Delegation $delegation): array => [
                     'id' => $delegation->id,
-                    'meet_id' => $delegation->meet_id,
                     'label' => $delegation->registrantName(),
                 ]),
             'canManage' => $canManage,
@@ -123,8 +107,6 @@ class VehicleController extends Controller
 
         return [
             'id' => $vehicle->id,
-            'meet_id' => $vehicle->meet_id,
-            'meet' => $vehicle->meet->name,
             'plate_number' => $vehicle->plate_number,
             'type' => $vehicle->type,
             'capacity' => $vehicle->capacity,
@@ -147,7 +129,6 @@ class VehicleController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'meet_id' => ['required', 'integer', Rule::exists('meets', 'id')],
             'plate_number' => ['required', 'string', 'max:20'],
             'type' => ['nullable', 'string', 'max:30'],
             'capacity' => ['nullable', 'integer', 'min:1'],
@@ -156,11 +137,11 @@ class VehicleController extends Controller
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $meet = Meet::query()->findOrFail((int) $validated['meet_id']);
+        $meet = Meet::current();
         abort_unless($this->policy->manage($request->user(), $meet), 403);
 
         if (Vehicle::query()
-            ->where('meet_id', $validated['meet_id'])
+            ->where('meet_id', $meet->id)
             ->where('plate_number', $validated['plate_number'])
             ->exists()) {
             throw ValidationException::withMessages([
@@ -168,7 +149,7 @@ class VehicleController extends Controller
             ]);
         }
 
-        $vehicle = Vehicle::create($validated);
+        $vehicle = Vehicle::create([...$validated, 'meet_id' => $meet->id]);
 
         $this->audit->record('vehicle.created', $vehicle, [
             'meet' => $meet->name,

@@ -66,8 +66,6 @@ type Item = {
 
 type Category = {
     id: number;
-    meet_id: number;
-    meet: string;
     name: string;
     description: string | null;
     is_consumable: boolean;
@@ -79,8 +77,6 @@ type ValueLabel = { value: string; label: string };
 
 type Props = {
     categories: Category[];
-    filters: { meet_id: number | null };
-    meetOptions: Option[];
     venueOptions: Option[];
     conditionOptions: ValueLabel[];
     adjustmentTypeOptions: ValueLabel[];
@@ -89,19 +85,15 @@ type Props = {
 function CreateCategoryDialog({
     open,
     onOpenChange,
-    meetOptions,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    meetOptions: Option[];
 }) {
     const { data, setData, post, processing, errors, reset } = useForm<{
-        meet_id: string;
         name: string;
         description: string;
         is_consumable: boolean;
     }>({
-        meet_id: '',
         name: '',
         description: '',
         is_consumable: false,
@@ -134,28 +126,6 @@ function CreateCategoryDialog({
                     <DialogTitle>Add category</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="category-meet">Meet</Label>
-                        <Select
-                            value={data.meet_id}
-                            onValueChange={(value) => setData('meet_id', value)}
-                        >
-                            <SelectTrigger id="category-meet">
-                                <SelectValue placeholder="Select a meet" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {meetOptions.map((meet) => (
-                                    <SelectItem
-                                        key={meet.id}
-                                        value={String(meet.id)}
-                                    >
-                                        {meet.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <InputError message={errors.meet_id} />
-                    </div>
                     <div className="space-y-2">
                         <Label htmlFor="category-name">Name</Label>
                         <Input
@@ -1057,9 +1027,6 @@ function CategoryCard({
                             <Badge variant="outline">Consumable</Badge>
                         )}
                     </CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                        {category.meet}
-                    </p>
                     {category.description && (
                         <p className="mt-1 text-sm text-muted-foreground">
                             {category.description}
@@ -1140,20 +1107,11 @@ function CategoryCard({
 
 export default function Equipment({
     categories,
-    filters,
-    meetOptions,
     venueOptions,
     conditionOptions,
     adjustmentTypeOptions,
 }: Props) {
     const [createOpen, setCreateOpen] = useState(false);
-
-    const applyMeetFilter = (value: string) => {
-        router.get(index().url, value === 'all' ? {} : { meet_id: value }, {
-            preserveState: true,
-            preserveScroll: true,
-        });
-    };
 
     return (
         <>
@@ -1169,23 +1127,6 @@ export default function Equipment({
                         </Button>
                     }
                 />
-
-                <Select
-                    value={filters.meet_id ? String(filters.meet_id) : 'all'}
-                    onValueChange={applyMeetFilter}
-                >
-                    <SelectTrigger className="w-64" aria-label="Filter by meet">
-                        <SelectValue placeholder="All meets" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All meets</SelectItem>
-                        {meetOptions.map((meet) => (
-                            <SelectItem key={meet.id} value={String(meet.id)}>
-                                {meet.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
 
                 {categories.length === 0 ? (
                     <EmptyState
@@ -1211,7 +1152,6 @@ export default function Equipment({
             <CreateCategoryDialog
                 open={createOpen}
                 onOpenChange={setCreateOpen}
-                meetOptions={meetOptions}
             />
         </>
     );

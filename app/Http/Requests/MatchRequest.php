@@ -2,11 +2,21 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Meet;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class MatchRequest extends FormRequest
 {
+    /**
+     * A match always belongs to `Meet::current()` — this deployment runs
+     * one meet, so nobody picks it.
+     */
+    protected function prepareForValidation(): void
+    {
+        $this->merge(['meet_id' => Meet::current()->id]);
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *

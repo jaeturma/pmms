@@ -4,11 +4,21 @@ namespace App\Http\Requests;
 
 use App\Enums\DivisionType;
 use App\Models\Division;
+use App\Models\Meet;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class DelegationStoreRequest extends FormRequest
 {
+    /**
+     * A delegation always registers under `Meet::current()` — this
+     * deployment runs one meet, so nobody picks it.
+     */
+    protected function prepareForValidation(): void
+    {
+        $this->merge(['meet_id' => Meet::current()->id]);
+    }
+
     /**
      * A delegation registers under a School (City division) or a District
      * (Province division, "Municipality") — whichever matches the current

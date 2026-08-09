@@ -11,6 +11,7 @@ import type { Paginated } from '@/components/pagination-controls';
 import { SearchBar } from '@/components/search-bar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogContent,
@@ -20,13 +21,6 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
 import {
     Table,
     TableBody,
@@ -56,38 +50,25 @@ type Announcement = {
     author: string | null;
 };
 
-type Option = { id: number; label: string };
-
 type Props = {
     announcements: Paginated<Announcement>;
     filters: { search: string };
-    meetOptions: Option[];
 };
 
 function AnnouncementFormDialog({
     announcement,
-    meetOptions,
     open,
     onOpenChange,
 }: {
     announcement: Announcement | null;
-    meetOptions: Option[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
-    const { data, setData, post, put, processing, errors, reset, transform } =
-        useForm({
-            meet_id: announcement?.meet_id
-                ? String(announcement.meet_id)
-                : 'general',
-            title: announcement?.title ?? '',
-            body: announcement?.body ?? '',
-        });
-
-    transform((current) => ({
-        ...current,
-        meet_id: current.meet_id === 'general' ? null : current.meet_id,
-    }));
+    const { data, setData, post, put, processing, errors, reset } = useForm({
+        tied_to_meet: announcement?.meet_id != null,
+        title: announcement?.title ?? '',
+        body: announcement?.body ?? '',
+    });
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -118,30 +99,20 @@ function AnnouncementFormDialog({
                     </DialogTitle>
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="announcement-meet">Meet</Label>
-                        <Select
-                            value={data.meet_id}
-                            onValueChange={(value) => setData('meet_id', value)}
+                    <div className="flex items-center gap-2">
+                        <Checkbox
+                            id="announcement-tied-to-meet"
+                            checked={data.tied_to_meet}
+                            onCheckedChange={(checked) =>
+                                setData('tied_to_meet', checked === true)
+                            }
+                        />
+                        <Label
+                            htmlFor="announcement-tied-to-meet"
+                            className="font-normal"
                         >
-                            <SelectTrigger id="announcement-meet">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="general">
-                                    General (no meet)
-                                </SelectItem>
-                                {meetOptions.map((option) => (
-                                    <SelectItem
-                                        key={option.id}
-                                        value={String(option.id)}
-                                    >
-                                        {option.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <InputError message={errors.meet_id} />
+                            Tied to the meet (unchecked = general)
+                        </Label>
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="announcement-title">Title</Label>
@@ -178,7 +149,6 @@ function AnnouncementFormDialog({
 export default function Announcements({
     announcements,
     filters,
-    meetOptions,
 }: Props) {
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<Announcement | null>(null);
@@ -366,7 +336,6 @@ export default function Announcements({
             <AnnouncementFormDialog
                 key={editing?.id ?? 'create'}
                 announcement={editing}
-                meetOptions={meetOptions}
                 open={formOpen}
                 onOpenChange={setFormOpen}
             />

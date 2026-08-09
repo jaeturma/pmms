@@ -36,19 +36,15 @@ class MeetSportAssignmentController extends Controller
      * authenticated role, same as the Districts/Schools/Sports/Events
      * "view lists" precedent — assignment rosters aren't minors data.
      */
-    public function index(Request $request): Response
+    public function index(): Response
     {
-        $meetId = $request->integer('meet_id');
-
         $query = MeetSportAssignment::query()
-            ->with(['meetSport.meet:id,name', 'meetSport.sport:id,name', 'sportCategory:id,display_name', 'user:id,name,email'])
-            ->when($meetId > 0, fn ($q) => $q->whereHas('meetSport', fn ($ms) => $ms->where('meet_id', $meetId)))
+            ->with(['meetSport.sport:id,name', 'sportCategory:id,display_name', 'user:id,name,email'])
             ->orderByDesc('id');
 
         return Inertia::render('meet-sport-assignments/index', [
             'assignments' => $query->get()->map(fn (MeetSportAssignment $assignment): array => [
                 'id' => $assignment->id,
-                'meet' => $assignment->meetSport->meet->name,
                 'sport' => $assignment->meetSport->sport->name,
                 'category' => $assignment->sportCategory?->display_name,
                 'user' => $assignment->user->name,
@@ -61,15 +57,12 @@ class MeetSportAssignmentController extends Controller
                 'status' => $assignment->status->value,
                 'status_label' => $assignment->status->label(),
             ]),
-            'filters' => ['meet_id' => $meetId > 0 ? $meetId : null],
-            'meetOptions' => Meet::query()->orderByDesc('id')->get(['id', 'name'])
-                ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]),
             'meetSportOptions' => MeetSport::query()
-                ->with(['meet:id,name', 'sport:id,name'])
-                ->get(['id', 'meet_id', 'sport_id'])
+                ->where('meet_id', Meet::current()->id)
+                ->with('sport:id,name')
+                ->get(['id', 'sport_id'])
                 ->map(fn (MeetSport $meetSport): array => [
                     'id' => $meetSport->id,
-                    'meet_id' => $meetSport->meet_id,
                     'label' => $meetSport->sport->name,
                 ]),
             'roleOptions' => array_map(

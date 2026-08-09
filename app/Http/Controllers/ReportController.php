@@ -123,14 +123,10 @@ class ReportController extends Controller
      * School participation summary: per-school counts, optionally for one
      * meet. Aggregates only — open to every authenticated user.
      */
-    public function participation(Request $request): Response
+    public function participation(): Response
     {
         return Inertia::render('reports/school-participation', [
-            'rows' => $this->participationRows($request),
-            'filters' => ['meet_id' => $request->integer('meet_id') ?: null],
-            'meetOptions' => Meet::query()
-                ->orderByDesc('starts_at')
-                ->get(['id', 'name']),
+            'rows' => $this->participationRows(),
             'generatedAt' => now()->toDayDateTimeString(),
         ]);
     }
@@ -138,17 +134,15 @@ class ReportController extends Controller
     /**
      * CSV of the participation summary, audited like the other exports.
      */
-    public function downloadParticipation(Request $request): StreamedResponse
+    public function downloadParticipation(): StreamedResponse
     {
-        $meetId = $request->integer('meet_id');
-
         $this->audit->record('report.participation_exported', null, [
-            'meet' => $meetId > 0 ? Meet::query()->find($meetId)?->name : 'all meets',
+            'meet' => Meet::current()->name,
         ]);
 
         $rows = [['School', Division::current()->areaLabel(), 'Delegations', 'Athletes', 'Personnel', 'Entries']];
 
-        foreach ($this->participationRows($request) as $row) {
+        foreach ($this->participationRows() as $row) {
             $rows[] = [
                 $row['school'], $row['district'], $row['delegations_count'],
                 $row['athletes_count'], $row['personnel_count'], $row['entries_count'],
@@ -205,18 +199,17 @@ class ReportController extends Controller
      */
     public function tallyReport(Request $request, MedalTallyService $tally): Response
     {
-        $meetId = $request->integer('meet_id');
+        $meet = Meet::current();
         $sportId = $request->integer('sport_id');
 
-        $standings = $tally->standings($meetId > 0 ? $meetId : null, $sportId > 0 ? $sportId : null);
+        $standings = $tally->standings($meet->id, $sportId > 0 ? $sportId : null);
 
         return Inertia::render('reports/medal-tally', [
             'schools' => $standings['schools'],
             'districts' => $standings['districts'],
-            'meet' => $meetId > 0 ? Meet::query()->find($meetId)?->name : null,
+            'meet' => $meet->name,
             'sport' => $sportId > 0 ? Sport::query()->find($sportId)?->name : null,
             'filters' => [
-                'meet_id' => $meetId > 0 ? $meetId : null,
                 'sport_id' => $sportId > 0 ? $sportId : null,
             ],
             'generatedAt' => now()->toDayDateTimeString(),
@@ -228,13 +221,13 @@ class ReportController extends Controller
      */
     public function downloadTallyReport(Request $request, MedalTallyService $tally): StreamedResponse
     {
-        $meetId = $request->integer('meet_id');
+        $meet = Meet::current();
         $sportId = $request->integer('sport_id');
 
-        $standings = $tally->standings($meetId > 0 ? $meetId : null, $sportId > 0 ? $sportId : null);
+        $standings = $tally->standings($meet->id, $sportId > 0 ? $sportId : null);
 
         $this->audit->record('report.tally_exported', null, [
-            'meet' => $meetId > 0 ? Meet::query()->find($meetId)?->name : 'all meets',
+            'meet' => $meet->name,
             'sport' => $sportId > 0 ? Sport::query()->find($sportId)?->name : 'all sports',
         ]);
 
@@ -491,23 +484,19 @@ class ReportController extends Controller
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function participationRows(Request $request): array
+    private function participationRows(): array
     {
-        $meetId = $request->integer('meet_id');
+        $meetId = Meet::current()->id;
 
         // Athletes, personnel, and entries reach their meet through their
         // own delegation (not a direct meet_id column), so the filter has
         // to go through that relation rather than a plain where().
-        $byDelegationMeet = fn (Builder $query) => $meetId > 0
-            ? $query->whereHas('delegation', fn (Builder $delegation) => $delegation->where('meet_id', $meetId))
-            : $query;
+        $byDelegationMeet = fn (Builder $query) => $query->whereHas('delegation', fn (Builder $delegation) => $delegation->where('meet_id', $meetId));
 
         return School::query()
             ->with('district:id,name')
             ->withCount([
-                'delegations' => fn (Builder $query) => $meetId > 0
-                    ? $query->where('meet_id', $meetId)
-                    : $query,
+                'delegations' => fn (Builder $query) => $query->where('meet_id', $meetId),
                 'athletes' => $byDelegationMeet,
                 'personnel' => $byDelegationMeet,
                 'entries' => $byDelegationMeet,

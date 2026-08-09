@@ -54,8 +54,6 @@ type Trip = {
 
 type Vehicle = {
     id: number;
-    meet_id: number;
-    meet: string;
     plate_number: string;
     type: string | null;
     capacity: number | null;
@@ -67,8 +65,6 @@ type Vehicle = {
 
 type TransportRequestRow = {
     id: number;
-    meet_id: number;
-    meet: string;
     delegation_id: number;
     delegation: string;
     pickup_location: string;
@@ -78,13 +74,11 @@ type TransportRequestRow = {
     notes: string | null;
 };
 
-type Option = { id: number; meet_id?: number; label: string };
+type Option = { id: number; label: string };
 
 type Props = {
     vehicles: Vehicle[];
     requests: TransportRequestRow[];
-    filters: { meet_id: number | null };
-    meetOptions: Option[];
     delegationOptions: Option[];
     canManage: boolean;
 };
@@ -101,14 +95,11 @@ const tripStatusOptions = [
 function CreateVehicleDialog({
     open,
     onOpenChange,
-    meetOptions,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    meetOptions: Option[];
 }) {
     const { data, setData, post, processing, errors, reset } = useForm<{
-        meet_id: string;
         plate_number: string;
         type: string;
         capacity: string;
@@ -116,7 +107,6 @@ function CreateVehicleDialog({
         driver_phone: string;
         notes: string;
     }>({
-        meet_id: '',
         plate_number: '',
         type: '',
         capacity: '',
@@ -152,28 +142,6 @@ reset();
                     <DialogTitle>Add vehicle</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="vehicle-meet">Meet</Label>
-                        <Select
-                            value={data.meet_id}
-                            onValueChange={(value) => setData('meet_id', value)}
-                        >
-                            <SelectTrigger id="vehicle-meet">
-                                <SelectValue placeholder="Select a meet" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {meetOptions.map((meet) => (
-                                    <SelectItem
-                                        key={meet.id}
-                                        value={String(meet.id)}
-                                    >
-                                        {meet.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <InputError message={errors.meet_id} />
-                    </div>
                     <div className="space-y-2">
                         <Label htmlFor="vehicle-plate">Plate number</Label>
                         <Input
@@ -580,20 +548,13 @@ function VehicleCard({
 }) {
     const [dispatchOpen, setDispatchOpen] = useState(false);
 
-    const vehicleDelegationOptions = delegationOptions.filter(
-        (d) => d.meet_id === vehicle.meet_id,
-    );
-    const vehiclePendingRequests = pendingRequests.filter(
-        (r) => r.meet_id === vehicle.meet_id,
-    );
-
     return (
         <Card>
             <CardHeader className="flex flex-row items-start justify-between gap-4">
                 <div>
                     <CardTitle>{vehicle.plate_number}</CardTitle>
                     <p className="text-sm text-muted-foreground">
-                        {vehicle.type ?? 'Vehicle'} — {vehicle.meet}
+                        {vehicle.type ?? 'Vehicle'}
                         {vehicle.capacity && ` — capacity ${vehicle.capacity}`}
                     </p>
                     {(vehicle.driver_name || vehicle.driver_phone) && (
@@ -731,8 +692,8 @@ function VehicleCard({
                     vehicleId={vehicle.id}
                     open={dispatchOpen}
                     onOpenChange={setDispatchOpen}
-                    delegationOptions={vehicleDelegationOptions}
-                    pendingRequests={vehiclePendingRequests}
+                    delegationOptions={delegationOptions}
+                    pendingRequests={pendingRequests}
                 />
             )}
         </Card>
@@ -742,20 +703,11 @@ function VehicleCard({
 export default function Transport({
     vehicles,
     requests,
-    filters,
-    meetOptions,
     delegationOptions,
     canManage,
 }: Props) {
     const [createVehicleOpen, setCreateVehicleOpen] = useState(false);
     const [createRequestOpen, setCreateRequestOpen] = useState(false);
-
-    const applyMeetFilter = (value: string) => {
-        router.get(index().url, value === 'all' ? {} : { meet_id: value }, {
-            preserveState: true,
-            preserveScroll: true,
-        });
-    };
 
     return (
         <>
@@ -763,7 +715,7 @@ export default function Transport({
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
                     title="Transport"
-                    description="Vehicle roster, trip dispatch, and transport requests per meet."
+                    description="Vehicle roster, trip dispatch, and transport requests."
                     actions={
                         <div className="flex gap-2">
                             <Button
@@ -784,23 +736,6 @@ export default function Transport({
                         </div>
                     }
                 />
-
-                <Select
-                    value={filters.meet_id ? String(filters.meet_id) : 'all'}
-                    onValueChange={applyMeetFilter}
-                >
-                    <SelectTrigger className="w-64" aria-label="Filter by meet">
-                        <SelectValue placeholder="All meets" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All meets</SelectItem>
-                        {meetOptions.map((meet) => (
-                            <SelectItem key={meet.id} value={String(meet.id)}>
-                                {meet.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
 
                 {requests.length > 0 && (
                     <Card>
@@ -884,7 +819,6 @@ export default function Transport({
                 <CreateVehicleDialog
                     open={createVehicleOpen}
                     onOpenChange={setCreateVehicleOpen}
-                    meetOptions={meetOptions}
                 />
             )}
             <CreateRequestDialog

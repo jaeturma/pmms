@@ -28,13 +28,12 @@ class EvacuationRouteController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'meet_id' => ['required', 'integer', Rule::exists('meets', 'id')],
             'venue_id' => ['required', 'integer', Rule::exists('venues', 'id')],
             'name' => ['required', 'string', 'max:120'],
             'description' => ['required', 'string', 'max:2000'],
         ]);
 
-        $meet = Meet::query()->findOrFail((int) $validated['meet_id']);
+        $meet = Meet::current();
         abort_unless($this->policy->manage($request->user(), $meet), 403);
 
         $route = EvacuationRoute::create([
@@ -53,12 +52,11 @@ class EvacuationRouteController extends Controller
     public function update(Request $request, EvacuationRoute $evacuationRoute): RedirectResponse
     {
         $validated = $request->validate([
-            'meet_id' => ['required', 'integer', Rule::exists('meets', 'id')],
             'name' => ['required', 'string', 'max:120'],
             'description' => ['required', 'string', 'max:2000'],
         ]);
 
-        $meet = Meet::query()->findOrFail((int) $validated['meet_id']);
+        $meet = Meet::current();
         abort_unless($this->policy->manage($request->user(), $meet), 403);
 
         $evacuationRoute->fill([
@@ -75,11 +73,7 @@ class EvacuationRouteController extends Controller
 
     public function destroy(Request $request, EvacuationRoute $evacuationRoute): RedirectResponse
     {
-        $validated = $request->validate([
-            'meet_id' => ['required', 'integer', Rule::exists('meets', 'id')],
-        ]);
-
-        $meet = Meet::query()->findOrFail((int) $validated['meet_id']);
+        $meet = Meet::current();
         abort_unless($this->policy->manage($request->user(), $meet), 403);
 
         $context = ['meet' => $meet->name, 'name' => $evacuationRoute->name];

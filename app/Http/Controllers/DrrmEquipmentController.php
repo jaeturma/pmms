@@ -26,17 +26,16 @@ class DrrmEquipmentController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'meet_id' => ['required', 'integer', Rule::exists('meets', 'id')],
             'name' => ['required', 'string', 'max:120'],
             'quantity' => ['required', 'integer', 'min:1'],
             'venue_id' => ['nullable', 'integer', Rule::exists('venues', 'id')],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $meet = Meet::query()->findOrFail((int) $validated['meet_id']);
+        $meet = Meet::current();
         abort_unless($this->policy->manage($request->user(), $meet), 403);
 
-        $equipment = DrrmEquipment::create($validated);
+        $equipment = DrrmEquipment::create([...$validated, 'meet_id' => $meet->id]);
 
         $this->audit->record('drrm_equipment.created', $equipment, ['meet' => $meet->name, 'name' => $equipment->name]);
 

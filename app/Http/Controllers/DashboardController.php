@@ -33,14 +33,10 @@ class DashboardController extends Controller
      */
     public function index(Request $request, MedalTallyService $tally): Response
     {
-        $currentMeet = Meet::query()
-            ->where('status', '!=', MeetStatus::Completed->value)
-            ->withCount('events')
-            ->orderByDesc('starts_at')
-            ->first();
+        $currentMeet = Meet::current()->loadCount('events');
 
         return Inertia::render('dashboard', [
-            'currentMeet' => $currentMeet === null ? null : [
+            'currentMeet' => [
                 'name' => $currentMeet->name,
                 'school_year' => $currentMeet->school_year,
                 'status' => $currentMeet->status->value,
@@ -122,12 +118,9 @@ class DashboardController extends Controller
      */
     private function operations(Request $request, MedalTallyService $tally): ?array
     {
-        $meet = Meet::query()
-            ->where('status', MeetStatus::Active->value)
-            ->orderByDesc('starts_at')
-            ->first();
+        $meet = Meet::current();
 
-        if ($meet === null) {
+        if ($meet->status !== MeetStatus::Active) {
             return null;
         }
 

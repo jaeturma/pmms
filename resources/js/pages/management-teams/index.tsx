@@ -52,7 +52,6 @@ type Member = {
 
 type Team = {
     id: number;
-    meet: string;
     team_type: string;
     team_type_label: string;
     name: string;
@@ -67,8 +66,6 @@ type ValueLabel = { value: string; label: string };
 
 type Props = {
     teams: Team[];
-    filters: { meet_id: number | null };
-    meetOptions: Option[];
     teamTypeOptions: ValueLabel[];
     teamStatusOptions: ValueLabel[];
     memberStatusOptions: ValueLabel[];
@@ -89,21 +86,17 @@ const memberStatusVariant: Record<
 function CreateTeamDialog({
     open,
     onOpenChange,
-    meetOptions,
     teamTypeOptions,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    meetOptions: Option[];
     teamTypeOptions: ValueLabel[];
 }) {
     const { data, setData, post, processing, errors, reset } = useForm<{
-        meet_id: string;
         team_type: string;
         name: string;
         description: string;
     }>({
-        meet_id: '',
         team_type: '',
         name: '',
         description: '',
@@ -136,30 +129,6 @@ function CreateTeamDialog({
                     <DialogTitle>Add team</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="team-meet">Meet</Label>
-                        <Select
-                            value={data.meet_id}
-                            onValueChange={(value) =>
-                                setData('meet_id', value)
-                            }
-                        >
-                            <SelectTrigger id="team-meet">
-                                <SelectValue placeholder="Select a meet" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {meetOptions.map((meet) => (
-                                    <SelectItem
-                                        key={meet.id}
-                                        value={String(meet.id)}
-                                    >
-                                        {meet.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <InputError message={errors.meet_id} />
-                    </div>
                     <div className="space-y-2">
                         <Label htmlFor="team-type">Team type</Label>
                         <Select
@@ -466,7 +435,7 @@ function TeamCard({
                         <Badge variant="outline">{team.status_label}</Badge>
                     </CardTitle>
                     <p className="text-sm text-muted-foreground">
-                        {team.team_type_label} — {team.meet}
+                        {team.team_type_label}
                     </p>
                     {team.description && (
                         <p className="mt-1 text-sm text-muted-foreground">
@@ -646,8 +615,6 @@ function TeamCard({
 
 export default function ManagementTeams({
     teams,
-    filters,
-    meetOptions,
     teamTypeOptions,
     teamStatusOptions,
     memberStatusOptions,
@@ -656,21 +623,13 @@ export default function ManagementTeams({
 }: Props) {
     const [createOpen, setCreateOpen] = useState(false);
 
-    const applyMeetFilter = (value: string) => {
-        router.get(
-            index().url,
-            value === 'all' ? {} : { meet_id: value },
-            { preserveState: true, preserveScroll: true },
-        );
-    };
-
     return (
         <>
             <Head title="Management Teams" />
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
                     title="Management Teams"
-                    description="Top Management, Meet Management, Results Committee, DSAC, ICT, Supply, Food, Billeting, Transport, Medical, and DRRM team membership per meet."
+                    description="Top Management, Meet Management, Results Committee, DSAC, ICT, Supply, Food, Billeting, Transport, Medical, and DRRM team membership."
                     actions={
                         canManage && (
                             <Button onClick={() => setCreateOpen(true)}>
@@ -680,23 +639,6 @@ export default function ManagementTeams({
                         )
                     }
                 />
-
-                <Select
-                    value={filters.meet_id ? String(filters.meet_id) : 'all'}
-                    onValueChange={applyMeetFilter}
-                >
-                    <SelectTrigger className="w-64" aria-label="Filter by meet">
-                        <SelectValue placeholder="All meets" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All meets</SelectItem>
-                        {meetOptions.map((meet) => (
-                            <SelectItem key={meet.id} value={String(meet.id)}>
-                                {meet.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
 
                 {teams.length === 0 ? (
                     <EmptyState
@@ -723,7 +665,6 @@ export default function ManagementTeams({
             <CreateTeamDialog
                 open={createOpen}
                 onOpenChange={setCreateOpen}
-                meetOptions={meetOptions}
                 teamTypeOptions={teamTypeOptions}
             />
         </>

@@ -48,31 +48,14 @@ class MedicalClearanceController extends Controller
 
         abort_unless($this->policy->viewAny($user), 403);
 
-        $meetId = $request->integer('meet_id');
         $accessibleMeetIds = $this->accessibleMeetIds($user, ManagementTeamType::Medical);
         $detailMeetIds = $this->detailMeetIds($user);
 
         $clearances = MedicalClearance::query()
-            ->with(['meet:id,name', 'athlete:id,delegation_id,first_name,last_name', 'personnel:id,delegation_id,first_name,last_name'])
+            ->with(['athlete:id,delegation_id,first_name,last_name', 'personnel:id,delegation_id,first_name,last_name'])
             ->when($accessibleMeetIds !== null, fn ($q) => $q->whereIn('meet_id', $accessibleMeetIds))
-            ->when($meetId > 0, fn ($q) => $q->where('meet_id', $meetId))
             ->orderByDesc('id')
             ->get();
-
-        $meetOptions = Meet::query()
-            ->when($accessibleMeetIds !== null, fn ($q) => $q->whereIn('id', $accessibleMeetIds))
-            ->orderByDesc('id')
-            ->get(['id', 'name'])
-            ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]);
-
-        // Distinct from meetOptions above: Organizer sees every meet's
-        // aggregate status (viewAny), but MedicalPolicy::manage() only
-        // allows Admin/Medical-Team — the create/edit dialog's meet
-        // picker must only offer meets this user can actually manage.
-        $manageableMeetOptions = $user->hasRole(UserRole::Admin)
-            ? $meetOptions
-            : Meet::query()->whereIn('id', $detailMeetIds)->orderByDesc('id')->get(['id', 'name'])
-                ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]);
 
         return Inertia::render('medical/index', [
             'clearances' => $clearances->map(function (MedicalClearance $clearance) use ($user, $detailMeetIds): array {
@@ -80,8 +63,6 @@ class MedicalClearanceController extends Controller
 
                 return [
                     'id' => $clearance->id,
-                    'meet_id' => $clearance->meet_id,
-                    'meet' => $clearance->meet->name,
                     'person' => $clearance->personName(),
                     'person_type' => $clearance->athlete_id !== null ? 'athlete' : 'personnel',
                     'status' => $clearance->status->value,
@@ -94,19 +75,19 @@ class MedicalClearanceController extends Controller
                     'notes' => $canViewDetail ? $clearance->notes : null,
                 ];
             }),
-            'filters' => ['meet_id' => $meetId > 0 ? $meetId : null],
-            'meetOptions' => $meetOptions,
-            'manageableMeetOptions' => $manageableMeetOptions,
-            'athleteOptions' => Athlete::query()->with('delegation:id,meet_id')->get(['id', 'delegation_id', 'first_name', 'last_name'])
+            'canManage' => $this->policy->manage($user, Meet::current()),
+            'athleteOptions' => Athlete::query()
+                ->whereHas('delegation', fn ($q) => $q->where('meet_id', Meet::current()->id))
+                ->get(['id', 'first_name', 'last_name'])
                 ->map(fn (Athlete $athlete): array => [
                     'id' => $athlete->id,
-                    'meet_id' => $athlete->delegation->meet_id,
                     'label' => "{$athlete->first_name} {$athlete->last_name}",
                 ]),
-            'personnelOptions' => Personnel::query()->with('delegation:id,meet_id')->get(['id', 'delegation_id', 'first_name', 'last_name'])
+            'personnelOptions' => Personnel::query()
+                ->whereHas('delegation', fn ($q) => $q->where('meet_id', Meet::current()->id))
+                ->get(['id', 'first_name', 'last_name'])
                 ->map(fn (Personnel $personnel): array => [
                     'id' => $personnel->id,
-                    'meet_id' => $personnel->delegation->meet_id,
                     'label' => "{$personnel->first_name} {$personnel->last_name}",
                 ]),
             'statusOptions' => array_map(
@@ -174,7 +155,6 @@ class MedicalClearanceController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'meet_id' => ['required', 'integer', Rule::exists('meets', 'id')],
             'athlete_id' => ['nullable', 'integer', Rule::exists('athletes', 'id'), 'required_without:personnel_id', 'prohibits:personnel_id'],
             'personnel_id' => ['nullable', 'integer', Rule::exists('personnel', 'id')],
             'status' => ['required', Rule::enum(MedicalClearanceStatus::class)],
@@ -185,11 +165,11 @@ class MedicalClearanceController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $meet = Meet::query()->findOrFail((int) $validated['meet_id']);
+        $meet = Meet::current();
         abort_unless($this->policy->manage($request->user(), $meet), 403);
 
         if (MedicalClearance::query()
-            ->where('meet_id', $validated['meet_id'])
+            ->where('meet_id', $meet->id)
             ->where(function ($q) use ($validated) {
                 if (! empty($validated['athlete_id'])) {
                     $q->where('athlete_id', $validated['athlete_id']);
@@ -205,6 +185,7 @@ class MedicalClearanceController extends Controller
 
         $clearance = MedicalClearance::create([
             ...$validated,
+            'meet_id' => $meet->id,
             'consent_confirmed' => $request->boolean('consent_confirmed'),
             'consent_confirmed_at' => $request->boolean('consent_confirmed') ? now() : null,
         ]);

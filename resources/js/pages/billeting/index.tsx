@@ -50,8 +50,6 @@ type Assignment = {
 
 type Venue = {
     id: number;
-    meet_id: number;
-    meet: string;
     name: string;
     address: string | null;
     capacity: number | null;
@@ -61,12 +59,10 @@ type Venue = {
     assignments: Assignment[];
 };
 
-type Option = { id: number; meet_id?: number; label: string };
+type Option = { id: number; label: string };
 
 type Props = {
     venues: Venue[];
-    filters: { meet_id: number | null };
-    meetOptions: Option[];
     venueOptions: Option[];
     delegationOptions: Option[];
     canManage: boolean;
@@ -81,14 +77,11 @@ const assignmentStatusOptions = [
 function CreateVenueDialog({
     open,
     onOpenChange,
-    meetOptions,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    meetOptions: Option[];
 }) {
     const { data, setData, post, processing, errors, reset } = useForm<{
-        meet_id: string;
         name: string;
         address: string;
         capacity: string;
@@ -96,7 +89,6 @@ function CreateVenueDialog({
         contact_phone: string;
         notes: string;
     }>({
-        meet_id: '',
         name: '',
         address: '',
         capacity: '',
@@ -132,28 +124,6 @@ reset();
                     <DialogTitle>Add billeting venue</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="venue-meet">Meet</Label>
-                        <Select
-                            value={data.meet_id}
-                            onValueChange={(value) => setData('meet_id', value)}
-                        >
-                            <SelectTrigger id="venue-meet">
-                                <SelectValue placeholder="Select a meet" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {meetOptions.map((meet) => (
-                                    <SelectItem
-                                        key={meet.id}
-                                        value={String(meet.id)}
-                                    >
-                                        {meet.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <InputError message={errors.meet_id} />
-                    </div>
                     <div className="space-y-2">
                         <Label htmlFor="venue-name">Name</Label>
                         <Input
@@ -375,18 +345,11 @@ function VenueCard({
         });
     };
 
-    const venueDelegationOptions = delegationOptions.filter(
-        (d) => d.meet_id === venue.meet_id,
-    );
-
     return (
         <Card>
             <CardHeader className="flex flex-row items-start justify-between gap-4">
                 <div>
                     <CardTitle>{venue.name}</CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                        {venue.meet}
-                    </p>
                     {venue.address && (
                         <p className="mt-1 text-sm text-muted-foreground">
                             {venue.address}
@@ -653,7 +616,7 @@ function VenueCard({
                         venueId={venue.id}
                         open={assignOpen}
                         onOpenChange={setAssignOpen}
-                        delegationOptions={venueDelegationOptions}
+                        delegationOptions={delegationOptions}
                     />
                 </>
             )}
@@ -663,19 +626,10 @@ function VenueCard({
 
 export default function Billeting({
     venues,
-    filters,
-    meetOptions,
     delegationOptions,
     canManage,
 }: Props) {
     const [createOpen, setCreateOpen] = useState(false);
-
-    const applyMeetFilter = (value: string) => {
-        router.get(index().url, value === 'all' ? {} : { meet_id: value }, {
-            preserveState: true,
-            preserveScroll: true,
-        });
-    };
 
     return (
         <>
@@ -683,7 +637,7 @@ export default function Billeting({
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
                     title="Billeting"
-                    description="Billeting venues and delegation assignments per meet."
+                    description="Billeting venues and delegation assignments."
                     actions={
                         canManage && (
                             <Button onClick={() => setCreateOpen(true)}>
@@ -693,23 +647,6 @@ export default function Billeting({
                         )
                     }
                 />
-
-                <Select
-                    value={filters.meet_id ? String(filters.meet_id) : 'all'}
-                    onValueChange={applyMeetFilter}
-                >
-                    <SelectTrigger className="w-64" aria-label="Filter by meet">
-                        <SelectValue placeholder="All meets" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All meets</SelectItem>
-                        {meetOptions.map((meet) => (
-                            <SelectItem key={meet.id} value={String(meet.id)}>
-                                {meet.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
 
                 {venues.length === 0 ? (
                     <EmptyState
@@ -735,7 +672,6 @@ export default function Billeting({
                 <CreateVenueDialog
                     open={createOpen}
                     onOpenChange={setCreateOpen}
-                    meetOptions={meetOptions}
                 />
             )}
         </>

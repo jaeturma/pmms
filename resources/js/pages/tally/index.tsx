@@ -65,11 +65,9 @@ type Props = {
     bySport: SportRow[];
     recentMedals: Totals;
     filters: {
-        meet_id: number | null;
         sport_id: number | null;
         age_division: string | null;
     };
-    meetOptions: Option[];
     sportOptions: Option[];
     ageDivisionOptions: StringOption[];
     generatedAt: string;
@@ -83,7 +81,6 @@ export default function Tally({
     bySport,
     recentMedals,
     filters,
-    meetOptions,
     sportOptions,
     ageDivisionOptions,
     generatedAt,
@@ -92,20 +89,14 @@ export default function Tally({
     const areaLabel = division.areaLabel;
 
     const applyFilters = (overrides: {
-        meet_id?: string;
         sport_id?: string;
         age_division?: string;
     }) => {
         const params: Record<string, string> = {};
 
-        const meetId = overrides.meet_id ?? String(filters.meet_id ?? '');
         const sportId = overrides.sport_id ?? String(filters.sport_id ?? '');
         const ageDivision =
             overrides.age_division ?? filters.age_division ?? '';
-
-        if (meetId && meetId !== 'all') {
-            params.meet_id = meetId;
-        }
 
         if (sportId && sportId !== 'all') {
             params.sport_id = sportId;
@@ -122,7 +113,6 @@ export default function Tally({
     };
 
     const reportQuery = {
-        ...(filters.meet_id ? { meet_id: filters.meet_id } : {}),
         ...(filters.sport_id ? { sport_id: filters.sport_id } : {}),
     };
 
@@ -161,30 +151,6 @@ export default function Tally({
                 />
 
                 <div className="flex flex-wrap gap-2">
-                    <Select
-                        value={String(filters.meet_id ?? 'all')}
-                        onValueChange={(value) =>
-                            applyFilters({ meet_id: value })
-                        }
-                    >
-                        <SelectTrigger
-                            className="w-56"
-                            aria-label="Filter by meet"
-                        >
-                            <SelectValue placeholder="All meets" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All meets</SelectItem>
-                            {meetOptions.map((option) => (
-                                <SelectItem
-                                    key={option.id}
-                                    value={String(option.id)}
-                                >
-                                    {option.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
                     <Select
                         value={String(filters.sport_id ?? 'all')}
                         onValueChange={(value) =>

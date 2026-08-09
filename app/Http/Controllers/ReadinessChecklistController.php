@@ -25,15 +25,14 @@ class ReadinessChecklistController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'meet_id' => ['required', 'integer', Rule::exists('meets', 'id')],
             'category' => ['required', Rule::enum(DrrmCategory::class)],
             'item' => ['required', 'string', 'max:200'],
         ]);
 
-        $meet = Meet::query()->findOrFail((int) $validated['meet_id']);
+        $meet = Meet::current();
         abort_unless($this->policy->manage($request->user(), $meet), 403);
 
-        $checklist = ReadinessChecklist::create($validated);
+        $checklist = ReadinessChecklist::create([...$validated, 'meet_id' => $meet->id]);
 
         $this->audit->record('readiness_checklist.created', $checklist, ['meet' => $meet->name, 'item' => $checklist->item]);
 
