@@ -5,7 +5,6 @@ import { PortalThemeToggle } from '@/apps/portal/components/theme-toggle';
 import { PortalNavDropdown } from '@/apps/portal/layout/portal-nav-dropdown';
 import { PortalNavigation } from '@/apps/portal/layout/portal-navigation';
 import type { PortalNavItem } from '@/apps/portal/layout/portal-navigation';
-import { PORTAL_SPORTS } from '@/apps/portal/lib/sport-terminology';
 import type { PortalNavShared } from '@/apps/portal/types';
 import { dashboard, home, login } from '@/routes';
 import {
@@ -16,7 +15,6 @@ import {
     news as publicNews,
     results as publicResults,
     search as publicSearch,
-    sportPortal,
     sports as publicSports,
     sportsDirectory as publicSportsDirectory,
     tally as publicTally,
@@ -79,11 +77,6 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
         },
     );
 
-    const sportItems = PORTAL_SPORTS.map((sport) => ({
-        label: sport.name,
-        href: sportPortal(sport.slug).url,
-    }));
-
     const moreItems = nav
         ? [
               { label: 'Sports directory', href: publicSports(nav.meetId).url },
@@ -120,7 +113,6 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
 
                 <div className="hidden items-center md:flex">
                     <PortalNavigation items={items} />
-                    <PortalNavDropdown label="Sports" items={sportItems} />
                     {moreItems.length > 0 && (
                         <PortalNavDropdown label="More" items={moreItems} />
                     )}
@@ -161,10 +153,6 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
                     <PortalNavigation
                         items={[
                             ...items,
-                            ...sportItems.map((item) => ({
-                                ...item,
-                                active: false,
-                            })),
                             ...moreItems.map((item) => ({
                                 ...item,
                                 active: false,

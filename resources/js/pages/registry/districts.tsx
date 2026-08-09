@@ -47,6 +47,7 @@ type District = {
     active: boolean;
     schools_count: number;
     logo_url: string | null;
+    team_logo_url: string | null;
 };
 
 type Props = {
@@ -72,12 +73,16 @@ function DistrictFormDialog({
         nickname: string;
         logo: File | null;
         remove_logo: boolean;
+        team_logo: File | null;
+        remove_team_logo: boolean;
     }>({
         ...(district ? { _method: 'put' } : {}),
         name: district?.name ?? '',
         nickname: district?.nickname ?? '',
         logo: null,
         remove_logo: false,
+        team_logo: null,
+        remove_team_logo: false,
     });
 
     const submit = (e: FormEvent) => {
@@ -189,6 +194,68 @@ function DistrictFormDialog({
                             }}
                         />
                         <InputError message={errors.logo} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="district-team-logo">
+                            Team logo (optional, max 2MB)
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                            Shown large on the public Teams page — separate
+                            from the crest above, which is the municipality's
+                            official seal.
+                        </p>
+                        {district?.team_logo_url && !data.team_logo && !data.remove_team_logo && (
+                            <div className="flex items-center gap-3">
+                                <img
+                                    src={district.team_logo_url}
+                                    alt=""
+                                    className="size-12 rounded-md border object-cover"
+                                />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setData('remove_team_logo', true)}
+                                >
+                                    Remove
+                                </Button>
+                            </div>
+                        )}
+                        {data.remove_team_logo && (
+                            <p className="text-sm text-muted-foreground">
+                                The current team logo will be removed on save.{' '}
+                                <button
+                                    type="button"
+                                    className="underline"
+                                    onClick={() => setData('remove_team_logo', false)}
+                                >
+                                    Undo
+                                </button>
+                            </p>
+                        )}
+                        <Input
+                            id="district-team-logo"
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                                const file = e.target.files?.[0] ?? null;
+
+                                if (file && file.size > MAX_LOGO_SIZE_BYTES) {
+                                    setError('team_logo', 'The team logo must not be larger than 2MB.');
+                                    e.target.value = '';
+
+                                    return;
+                                }
+
+                                clearErrors('team_logo');
+                                setData((current) => ({
+                                    ...current,
+                                    team_logo: file,
+                                    remove_team_logo: false,
+                                }));
+                            }}
+                        />
+                        <InputError message={errors.team_logo} />
                     </div>
                     <DialogFooter>
                         <Button type="submit" disabled={processing}>

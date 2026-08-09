@@ -47,6 +47,7 @@ class DistrictController extends Controller
                     'active' => $district->active,
                     'schools_count' => $district->schools_count,
                     'logo_url' => $district->logoUrl(),
+                    'team_logo_url' => $district->teamLogoUrl(),
                 ]),
             'filters' => ['search' => $search],
             'canManage' => Gate::allows('manage-meet-data'),
@@ -67,16 +68,34 @@ class DistrictController extends Controller
     }
 
     /**
+     * Serve the district's (delegation's) team logo — distinct from the
+     * municipal crest served by `logo()` above.
+     */
+    public function teamLogo(District $district): HttpResponse
+    {
+        $upload = $district->teamLogo;
+
+        abort_if($upload === null, 404);
+
+        return Storage::disk($upload->disk)->response($upload->path, $upload->original_name);
+    }
+
+    /**
      * Create a district.
      */
     public function store(DistrictRequest $request): RedirectResponse
     {
-        $district = new District($request->safe()->except(['logo', 'remove_logo']));
+        $district = new District($request->safe()->except(['logo', 'remove_logo', 'team_logo', 'remove_team_logo']));
+
+        /** @var User $user */
+        $user = $request->user();
 
         if ($request->hasFile('logo')) {
-            /** @var User $user */
-            $user = $request->user();
             $district->logo_upload_id = $this->uploads->store($request->file('logo'), $user, 'logo')->id;
+        }
+
+        if ($request->hasFile('team_logo')) {
+            $district->team_logo_upload_id = $this->uploads->store($request->file('team_logo'), $user, 'team_logo')->id;
         }
 
         $district->save();
@@ -89,17 +108,20 @@ class DistrictController extends Controller
     }
 
     /**
-     * Update a district, optionally replacing or removing its logo.
+     * Update a district, optionally replacing or removing its logo and/or
+     * team logo.
      */
     public function update(DistrictRequest $request, District $district): RedirectResponse
     {
-        $district->fill($request->safe()->except(['logo', 'remove_logo']));
+        $district->fill($request->safe()->except(['logo', 'remove_logo', 'team_logo', 'remove_team_logo']));
+
+        /** @var User $user */
+        $user = $request->user();
 
         $oldLogo = null;
+        $oldTeamLogo = null;
 
         if ($request->hasFile('logo')) {
-            /** @var User $user */
-            $user = $request->user();
             $oldLogo = $district->logo;
             $district->logo_upload_id = $this->uploads->store($request->file('logo'), $user, 'logo')->id;
         } elseif ($request->boolean('remove_logo') && $district->logo_upload_id !== null) {
@@ -107,10 +129,22 @@ class DistrictController extends Controller
             $district->logo_upload_id = null;
         }
 
+        if ($request->hasFile('team_logo')) {
+            $oldTeamLogo = $district->teamLogo;
+            $district->team_logo_upload_id = $this->uploads->store($request->file('team_logo'), $user, 'team_logo')->id;
+        } elseif ($request->boolean('remove_team_logo') && $district->team_logo_upload_id !== null) {
+            $oldTeamLogo = $district->teamLogo;
+            $district->team_logo_upload_id = null;
+        }
+
         $district->save();
 
         if ($oldLogo !== null) {
             $this->uploads->delete($oldLogo);
+        }
+
+        if ($oldTeamLogo !== null) {
+            $this->uploads->delete($oldTeamLogo);
         }
 
         $this->audit->record('district.updated', $district, ['name' => $district->name]);
@@ -163,11 +197,16 @@ class DistrictController extends Controller
         }
 
         $logo = $district->logo;
+        $teamLogo = $district->teamLogo;
 
         $district->delete();
 
         if ($logo !== null) {
             $this->uploads->delete($logo);
+        }
+
+        if ($teamLogo !== null) {
+            $this->uploads->delete($teamLogo);
         }
 
         $this->audit->record('district.deleted', $district, ['name' => $district->name]);

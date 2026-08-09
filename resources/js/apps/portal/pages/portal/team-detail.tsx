@@ -75,7 +75,7 @@ export default function PortalTeamDetail({
 
                 <Link
                     href={teamPlayersCoaches(team.slug).url}
-                    className="self-start text-sm font-semibold text-[var(--portal-accent)]"
+                    className="self-center text-lg font-semibold text-[var(--portal-accent)]"
                 >
                     Players &amp; Coaches →
                 </Link>

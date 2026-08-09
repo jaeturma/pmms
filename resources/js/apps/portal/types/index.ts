@@ -312,6 +312,7 @@ export type PortalMunicipalityTeam = {
     nickname: string | null;
     congressional_district: string | null;
     logo_url: string | null;
+    team_logo_url: string | null;
     athlete_count: number;
     sport_count: number;
     medals: PortalMunicipalityMedals;
@@ -324,6 +325,7 @@ export type PortalMunicipalityProfile = {
     nickname: string | null;
     congressional_district: string | null;
     logo_url: string | null;
+    team_logo_url: string | null;
     athlete_count: number;
     sport_count: number;
 };

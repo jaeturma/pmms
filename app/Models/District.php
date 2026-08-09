@@ -18,10 +18,12 @@ use Illuminate\Support\Carbon;
  * @property int|null $congressional_district_id
  * @property bool $active
  * @property int|null $logo_upload_id
+ * @property int|null $team_logo_upload_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read int|null $schools_count
  * @property-read FileUpload|null $logo
+ * @property-read FileUpload|null $teamLogo
  * @property-read CongressionalDistrict|null $congressionalDistrict
  */
 #[Fillable(['name', 'nickname', 'congressional_district', 'congressional_district_id'])]
@@ -51,10 +53,11 @@ class District extends Model
     }
 
     /**
-     * The municipality's crest/logo, shown on the public portal wherever
-     * this district's name appears. `logo_upload_id` is intentionally kept
-     * out of Fillable (like Athlete's photo_upload_id) — it's only ever set
-     * by DistrictController after a successful upload, never via mass
+     * The municipality's official crest/seal, shown on the public portal
+     * wherever this district's name appears (nav, standings, live
+     * scoreboards). `logo_upload_id` is intentionally kept out of Fillable
+     * (like Athlete's photo_upload_id) — it's only ever set by
+     * DistrictController after a successful upload, never via mass
      * assignment from request input.
      *
      * @return BelongsTo<FileUpload, $this>
@@ -74,6 +77,29 @@ class District extends Model
     public function logoUrl(): ?string
     {
         return $this->logo_upload_id === null ? null : route('districts.logo', $this);
+    }
+
+    /**
+     * The delegation's own team logo — distinct from the municipality's
+     * official crest (`logo`/`logoUrl()`) — shown as the large mark on the
+     * public Teams directory. `team_logo_upload_id` is kept out of
+     * Fillable for the same reason `logo_upload_id` is: only
+     * DistrictController sets it, after a successful upload.
+     *
+     * @return BelongsTo<FileUpload, $this>
+     */
+    public function teamLogo(): BelongsTo
+    {
+        return $this->belongsTo(FileUpload::class, 'team_logo_upload_id');
+    }
+
+    /**
+     * The public URL for this municipality's team logo, or `null` when
+     * none has been uploaded.
+     */
+    public function teamLogoUrl(): ?string
+    {
+        return $this->team_logo_upload_id === null ? null : route('districts.team-logo', $this);
     }
 
     /**

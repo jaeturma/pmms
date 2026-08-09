@@ -167,13 +167,18 @@ class ScoringSession extends Model
     }
 
     /**
-     * A side's real crest, matched by name — `side_a_label`/`side_b_label`
-     * are freeform text entered when the session started (never an FK to
-     * `District`), but they're conventionally a delegation's
-     * `registrantName()`, which for a Province division IS the
-     * municipality's own name. A City division's school-named side, or
+     * A side's logo for live play, matched by name — `side_a_label`/
+     * `side_b_label` are freeform text entered when the session started
+     * (never an FK to `District`), but they're conventionally a
+     * delegation's `registrantName()`, which for a Province division IS
+     * the municipality's own name. A City division's school-named side, or
      * any label that doesn't match a district, simply gets no logo here —
      * `MunicipalityCrest` already falls back to its initials badge.
+     *
+     * Prefers the delegation's own team logo (`District::teamLogo`) over
+     * the municipality's official crest (`District::logo`) — the team logo
+     * is what a delegation competes under, the crest falls back only when
+     * no team logo has been uploaded yet.
      */
     private function districtLogoUrl(?string $label): ?string
     {
@@ -181,7 +186,9 @@ class ScoringSession extends Model
             return null;
         }
 
-        return District::query()->where('name', $label)->first()?->logoUrl();
+        $district = District::query()->where('name', $label)->first();
+
+        return $district?->teamLogoUrl() ?? $district?->logoUrl();
     }
 
     /**

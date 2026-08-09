@@ -28,6 +28,8 @@ class DistrictRequest extends FormRequest
             'nickname' => ['nullable', 'string', 'max:60'],
             'logo' => ['nullable', 'image', 'max:2048'],
             'remove_logo' => ['nullable', 'boolean'],
+            'team_logo' => ['nullable', 'image', 'max:2048'],
+            'remove_team_logo' => ['nullable', 'boolean'],
         ];
     }
 }

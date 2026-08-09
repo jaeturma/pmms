@@ -65,6 +65,7 @@ class PortalTeamsController extends Controller
                         'nickname' => $municipality->nickname,
                         'congressional_district' => $municipality->congressionalDistrict?->name,
                         'logo_url' => $municipality->logoUrl(),
+                        'team_logo_url' => $municipality->teamLogoUrl(),
                         'athlete_count' => $stats['athlete_count'],
                         'sport_count' => $stats['sport_count'],
                         'medals' => [
@@ -100,6 +101,7 @@ class PortalTeamsController extends Controller
                 'nickname' => $district->nickname,
                 'congressional_district' => $district->congressionalDistrict?->name,
                 'logo_url' => $district->logoUrl(),
+                'team_logo_url' => $district->teamLogoUrl(),
                 'athlete_count' => $stats['athlete_count'],
                 'sport_count' => $stats['sport_count'],
             ],

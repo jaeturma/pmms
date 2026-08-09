@@ -3,7 +3,7 @@ import { cn } from '@/apps/portal/lib/utils';
 type MunicipalityCrestProps = {
     name: string;
     logoUrl?: string | null;
-    size?: 'sm' | 'md' | 'lg';
+    size?: 'sm' | 'md' | 'lg' | 'xl';
     /** 'circle' (default) — the usual ringed badge, used for rankings/
      * standings/home. 'square' drops the circular crop and the ring
      * outline entirely, for both the real-logo image and the initials
@@ -53,6 +53,7 @@ const sizeClasses: Record<NonNullable<MunicipalityCrestProps['size']>, string> =
     sm: 'size-8 text-xs ring-1',
     md: 'size-14 text-lg ring-2',
     lg: 'size-20 text-2xl sm:size-24 sm:text-3xl ring-2',
+    xl: 'size-40 text-4xl sm:size-48 sm:text-5xl ring-2',
 };
 
 export function MunicipalityCrest({ name, logoUrl, size = 'md', shape = 'circle', className }: MunicipalityCrestProps) {
