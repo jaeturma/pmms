@@ -1,18 +1,11 @@
-import { Head, router } from '@inertiajs/react';
-import { Trophy } from 'lucide-react';
+import { Head, Link, router } from '@inertiajs/react';
+import { ArrowRight, Trophy } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { PortalBasketballScoreboard } from '@/apps/portal/components/basketball-scoreboard';
-import { PortalBasketballSidebar } from '@/apps/portal/components/basketball-sidebar';
-import { PortalBoxingScoreboard } from '@/apps/portal/components/boxing-scoreboard';
-import { PortalBoxingSidebar } from '@/apps/portal/components/boxing-sidebar';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { PortalHero } from '@/apps/portal/components/hero';
 import { PortalLeadingScorers } from '@/apps/portal/components/leading-scorers';
-import { PortalLiveScoreCard } from '@/apps/portal/components/live-score-card';
 import { PortalScheduleList } from '@/apps/portal/components/schedule-list';
 import { PortalSectionHeader } from '@/apps/portal/components/section-header';
-import { PortalSoftballScoreboard } from '@/apps/portal/components/softball-scoreboard';
-import { PortalSoftballSidebar } from '@/apps/portal/components/softball-sidebar';
 import { PortalSportCategories } from '@/apps/portal/components/sport-categories';
 import { PortalSportDescription } from '@/apps/portal/components/sport-description';
 import { PortalSportEventStrip } from '@/apps/portal/components/sport-event-strip';
@@ -36,7 +29,7 @@ import type {
     PortalSport,
     PortalVenue,
 } from '@/apps/portal/types';
-import { scoreboard as publicScoreboard } from '@/routes/public';
+import { liveSportPortal, scoreboard as publicScoreboard } from '@/routes/public';
 import { poll as pollSportPortal } from '@/routes/public/sport-portal';
 
 const BACKGROUND_REFRESH_INTERVAL_MS = 45000;
@@ -330,31 +323,25 @@ export default function PortalSportPortal({
                             Reconnecting — scores may be behind
                         </span>
                     )}
-                    {liveNow === null ? (
-                        <PortalEmptyState
-                            icon={Trophy}
-                            title="Nothing live right now"
-                        />
-                    ) : showBasketballLive ? (
-                        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[2.15fr_0.9fr] lg:items-start">
-                            <PortalBasketballScoreboard liveNow={liveNow} />
-                            <PortalBasketballSidebar
-                                session={liveNow.session}
-                            />
-                        </div>
-                    ) : showSoftballLive ? (
-                        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[2.15fr_0.95fr] lg:items-start">
-                            <PortalSoftballScoreboard liveNow={liveNow} />
-                            <PortalSoftballSidebar session={liveNow.session} />
-                        </div>
-                    ) : showBoxingLive ? (
-                        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[2.15fr_0.95fr] lg:items-start">
-                            <PortalBoxingScoreboard liveNow={liveNow} />
-                            <PortalBoxingSidebar liveNow={liveNow} />
-                        </div>
-                    ) : (
-                        <PortalLiveScoreCard liveNow={liveNow} />
-                    )}
+                    <Link
+                        href={liveSportPortal(sport.slug).url}
+                        className="flex items-center justify-between gap-3 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-5 transition-colors hover:border-[var(--portal-accent)]"
+                    >
+                        <span className="flex items-center gap-2 text-sm font-semibold">
+                            {liveNow !== null && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--portal-live)] px-2.5 py-1 text-xs font-bold text-[var(--portal-live-foreground)]">
+                                    LIVE
+                                </span>
+                            )}
+                            {liveNow !== null
+                                ? 'View the live scoreboard'
+                                : 'Nothing live right now — view the live scoreboard page'}
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--portal-accent)]">
+                            Open
+                            <ArrowRight aria-hidden="true" className="size-4" />
+                        </span>
+                    </Link>
                 </section>
 
                 <section className="grid gap-6 md:grid-cols-2">

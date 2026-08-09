@@ -908,6 +908,43 @@ class PortalController extends Controller
     }
 
     /**
+     * The dedicated live-scoreboard page (`/live/{sportSlug}`) — the
+     * sport portal page's own "Live now" section can link out here
+     * instead of embedding the full scoreboard inline (WP: basketball's
+     * mega scoreboard was crowding the sport portal page). Shares
+     * `sportPortalLiveNow()` with `sportPortalPoll()` below, so the two
+     * endpoints' payloads never drift apart.
+     */
+    public function liveSportPortal(string $sportSlug): Response
+    {
+        $slug = SportPortalSlug::from($sportSlug);
+        $sport = Sport::query()->where('name', $slug->sportName())->first();
+        $meet = Meet::query()->published()->active()->first();
+
+        $base = [
+            'sport' => $sport === null ? $this->emptySportProfile($slug) : $this->sportProfile($slug, $sport, $meet),
+            'meet' => $meet === null ? null : $this->meetSummary($meet),
+            'canonicalUrl' => route('public.live-sport-portal', $slug->value),
+        ];
+
+        if ($sport === null || $meet === null) {
+            return Inertia::render('portal/live-sport', [
+                ...$base,
+                'liveNow' => null,
+                'otherLiveCount' => 0,
+            ]);
+        }
+
+        [$liveNow, $otherLiveCount] = $this->sportPortalLiveNow($meet, $sport);
+
+        return Inertia::render('portal/live-sport', [
+            ...$base,
+            'liveNow' => $liveNow,
+            'otherLiveCount' => $otherLiveCount,
+        ]);
+    }
+
+    /**
      * The mini portal's upper-section profile — photo/description/
      * categories/personnel, built from real `Sport`/`MeetSport`/
      * `MeetSportAssignment`/`sport_user` data (see

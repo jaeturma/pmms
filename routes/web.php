@@ -135,6 +135,15 @@ Route::middleware('throttle:60,1')->group(function () {
     // "sports-directory" isn't one of `SportPortalSlug::values()`.
     Route::get('sports-directory', [PortalSportsController::class, 'index'])->name('public.sports-directory');
 
+    // Dedicated live-scoreboard page (`/live/basketball`, etc.) — the
+    // sport portal's own "Live now" section links out here instead of
+    // embedding the full scoreboard inline. Reuses the sport portal's
+    // own poll endpoint below (`public.sport-portal.poll`) since the
+    // payload shape (`liveNow`/`otherLiveCount`) is identical.
+    Route::get('live/{sportSlug}', [PortalController::class, 'liveSportPortal'])
+        ->whereIn('sportSlug', SportPortalSlug::values())
+        ->name('public.live-sport-portal');
+
     // Phase 12: permanent, meet-agnostic sport-portal routes
     // (`/basketball`, etc.) — constrained to the full 28-sport catalog
     // (`SportPortalSlug::values()`) so this can never intercept any other
