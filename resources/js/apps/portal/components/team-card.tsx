@@ -15,34 +15,34 @@ const MEDAL_STATS = [
 
 /**
  * One municipality's card on the Teams index (WP: public municipal teams,
- * Stage 3) — municipal crest and team logo side by side at equal size, name,
- * nickname, and a Gold/Silver/Bronze mini-strip with real text labels (WP's
- * "medal type is not communicated by color alone" accessibility rule), the
- * whole card linking to the full team profile. `logo_url` (the
- * municipality's official crest) and `team_logo_url` (the delegation's own
- * logo) are two separate uploads — see `District::logo`/`District::teamLogo`.
+ * Stage 3) — team logo large and centered, municipal crest pinned small in
+ * the top-right corner, name, nickname, and a Gold/Silver/Bronze mini-strip
+ * with real text labels (WP's "medal type is not communicated by color
+ * alone" accessibility rule), the whole card linking to the full team
+ * profile. `logo_url` (the municipality's official crest) and
+ * `team_logo_url` (the delegation's own logo) are two separate uploads —
+ * see `District::logo`/`District::teamLogo`.
  */
 export function PortalTeamCard({ team }: { team: PortalMunicipalityTeam }) {
     return (
         <Link
             href={teamShow(team.slug).url}
-            className="flex flex-col items-center gap-2 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-5 text-center transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-[var(--portal-accent)] focus-visible:outline-none"
+            className="relative flex flex-col items-center gap-2 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-5 text-center transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-[var(--portal-accent)] focus-visible:outline-none"
         >
-            <div className="flex items-center justify-center gap-3">
-                <MunicipalityCrest
-                    name={team.name}
-                    logoUrl={team.logo_url}
-                    size="lg"
-                    shape="square"
-                />
+            <MunicipalityCrest
+                name={team.name}
+                logoUrl={team.logo_url}
+                size="md"
+                shape="square"
+                className="absolute top-3 right-3"
+            />
 
-                <MunicipalityCrest
-                    name={team.name}
-                    logoUrl={team.team_logo_url}
-                    size="lg"
-                    shape="square"
-                />
-            </div>
+            <MunicipalityCrest
+                name={team.name}
+                logoUrl={team.team_logo_url}
+                size="xl"
+                shape="square"
+            />
 
             <h3 className="text-lg font-bold uppercase">{team.name}</h3>
 

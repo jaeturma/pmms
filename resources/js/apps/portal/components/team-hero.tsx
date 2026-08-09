@@ -36,12 +36,14 @@ export function PortalTeamHero({
                         logoUrl={team.logo_url}
                         size="lg"
                         shape="square"
+                        className="size-[8.5rem] text-4xl sm:size-[10.2rem] sm:text-5xl"
                     />
                     <MunicipalityCrest
                         name={team.name}
                         logoUrl={team.team_logo_url}
                         size="lg"
                         shape="square"
+                        className="size-[8.5rem] text-4xl sm:size-[10.2rem] sm:text-5xl"
                     />
                 </div>
 
