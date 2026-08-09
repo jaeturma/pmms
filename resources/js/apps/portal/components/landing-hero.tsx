@@ -1,9 +1,11 @@
+import { Link } from '@inertiajs/react';
 import type { ReactNode } from 'react';
 import { PortalCountdown } from '@/apps/portal/components/countdown';
 import { PortalHeroBackground } from '@/apps/portal/components/hero-background';
 import { PortalTorchIcon } from '@/apps/portal/components/torch-icon';
 import { cn } from '@/apps/portal/lib/utils';
 import type { PortalMunicipality } from '@/apps/portal/types';
+import { show as teamShow } from '@/routes/public/teams';
 
 type PortalLandingHeroProps = {
     title: string;
@@ -100,12 +102,17 @@ export function PortalLandingHero({
                 >
                     {municipalities.map((municipality) => {
                         const nicknameWords = municipality.nickname?.split(' ') ?? [];
+                        const logoUrl = municipality.team_logo_url ?? municipality.logo_url;
 
                         return (
-                            <div key={municipality.id} className="flex min-w-0 flex-col items-center gap-1 lg:flex-1">
-                                {municipality.logo_url && (
+                            <Link
+                                key={municipality.id}
+                                href={teamShow(municipality.slug).url}
+                                className="flex min-w-0 flex-col items-center gap-1 lg:flex-1"
+                            >
+                                {logoUrl && (
                                     <img
-                                        src={municipality.logo_url}
+                                        src={logoUrl}
                                         alt={municipality.name}
                                         className="h-auto max-h-[53px] w-full object-contain sm:max-h-[69px]"
                                     />
@@ -129,7 +136,7 @@ export function PortalLandingHero({
                                         </span>
                                     )}
                                 </div>
-                            </div>
+                            </Link>
                         );
                     })}
                 </div>

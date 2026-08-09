@@ -94,7 +94,7 @@ test('rankings rows carry no internal or unrelated fields', function () {
     $this->get("/meets/{$meet->id}/rankings")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('districts.0', fn (AssertableInertia $row) => $row
-                ->hasAll(['position', 'district', 'district_id', 'logo_url', 'gold', 'silver', 'bronze', 'total', 'points'])
+                ->hasAll(['position', 'district', 'district_id', 'logo_url', 'team_logo_url', 'slug', 'gold', 'silver', 'bronze', 'total', 'points'])
                 ->missing('created_at')
                 ->missing('updated_at')));
 });

@@ -1,11 +1,15 @@
+import { Link } from '@inertiajs/react';
 import { Trophy } from 'lucide-react';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { MunicipalityCrest } from '@/apps/portal/components/municipality-crest';
 import { cn } from '@/apps/portal/lib/utils';
+import { show as teamShow } from '@/routes/public/teams';
 
 type PortalStandingsRow = {
     label: string;
     logoUrl?: string | null;
+    teamLogoUrl?: string | null;
+    slug?: string | null;
     gold?: number;
     silver?: number;
     bronze?: number;
@@ -79,18 +83,36 @@ export function PortalStandingsTable({
                             <tr key={row.label} className={isPodium ? 'font-bold text-[var(--portal-fg)]' : undefined}>
                                 <td className={cn(cellPadding, 'tabular-nums')}>{index + 1}</td>
                                 <td className={cellPadding}>
-                                    <span className="flex items-center gap-2 sm:gap-3">
-                                        {showCrest && (
-                                            <MunicipalityCrest
-                                                name={row.label}
-                                                logoUrl={row.logoUrl}
-                                                size="sm"
-                                                shape={emphasized ? 'square' : 'circle'}
-                                                className={emphasized ? 'size-8 sm:size-12 md:size-14 lg:size-16' : undefined}
-                                            />
-                                        )}
-                                        {row.label}
-                                    </span>
+                                    {row.slug ? (
+                                        <Link
+                                            href={teamShow(row.slug).url}
+                                            className="flex items-center gap-2 hover:underline sm:gap-3"
+                                        >
+                                            {showCrest && (
+                                                <MunicipalityCrest
+                                                    name={row.label}
+                                                    logoUrl={row.teamLogoUrl ?? row.logoUrl}
+                                                    size="sm"
+                                                    shape={emphasized ? 'square' : 'circle'}
+                                                    className={emphasized ? 'size-8 sm:size-12 md:size-14 lg:size-16' : undefined}
+                                                />
+                                            )}
+                                            {row.label}
+                                        </Link>
+                                    ) : (
+                                        <span className="flex items-center gap-2 sm:gap-3">
+                                            {showCrest && (
+                                                <MunicipalityCrest
+                                                    name={row.label}
+                                                    logoUrl={row.teamLogoUrl ?? row.logoUrl}
+                                                    size="sm"
+                                                    shape={emphasized ? 'square' : 'circle'}
+                                                    className={emphasized ? 'size-8 sm:size-12 md:size-14 lg:size-16' : undefined}
+                                                />
+                                            )}
+                                            {row.label}
+                                        </span>
+                                    )}
                                 </td>
                                 {showMedals && (
                                     <>

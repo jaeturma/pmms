@@ -27,7 +27,7 @@ export function PortalTeamCard({ team }: { team: PortalMunicipalityTeam }) {
     return (
         <Link
             href={teamShow(team.slug).url}
-            className="relative flex flex-col items-center gap-2 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-5 text-center transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-[var(--portal-accent)] focus-visible:outline-none"
+            className="relative flex flex-col items-center gap-2 rounded-[var(--portal-radius)] border border-[var(--portal-border)]/60 bg-[var(--portal-surface)]/60 p-5 text-center backdrop-blur-md transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-[var(--portal-accent)] focus-visible:outline-none"
         >
             <MunicipalityCrest
                 name={team.name}
@@ -48,7 +48,7 @@ export function PortalTeamCard({ team }: { team: PortalMunicipalityTeam }) {
 
             {team.nickname && (
                 <p className="text-2xl text-[var(--portal-muted-foreground)]">
-                    {team.nickname}
+                    "{team.nickname}"
                 </p>
             )}
 

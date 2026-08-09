@@ -29,6 +29,8 @@ export type PortalMunicipality = {
     name: string;
     nickname: string | null;
     logo_url: string | null;
+    team_logo_url: string | null;
+    slug: string;
 };
 
 export type PortalLeader = {
@@ -203,6 +205,8 @@ export type PortalStandingRow = {
     district: string;
     district_id?: number;
     logo_url?: string | null;
+    team_logo_url?: string | null;
+    slug?: string | null;
     gold: number;
     silver: number;
     bronze: number;

@@ -148,6 +148,8 @@ export default function PortalTally({
                             rows={districts.map((row) => ({
                                 label: row.district,
                                 logoUrl: row.logo_url,
+                                teamLogoUrl: row.team_logo_url,
+                                slug: row.slug,
                                 gold: row.gold,
                                 silver: row.silver,
                                 bronze: row.bronze,

@@ -31,6 +31,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -291,12 +292,13 @@ class PortalController extends Controller
     }
 
     /**
-     * Attaches each row's real municipality crest via its carried-through
-     * `district_id` (`MedalTallyService::standings()`'s district rows) —
-     * one batched lookup rather than N name-matched queries. Rows without
-     * a `district_id` (there always is one here, but this stays honest if
-     * that ever changes) simply get `logo_url: null`, and `MunicipalityCrest`
-     * falls back to its initials badge exactly as it already does.
+     * Attaches each row's real municipality crest, team logo, and public
+     * Teams-profile slug via its carried-through `district_id`
+     * (`MedalTallyService::standings()`'s district rows) — one batched
+     * lookup rather than N name-matched queries. Rows without a
+     * `district_id` (there always is one here, but this stays honest if
+     * that ever changes) simply get nulls, and `MunicipalityCrest` falls
+     * back to its initials badge exactly as it already does.
      *
      * @param  array<int, array<string, mixed>>  $districts
      * @return array<int, array<string, mixed>>
@@ -305,16 +307,20 @@ class PortalController extends Controller
     {
         $ids = collect($districts)->pluck('district_id')->filter()->unique()->values();
 
-        $logoUrlsById = District::query()
-            ->whereIn('id', $ids)
-            ->get()
-            ->mapWithKeys(fn (District $district): array => [$district->id => $district->logoUrl()]);
+        $districtsById = District::query()->whereIn('id', $ids)->get()->keyBy('id');
 
         return array_map(
-            fn (array $row): array => [
-                ...$row,
-                'logo_url' => $logoUrlsById->get($row['district_id'] ?? null),
-            ],
+            function (array $row) use ($districtsById): array {
+                /** @var District|null $district */
+                $district = $districtsById->get($row['district_id'] ?? null);
+
+                return [
+                    ...$row,
+                    'logo_url' => $district?->logoUrl(),
+                    'team_logo_url' => $district?->teamLogoUrl(),
+                    'slug' => $district !== null ? Str::slug($district->name) : null,
+                ];
+            },
             $districts,
         );
     }
@@ -1489,7 +1495,7 @@ class PortalController extends Controller
      * initials placeholder client-side) until an admin uploads a real
      * crest for that municipality.
      *
-     * @return array<int, array{id: int, name: string, nickname: string|null, logo_url: string|null}>
+     * @return array<int, array{id: int, name: string, nickname: string|null, logo_url: string|null, team_logo_url: string|null, slug: string}>
      */
     private function competingMunicipalities(Meet $meet): array
     {
@@ -1507,6 +1513,8 @@ class PortalController extends Controller
                 'name' => $municipality->name,
                 'nickname' => $municipality->nickname,
                 'logo_url' => $municipality->logoUrl(),
+                'team_logo_url' => $municipality->teamLogoUrl(),
+                'slug' => Str::slug($municipality->name),
             ])
             ->all();
     }
