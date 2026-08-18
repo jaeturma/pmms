@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -10,30 +9,25 @@ class DatabaseSeeder extends Seeder
 {
     use WithoutModelEvents;
 
-    /**
-     * Seed the application's database.
-     */
+    /** Seed only the production DdOPAA Meet 2026 dataset. */
     public function run(): void
     {
         $this->call(AdminUserSeeder::class);
         $this->call(DivisionRegistrySeeder::class);
         $this->call(SportsCatalogSeeder::class);
 
-        $hasTestUser = User::query()->where('email', 'test@example.com')->exists();
-
-        if (! $hasTestUser && app()->environment(['local', 'testing'])) {
-            User::factory()->create([
-                'name' => 'Test User',
-                'email' => 'test@example.com',
-            ]);
-        }
+        $this->call(DdOPAA2026FinalSeeder::class);
 
         // Ddopaa2026ShowcaseSeeder guards itself to local/testing, so it's
         // always safe to call — a production run no-ops.
-        $this->call(Ddopaa2026ShowcaseSeeder::class);
 
         // RoleShowcaseSeeder needs Ddopaa2026ShowcaseSeeder's meet and
         // delegations; same local/testing self-guard, always safe to call.
-        $this->call(RoleShowcaseSeeder::class);
+
+        // Dedicated, single-sport Tournament ICT accounts for exercising
+        // the Basketball, Baseball, and Boxing live scoreboards.
+
+        // Player-attributed Basketball points/fouls and substitutions need
+        // real confirmed entries plus a match roster for both sides.
     }
 }

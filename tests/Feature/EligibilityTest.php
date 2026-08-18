@@ -1,11 +1,15 @@
 <?php
 
 use App\Enums\EligibilityStatus;
+use App\Enums\ManagementTeamMemberStatus;
+use App\Enums\ManagementTeamType;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
 use App\Models\EligibilityDocument;
 use App\Models\EligibilityReview;
+use App\Models\ManagementTeam;
+use App\Models\ManagementTeamMember;
 use App\Models\Entry;
 use App\Models\Meet;
 use App\Models\User;
@@ -124,7 +128,7 @@ test('document downloads are authorized and audited', function () {
         ->assertForbidden();
 });
 
-test('managers can approve a pending review and officers cannot decide', function () {
+test('DSAC can approve a pending review and officers cannot decide', function () {
     $delegation = Delegation::factory()->create();
     $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);
     $review = EligibilityReview::factory()->create([
@@ -138,15 +142,20 @@ test('managers can approve a pending review and officers cannot decide', functio
         ->assertForbidden();
 
     $organizer = User::factory()->organizer()->create();
+    $this->actingAs($organizer)->patch("/eligibility/reviews/{$review->id}/approve")->assertForbidden();
 
-    $this->actingAs($organizer)
+    $team = ManagementTeam::factory()->create(['meet_id' => $delegation->meet_id, 'team_type' => ManagementTeamType::DivisionScreeningAndAccreditation]);
+    $member = ManagementTeamMember::factory()->create(['management_team_id' => $team->id, 'status' => ManagementTeamMemberStatus::Active]);
+    $dsac = $member->user;
+
+    $this->actingAs($dsac)
         ->patch("/eligibility/reviews/{$review->id}/approve", ['remarks' => 'Complete papers.'])
         ->assertRedirect();
 
     $review->refresh();
 
     expect($review->status)->toBe(EligibilityStatus::Approved)
-        ->and($review->reviewer_id)->toBe($organizer->id)
+        ->and($review->reviewer_id)->toBe($dsac->id)
         ->and($review->decided_at)->not->toBeNull()
         ->and(AuditLog::query()->where('action', 'eligibility.approved')->exists())->toBeTrue();
 });

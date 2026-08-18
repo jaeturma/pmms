@@ -50,6 +50,12 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user === null ? null : [
                     ...$user->toArray(),
                     'role_label' => $user->role->label(),
+                    'team_types' => $user->managementTeamMemberships()
+                        ->where('management_team_members.status', 'active')
+                        ->join('management_teams', 'management_teams.id', '=', 'management_team_members.management_team_id')
+                        ->distinct()
+                        ->pluck('management_teams.team_type')
+                        ->values(),
                 ],
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',

@@ -194,6 +194,7 @@ class MedicalClearanceController extends Controller
             'meet' => $meet->name,
             'status' => $clearance->status->value,
         ]);
+        $this->recordAuthorityAudit($clearance);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Clearance record added.')]);
 
@@ -230,9 +231,21 @@ class MedicalClearanceController extends Controller
             'meet' => $medicalClearance->meet->name,
             'status' => $medicalClearance->status->value,
         ]);
+        $this->recordAuthorityAudit($medicalClearance);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Clearance record updated.')]);
 
         return back();
+    }
+
+    private function recordAuthorityAudit(MedicalClearance $clearance): void
+    {
+        $action = match ($clearance->status) {
+            MedicalClearanceStatus::Cleared => 'athlete.medical.cleared',
+            MedicalClearanceStatus::Restricted => 'athlete.medical.restricted',
+            MedicalClearanceStatus::NotCleared => 'athlete.medical.not_cleared',
+            default => 'athlete.medical.evaluation_started',
+        };
+        $this->audit->record($action, $clearance, ['status' => $clearance->status->value]);
     }
 }

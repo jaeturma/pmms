@@ -2,14 +2,18 @@
 
 namespace App\Http\Controllers\Concerns;
 
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\UserRole;
+use App\Models\Meet;
 use App\Models\User;
+use Illuminate\Support\Collection;
 
 /**
  * One definition of "does this user operate this sport" — a Technical
  * Official via the many-to-many `sport_user` pivot (`User::sports()`), a
- * Tournament Manager via the 1:1 `sports.tournament_manager_id` FK
- * (`User::managedSport()`). Every other role operates no sport directly.
+ * Tournament Manager via either the legacy 1:1 sport FK or an active,
+ * meet-scoped Tournament/Assistant Tournament Manager assignment.
  * Extracted once this check reached three call sites (matching this
  * project's own `SearchesAndPaginates` extraction threshold).
  */
@@ -19,8 +23,31 @@ trait ScopesToAssignedSport
     {
         return match ($user->role) {
             UserRole::TechnicalOfficial => $user->sports()->whereKey($sportId)->exists(),
-            UserRole::TournamentManager => $user->managedSport?->id === $sportId,
+            UserRole::TournamentManager => $this->userManagedSportIds($user)->contains($sportId),
             default => false,
         };
+    }
+
+    /**
+     * @return Collection<int, int>
+     */
+    protected function userManagedSportIds(User $user): Collection
+    {
+        $assigned = $user->meetSportAssignments()
+            ->where('status', MeetSportAssignmentStatus::Active)
+            ->whereIn('role', [
+                MeetSportAssignmentRole::TournamentManager,
+                MeetSportAssignmentRole::AssistantTournamentManager,
+            ])
+            ->whereHas('meetSport.meet', fn ($query) => $query->where('id', Meet::current()->id))
+            ->with('meetSport:id,sport_id')
+            ->get()
+            ->pluck('meetSport.sport_id');
+
+        if ($user->managedSport !== null) {
+            $assigned->push($user->managedSport->id);
+        }
+
+        return $assigned->filter()->map(fn ($id): int => (int) $id)->unique()->values();
     }
 }

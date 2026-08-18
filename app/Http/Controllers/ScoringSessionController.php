@@ -23,6 +23,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -141,6 +142,20 @@ class ScoringSessionController extends Controller
 
         /** @var User $user */
         $user = $request->user();
+
+        // For a scheduled head-to-head match, the assigned participants
+        // are authoritative. An ICT operator must not accidentally start
+        // the board under hand-typed or swapped team names.
+        $scheduledLabels = $match->entries()
+            ->with('athlete.school:id,name')
+            ->get()
+            ->map(fn (Entry $entry): string => $entry->athlete->school->name)
+            ->values();
+
+        if ($scheduledLabels->count() === 2) {
+            $data['side_a_label'] = $scheduledLabels[0];
+            $data['side_b_label'] = $scheduledLabels[1];
+        }
 
         $session = ScoringSession::create([
             'match_id' => $match->id,
@@ -354,7 +369,10 @@ class ScoringSessionController extends Controller
         $this->authorizeManageSession($request, $session);
         $this->assertActive($session);
 
-        $session->forceFill(['status' => ScoringSessionStatus::Paused])->save();
+        $session->forceFill([
+            'status' => ScoringSessionStatus::Paused,
+            'sport_state' => $this->materializeCountdownClocks($session->sport_state ?? []),
+        ])->save();
 
         $this->recordSimpleEvent($request, $session, ScoreEventType::Paused, 'scoring.paused');
 
@@ -371,7 +389,10 @@ class ScoringSessionController extends Controller
             ]);
         }
 
-        $session->forceFill(['status' => ScoringSessionStatus::InProgress])->save();
+        $session->forceFill([
+            'status' => ScoringSessionStatus::InProgress,
+            'sport_state' => $this->restartCountdownClocks($session->sport_state ?? []),
+        ])->save();
 
         $this->recordSimpleEvent($request, $session, ScoreEventType::Resumed, 'scoring.resumed');
 
@@ -393,6 +414,7 @@ class ScoringSessionController extends Controller
 
         $session->forceFill([
             'status' => ScoringSessionStatus::Ended,
+            'sport_state' => $this->materializeCountdownClocks($session->sport_state ?? []),
             'ended_by' => $user->id,
             'ended_at' => now(),
         ])->save();
@@ -478,6 +500,74 @@ class ScoringSessionController extends Controller
         );
 
         broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /** Remove a point or added basketball foul and reverse its totals. */
+    public function removeEvent(Request $request, ScoringSession $session, ScoreEvent $event): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:500'],
+        ]);
+
+        if ($event->scoring_session_id !== $session->id) {
+            abort(404);
+        }
+
+        $payload = $event->payload ?? [];
+        $isPoint = $event->type === ScoreEventType::Point;
+        $isAddedFoul = $event->type === ScoreEventType::Foul && ($payload['action'] ?? null) === 'add';
+
+        if (! $isPoint && ! $isAddedFoul) {
+            throw ValidationException::withMessages([
+                'event' => __('Only recorded points and added fouls can be removed.'),
+            ]);
+        }
+
+        DB::transaction(function () use ($data, $event, $isPoint, $payload, $session): void {
+            $state = $session->sport_state;
+            $side = $payload['side'] ?? null;
+
+            if ($isPoint) {
+                $column = $side === 'a' ? 'score_a' : 'score_b';
+                $delta = (int) ($payload['delta'] ?? 0);
+                $session->{$column} = max(0, (int) $session->{$column} - $delta);
+
+                if ($state !== null && isset($payload['roster_player_id'])) {
+                    $id = (string) $payload['roster_player_id'];
+                    $state['player_points'][$id] = max(0, (int) ($state['player_points'][$id] ?? 0) - $delta);
+                }
+            } else {
+                $column = $side === 'a' ? 'fouls_a' : 'fouls_b';
+                $state ??= [];
+                $state[$column] = max(0, (int) ($state[$column] ?? 0) - 1);
+
+                if (isset($payload['roster_player_id'])) {
+                    $id = (string) $payload['roster_player_id'];
+                    $state['player_fouls'][$id] = max(0, (int) ($state['player_fouls'][$id] ?? 0) - 1);
+                }
+            }
+
+            $session->sport_state = $state;
+            $session->save();
+
+            $this->audit->record('scoring.event_removed', $session, [
+                ...$this->context($session),
+                'score_event_id' => $event->id,
+                'score_event_type' => $event->type->value,
+                'payload' => $payload,
+                'reason' => $data['reason'],
+            ]);
+
+            $event->delete();
+        });
+
+        broadcast(new ScoreUpdated($session->fresh()))->toOthers();
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Play removed.')]);
 
         return back();
     }
@@ -2274,6 +2364,42 @@ class ScoringSessionController extends Controller
         $this->audit->record($action, $session, $this->context($session));
 
         broadcast(new ScoreUpdated($session))->toOthers();
+    }
+
+    /**
+     * Freeze every sport countdown at its authoritative remaining value.
+     * Stored seconds are the value at the matching *_updated_at anchor,
+     * not necessarily the value at the time pause/end is pressed.
+     *
+     * @param  array<string, mixed>  $state
+     * @return array<string, mixed>
+     */
+    private function materializeCountdownClocks(array $state): array
+    {
+        foreach ([['game_clock_seconds', 'game_clock_updated_at'], ['shot_clock_seconds', 'shot_clock_updated_at'], ['clock_seconds', 'clock_updated_at']] as [$secondsKey, $anchorKey]) {
+            if (! isset($state[$secondsKey]) || empty($state[$anchorKey])) {
+                continue;
+            }
+
+            $elapsed = (int) floor(max(0, \Illuminate\Support\Carbon::parse($state[$anchorKey])->diffInSeconds(now())));
+            $state[$secondsKey] = max(0, (int) $state[$secondsKey] - $elapsed);
+            $state[$anchorKey] = null;
+        }
+
+        return $state;
+    }
+
+    /** @param array<string, mixed> $state @return array<string, mixed> */
+    private function restartCountdownClocks(array $state): array
+    {
+        $now = now()->toIso8601String();
+        foreach ([['game_clock_seconds', 'game_clock_updated_at'], ['shot_clock_seconds', 'shot_clock_updated_at'], ['clock_seconds', 'clock_updated_at']] as [$secondsKey, $anchorKey]) {
+            if (isset($state[$secondsKey])) {
+                $state[$anchorKey] = $now;
+            }
+        }
+
+        return $state;
     }
 
     /**

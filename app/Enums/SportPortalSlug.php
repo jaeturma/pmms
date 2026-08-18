@@ -26,6 +26,7 @@ enum SportPortalSlug: string
     case Badminton = 'badminton';
     case Baseball = 'baseball';
     case Basketball = 'basketball';
+    case Basketball3x3 = 'basketball-3x3';
     case Billiard = 'billiard';
     case Bocce = 'bocce';
     case Boxing = 'boxing';
@@ -61,14 +62,15 @@ enum SportPortalSlug: string
             self::Badminton => 'Badminton',
             self::Baseball => 'Baseball',
             self::Basketball => 'Basketball',
-            self::Billiard => 'Billiard',
+            self::Basketball3x3 => 'Basketball 3x3',
+            self::Billiard => 'Billiards',
             self::Bocce => 'Bocce',
             self::Boxing => 'Boxing',
             self::Chess => 'Chess',
             self::Dancesports => 'Dancesports',
             self::Football => 'Football',
             self::Futsal => 'Futsal',
-            self::GoalBall => 'Goal Ball',
+            self::GoalBall => 'Goalball',
             self::Gymnastics => 'Gymnastics',
             self::PencakSilat => 'Pencak Silat',
             self::Swimming => 'Swimming',
@@ -81,8 +83,8 @@ enum SportPortalSlug: string
             self::Volleyball => 'Volleyball',
             self::Wrestling => 'Wrestling',
             self::Wushu => 'Wushu',
-            self::ParagamesAthletics => 'Paragames - Athletics',
-            self::ParagamesSwimming => 'Paragames - Swimming',
+            self::ParagamesAthletics => 'Para Athletics',
+            self::ParagamesSwimming => 'Para Swimming',
         };
     }
 

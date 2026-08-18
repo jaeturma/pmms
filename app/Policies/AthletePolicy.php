@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Enums\UserRole;
+use App\Enums\Permission;
 use App\Models\Athlete;
 use App\Models\Delegation;
 use App\Models\User;
@@ -16,7 +17,9 @@ class AthletePolicy
      */
     public function viewAny(User $user): bool
     {
-        return $user->hasRole(UserRole::Admin, UserRole::Organizer, UserRole::DelegationOfficer, UserRole::Coach);
+        return $user->hasRole(UserRole::Admin, UserRole::Organizer, UserRole::DelegationOfficer, UserRole::Coach)
+            || $user->hasPermission(Permission::DistrictAthletesView)
+            || $user->hasPermission(Permission::MunicipalityAthletesView);
     }
 
     /**
@@ -28,6 +31,12 @@ class AthletePolicy
         if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
             return true;
         }
+
+        if ($user->athleteOversightAssignments()->where('active', true)->where('meet_id', $athlete->delegation->meet_id)
+            ->where(function ($query) use ($athlete) {
+                $query->where(fn ($scope) => $scope->where('authority_type', 'district_sports_coordinator')->where('school_district_id', $athlete->school->school_district_id))
+                    ->orWhere(fn ($scope) => $scope->where('authority_type', 'municipality_team_manager')->where('district_id', $athlete->school->district_id));
+            })->exists()) return true;
 
         return $athlete->delegation->hasOfficer($user) || $athlete->delegation->hasCoach($user);
     }

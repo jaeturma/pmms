@@ -5,6 +5,7 @@ namespace App\Policies;
 use App\Enums\ManagementTeamMemberStatus;
 use App\Enums\ManagementTeamType;
 use App\Enums\UserRole;
+use App\Enums\Permission;
 use App\Models\Meet;
 use App\Models\User;
 use App\Policies\Concerns\ChecksManagementTeamMembership;
@@ -43,8 +44,7 @@ class MedicalPolicy
 
     public function manage(User $user, Meet $meet): bool
     {
-        return $user->hasRole(UserRole::Admin)
-            || $this->hasActiveMembership($user, ManagementTeamType::Medical, $meet);
+        return $user->hasPermission(Permission::MedicalClearanceApprove, $meet);
     }
 
     /**

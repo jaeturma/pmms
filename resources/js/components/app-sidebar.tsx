@@ -79,7 +79,7 @@ import { edit as systemSettingsEdit } from '@/routes/system-settings';
 import { index as tallyIndex } from '@/routes/tally';
 import { index as transportIndex } from '@/routes/transport';
 import { index as venuesIndex } from '@/routes/venues';
-import type { NavItem } from '@/types';
+import type { NavItem, NavSection } from '@/types';
 
 const mainNavItems: NavItem[] = [
     {
@@ -312,31 +312,64 @@ export function AppSidebar() {
     const { auth, division } = usePage().props;
 
     const role = auth.user?.role;
+    const teamTypes: string[] = auth.user?.team_types ?? [];
 
     // A Technical Official only runs live scoring for their assigned
     // sport(s) — the full admin registry (Districts/Schools/Delegations/
     // Entries/Eligibility/etc.) isn't their job, so they get a minimal nav
     // instead of `mainNavItems`, rather than a full console they'd mostly
     // see 403s on.
-    const navItems =
+    const roleNavItems =
         role === 'technical_official'
             ? technicalOfficialNavItems
             : role === 'tournament_manager'
               ? tournamentManagerNavItems
-              : [
-                    ...mainNavItems.map((item) =>
-                        item.title === 'Districts'
-                            ? {
-                                  ...item,
-                                  title: pluralizeAreaLabel(division.areaLabel),
-                              }
-                            : item,
-                    ),
-                    ...(role === 'admin' || role === 'organizer'
-                        ? managerNavItems
-                        : []),
-                    ...(role === 'admin' ? adminNavItems : []),
-                ];
+              : role === 'coach' || role === 'delegation_officer'
+                ? mainNavItems.filter((item) => ['Dashboard', 'Schedule', 'Results', 'Medal tally', 'Delegations', 'Athletes', 'Personnel', 'Entries', 'Eligibility'].includes(item.title))
+                : role === 'viewer'
+                  ? mainNavItems.filter((item) => ['Dashboard', 'Schedule', 'Results', 'Medal tally'].includes(item.title))
+                  : mainNavItems;
+
+    const labeledItems = roleNavItems.map((item) =>
+        item.title === 'Districts' ? { ...item, title: pluralizeAreaLabel(division.areaLabel) } : item,
+    );
+    const byTitle = (titles: string[], pool: NavItem[] = labeledItems) =>
+        titles.map((title) => pool.find((item) => item.title === title)).filter((item): item is NavItem => item !== undefined);
+
+    const navItems = byTitle(['Dashboard']);
+    const navSections: NavSection[] = [];
+
+    if (role === 'admin' || role === 'organizer') {
+        navSections.push(
+            { title: 'Meet setup', icon: Settings, items: byTitle([pluralizeAreaLabel(division.areaLabel), 'School districts', 'Schools', 'Sports', 'Events', 'Meets', 'Venues', 'Tournament Assignments', 'Management Teams']) },
+            { title: 'Competition', icon: Trophy, items: byTitle(['Schedule', 'Matches', 'Results', 'Medal tally', 'Protests']) },
+            { title: 'Registration', icon: UsersRound, items: byTitle(['Delegations', 'Athletes', 'Personnel', 'Entries', 'Eligibility']) },
+            { title: 'Meet operations', icon: LifeBuoy, items: managerNavItems.filter((item) => !['Management', 'Announcements'].includes(item.title)) },
+            { title: 'Monitoring', icon: BarChart3, items: managerNavItems.filter((item) => ['Management', 'Announcements'].includes(item.title)) },
+        );
+        if (role === 'admin') navSections.push({ title: 'System', icon: Settings, items: adminNavItems });
+    } else if (role === 'technical_official' || role === 'tournament_manager') {
+        navSections.push({ title: 'Competition', icon: Trophy, items: labeledItems.filter((item) => item.title !== 'Dashboard') });
+    } else if (role === 'coach' || role === 'delegation_officer') {
+        navSections.push(
+            { title: 'Registration', icon: UsersRound, items: byTitle(['Delegations', 'Athletes', 'Personnel', 'Entries', 'Eligibility']) },
+            { title: 'Competition', icon: Trophy, items: byTitle(['Schedule', 'Results', 'Medal tally']) },
+        );
+    } else {
+        const relevantOperations = managerNavItems.filter((item) =>
+            (item.title === 'Medical' && teamTypes.includes('medical'))
+            || (item.title === 'Food' && teamTypes.includes('food'))
+            || (item.title === 'Billeting' && teamTypes.includes('billeting'))
+            || (item.title === 'Transport' && teamTypes.includes('transport'))
+            || (item.title === 'Equipment' && teamTypes.includes('supply'))
+            || (['DRRM Plans', 'Emergency Incidents'].includes(item.title) && teamTypes.includes('drrm')),
+        );
+        navSections.push({ title: 'Competition', icon: Trophy, items: byTitle(['Schedule', 'Results', 'Medal tally']) });
+        if (teamTypes.includes('division_screening_and_accreditation')) {
+            navSections.push({ title: 'DSAC', icon: FileCheck, items: byTitle(['Athletes', 'Eligibility'], mainNavItems) });
+        }
+        if (relevantOperations.length) navSections.push({ title: 'Assigned operations', icon: LifeBuoy, items: relevantOperations });
+    }
 
     return (
         <Sidebar collapsible="icon">
@@ -353,7 +386,7 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={navItems} />
+                <NavMain items={navItems} sections={navSections.filter((section) => section.items.length > 0)} />
             </SidebarContent>
 
             <SidebarFooter className="p-3">

@@ -24,16 +24,22 @@ test('guests can browse the sports directory even with no active meet', function
             ->where('sports.0.is_paragames', false));
 });
 
-test('the directory covers the full 28-sport catalog and correctly classifies Paragames', function () {
+test('the directory correctly classifies regular sports and all four Paragames sports', function () {
     Meet::factory()->active()->published()->featured()->create();
     Sport::query()->create(['name' => 'Basketball']);
-    Sport::query()->create(['name' => 'Paragames - Athletics']);
+    Sport::query()->create(['name' => 'Para Athletics', 'classification' => 'paragames']);
+    Sport::query()->create(['name' => 'Bocce', 'classification' => 'paragames']);
+    Sport::query()->create(['name' => 'Goalball', 'classification' => 'paragames']);
+    Sport::query()->create(['name' => 'Para Swimming', 'classification' => 'paragames']);
 
     $this->get('/sports-directory')
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('sports', 2)
+            ->has('sports', 5)
             ->where('sports.0.is_paragames', false)
-            ->where('sports.1.is_paragames', true));
+            ->where('sports.1.is_paragames', true)
+            ->where('sports.2.is_paragames', true)
+            ->where('sports.3.is_paragames', true)
+            ->where('sports.4.is_paragames', true));
 });
 
 test('category count combines catalog-wide and this meet-scoped categories', function () {

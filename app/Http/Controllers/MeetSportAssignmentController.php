@@ -39,7 +39,7 @@ class MeetSportAssignmentController extends Controller
     public function index(): Response
     {
         $query = MeetSportAssignment::query()
-            ->with(['meetSport.sport:id,name', 'sportCategory:id,display_name', 'user:id,name,email'])
+            ->with(['meetSport.sport:id,name', 'sportCategory:id,display_name', 'user:id,name,email', 'person:id,full_name'])
             ->orderByDesc('id');
 
         return Inertia::render('meet-sport-assignments/index', [
@@ -47,8 +47,8 @@ class MeetSportAssignmentController extends Controller
                 'id' => $assignment->id,
                 'sport' => $assignment->meetSport->sport->name,
                 'category' => $assignment->sportCategory?->display_name,
-                'user' => $assignment->user->name,
-                'user_email' => $assignment->user->email,
+                'user' => $this->assignmentName($assignment),
+                'user_email' => $assignment->user?->email ?? '',
                 'role' => $assignment->role->value,
                 'role_label' => $assignment->role->label(),
                 'is_lead' => $assignment->is_lead,
@@ -151,12 +151,12 @@ class MeetSportAssignmentController extends Controller
 
         $meetSportAssignment->forceFill(['status' => $validated['status']])->save();
 
-        $meetSportAssignment->load(['meetSport.meet:id,name', 'meetSport.sport:id,name', 'user:id,name']);
+        $meetSportAssignment->load(['meetSport.meet:id,name', 'meetSport.sport:id,name', 'user:id,name', 'person:id,full_name']);
 
         $this->audit->record('meet_sport_assignment.status_updated', $meetSportAssignment, [
             'meet' => $meetSportAssignment->meetSport->meet->name,
             'sport' => $meetSportAssignment->meetSport->sport->name,
-            'user' => $meetSportAssignment->user->name,
+            'user' => $this->assignmentName($meetSportAssignment),
             'status' => $meetSportAssignment->status->value,
         ]);
 
@@ -172,12 +172,12 @@ class MeetSportAssignmentController extends Controller
      */
     public function destroy(MeetSportAssignment $meetSportAssignment): RedirectResponse
     {
-        $meetSportAssignment->load(['meetSport.meet:id,name', 'meetSport.sport:id,name', 'user:id,name']);
+        $meetSportAssignment->load(['meetSport.meet:id,name', 'meetSport.sport:id,name', 'user:id,name', 'person:id,full_name']);
 
         $context = [
             'meet' => $meetSportAssignment->meetSport->meet->name,
             'sport' => $meetSportAssignment->meetSport->sport->name,
-            'user' => $meetSportAssignment->user->name,
+            'user' => $this->assignmentName($meetSportAssignment),
             'role' => $meetSportAssignment->role->value,
         ];
 
@@ -188,5 +188,10 @@ class MeetSportAssignmentController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Assignment removed.')]);
 
         return back();
+    }
+
+    private function assignmentName(MeetSportAssignment $assignment): string
+    {
+        return $assignment->user?->name ?? $assignment->person?->full_name ?? __('Unknown person');
     }
 }

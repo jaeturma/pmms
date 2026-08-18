@@ -44,8 +44,10 @@ class ScheduleController extends Controller
         $user = $request->user();
 
         $canManageAll = Gate::allows('manage-meet-data');
-        $isTournamentManager = $user->role === UserRole::TournamentManager && $user->managedSport !== null;
-        $managedSportId = $isTournamentManager ? $user->managedSport->id : null;
+        $managedSportIds = $user->role === UserRole::TournamentManager
+            ? $this->userManagedSportIds($user)
+            : collect();
+        $isTournamentManager = $managedSportIds->isNotEmpty();
 
         $search = $this->searchTerm($request);
         $venueId = $request->integer('venue_id');
@@ -75,7 +77,7 @@ class ScheduleController extends Controller
 
         return Inertia::render('schedule/index', [
             'schedules' => $slots
-                ->through(function (EventSchedule $schedule) use ($matchesBySchedule, $canManageAll, $isTournamentManager, $managedSportId): array {
+                ->through(function (EventSchedule $schedule) use ($matchesBySchedule, $canManageAll, $managedSportIds): array {
                     $match = $matchesBySchedule->get($schedule->id);
 
                     return [
@@ -100,7 +102,7 @@ class ScheduleController extends Controller
                         'match_id' => $match?->id,
                         'is_live' => $match !== null && $match->scoringSessions->isNotEmpty(),
                         'can_manage' => $canManageAll
-                            || ($isTournamentManager && $schedule->event->sport_id === $managedSportId),
+                            || $managedSportIds->contains($schedule->event->sport_id),
                     ];
                 }),
             'filters' => [
@@ -113,7 +115,7 @@ class ScheduleController extends Controller
             'meetIsSchedulable' => $meetIsSchedulable,
             'eventOptions' => Event::query()
                 ->whereHas('meets', fn ($meets) => $meets->whereKey($meet->id))
-                ->when($managedSportId !== null, fn ($query) => $query->where('sport_id', $managedSportId))
+                ->when($isTournamentManager, fn ($query) => $query->whereIn('sport_id', $managedSportIds))
                 ->with('sport:id,name')
                 ->get(['id', 'sport_id', 'name', 'gender', 'age_division'])
                 ->map(fn (Event $event): array => [

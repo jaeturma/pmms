@@ -29,7 +29,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['meet_id', 'sport_id', 'active', 'notes'])]
+#[Fillable(['meet_id', 'sport_id', 'status', 'description', 'venue_notes', 'active', 'notes', 'display_order'])]
 class MeetSport extends Model
 {
     /** @use HasFactory<MeetSportFactory> */
@@ -44,6 +44,7 @@ class MeetSport extends Model
     {
         return [
             'active' => 'boolean',
+            'display_order' => 'integer',
         ];
     }
 

@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\MeetStatus;
 use App\Models\Athlete;
 use App\Models\AuditLog;
@@ -9,6 +11,8 @@ use App\Models\Event;
 use App\Models\EventMatch;
 use App\Models\EventSchedule;
 use App\Models\Meet;
+use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
 use App\Models\ScoringSession;
 use App\Models\SportCategory;
 use App\Models\User;
@@ -297,6 +301,61 @@ test('a tournament manager gets a page-level manage flag and per-row scoping to 
             ->where('canManage', true)
             ->where('schedules.data.0.can_manage', false));
 });
+
+test('an assigned tournament or assistant manager can view all schedules but only create and update their sport', function (MeetSportAssignmentRole $assignmentRole) {
+    $meet = Meet::current();
+    $manager = User::factory()->tournamentManager()->create();
+    $ownEvent = Event::factory()->create();
+    $otherEvent = Event::factory()->create();
+    $meet->events()->attach([$ownEvent->id, $otherEvent->id]);
+
+    $meetSport = MeetSport::factory()->create([
+        'meet_id' => $meet->id,
+        'sport_id' => $ownEvent->sport_id,
+    ]);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $manager->id,
+        'role' => $assignmentRole,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $ownSlot = EventSchedule::factory()->create(['meet_id' => $meet->id, 'event_id' => $ownEvent->id]);
+    $otherSlot = EventSchedule::factory()->create(['meet_id' => $meet->id, 'event_id' => $otherEvent->id]);
+
+    $this->actingAs($manager)->get('/schedule')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('schedules.data', 2)
+            ->where('canManage', true));
+
+    $payload = [
+        'event_id' => $ownEvent->id,
+        'venue_id' => Venue::factory()->create()->id,
+        'scheduled_date' => '2026-08-11',
+        'starts_at' => '08:00',
+        'ends_at' => '10:00',
+        'note' => null,
+    ];
+    $this->actingAs($manager)->post('/schedule', $payload)->assertRedirect()->assertSessionHasNoErrors();
+
+    $this->actingAs($manager)->post('/schedule', [...$payload, 'event_id' => $otherEvent->id])->assertForbidden();
+
+    $this->actingAs($manager)->put("/schedule/{$ownSlot->id}", [
+        ...$payload,
+        'scheduled_date' => $ownSlot->scheduled_date->toDateString(),
+        'starts_at' => '12:00',
+        'ends_at' => '14:00',
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $this->actingAs($manager)->put("/schedule/{$otherSlot->id}", [
+        ...$payload,
+        'event_id' => $otherEvent->id,
+    ])->assertForbidden();
+})->with([
+    'tournament manager' => MeetSportAssignmentRole::TournamentManager,
+    'assistant tournament manager' => MeetSportAssignmentRole::AssistantTournamentManager,
+]);
 
 test('viewers and delegation officers cannot manage the schedule', function (User $user) {
     $this->actingAs($user)

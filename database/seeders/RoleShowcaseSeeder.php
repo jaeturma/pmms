@@ -80,14 +80,14 @@ class RoleShowcaseSeeder extends Seeder
 
         // email => [name, assignment role, is_lead]
         $roles = [
-            'tournament.manager@ddopaa2026.test' => ['Tournament Manager (Demo)', MeetSportAssignmentRole::TournamentManager, true],
-            'assistant.manager@ddopaa2026.test' => ['Assistant Tournament Manager (Demo)', MeetSportAssignmentRole::AssistantTournamentManager, false],
-            'ict@ddopaa2026.test' => ['Tournament ICT (Demo)', MeetSportAssignmentRole::TournamentICT, false],
-            'secretary@ddopaa2026.test' => ['Tournament Secretary (Demo)', MeetSportAssignmentRole::TournamentSecretary, false],
+            'tournament.manager@ddopaa2026.test' => ['Tournament Manager (Demo)', MeetSportAssignmentRole::TournamentManager, true, UserRole::TournamentManager],
+            'assistant.manager@ddopaa2026.test' => ['Assistant Tournament Manager (Demo)', MeetSportAssignmentRole::AssistantTournamentManager, false, UserRole::TournamentManager],
+            'ict@ddopaa2026.test' => ['Tournament ICT (Demo)', MeetSportAssignmentRole::TournamentICT, false, UserRole::Organizer],
+            'secretary@ddopaa2026.test' => ['Tournament Secretary (Demo)', MeetSportAssignmentRole::TournamentSecretary, false, UserRole::Organizer],
         ];
 
-        foreach ($roles as $email => [$name, $role, $isLead]) {
-            $user = $this->account($email, $name, UserRole::TechnicalOfficial);
+        foreach ($roles as $email => [$name, $role, $isLead, $userRole]) {
+            $user = $this->account($email, $name, $userRole);
 
             MeetSportAssignment::query()->firstOrCreate(
                 ['meet_sport_id' => $meetSport->id, 'user_id' => $user->id, 'role' => $role->value],

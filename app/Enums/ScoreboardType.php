@@ -35,9 +35,9 @@ enum ScoreboardType: string
             'taekwondo', 'wushu', 'pencak silat', 'arnis' => self::CombatRounds,
             'wrestling' => self::Wrestling,
             'tennis' => self::Tennis,
-            'goal ball' => self::GoalBall,
+            'goal ball', 'paragames - goal ball' => self::GoalBall,
             'billiard' => self::Billiard,
-            'bocce' => self::Bocce,
+            'bocce', 'paragames - boccee' => self::Bocce,
             default => self::Generic,
         };
     }

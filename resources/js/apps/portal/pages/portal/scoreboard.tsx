@@ -21,7 +21,10 @@ import type {
 } from '@/apps/portal/types';
 import publicRoutes from '@/routes/public';
 
-const POLL_INTERVAL_MS = 5000;
+// Public scoreboards do not have access to the authenticated scoring Echo
+// channel. Poll frequently enough that a clock pause is reflected on the
+// display on the next visible second rather than continuing for 5 seconds.
+const POLL_INTERVAL_MS = 1000;
 
 type Props = {
     meet: PortalMeetSummary;
@@ -63,7 +66,10 @@ export default function PortalScoreboard({
             fetch(
                 publicRoutes.scoreboard.poll({ meet: meet.id, match: match.id })
                     .url,
-                { headers: { Accept: 'application/json' } },
+                {
+                    cache: 'no-store',
+                    headers: { Accept: 'application/json' },
+                },
             )
                 .then((response) => {
                     if (!response.ok) {

@@ -3,6 +3,10 @@
 namespace App\Models;
 
 use App\Enums\UserRole;
+use App\Enums\Permission;
+use App\Enums\AthleteOversightType;
+use App\Enums\ManagementTeamMemberStatus;
+use App\Enums\ManagementTeamType;
 use Database\Factories\UserFactory;
 use Illuminate\Auth\MustVerifyEmail as VerifiesEmail;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -124,5 +128,35 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     public function managementTeamMemberships(): HasMany
     {
         return $this->hasMany(ManagementTeamMember::class);
+    }
+
+    public function athleteOversightAssignments(): HasMany
+    {
+        return $this->hasMany(AthleteOversightAssignment::class);
+    }
+
+    public function hasPermission(Permission $permission, ?Meet $meet = null): bool
+    {
+        if ($this->isAdmin()) return true;
+
+        $teamType = match ($permission) {
+            Permission::AthleteProfileValidate, Permission::AthleteDocumentsVerify,
+            Permission::AthleteEligibilityReview, Permission::AthleteEligibilityApprove => ManagementTeamType::DivisionScreeningAndAccreditation,
+            Permission::MedicalClearanceEvaluate, Permission::MedicalClearanceApprove => ManagementTeamType::Medical,
+            default => null,
+        };
+        if ($teamType !== null && $this->managementTeamMemberships()->where('status', ManagementTeamMemberStatus::Active)
+            ->whereHas('managementTeam', fn ($query) => $query->where('team_type', $teamType)
+                ->when($meet !== null, fn ($scope) => $scope->where('meet_id', $meet->id)))->exists()) return true;
+
+        $oversightType = match ($permission) {
+            Permission::DistrictReadinessView, Permission::DistrictAthletesView => AthleteOversightType::DistrictSportsCoordinator,
+            Permission::MunicipalityReadinessView, Permission::MunicipalityAthletesView => AthleteOversightType::MunicipalityTeamManager,
+            default => null,
+        };
+
+        return $oversightType !== null && $this->athleteOversightAssignments()->where('active', true)
+            ->where('authority_type', $oversightType)
+            ->when($meet !== null, fn ($query) => $query->where('meet_id', $meet->id))->exists();
     }
 }

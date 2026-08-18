@@ -4,6 +4,7 @@ namespace App\Actions\Fortify;
 
 use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
+use App\Models\CoachOnboardingRequest;
 use App\Models\User;
 use App\Services\RecaptchaVerifier;
 use Illuminate\Support\Facades\Validator;
@@ -14,7 +15,12 @@ class CreateNewUser implements CreatesNewUsers
 {
     use PasswordValidationRules, ProfileValidationRules;
 
-    public function __construct(private readonly RecaptchaVerifier $recaptcha) {}
+    private readonly RecaptchaVerifier $recaptcha;
+
+    public function __construct(RecaptchaVerifier $recaptcha)
+    {
+        $this->recaptcha = $recaptcha;
+    }
 
     /**
      * Validate and create a newly registered user.
@@ -26,6 +32,7 @@ class CreateNewUser implements CreatesNewUsers
         Validator::make($input, [
             ...$this->profileRules(),
             'password' => $this->passwordRules(),
+            'account_type' => ['nullable', 'in:viewer,coach'],
         ])->validate();
 
         // Same reCAPTCHA check as the login pipeline
@@ -39,10 +46,16 @@ class CreateNewUser implements CreatesNewUsers
             ]);
         }
 
-        return User::create([
+        $user = User::create([
             'name' => $input['name'],
             'email' => $input['email'],
             'password' => $input['password'],
         ]);
+
+        if (($input['account_type'] ?? 'viewer') === 'coach') {
+            CoachOnboardingRequest::query()->create(['user_id' => $user->id]);
+        }
+
+        return $user;
     }
 }

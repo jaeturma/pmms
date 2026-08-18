@@ -9,13 +9,10 @@ import {
     Users,
     X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { WhistleIcon } from '@/components/icons/whistle-icon';
-import {
-    CorrectionDialog,
-    CountdownClock,
-} from '@/components/live-score-display';
+import { CountdownClock } from '@/components/live-score-display';
 import type { BasketballState, LiveSession, RosterPlayer } from '@/components/live-score-display';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -578,7 +575,6 @@ function SidePanel({
     onToggleCourt,
     onAddPlayer,
     onRemovePlayer,
-    onCorrect,
     onResetFouls,
 }: {
     side: Side;
@@ -599,7 +595,6 @@ function SidePanel({
         isStarter: boolean,
     ) => void;
     onRemovePlayer: (rosterPlayerId: number) => void;
-    onCorrect: (delta: number, reason: string) => void;
     onResetFouls: () => void;
 }) {
     return (
@@ -620,6 +615,14 @@ function SidePanel({
                             (Fouls: {fouls})
                         </span>
                     </span>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 shrink-0"
+                        onClick={onResetFouls}
+                    >
+                        Reset fouls
+                    </Button>
                 </span>
                 <TeamModal
                     side={side}
@@ -657,16 +660,6 @@ function SidePanel({
                 </ul>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-                <Button
-                    variant="outline"
-                    className="h-10 text-base"
-                    onClick={onResetFouls}
-                >
-                    Reset fouls
-                </Button>
-                <CorrectionDialog side={side} label={label} onSubmit={onCorrect} />
-            </div>
         </div>
     );
 }
@@ -700,16 +693,29 @@ const BASKETBALL_STATE_DEFAULTS: BasketballState = {
 export function BasketballGameControl({
     session,
     state: rawState,
+    onSessionChange,
 }: {
     session: LiveSession;
     state: BasketballState;
+    onSessionChange: (session: LiveSession) => void;
 }) {
+    // Older showcase sessions stored per-quarter score rows under the
+    // `quarters` key. The interactive controller later standardized that
+    // key as the configured number of periods (2 or 4). Never pass the
+    // legacy object array into JSX or numeric comparisons: React cannot
+    // render those objects and the whole scoreboard becomes blank.
+    const normalizedQuarters =
+        rawState.quarters === 2 || rawState.quarters === 4
+            ? rawState.quarters
+            : 4;
     const state: BasketballState = {
         ...BASKETBALL_STATE_DEFAULTS,
         ...rawState,
+        quarters: normalizedQuarters,
     };
     const running = session.status === 'in_progress';
     const isPaused = session.status === 'paused';
+    const optimisticRequest = useRef(0);
 
     // Basketball doesn't track a structured "current quarter" column —
     // it reuses the same free-text `period_label` every board type has
@@ -734,11 +740,96 @@ export function BasketballGameControl({
         );
     };
 
+    const patchSessionOptimistically = (
+        optimisticSession: LiveSession,
+        url: string,
+        data: Record<string, unknown> = {},
+    ) => {
+        const previousSession = session;
+        const requestId = ++optimisticRequest.current;
+        onSessionChange(optimisticSession);
+
+        const csrfToken = document
+            .querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
+            ?.content;
+        const xsrfToken = document.cookie
+            .split('; ')
+            .find((cookie) => cookie.startsWith('XSRF-TOKEN='))
+            ?.slice('XSRF-TOKEN='.length);
+
+        void fetch(url, {
+            method: 'PATCH',
+            credentials: 'same-origin',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                ...(xsrfToken
+                    ? { 'X-XSRF-TOKEN': decodeURIComponent(xsrfToken) }
+                    : {}),
+            },
+            body: JSON.stringify(data),
+        })
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`Background save failed: ${response.status}`);
+                }
+            })
+            .catch(() => {
+                // A newer optimistic action owns the current display and
+                // must not be undone by an older request failing later.
+                if (optimisticRequest.current === requestId) {
+                    onSessionChange(previousSession);
+                }
+            });
+    };
+
     const pauseResume = () => {
-        router.patch(
+        const now = new Date();
+        const sportState = { ...state };
+
+        if (isPaused) {
+            const anchor = now.toISOString();
+            sportState.game_clock_updated_at = anchor;
+            sportState.shot_clock_updated_at = anchor;
+        } else {
+            const freezeClock = (
+                seconds: number,
+                anchor: string | null,
+            ): number => {
+                if (!anchor) {
+                    return seconds;
+                }
+
+                const elapsed = Math.max(
+                    0,
+                    Math.floor((now.getTime() - Date.parse(anchor)) / 1000),
+                );
+
+                return Math.max(0, seconds - elapsed);
+            };
+
+            sportState.game_clock_seconds = freezeClock(
+                state.game_clock_seconds,
+                state.game_clock_updated_at,
+            );
+            sportState.shot_clock_seconds = freezeClock(
+                state.shot_clock_seconds,
+                state.shot_clock_updated_at,
+            );
+            sportState.game_clock_updated_at = null;
+            sportState.shot_clock_updated_at = null;
+        }
+
+        patchSessionOptimistically(
+            {
+                ...session,
+                status: isPaused ? 'in_progress' : 'paused',
+                status_label: isPaused ? 'In Progress' : 'Paused',
+                clock_running: isPaused,
+                sport_state: sportState,
+            },
             (isPaused ? resumeRoute : pauseRoute)(session.id).url,
-            {},
-            { preserveScroll: true },
         );
     };
 
@@ -746,20 +837,37 @@ export function BasketballGameControl({
         router.patch(hornRoute(session.id).url, {}, { preserveScroll: true });
     };
 
-    const cyclePossession = () => {
-        const next =
-            state.possession === 'a'
-                ? 'b'
-                : state.possession === 'b'
-                  ? null
-                  : 'a';
-
-        router.patch(
+    const setPossession = (side: Side | null) => {
+        patchSessionOptimistically(
+            {
+                ...session,
+                sport_state: { ...state, possession: side },
+            },
             possessionRoute(session.id).url,
-            { side: next },
-            { preserveScroll: true },
+            { side },
         );
     };
+
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            const target = event.target as HTMLElement | null;
+            const isTyping =
+                target?.isContentEditable ||
+                target?.tagName === 'INPUT' ||
+                target?.tagName === 'TEXTAREA' ||
+                target?.tagName === 'SELECT';
+
+            if (event.code !== 'Space' || event.repeat || isTyping) {
+                return;
+            }
+
+            event.preventDefault();
+            pauseResume();
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    });
 
     const adjustGameClock = (deltaSeconds: number) => {
         router.patch(
@@ -851,14 +959,6 @@ export function BasketballGameControl({
         router.delete(rosterDestroyRoute(rosterPlayerId).url, {
             preserveScroll: true,
         });
-    };
-
-    const correctScore = (side: Side, delta: number, reason: string) => {
-        router.patch(
-            scoreRoute(session.id).url,
-            { type: 'correction', side, delta, reason },
-            { preserveScroll: true },
-        );
     };
 
     return (
@@ -954,7 +1054,7 @@ export function BasketballGameControl({
                     would Pause, orange while it would Resume. */}
                 <div className="flex flex-wrap items-center justify-center gap-2">
                     <Button
-                        className="h-12 border-orange-700 bg-orange-600 text-base font-semibold text-white hover:bg-orange-700"
+                        className="h-[4.8rem] border-2 border-slate-950 bg-orange-600 px-6 text-lg font-semibold text-white hover:bg-orange-700 dark:border-white"
                         onClick={soundHorn}
                         aria-label="Sound horn"
                     >
@@ -962,30 +1062,50 @@ export function BasketballGameControl({
                         Horn
                     </Button>
 
-                    <Button
-                        className="h-12 border-sky-700 bg-sky-600 text-base font-semibold text-white hover:bg-sky-700"
-                        onClick={cyclePossession}
-                        aria-label="Toggle possession arrow"
+                    <div
+                        className="flex h-[4.8rem] overflow-hidden rounded-md border-2 border-slate-950 dark:border-white"
+                        role="group"
+                        aria-label="Possession"
                     >
-                        {state.possession === 'a' && (
-                            <ArrowLeft aria-hidden="true" className="size-5" />
-                        )}
-                        {state.possession === 'b' && (
-                            <ArrowRight aria-hidden="true" className="size-5" />
-                        )}
-                        Possession
-                        {state.possession === null && ': none'}
-                    </Button>
+                        <Button
+                            className="h-full rounded-none border-0 px-5"
+                            variant={state.possession === 'a' ? 'default' : 'outline'}
+                            aria-label={`Possession: ${session.side_a_label ?? 'left team'}`}
+                            aria-pressed={state.possession === 'a'}
+                            onClick={() => setPossession('a')}
+                        >
+                            <ArrowLeft aria-hidden="true" className="size-7" />
+                        </Button>
+                        <Button
+                            className="h-full rounded-none border-y-0 border-r border-l px-5 text-lg"
+                            variant={state.possession === null ? 'default' : 'outline'}
+                            aria-label="No possession"
+                            aria-pressed={state.possession === null}
+                            onClick={() => setPossession(null)}
+                        >
+                            <X aria-hidden="true" className="size-6" />
+                        </Button>
+                        <Button
+                            className="h-full rounded-none border-0 px-5"
+                            variant={state.possession === 'b' ? 'default' : 'outline'}
+                            aria-label={`Possession: ${session.side_b_label ?? 'right team'}`}
+                            aria-pressed={state.possession === 'b'}
+                            onClick={() => setPossession('b')}
+                        >
+                            <ArrowRight aria-hidden="true" className="size-7" />
+                        </Button>
+                    </div>
 
                     <Button
                         className={cn(
-                            'h-12 text-base font-semibold text-white',
+                            'h-[4.8rem] border-2 border-slate-950 px-6 text-lg font-semibold text-white dark:border-white',
                             isPaused
                                 ? 'border-orange-700 bg-orange-600 hover:bg-orange-700'
                                 : 'border-emerald-700 bg-emerald-600 hover:bg-emerald-700',
                         )}
                         onClick={pauseResume}
                         aria-label={isPaused ? 'Resume clock' : 'Pause clock'}
+                        title="Pause/resume clock (Space)"
                     >
                         <WhistleIcon aria-hidden="true" className="size-5" />
                         {isPaused ? 'Resume' : 'Pause'}
@@ -1013,9 +1133,6 @@ export function BasketballGameControl({
                         addPlayer('a', entryId, jersey, starter)
                     }
                     onRemovePlayer={removePlayer}
-                    onCorrect={(delta, reason) =>
-                        correctScore('a', delta, reason)
-                    }
                     onResetFouls={resetTeamFouls}
                 />
                 <SidePanel
@@ -1037,9 +1154,6 @@ export function BasketballGameControl({
                         addPlayer('b', entryId, jersey, starter)
                     }
                     onRemovePlayer={removePlayer}
-                    onCorrect={(delta, reason) =>
-                        correctScore('b', delta, reason)
-                    }
                     onResetFouls={resetTeamFouls}
                 />
             </div>

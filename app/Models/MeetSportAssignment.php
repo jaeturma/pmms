@@ -42,7 +42,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['meet_sport_id', 'sport_category_id', 'user_id', 'role', 'is_lead', 'start_date', 'end_date', 'status'])]
+#[Fillable(['meet_sport_id', 'sport_category_id', 'person_id', 'user_id', 'role', 'original_designation', 'assignment_scope', 'source_sequence', 'source_district_text', 'district_id', 'school_district_id', 'requires_system_user', 'is_lead', 'start_date', 'end_date', 'status'])]
 class MeetSportAssignment extends Model
 {
     /** @use HasFactory<MeetSportAssignmentFactory> */
@@ -58,6 +58,7 @@ class MeetSportAssignment extends Model
         return [
             'role' => MeetSportAssignmentRole::class,
             'is_lead' => 'boolean',
+            'requires_system_user' => 'boolean',
             'start_date' => 'date',
             'end_date' => 'date',
             'status' => MeetSportAssignmentStatus::class,
@@ -86,5 +87,10 @@ class MeetSportAssignment extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function person(): BelongsTo
+    {
+        return $this->belongsTo(Person::class);
     }
 }

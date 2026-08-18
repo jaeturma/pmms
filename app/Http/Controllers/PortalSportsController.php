@@ -71,7 +71,9 @@ class PortalSportsController extends Controller
                     'name' => $sport->name,
                     'short_description' => $sport->short_description,
                     'photo_url' => $sport->photoUrl(),
-                    'is_paragames' => str_starts_with($sport->name, 'Paragames'),
+                    'classification' => $sport->classification,
+                    'icon_key' => $sport->icon_key,
+                    'is_paragames' => $sport->classification === 'paragames',
                     'category_count' => $this->categoryCount($sport, $meetSport),
                     'is_live' => $liveSportIds->contains($sport->id),
                 ];

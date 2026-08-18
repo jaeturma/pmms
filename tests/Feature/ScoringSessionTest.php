@@ -240,7 +240,7 @@ function tennisInitialState(): array
  */
 function goalBallMatch(): EventMatch
 {
-    $sport = Sport::factory()->create(['name' => 'Goal Ball']);
+    $sport = Sport::factory()->create(['name' => 'Paragames - Goal Ball']);
     $event = Event::factory()->create(['sport_id' => $sport->id]);
 
     return EventMatch::factory()->create(['event_id' => $event->id, 'status' => MatchStatus::Scheduled]);
@@ -285,7 +285,7 @@ function billiardInitialState(): array
  */
 function bocceMatch(): EventMatch
 {
-    $sport = Sport::factory()->create(['name' => 'Bocce']);
+    $sport = Sport::factory()->create(['name' => 'Paragames - Boccee']);
     $event = Event::factory()->create(['sport_id' => $sport->id]);
 
     return EventMatch::factory()->create(['event_id' => $event->id, 'status' => MatchStatus::Scheduled]);
@@ -387,6 +387,24 @@ test('a technical official can run a full basketball scoring session for their a
     expect($session->score_a)->toBe(2)
         ->and($session->sport_state['fouls_a'])->toBe(1)
         ->and($session->status)->toBe(ScoringSessionStatus::Ended);
+});
+
+test('starting a scheduled team scoreboard uses its assigned teams instead of operator-entered labels', function () {
+    $match = basketballMatch();
+    $entryA = confirmedEntryForScoringSession($match);
+    $entryB = confirmedEntryForScoringSession($match);
+    $match->entries()->sync([$entryA->id, $entryB->id]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->post("/matches/{$match->id}/scoring-sessions", [
+        'side_a_label' => 'Wrong A',
+        'side_b_label' => 'Wrong B',
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    expect($session->side_a_label)->toBe($entryA->athlete->school->name)
+        ->and($session->side_b_label)->toBe($entryB->athlete->school->name);
 });
 
 test('a technical official cannot run scoring for a match outside their assigned sport', function () {
@@ -839,6 +857,40 @@ test('starting a session for a basketball match initializes team fouls and the b
     ]);
 });
 
+test('pausing freezes countdown clocks at their authoritative remaining time and resume reanchors them', function () {
+    $match = basketballMatch();
+    $admin = User::factory()->admin()->create();
+    $started = now()->startOfSecond();
+    $state = basketballInitialSportState();
+    $state['game_clock_seconds'] = 600;
+    $state['game_clock_updated_at'] = $started->toIso8601String();
+    $state['shot_clock_seconds'] = 24;
+    $state['shot_clock_updated_at'] = $started->toIso8601String();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'status' => ScoringSessionStatus::InProgress,
+        'sport_state' => $state,
+    ]);
+
+    $this->travel(7)->seconds();
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/pause")->assertSessionHasNoErrors();
+    $paused = $session->fresh()->sport_state;
+
+    expect($paused['game_clock_seconds'])->toBe(593)
+        ->and($paused['shot_clock_seconds'])->toBe(17)
+        ->and($paused['game_clock_updated_at'])->toBeNull()
+        ->and($paused['shot_clock_updated_at'])->toBeNull();
+
+    $this->travel(3)->seconds();
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/resume")->assertSessionHasNoErrors();
+    $resumed = $session->fresh()->sport_state;
+
+    expect($resumed['game_clock_seconds'])->toBe(593)
+        ->and($resumed['shot_clock_seconds'])->toBe(17)
+        ->and($resumed['game_clock_updated_at'])->not->toBeNull()
+        ->and($resumed['shot_clock_updated_at'])->toBe($resumed['game_clock_updated_at']);
+});
+
 test('a non-basketball match uses the generic board type with no sport state', function () {
     $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
     $admin = User::factory()->admin()->create();
@@ -972,6 +1024,84 @@ test('the live payload includes a play-by-play feed reconstructed from score eve
         ->and($plays[2]['description'])->toBe('+2 — Mabini')
         ->and($plays[2]['score_a'])->toBe(2)
         ->and($plays[2]['score_b'])->toBe(0);
+});
+
+test('a scorer can remove recorded points and added fouls from play by play', function () {
+    $match = basketballMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Home', 'side_b_label' => 'Away']);
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/score", ['type' => 'point', 'side' => 'a', 'delta' => 3]);
+    $point = $session->events()->latest('id')->firstOrFail();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/foul", ['action' => 'add', 'side' => 'b']);
+    $foul = $session->events()->latest('id')->firstOrFail();
+
+    expect($session->refresh()->playByPlay()[0]['removable'])->toBeTrue();
+
+    $this->actingAs($admin)
+        ->delete("/scoring-sessions/{$session->id}/events/{$point->id}", ['reason' => 'Wrong player selected'])
+        ->assertSessionHasNoErrors();
+    $this->actingAs($admin)
+        ->delete("/scoring-sessions/{$session->id}/events/{$foul->id}", ['reason' => 'Official reversed the call'])
+        ->assertSessionHasNoErrors();
+
+    $fresh = $session->refresh();
+
+    expect($fresh->score_a)->toBe(0)
+        ->and($fresh->sport_state['fouls_b'])->toBe(0)
+        ->and($fresh->events()->count())->toBe(0)
+        ->and(AuditLog::query()->where('action', 'scoring.event_removed')->count())->toBe(2)
+        ->and(AuditLog::query()->where('action', 'scoring.event_removed')->latest('id')->value('context')['reason'])
+        ->toBe('Official reversed the call');
+});
+
+test('removing a play requires a reason', function () {
+    $match = basketballMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Home', 'side_b_label' => 'Away']);
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/score", ['type' => 'point', 'side' => 'a', 'delta' => 2]);
+    $point = $session->events()->latest('id')->firstOrFail();
+
+    $this->actingAs($admin)
+        ->delete("/scoring-sessions/{$session->id}/events/{$point->id}")
+        ->assertSessionHasErrors('reason');
+
+    expect($point->fresh())->not->toBeNull()
+        ->and($session->refresh()->score_a)->toBe(2);
+});
+
+test('corrections and foul resets cannot be removed from play by play', function () {
+    $match = basketballMatch();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Home', 'side_b_label' => 'Away']);
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/score", [
+        'type' => 'correction', 'side' => 'a', 'delta' => 1, 'reason' => 'Official correction',
+    ]);
+    $correction = $session->events()->latest('id')->firstOrFail();
+
+    $this->actingAs($admin)
+        ->delete("/scoring-sessions/{$session->id}/events/{$correction->id}", ['reason' => 'Attempted removal'])
+        ->assertSessionHasErrors('event');
+
+    expect($correction->fresh())->not->toBeNull()
+        ->and($session->refresh()->score_a)->toBe(1)
+        ->and($session->playByPlay()[0]['removable'])->toBeFalse();
 });
 
 test('the scoreboard page exposes real match metadata: sport, category, round, venue, and date', function () {

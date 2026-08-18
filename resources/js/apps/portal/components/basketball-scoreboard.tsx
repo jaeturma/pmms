@@ -1,8 +1,8 @@
-import { ClipboardList, ListOrdered, Video } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ClipboardList, ListOrdered, Video } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { initialsFor } from '@/apps/portal/components/municipality-crest';
-import { foulCount, readQuarters, shotClockSeconds, timeoutCount } from '@/apps/portal/lib/basketball-state';
+import { foulCount, gameClock, possessionSide, quarterCount, readQuarters, timeoutCount } from '@/apps/portal/lib/basketball-state';
 import { cn } from '@/apps/portal/lib/utils';
 import type { PortalLiveNow, PortalPlayByPlayEntry } from '@/apps/portal/types';
 
@@ -97,44 +97,60 @@ function PlayRow({ play, highlight }: { play: PortalPlayByPlayEntry; highlight: 
 
 export function PortalBasketballScoreboard({ liveNow, className }: PortalBasketballScoreboardProps) {
     const { session } = liveNow;
-    const [elapsed, setElapsed] = useState(session.elapsed_seconds);
     const [tab, setTab] = useState<BasketballTab>('plays');
 
-    const shotClockSeed = shotClockSeconds(session.sport_state);
-    const [shotClock, setShotClock] = useState(shotClockSeed ?? 24);
+    const gameClockSeed = gameClock(session.sport_state);
+    const gameClockSeconds = gameClockSeed?.seconds;
+    const gameClockUpdatedAt = gameClockSeed?.updatedAt;
+    const [clockTick, setClockTick] = useState(() => Date.now());
 
     useEffect(() => {
-        setElapsed(session.elapsed_seconds);
-
-        if (!session.clock_running) {
+        if (gameClockSeconds === undefined || !session.clock_running) {
             return;
         }
 
-        const interval = setInterval(() => setElapsed((value) => value + 1), 1000);
+        const interval = setInterval(() => setClockTick(Date.now()), 1000);
 
         return () => clearInterval(interval);
-    }, [session.elapsed_seconds, session.clock_running]);
+    }, [gameClockSeconds, gameClockUpdatedAt, session.clock_running]);
+
+    const elapsedSinceClockUpdate =
+        gameClockSeconds !== undefined && session.clock_running && gameClockUpdatedAt
+            ? Math.max(0, Math.floor((clockTick - Date.parse(gameClockUpdatedAt)) / 1000))
+            : 0;
+    const remainingSeconds = gameClockSeconds !== undefined
+        ? Math.max(0, gameClockSeconds - elapsedSinceClockUpdate)
+        : undefined;
 
     // Cosmetic only: PMMS has no real shot-clock reset tied to individual
     // plays, so this just loops 24→0→24 client-side once seeded with a
     // starting value, the same way the reference mockup's own shot clock
     // is decorative chrome rather than backend-driven.
-    useEffect(() => {
-        if (shotClockSeed === undefined || !session.clock_running) {
-            return;
+    const completedQuarters = readQuarters(session.sport_state) ?? [];
+    const configuredQuarterCount = quarterCount(session.sport_state);
+    const currentQuarterLabel = session.period_label?.match(/^Q\d+$/i)?.[0].toUpperCase();
+    const completedScoreA = completedQuarters.reduce((total, quarter) => total + quarter.a, 0);
+    const completedScoreB = completedQuarters.reduce((total, quarter) => total + quarter.b, 0);
+    const quarters = Array.from({ length: configuredQuarterCount }, (_, index) => {
+        const label = `Q${index + 1}`;
+        const completed = completedQuarters.find((quarter) => quarter.label.toUpperCase() === label);
+
+        if (completed) {
+            return completed;
         }
 
-        const interval = setInterval(() => setShotClock((value) => (value <= 0 ? 24 : value - 1)), 1000);
-
-        return () => clearInterval(interval);
-    }, [shotClockSeed, session.clock_running]);
-
-    const quarters = readQuarters(session.sport_state);
+        return {
+            label,
+            a: currentQuarterLabel === label ? Math.max(0, (session.score_a ?? 0) - completedScoreA) : 0,
+            b: currentQuarterLabel === label ? Math.max(0, (session.score_b ?? 0) - completedScoreB) : 0,
+        };
+    });
     const foulsA = foulCount(session.sport_state, 'fouls_a');
     const foulsB = foulCount(session.sport_state, 'fouls_b');
     const timeoutsA = timeoutCount(session.sport_state, 'timeouts_a');
     const timeoutsB = timeoutCount(session.sport_state, 'timeouts_b');
     const showTimeouts = timeoutsA !== undefined && timeoutsB !== undefined;
+    const possession = possessionSide(session.sport_state);
 
     return (
         <div className={cn('flex flex-col gap-3.5', className)}>
@@ -163,20 +179,28 @@ export function PortalBasketballScoreboard({ liveNow, className }: PortalBasketb
                         </div>
 
                         <div className="flex flex-col items-center gap-2">
-                            <span className="text-xs font-[900] text-[var(--portal-ink)] sm:text-[17px]">
-                                {formatPeriodLabel(session.period_label) ?? session.status_label}
-                            </span>
-                            {session.started_at && (
-                                <span className="rounded-[10px] border border-[var(--portal-border)] bg-[var(--portal-muted)] px-[9px] pt-[3px] pb-[7px] font-mono text-[28px] font-[950] text-[var(--portal-ink)] tabular-nums sm:px-[18px] sm:text-[46px]">
-                                    {formatClock(elapsed)}
+                            <div className="flex min-h-10 items-center justify-center gap-2 text-[var(--portal-ink)]">
+                                {possession === 'a' && (
+                                    <ArrowLeft
+                                        aria-label={`Possession: ${session.side_a_label ?? 'left team'}`}
+                                        className="size-7 shrink-0 stroke-[3.5] text-[var(--portal-accent)] sm:size-9"
+                                    />
+                                )}
+                                <span className="text-xs font-[900] sm:text-[17px]">
+                                    {formatPeriodLabel(session.period_label) ?? session.status_label}
                                 </span>
-                            )}
-                            {shotClockSeed !== undefined && (
-                                <div className="flex flex-col items-center gap-1">
-                                    <span className="w-[52px] rounded-[9px] border border-[var(--portal-maroon)]/50 px-2 py-[3px] text-center font-mono text-[24px] font-[950] text-[var(--portal-maroon)] tabular-nums sm:w-[70px] sm:text-[34px]">
-                                        {shotClock}
+                                {possession === 'b' && (
+                                    <ArrowRight
+                                        aria-label={`Possession: ${session.side_b_label ?? 'right team'}`}
+                                        className="size-7 shrink-0 stroke-[3.5] text-[var(--portal-accent)] sm:size-9"
+                                    />
+                                )}
+                            </div>
+                            {remainingSeconds !== undefined && (
+                                <div className="flex items-center justify-center gap-2 sm:gap-3">
+                                    <span className="rounded-[10px] border border-[var(--portal-border)] bg-[var(--portal-muted)] px-[9px] pt-[3px] pb-[7px] font-mono text-[28px] font-[950] text-[var(--portal-ink)] tabular-nums sm:px-[18px] sm:text-[46px]">
+                                        {formatClock(remainingSeconds)}
                                     </span>
-                                    <span className="text-[10px] font-[900] text-[var(--portal-muted-foreground)] sm:text-xs">SHOT CLOCK</span>
                                 </div>
                             )}
                         </div>
@@ -194,7 +218,7 @@ export function PortalBasketballScoreboard({ liveNow, className }: PortalBasketb
                         </div>
                     </div>
 
-                    {quarters && (
+                    {quarters.length > 0 && (
                         <div className="mt-[18px] overflow-x-auto">
                             <div className="mx-auto max-w-[520px]">
                                 <table className="w-full border-collapse border border-[var(--portal-border)] text-[13px]">

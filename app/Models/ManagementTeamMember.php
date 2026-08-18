@@ -21,7 +21,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['management_team_id', 'user_id', 'role_title', 'is_head', 'responsibilities', 'status'])]
+#[Fillable(['management_team_id', 'person_id', 'user_id', 'role_title', 'is_head', 'responsibilities', 'source_sequence', 'status'])]
 class ManagementTeamMember extends Model
 {
     /** @use HasFactory<ManagementTeamMemberFactory> */
@@ -54,5 +54,10 @@ class ManagementTeamMember extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function person(): BelongsTo
+    {
+        return $this->belongsTo(Person::class);
     }
 }

@@ -275,7 +275,7 @@ class ScoringSession extends Model
      * changed. Newest first, capped — this is a feed, not a paginated
      * archive.
      *
-     * @return array<int, array{id: int, description: string, score_a: int, score_b: int, created_at: string|null}>
+     * @return array<int, array{id: int, description: string, score_a: int, score_b: int, created_at: string|null, removable: bool}>
      */
     public function playByPlay(int $limit = 30): array
     {
@@ -367,6 +367,8 @@ class ScoringSession extends Model
                 'score_a' => $runningA,
                 'score_b' => $runningB,
                 'created_at' => $event->created_at?->format('g:i:s A'),
+                'removable' => $event->type === ScoreEventType::Point
+                    || ($event->type === ScoreEventType::Foul && ($payload['action'] ?? null) === 'add'),
             ];
         }
 

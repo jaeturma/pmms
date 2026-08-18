@@ -30,7 +30,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  * @property-read int|null $members_count
  */
-#[Fillable(['meet_id', 'team_type', 'name', 'description', 'status'])]
+#[Fillable(['meet_id', 'team_type', 'source_code', 'name', 'description', 'display_order', 'status'])]
 class ManagementTeam extends Model
 {
     /** @use HasFactory<ManagementTeamFactory> */

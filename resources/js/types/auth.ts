@@ -4,6 +4,7 @@ export type User = {
     email: string;
     role: string;
     role_label: string;
+    team_types?: string[];
     avatar?: string;
     email_verified_at: string | null;
     two_factor_enabled?: boolean;

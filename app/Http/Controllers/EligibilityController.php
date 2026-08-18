@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Enums\EligibilityDocumentType;
 use App\Enums\EligibilityStatus;
+use App\Enums\RequirementStatus;
+use App\Enums\Permission;
 use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Models\Athlete;
@@ -11,6 +13,13 @@ use App\Models\Delegation;
 use App\Models\EligibilityDocument;
 use App\Models\EligibilityReview;
 use App\Models\User;
+use App\Models\EligibilityCheck;
+use App\Models\Event;
+use App\Models\Meet;
+use App\Models\Sport;
+use App\Models\SportCategory;
+use App\Services\Eligibility\AthleteEligibilityChecker;
+use App\Services\Eligibility\TechnicalOfficialEligibilityChecker;
 use App\Services\AuditLogger;
 use App\Services\FileUploadService;
 use Illuminate\Http\RedirectResponse;
@@ -31,7 +40,72 @@ class EligibilityController extends Controller
     public function __construct(
         private readonly AuditLogger $audit,
         private readonly FileUploadService $uploads,
+        private readonly AthleteEligibilityChecker $athleteChecker,
+        private readonly TechnicalOfficialEligibilityChecker $officialChecker,
     ) {}
+
+    public function athleteChecker(Request $request): Response
+    {
+        Gate::authorize('viewAny', EligibilityReview::class);
+        $meet = Meet::query()->find($request->integer('meet_id')) ?? Meet::query()->active()->first();
+        $athlete = $request->filled('athlete_id') ? Athlete::query()->findOrFail($request->integer('athlete_id')) : null;
+        $event = $request->filled('event_id') ? Event::query()->findOrFail($request->integer('event_id')) : null;
+        $category = $request->filled('sport_category_id') ? SportCategory::query()->findOrFail($request->integer('sport_category_id')) : $event?->sportCategory;
+        $evaluation = $athlete !== null && $meet !== null ? $this->athleteChecker->evaluate($athlete, $meet, $event, $category) : null;
+
+        if ($evaluation !== null) {
+            $previousResult = EligibilityCheck::query()->where('subject_type', 'athlete')->where('subject_id', $athlete->id)
+                ->where('meet_id', $meet->id)->latest('checked_at')->value('result');
+            EligibilityCheck::query()->create(['meet_id' => $meet->id, 'subject_type' => 'athlete', 'subject_id' => $athlete->id,
+                'sport_id' => $event?->sport_id, 'sport_category_id' => $category?->id, 'event_id' => $event?->id,
+                'result' => $evaluation->result(), 'checked_by' => $request->user()?->id, 'checked_at' => now(), 'snapshot' => $evaluation->toArray()]);
+            $this->audit->record('athlete.eligibility.checked', $athlete, ['result' => $evaluation->result()->value]);
+            $this->audit->record('athlete.eligibility.recalculated', $athlete, ['result' => $evaluation->result()->value, 'previous_result' => $previousResult]);
+            if ($previousResult !== $evaluation->result()->value && in_array($evaluation->result()->value, ['eligible', 'ineligible'], true)) {
+                $this->audit->record('athlete.became_'.$evaluation->result()->value, $athlete, ['previous_result' => $previousResult]);
+            }
+        }
+
+        return Inertia::render('athletes/eligibility', [
+            'athletes' => Athlete::query()->with('school:id,name')->orderBy('last_name')->get()->map(fn (Athlete $item) => ['id' => $item->id, 'label' => $item->fullName().' — '.$item->school->name]),
+            'events' => Event::query()->with(['sport:id,name', 'sportCategory:id,display_name'])->orderBy('name')->get()->map(fn (Event $item) => ['id' => $item->id, 'label' => $item->sport->name.' — '.$item->name, 'category' => $item->sportCategory?->display_name]),
+            'selectedAthlete' => $athlete?->load(['school', 'delegation.district', 'eligibilityDocuments']),
+            'evaluation' => $evaluation?->toArray(), 'meet' => $meet?->only(['id', 'name']),
+        ]);
+    }
+
+    public function officialChecker(Request $request, User $official): Response
+    {
+        abort_unless($request->user()?->hasRole(UserRole::Admin, UserRole::Organizer), 403);
+        $meet = Meet::query()->find($request->integer('meet_id')) ?? Meet::query()->active()->firstOrFail();
+        $sport = $request->filled('sport_id') ? Sport::query()->findOrFail($request->integer('sport_id')) : null;
+        $evaluation = $sport === null ? null : $this->officialChecker->evaluate($official, $meet, $sport);
+        if ($evaluation !== null) {
+            EligibilityCheck::query()->create(['meet_id' => $meet->id, 'subject_type' => 'technical_official', 'subject_id' => $official->id,
+                'sport_id' => $sport->id, 'result' => $evaluation->result(), 'checked_by' => $request->user()?->id,
+                'checked_at' => now(), 'snapshot' => $evaluation->toArray()]);
+            $this->audit->record('technical_official.eligibility.checked', $official, ['result' => $evaluation->result()->value]);
+        }
+        $credential = $sport === null ? null : \App\Models\TechnicalOfficialAccreditation::query()
+            ->where('user_id', $official->id)->where('sport_id', $sport->id)->latest()->first();
+
+        return Inertia::render('technical-officials/eligibility', [
+            'official' => $official->only(['id', 'name', 'email']),
+            'sports' => Sport::query()->where('active', true)->orderBy('name')->get(['id', 'name']),
+            'selectedSport' => $sport?->only(['id', 'name']),
+            'accreditation' => $credential === null ? null : [
+                'type' => $credential->accreditation_type,
+                'certificate_number' => $credential->certificate_number,
+                'issuer' => $credential->issuing_organization,
+                'issued_at' => $credential->issued_at?->toDateString(),
+                'expires_at' => $credential->expires_at?->toDateString(),
+                'status' => $credential->status->value,
+                'attachment_url' => route('technical-official-accreditations.download', $credential),
+            ],
+            'evaluation' => $evaluation?->toArray(),
+            'meet' => $meet->only(['id', 'name']),
+        ]);
+    }
 
     /**
      * The eligibility review queue, searchable by athlete name and
@@ -60,6 +134,19 @@ class EligibilityController extends Controller
                 'athlete.delegation.officers',
                 fn ($officers) => $officers->whereKey($user->getKey()),
             );
+        } elseif ($user->role === UserRole::Coach) {
+            $base->whereHas('athlete.delegation.personnel', fn ($personnel) => $personnel->where('user_id', $user->id));
+        } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer) && ! $user->hasPermission(Permission::AthleteEligibilityReview)) {
+            $assignments = $user->athleteOversightAssignments()->where('active', true)->get();
+            $base->whereHas('athlete.school', function ($school) use ($assignments): void {
+                $school->where(function ($scope) use ($assignments): void {
+                    foreach ($assignments as $assignment) {
+                        $scope->orWhere(fn ($item) => $assignment->school_district_id !== null
+                            ? $item->where('school_district_id', $assignment->school_district_id)
+                            : $item->where('district_id', $assignment->district_id));
+                    }
+                });
+            });
         }
 
         // Counts reflect the officer's whole queue regardless of the
@@ -214,6 +301,11 @@ class EligibilityController extends Controller
             'document_type' => $request->string('document_type')->value(),
         ]);
 
+        $this->audit->record('athlete.document.uploaded', $document, [
+            'athlete' => $athlete->fullName(),
+            'type' => $document->document_type->value,
+        ]);
+        // Retained for compatibility with existing audit reports.
         $this->audit->record('eligibility.document_uploaded', $document, [
             'athlete' => $athlete->fullName(),
             'type' => $document->document_type->value,
@@ -294,6 +386,23 @@ class EligibilityController extends Controller
         return back();
     }
 
+    public function verifyDocument(Request $request, EligibilityDocument $document): RedirectResponse
+    {
+        $review = $document->athlete->eligibilityReview;
+        abort_if($review === null, 404);
+        $permission = $document->document_type === EligibilityDocumentType::MedicalCertificate
+            ? Permission::MedicalClearanceEvaluate
+            : Permission::AthleteDocumentsVerify;
+        abort_unless($request->user()?->hasPermission($permission, $review->meet), 403);
+        $data = $request->validate(['status' => ['required', Rule::enum(RequirementStatus::class)], 'remarks' => ['nullable', 'string', 'max:1000']]);
+        abort_unless(in_array($data['status'], [RequirementStatus::Verified->value, RequirementStatus::Rejected->value, RequirementStatus::UnderReview->value], true), 422);
+        $document->forceFill(['status' => $data['status'], 'verified_by' => $request->user()?->id,
+            'verified_at' => $data['status'] === RequirementStatus::UnderReview->value ? null : now(), 'remarks' => $data['remarks'] ?? null])->save();
+        $action = $data['status'] === RequirementStatus::Verified->value ? 'athlete.document.verified' : ($data['status'] === RequirementStatus::Rejected->value ? 'athlete.document.rejected' : 'athlete.document.under_review');
+        $this->audit->record($action, $document, ['athlete' => $document->athlete->fullName(), 'type' => $document->document_type->value]);
+        return back();
+    }
+
     /**
      * Approve a pending review (human decision, with optional remarks).
      */
@@ -322,6 +431,7 @@ class EligibilityController extends Controller
         $this->audit->record('eligibility.approved', $review, [
             'athlete' => $review->athlete->fullName(),
         ]);
+        $this->audit->record('athlete.dsac.approved', $review, ['athlete' => $review->athlete->fullName()]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Eligibility approved.')]);
 
@@ -356,6 +466,7 @@ class EligibilityController extends Controller
         $this->audit->record('eligibility.returned', $review, [
             'athlete' => $review->athlete->fullName(),
         ]);
+        $this->audit->record('athlete.dsac.returned', $review, ['athlete' => $review->athlete->fullName()]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Eligibility returned for correction.')]);
 

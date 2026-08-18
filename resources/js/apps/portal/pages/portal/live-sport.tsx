@@ -16,7 +16,9 @@ import type { PortalLiveNow, PortalMeetSummary, PortalSport } from '@/apps/porta
 import { sportPortal } from '@/routes/public';
 import { poll as pollSportPortal } from '@/routes/public/sport-portal';
 
-const LIVE_POLL_INTERVAL_MS = 10000;
+// Guest scoreboards cannot subscribe to the scorer's private Echo channel,
+// so clock controls need a short polling interval to remain in sync.
+const LIVE_POLL_INTERVAL_MS = 1000;
 
 type Props = {
     sport: PortalSport;
@@ -52,6 +54,7 @@ export default function PortalLiveSport({
 
         const interval = setInterval(() => {
             fetch(pollSportPortal(sport.slug).url, {
+                cache: 'no-store',
                 headers: { Accept: 'application/json' },
             })
                 .then((response) => {

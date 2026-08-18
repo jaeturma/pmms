@@ -191,6 +191,27 @@ test('the public scoreboard poll endpoint returns the same read-only payload', f
     $this->get("/meets/{$hidden->id}/matches/{$hiddenMatch->id}/scoreboard/poll")->assertNotFound();
 });
 
+test('the public scoreboard poll returns a frozen clock after the scorer pauses', function () {
+    $meet = Meet::factory()->active()->published()->create();
+    $match = publicScoreboardMatch($meet);
+
+    ScoringSession::factory()->paused()->create([
+        'match_id' => $match->id,
+        'sport_state' => [
+            'game_clock_seconds' => 593,
+            'game_clock_updated_at' => null,
+        ],
+    ]);
+
+    $response = $this->get("/meets/{$meet->id}/matches/{$match->id}/scoreboard/poll")
+        ->assertOk()
+        ->assertJsonPath('session.clock_running', false)
+        ->assertJsonPath('session.sport_state.game_clock_seconds', 593)
+        ->assertJsonPath('session.sport_state.game_clock_updated_at', null);
+
+    expect($response->headers->get('Cache-Control'))->toContain('no-store');
+});
+
 test('the public meet page lists only matches with a currently active session', function () {
     $meet = Meet::factory()->active()->published()->create();
 

@@ -26,7 +26,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  * @property-read int|null $events_count
  */
-#[Fillable(['name', 'school_year', 'starts_at', 'ends_at', 'venue'])]
+#[Fillable(['name', 'school_year', 'starts_at', 'ends_at', 'venue', 'eligibility_cutoff_date', 'medical_clearance_required', 'max_events_per_athlete'])]
 class Meet extends Model
 {
     /** @use HasFactory<MeetFactory> */
@@ -45,6 +45,9 @@ class Meet extends Model
             'status' => MeetStatus::class,
             'is_published' => 'boolean',
             'is_active' => 'boolean',
+            'eligibility_cutoff_date' => 'date',
+            'medical_clearance_required' => 'boolean',
+            'max_events_per_athlete' => 'integer',
         ];
     }
 
@@ -90,6 +93,14 @@ class Meet extends Model
     public function meetSports(): HasMany
     {
         return $this->hasMany(MeetSport::class);
+    }
+
+    /** Canonical sports enabled for this meet. */
+    public function sports(): BelongsToMany
+    {
+        return $this->belongsToMany(Sport::class, 'meet_sports')
+            ->withPivot(['status', 'description', 'venue_notes', 'active', 'notes', 'display_order'])
+            ->withTimestamps();
     }
 
     /**

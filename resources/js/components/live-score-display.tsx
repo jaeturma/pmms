@@ -1,4 +1,4 @@
-import { Maximize2, Minimize2, WifiOff } from 'lucide-react';
+import { Maximize2, Minimize2, Trash2, WifiOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { LiveBadge } from '@/components/live-badge';
@@ -31,6 +31,7 @@ export type PlayByPlayEntry = {
     score_a: number;
     score_b: number;
     created_at: string | null;
+    removable: boolean;
 };
 
 const PLAY_BY_PLAY_PREVIEW_COUNT = 8;
@@ -442,6 +443,7 @@ export function CountdownClock({
         <TickingCountdown
             key={anchor ?? 'initial'}
             baseSeconds={baseSeconds}
+            anchor={anchor}
             running={running}
         />
     );
@@ -449,14 +451,21 @@ export function CountdownClock({
 
 function TickingCountdown({
     baseSeconds,
+    anchor,
     running,
 }: {
     baseSeconds: number;
+    anchor: string | null;
     running: boolean;
 }) {
     const ticks = useTicks(running);
+    const [elapsedAtMount] = useState(() =>
+        running && anchor !== null
+            ? Math.max(0, Math.floor((Date.now() - Date.parse(anchor)) / 1000))
+            : 0,
+    );
 
-    return <>{formatClock(baseSeconds - ticks)}</>;
+    return <>{formatClock(baseSeconds - elapsedAtMount - ticks)}</>;
 }
 
 /**
@@ -580,6 +589,7 @@ function TeamPanel({
     corner,
     photoUrl,
     children,
+    logoAfterScore = false,
 }: {
     label: string;
     score: number;
@@ -587,6 +597,7 @@ function TeamPanel({
     corner: Corner;
     photoUrl?: string | null;
     children?: ReactNode;
+    logoAfterScore?: boolean;
 }) {
     return (
         <div
@@ -607,7 +618,12 @@ function TeamPanel({
             )}
         >
             {/* Logo, then the team name below it — one column. */}
-            <div className="flex min-w-0 flex-col items-center gap-2">
+            <div
+                className={cn(
+                    'flex min-w-0 flex-col items-center gap-2',
+                    logoAfterScore && 'order-1',
+                )}
+            >
                 {corner && (
                     <Badge
                         className={cn(
@@ -648,8 +664,18 @@ function TeamPanel({
                 </p>
             </div>
 
+            <div
+                aria-hidden="true"
+                className="h-24 shrink-0 border-l-2 border-slate-900/80 dark:border-slate-100/80"
+            />
+
             {/* The score sits beside the logo/name column, not below it. */}
-            <div className="flex flex-col items-center gap-2">
+            <div
+                className={cn(
+                    'flex flex-col items-center gap-2',
+                    logoAfterScore && '-order-1',
+                )}
+            >
                 {/* `key={score}` remounts this element on every real score
                     change (same technique as `RunningClock`/`LastUpdated`
                     below), replaying `animate-score-pop` — WP-08.5-06's
@@ -1211,11 +1237,17 @@ export function CorrectionDialog({
  */
 export function PlayByPlayList({
     playByPlay,
+    onRemove,
+    scrollable = false,
 }: {
     playByPlay: PlayByPlayEntry[];
+    onRemove?: (id: number) => void;
+    scrollable?: boolean;
 }) {
     const [showAllPlays, setShowAllPlays] = useState(false);
-    const visiblePlays = showAllPlays
+    const visiblePlays = scrollable
+        ? playByPlay
+        : showAllPlays
         ? playByPlay
         : playByPlay.slice(0, PLAY_BY_PLAY_PREVIEW_COUNT);
 
@@ -1228,11 +1260,19 @@ export function PlayByPlayList({
             <p className="mb-2 text-sm font-medium text-muted-foreground">
                 Live play by play
             </p>
-            <ul className="divide-y rounded-lg border text-sm">
+            <ul
+                className={cn(
+                    'divide-y rounded-lg border text-sm',
+                    scrollable && 'max-h-[15rem] overflow-y-auto',
+                )}
+            >
                 {visiblePlays.map((play) => (
                     <li
                         key={play.id}
-                        className="flex items-center justify-between gap-3 px-3 py-2"
+                        className={cn(
+                            'flex items-center justify-between gap-3 px-3 py-2',
+                            scrollable && 'h-12',
+                        )}
                     >
                         <span className="w-16 shrink-0 text-xs text-muted-foreground tabular-nums">
                             {play.created_at}
@@ -1241,10 +1281,22 @@ export function PlayByPlayList({
                         <span className="shrink-0 font-medium tabular-nums">
                             {play.score_a} – {play.score_b}
                         </span>
+                        {onRemove && play.removable && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 shrink-0 text-destructive hover:text-destructive"
+                                aria-label={`Remove ${play.description}`}
+                                onClick={() => onRemove(play.id)}
+                            >
+                                <Trash2 aria-hidden="true" className="size-4" />
+                            </Button>
+                        )}
                     </li>
                 ))}
             </ul>
-            {!showAllPlays &&
+            {!scrollable &&
+                !showAllPlays &&
                 playByPlay.length > PLAY_BY_PLAY_PREVIEW_COUNT && (
                     <Button
                         variant="link"
@@ -1493,6 +1545,7 @@ export function LiveScoreDisplay({
                         fullscreen={fullscreen}
                         corner={cornerB}
                         photoUrl={participants?.[1]?.photo_url}
+                        logoAfterScore
                     >
                         {basketballState && (
                             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">

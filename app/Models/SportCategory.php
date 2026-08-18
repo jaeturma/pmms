@@ -36,7 +36,7 @@ use Illuminate\Support\Collection;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['sport_id', 'meet_sport_id', 'level', 'sex', 'discipline', 'event_type', 'display_name'])]
+#[Fillable(['sport_id', 'meet_sport_id', 'name', 'slug', 'level', 'sex', 'discipline', 'classification', 'event_type', 'competition_format', 'team_size', 'min_players', 'max_players', 'participation_notes', 'display_name', 'display_order', 'active', 'min_age', 'max_age', 'min_grade', 'max_grade'])]
 class SportCategory extends Model
 {
     /** @use HasFactory<SportCategoryFactory> */
@@ -53,6 +53,14 @@ class SportCategory extends Model
             'level' => AgeDivision::class,
             'sex' => GenderCategory::class,
             'active' => 'boolean',
+            'team_size' => 'integer',
+            'min_players' => 'integer',
+            'max_players' => 'integer',
+            'display_order' => 'integer',
+            'min_age' => 'integer',
+            'max_age' => 'integer',
+            'min_grade' => 'integer',
+            'max_grade' => 'integer',
         ];
     }
 

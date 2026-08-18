@@ -60,7 +60,7 @@ export const PORTAL_SPORTS: Array<{ slug: string; name: string }> = [
     { slug: 'dancesports', name: 'Dancesports' },
     { slug: 'football', name: 'Football' },
     { slug: 'futsal', name: 'Futsal' },
-    { slug: 'goal-ball', name: 'Goal Ball' },
+    { slug: 'goal-ball', name: 'Goalball' },
     { slug: 'gymnastics', name: 'Gymnastics' },
     { slug: 'pencak-silat', name: 'Pencak Silat' },
     { slug: 'swimming', name: 'Swimming' },
@@ -73,8 +73,8 @@ export const PORTAL_SPORTS: Array<{ slug: string; name: string }> = [
     { slug: 'volleyball', name: 'Volleyball' },
     { slug: 'wrestling', name: 'Wrestling' },
     { slug: 'wushu', name: 'Wushu' },
-    { slug: 'paragames-athletics', name: 'Paragames - Athletics' },
-    { slug: 'paragames-swimming', name: 'Paragames - Swimming' },
+    { slug: 'paragames-athletics', name: 'Para Athletics' },
+    { slug: 'paragames-swimming', name: 'Para Swimming' },
 ];
 
 export function pluralize(word: string): string {

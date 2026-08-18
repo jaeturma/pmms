@@ -41,7 +41,7 @@ class GoalBallLiveDemoSeeder extends Seeder
 {
     public function run(): void
     {
-        $sport = Sport::query()->firstOrCreate(['name' => 'Goal Ball'], ['active' => true]);
+        $sport = Sport::query()->firstOrCreate(['name' => 'Paragames - Goal Ball'], ['active' => true]);
 
         $meet = Meet::query()->firstOrCreate(['name' => 'Goal Ball Scoreboard Demo'], [
             'school_year' => '2026-2027',

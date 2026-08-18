@@ -152,9 +152,15 @@ test('events can be deleted and the deletion is audited', function () {
 
 test('the sports catalog seeder is idempotent and seeds athletics events', function () {
     $this->seed(SportsCatalogSeeder::class);
+    $eventCount = Event::query()->count();
     $this->seed(SportsCatalogSeeder::class);
 
     expect(Sport::query()->where('name', 'Athletics')->count())->toBe(1)
-        ->and(Sport::query()->count())->toBe(28)
-        ->and(Event::query()->count())->toBe(16);
+        ->and(Sport::query()->count())->toBe(29)
+        ->and(Sport::query()->whereNull('short_description')->count())->toBe(0)
+        ->and(Sport::query()->whereNull('description')->count())->toBe(0)
+        ->and(Sport::query()->where('short_description', 'like', '%competition configured for the DdOPAA provincial sports program.')->count())->toBe(0)
+        ->and(Sport::query()->where('name', 'Basketball 3x3')->value('description'))->toContain('half court')
+        ->and(Event::query()->count())->toBe($eventCount)
+        ->and(Event::query()->whereHas('sport', fn ($query) => $query->where('code', 'ATHLETICS'))->count())->toBe(12);
 });

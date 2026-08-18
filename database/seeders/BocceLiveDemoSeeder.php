@@ -41,7 +41,7 @@ class BocceLiveDemoSeeder extends Seeder
 {
     public function run(): void
     {
-        $sport = Sport::query()->firstOrCreate(['name' => 'Bocce'], ['active' => true]);
+        $sport = Sport::query()->firstOrCreate(['name' => 'Paragames - Boccee'], ['active' => true]);
 
         $meet = Meet::query()->firstOrCreate(['name' => 'Bocce Scoreboard Demo'], [
             'school_year' => '2026-2027',

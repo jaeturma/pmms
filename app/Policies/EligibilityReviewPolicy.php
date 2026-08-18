@@ -2,6 +2,9 @@
 
 namespace App\Policies;
 
+use App\Enums\ManagementTeamMemberStatus;
+use App\Enums\ManagementTeamType;
+use App\Enums\Permission;
 use App\Enums\UserRole;
 use App\Models\Delegation;
 use App\Models\EligibilityReview;
@@ -17,7 +20,10 @@ class EligibilityReviewPolicy
      */
     public function viewAny(User $user): bool
     {
-        return $user->hasRole(UserRole::Admin, UserRole::Organizer, UserRole::DelegationOfficer, UserRole::Coach);
+        return $user->hasRole(UserRole::Admin, UserRole::Organizer, UserRole::DelegationOfficer, UserRole::Coach)
+            || $user->hasPermission(Permission::AthleteEligibilityReview)
+            || $user->hasPermission(Permission::DistrictAthletesView)
+            || $user->hasPermission(Permission::MunicipalityAthletesView);
     }
 
     /**
@@ -27,6 +33,19 @@ class EligibilityReviewPolicy
     public function view(User $user, EligibilityReview $review): bool
     {
         if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+            return true;
+        }
+
+        if ($user->hasPermission(Permission::AthleteEligibilityReview, $review->meet)) {
+            return true;
+        }
+
+        $school = $review->athlete->school;
+        if ($user->athleteOversightAssignments()->where('active', true)->where('meet_id', $review->meet_id)
+            ->where(function ($query) use ($school) {
+                $query->where(fn ($scope) => $scope->where('authority_type', 'district_sports_coordinator')->where('school_district_id', $school->school_district_id))
+                    ->orWhere(fn ($scope) => $scope->where('authority_type', 'municipality_team_manager')->where('district_id', $school->district_id));
+            })->exists()) {
             return true;
         }
 
@@ -55,6 +74,6 @@ class EligibilityReviewPolicy
      */
     public function decide(User $user, EligibilityReview $review): bool
     {
-        return $user->hasRole(UserRole::Admin, UserRole::Organizer);
+        return $user->hasPermission(Permission::AthleteEligibilityApprove, $review->meet);
     }
 }

@@ -24,6 +24,7 @@ use App\Models\EventMatch;
 use App\Models\EventResult;
 use App\Models\EventSchedule;
 use App\Models\Meet;
+use App\Models\MeetSport;
 use App\Models\Personnel;
 use App\Models\ResultPlacement;
 use App\Models\School;
@@ -101,6 +102,7 @@ class Ddopaa2026ShowcaseSeeder extends Seeder
         $venues = $this->venues();
         $secondaryEvents = $this->secondaryEvents($meet);
         $elementaryEvents = $this->elementaryEvents($meet);
+        $this->meetSports($meet, $secondaryEvents->concat($elementaryEvents));
 
         $delegationsByMunicipality = $this->delegationsAndRosters($meet, $secondaryEvents, $elementaryEvents);
 
@@ -254,6 +256,24 @@ class Ddopaa2026ShowcaseSeeder extends Seeder
         $meet->events()->syncWithoutDetaching($events->pluck('id'));
 
         return $events;
+    }
+
+    /**
+     * Keep the meet-specific sport registry in sync with the events this
+     * seeder attaches. The regular meet-management controller does this
+     * when an organizer updates a meet, but seeders write the pivot
+     * directly and therefore need to maintain the same invariant here.
+     *
+     * @param  Collection<int, Event>  $events
+     */
+    private function meetSports(Meet $meet, Collection $events): void
+    {
+        foreach ($events->pluck('sport_id')->unique() as $sportId) {
+            MeetSport::query()->firstOrCreate([
+                'meet_id' => $meet->id,
+                'sport_id' => $sportId,
+            ]);
+        }
     }
 
     /**

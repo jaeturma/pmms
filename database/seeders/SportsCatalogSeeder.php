@@ -20,8 +20,34 @@ class SportsCatalogSeeder extends Seeder
      */
     public function run(): void
     {
+        // Backwards-compatible entry point retained for existing showcase
+        // seeders. The canonical catalog is now split by responsibility.
+        $this->call(SportEventsSeeder::class);
+
         foreach ($this->sports() as $name => $descriptions) {
-            Sport::query()->firstOrCreate(['name' => $name], $descriptions);
+            $canonicalName = match ($name) {
+                'Billiard' => 'Billiards',
+                'Paragames - Boccee' => 'Bocce',
+                'Paragames - Goal Ball' => 'Goalball',
+                'Paragames - Athletics' => 'Para Athletics',
+                'Paragames - Swimming' => 'Para Swimming',
+                default => $name,
+            };
+            $sport = Sport::query()->where('name', $canonicalName)->first();
+
+            if ($sport === null) {
+                continue;
+            }
+
+            $generic = $sport->name.' competition configured for the DdOPAA provincial sports program.';
+            $sport->forceFill([
+                'short_description' => blank($sport->short_description) || $sport->short_description === $generic
+                    ? $descriptions['short_description']
+                    : $sport->short_description,
+                'description' => blank($sport->description)
+                    ? $descriptions['description']
+                    : $sport->description,
+            ])->save();
         }
 
         // Backfill descriptions for rows that already existed before this
@@ -40,6 +66,8 @@ class SportsCatalogSeeder extends Seeder
                     $sport->forceFill($descriptions)->save();
                 }
             });
+
+        return;
 
         $athletics = Sport::query()->where('name', 'Athletics')->firstOrFail();
 
@@ -111,11 +139,15 @@ class SportsCatalogSeeder extends Seeder
                 'short_description' => 'Fast-paced team competition featuring Elementary and Secondary Boys and Girls divisions in the DdOPAA Meet.',
                 'description' => "Basketball is one of the major team sports contested during the DdOPAA Provincial Meet. Municipal delegations compete through approved Elementary and Secondary categories for Boys and Girls. Games are conducted according to the official meet schedule and are managed by assigned Tournament Managers, Technical Officials, Tournament ICT personnel, and Tournament Secretaries.\n\nThe competition progresses through the configured tournament format until the championship matches. Live scores may be available when venue connectivity permits. Otherwise, official results are encoded and confirmed after the match.\n\nAs one of the most widely followed sports at any DepEd meet, Basketball typically draws large crowds and frequent live-scoring coverage, and its games are often featured prominently across the public portal's Live Now section.",
             ],
+            'Basketball 3x3' => [
+                'short_description' => 'A compact, fast-paced form of basketball played by three athletes per side on a half court.',
+                'description' => "Basketball 3x3 is a fast-paced team sport contested on a half court by three active players from each delegation. Its compact format keeps play moving through quick possessions, frequent transitions, and continuous action around a single basket.\n\nGames follow the official DdOPAA Meet schedule and are handled by the assigned Tournament Managers, Technical Officials, Tournament ICT personnel, and Tournament Secretaries. They oversee officiating, scoring, match records, and confirmation of the official result. Live scores may be shown when venue connectivity permits; otherwise, results are encoded after each game.\n\nAlthough related to traditional Basketball, 3x3 is maintained as a separate meet sport with its own assignments, schedule, results, and medal outcome.",
+            ],
             'Billiard' => [
                 'short_description' => 'A cue sport contested rack by rack, rewarding precision, positioning, and composure.',
                 'description' => "Billiard is an individual cue sport contested at the provincial meet across Secondary Boys and Girls categories. Matches are played as a race to a set number of racks, with the first athlete to reach the target declared the winner of that match.\n\nCompetitions take place at the meet's designated billiard venue under the supervision of Technical Officials who confirm rack outcomes and maintain match records. Given the sport's need for a controlled, quiet playing environment, its schedule is coordinated closely with venue availability.\n\nBilliard rewards patience and precision over raw athleticism, offering a different pace of competition within the broader meet program while still counting fully toward each delegation's overall standing.",
             ],
-            'Bocce' => [
+            'Paragames - Boccee' => [
                 'short_description' => 'A precision ball sport where teams score points each end by landing closest to the target ball.',
                 'description' => "Bocce is a precision ball sport contested at the provincial meet in team format across Elementary and Secondary categories. Competitors take turns rolling balls toward a smaller target ball, scoring points each end based on proximity, until a delegation reaches the target score.\n\nMatches are conducted at the meet's designated court under the oversight of assigned Technical Officials, who confirm end results and running scores. As with other precision sports, Bocce rewards accuracy and tactical shot selection over speed.\n\nBocce's inclusion broadens the range of competition formats available at the meet, giving delegations another avenue to contribute to their overall medal count outside the more physically intensive team sports.",
             ],
@@ -139,7 +171,7 @@ class SportsCatalogSeeder extends Seeder
                 'short_description' => 'A fast indoor variant of football played on a smaller court over shorter halves.',
                 'description' => "Futsal is a team sport contested at the provincial meet across Elementary and Secondary Boys and Girls divisions, played on a smaller indoor or hard-court surface over two shorter halves than outdoor Football. The compact playing area rewards quick passing and close ball control.\n\nMatches follow the official meet schedule and are managed by assigned Tournament Managers and Technical Officials who oversee refereeing, timing, and results confirmation, including yellow and red card tallies where applicable. Live scores may be available when venue connectivity permits; otherwise, results are confirmed and encoded after the match.\n\nFutsal's smaller format allows more matches to be scheduled within a shorter window, making it a fast-paced, frequently featured sport across the meet's daily schedule.",
             ],
-            'Goal Ball' => [
+            'Paragames - Goal Ball' => [
                 'short_description' => 'A Paralympic team sport for visually impaired athletes, played by ear using a bell-fitted ball.',
                 'description' => "Goal Ball is a team sport for visually impaired athletes, contested at the provincial meet across its own categories. Teams attempt to roll a ball fitted with bells past their opponents into a goal, relying entirely on hearing and orientation within a marked, tactile-lined court.\n\nMatches are played over two halves under strict silence requirements from spectators, allowing athletes to track the ball by sound alone. Assigned Tournament Managers and Technical Officials oversee timing, goal confirmation, and penalty-throw calls throughout each match.\n\nGoal Ball's inclusion reflects the meet's commitment to inclusive competition, giving visually impaired athletes a genuine, fully officiated sport of their own within the overall program.",
             ],

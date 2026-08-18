@@ -6,6 +6,7 @@ import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Spinner } from '@/components/ui/spinner';
 import { login } from '@/routes';
 import { store } from '@/routes/register';
@@ -74,6 +75,12 @@ export default function Register({ passwordRules }: Props) {
                                 />
                                 <InputError message={errors.password} />
                             </div>
+
+                            <label className="flex items-center gap-3 text-sm">
+                                <Checkbox name="account_type" value="coach" />
+                                Request a Coach account
+                            </label>
+                            <InputError message={errors.account_type} />
 
                             <div className="grid gap-2">
                                 <Label htmlFor="password_confirmation">

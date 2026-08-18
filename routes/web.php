@@ -4,9 +4,11 @@ use App\Enums\SportPortalSlug;
 use App\Http\Controllers\AccreditationController;
 use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\AthleteController;
+use App\Http\Controllers\AthleteReadinessController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\BilletingAssignmentController;
 use App\Http\Controllers\BilletingVenueController;
+use App\Http\Controllers\CoachAssignmentRequestController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DelegationController;
 use App\Http\Controllers\DistrictController;
@@ -54,6 +56,7 @@ use App\Http\Controllers\ScoringSessionController;
 use App\Http\Controllers\SportController;
 use App\Http\Controllers\SystemSettingsController;
 use App\Http\Controllers\TallyController;
+use App\Http\Controllers\TechnicalOfficialAccreditationController;
 use App\Http\Controllers\TransportRequestController;
 use App\Http\Controllers\TransportTripController;
 use App\Http\Controllers\VehicleController;
@@ -158,6 +161,7 @@ Route::middleware('throttle:60,1')->group(function () {
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::post('coach/assignment-requests', [CoachAssignmentRequestController::class, 'store'])->name('coach.assignment-requests.store');
 
     Route::post('uploads', [FileUploadController::class, 'store'])->name('uploads.store');
     Route::get('uploads/{upload}', [FileUploadController::class, 'download'])->name('uploads.download');
@@ -193,6 +197,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('accreditations/{accreditation}/card', [AccreditationController::class, 'card'])->name('accreditation.card');
 
     Route::get('athletes', [AthleteController::class, 'index'])->name('athletes.index');
+    Route::get('athletes/eligibility', [EligibilityController::class, 'athleteChecker'])->name('athletes.eligibility');
+    Route::get('readiness', AthleteReadinessController::class)->name('readiness.index');
     Route::get('athletes/{athlete}', [AthleteController::class, 'show'])->name('athletes.show');
     Route::get('athletes/{athlete}/photo', [AthleteController::class, 'photo'])->name('athletes.photo');
     Route::get('athletes/{athlete}/sports-photo', [AthleteController::class, 'sportsPhoto'])->name('athletes.sports-photo');
@@ -316,9 +322,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('emergency-communication-logs', [EmergencyCommunicationLogController::class, 'store'])->name('emergency-communication-logs.store');
 
     Route::get('eligibility', [EligibilityController::class, 'index'])->name('eligibility.index');
+    Route::get('technical-officials/{official}/eligibility', [EligibilityController::class, 'officialChecker'])->name('technical-officials.eligibility');
+    Route::post('technical-official-accreditations', [TechnicalOfficialAccreditationController::class, 'store'])->name('technical-official-accreditations.store');
+    Route::get('technical-official-accreditations/{accreditation}', [TechnicalOfficialAccreditationController::class, 'download'])->name('technical-official-accreditations.download');
+    Route::patch('technical-official-accreditations/{accreditation}/status', [TechnicalOfficialAccreditationController::class, 'updateStatus'])->name('technical-official-accreditations.status');
     Route::post('eligibility/documents', [EligibilityController::class, 'storeDocument'])->name('eligibility.documents.store');
     Route::get('eligibility/documents/{document}', [EligibilityController::class, 'downloadDocument'])->name('eligibility.documents.download');
     Route::delete('eligibility/documents/{document}', [EligibilityController::class, 'destroyDocument'])->name('eligibility.documents.destroy');
+    Route::patch('eligibility/documents/{document}/status', [EligibilityController::class, 'verifyDocument'])->name('eligibility.documents.status');
     Route::patch('eligibility/reviews/{review}/approve', [EligibilityController::class, 'approve'])->name('eligibility.approve');
     Route::patch('eligibility/reviews/{review}/return', [EligibilityController::class, 'returnReview'])->name('eligibility.return');
     Route::patch('eligibility/reviews/{review}/reject', [EligibilityController::class, 'reject'])->name('eligibility.reject');
@@ -487,6 +498,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('scoring-sessions/{session}/resume', [ScoringSessionController::class, 'resume'])->name('scoring.resume');
         Route::patch('scoring-sessions/{session}/end', [ScoringSessionController::class, 'end'])->name('scoring.end');
         Route::patch('scoring-sessions/{session}/foul', [ScoringSessionController::class, 'foul'])->name('scoring.foul');
+        Route::delete('scoring-sessions/{session}/events/{event}', [ScoringSessionController::class, 'removeEvent'])->name('scoring.events.destroy');
         Route::patch('scoring-sessions/{session}/round', [ScoringSessionController::class, 'round'])->name('scoring.round');
         Route::patch('scoring-sessions/{session}/count', [ScoringSessionController::class, 'count'])->name('scoring.count');
         Route::patch('scoring-sessions/{session}/inning-run', [ScoringSessionController::class, 'inningRun'])->name('scoring.inning-run');

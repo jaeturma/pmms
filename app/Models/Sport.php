@@ -23,7 +23,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  * @property-read int|null $events_count
  */
-#[Fillable(['name', 'short_description', 'description'])]
+#[Fillable(['code', 'name', 'slug', 'classification', 'short_description', 'description', 'icon_key', 'competition_format', 'is_team_sport', 'active', 'display_order'])]
 class Sport extends Model
 {
     /** @use HasFactory<SportFactory> */
@@ -38,6 +38,8 @@ class Sport extends Model
     {
         return [
             'active' => 'boolean',
+            'is_team_sport' => 'boolean',
+            'display_order' => 'integer',
         ];
     }
 

@@ -963,13 +963,13 @@ class PortalController extends Controller
         return [
             'slug' => $slug->value,
             'name' => $slug->sportName(),
-            'is_paragames' => str_starts_with($sport->name, 'Paragames'),
+            'is_paragames' => $sport->classification === 'paragames' || str_starts_with($sport->name, 'Paragames'),
             'short_description' => $sport->short_description,
             'description' => $sport->description,
             'photo_url' => $sport->photoUrl(),
             'categories' => $this->sportProfileCategories($sport, $meetSport),
             'tournament_management' => $meetSport === null ? [] : $this->sportProfileTournamentManagement($meetSport),
-            'technical_officials' => $this->sportProfileTechnicalOfficials($sport),
+            'technical_officials' => $this->sportProfileTechnicalOfficials($sport, $meetSport),
         ];
     }
 
@@ -981,7 +981,7 @@ class PortalController extends Controller
         return [
             'slug' => $slug->value,
             'name' => $slug->sportName(),
-            'is_paragames' => str_starts_with($slug->sportName(), 'Paragames'),
+            'is_paragames' => in_array($slug, [SportPortalSlug::Bocce, SportPortalSlug::GoalBall, SportPortalSlug::ParagamesAthletics, SportPortalSlug::ParagamesSwimming], true),
             'short_description' => null,
             'description' => null,
             'photo_url' => null,
@@ -1039,11 +1039,11 @@ class PortalController extends Controller
         return MeetSportAssignment::query()
             ->where('meet_sport_id', $meetSport->id)
             ->where('role', '!=', MeetSportAssignmentRole::TechnicalOfficial->value)
-            ->with(['user:id,name', 'sportCategory:id,display_name'])
+            ->with(['user:id,name', 'person:id,full_name', 'sportCategory:id,display_name'])
             ->get()
             ->sortBy(fn (MeetSportAssignment $assignment): int => $this->tournamentManagementRolePriority($assignment->role))
             ->map(fn (MeetSportAssignment $assignment): array => [
-                'name' => $assignment->user->name,
+                'name' => $assignment->user?->name ?? $assignment->person?->full_name ?? __('Unknown person'),
                 'role_label' => $assignment->role->label(),
                 'category' => $assignment->sportCategory?->display_name,
                 'is_lead' => $assignment->is_lead,
@@ -1090,17 +1090,40 @@ class PortalController extends Controller
      *
      * @return array<int, array{name: string, duty: string|null}>
      */
-    private function sportProfileTechnicalOfficials(Sport $sport): array
+    private function sportProfileTechnicalOfficials(Sport $sport, ?MeetSport $meetSport): array
     {
-        return DB::table('sport_user')
+        $meetOfficials = $meetSport === null
+            ? collect()
+            : MeetSportAssignment::query()
+                ->where('meet_sport_id', $meetSport->id)
+                ->where('role', MeetSportAssignmentRole::TechnicalOfficial->value)
+                ->whereNotIn('status', ['declined', 'ended'])
+                ->with(['user:id,name', 'person:id,full_name'])
+                ->get()
+                ->map(function (MeetSportAssignment $assignment): array {
+                    $designation = trim((string) $assignment->original_designation);
+
+                    return [
+                        'name' => $assignment->user?->name ?? $assignment->person?->full_name ?? __('Unknown person'),
+                        'duty' => $designation !== '' && strcasecmp($designation, 'Technical Official') !== 0
+                            ? $designation
+                            : null,
+                    ];
+                });
+
+        $legacyOfficials = DB::table('sport_user')
             ->join('users', 'users.id', '=', 'sport_user.user_id')
             ->where('sport_user.sport_id', $sport->id)
-            ->orderBy('users.name')
             ->get(['users.name as name', 'sport_user.duty as duty'])
             ->map(fn (object $row): array => [
                 'name' => (string) $row->name,
                 'duty' => $row->duty === null ? null : (string) $row->duty,
-            ])
+            ]);
+
+        return $meetOfficials
+            ->concat($legacyOfficials)
+            ->unique(fn (array $official): string => mb_strtolower($official['name'].'|'.($official['duty'] ?? '')))
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
             ->values()
             ->all();
     }
@@ -1452,7 +1475,7 @@ class PortalController extends Controller
 
         return response()->json([
             'session' => $session === null ? null : $session->toLivePayload(),
-        ]);
+        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate');
     }
 
     /**

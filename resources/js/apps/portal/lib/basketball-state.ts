@@ -50,11 +50,17 @@ function readNumber(record: Record<string, unknown>, key: string): number {
     return typeof value === 'number' ? value : 0;
 }
 
-export function foulCount(state: SportState, key: 'fouls_a' | 'fouls_b'): number {
+export function foulCount(
+    state: SportState,
+    key: 'fouls_a' | 'fouls_b',
+): number {
     return isRecord(state) ? readNumber(state, key) : 0;
 }
 
-export function timeoutCount(state: SportState, key: 'timeouts_a' | 'timeouts_b'): number | undefined {
+export function timeoutCount(
+    state: SportState,
+    key: 'timeouts_a' | 'timeouts_b',
+): number | undefined {
     if (!isRecord(state) || typeof state[key] !== 'number') {
         return undefined;
     }
@@ -62,25 +68,59 @@ export function timeoutCount(state: SportState, key: 'timeouts_a' | 'timeouts_b'
     return state[key];
 }
 
-export function shotClockSeconds(state: SportState): number | undefined {
-    if (!isRecord(state) || typeof state.shot_clock_seconds !== 'number') {
+export function gameClock(
+    state: SportState,
+): { seconds: number; updatedAt: string | null } | undefined {
+    if (!isRecord(state) || typeof state.game_clock_seconds !== 'number') {
         return undefined;
     }
 
-    return state.shot_clock_seconds;
+    return {
+        seconds: Math.max(0, state.game_clock_seconds),
+        updatedAt:
+            typeof state.game_clock_updated_at === 'string'
+                ? state.game_clock_updated_at
+                : null,
+    };
 }
 
-export function readQuarters(state: SportState): BasketballQuarter[] | undefined {
+export function possessionSide(state: SportState): 'a' | 'b' | null {
+    if (
+        !isRecord(state) ||
+        (state.possession !== 'a' && state.possession !== 'b')
+    ) {
+        return null;
+    }
+
+    return state.possession;
+}
+
+export function readQuarters(
+    state: SportState,
+): BasketballQuarter[] | undefined {
     if (!isRecord(state) || !Array.isArray(state.quarters)) {
         return undefined;
     }
 
     const quarters = state.quarters.filter(
         (quarter): quarter is BasketballQuarter =>
-            isRecord(quarter) && typeof quarter.label === 'string' && typeof quarter.a === 'number' && typeof quarter.b === 'number',
+            isRecord(quarter) &&
+            typeof quarter.label === 'string' &&
+            typeof quarter.a === 'number' &&
+            typeof quarter.b === 'number',
     );
 
     return quarters.length > 0 ? quarters : undefined;
+}
+
+export function quarterCount(state: SportState): 2 | 4 {
+    if (isRecord(state) && (state.quarters === 2 || state.quarters === 4)) {
+        return state.quarters;
+    }
+
+    // Legacy showcase sessions stored completed quarter rows under this
+    // key. Those basketball games use the standard four-quarter format.
+    return 4;
 }
 
 function readTeamStatsSide(value: unknown): BasketballTeamStats | undefined {
@@ -109,7 +149,9 @@ function readTeamStatsSide(value: unknown): BasketballTeamStats | undefined {
     return value as unknown as BasketballTeamStats;
 }
 
-export function readTeamStats(state: SportState): { a: BasketballTeamStats; b: BasketballTeamStats } | undefined {
+export function readTeamStats(
+    state: SportState,
+): { a: BasketballTeamStats; b: BasketballTeamStats } | undefined {
     if (!isRecord(state) || !isRecord(state.team_stats)) {
         return undefined;
     }
@@ -138,7 +180,9 @@ function readPerformerList(value: unknown): BasketballPerformer[] | undefined {
     return performers.length > 0 ? performers : undefined;
 }
 
-export function readBoxScore(state: SportState): { a: BasketballPerformer[]; b: BasketballPerformer[] } | undefined {
+export function readBoxScore(
+    state: SportState,
+): { a: BasketballPerformer[]; b: BasketballPerformer[] } | undefined {
     if (!isRecord(state) || !isRecord(state.box_score)) {
         return undefined;
     }

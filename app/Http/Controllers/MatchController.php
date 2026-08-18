@@ -48,8 +48,10 @@ class MatchController extends Controller
         }
 
         $canManageAll = Gate::allows('manage-meet-data');
-        $isTournamentManager = $user->role === UserRole::TournamentManager && $user->managedSport !== null;
-        $managedSportId = $isTournamentManager ? $user->managedSport->id : null;
+        $managedSportIds = $user->role === UserRole::TournamentManager
+            ? $this->userManagedSportIds($user)
+            : collect();
+        $isTournamentManager = $managedSportIds->isNotEmpty();
 
         $eventId = $request->integer('event_id');
 
@@ -74,7 +76,7 @@ class MatchController extends Controller
         if ($user->hasRole(UserRole::TechnicalOfficial, UserRole::TournamentManager)) {
             $sportIds = $user->role === UserRole::TechnicalOfficial
                 ? $user->sports()->pluck('sports.id')
-                : collect([$user->managedSport?->id])->filter();
+                : $managedSportIds;
 
             $query->whereHas('event', fn ($events) => $events->whereIn('sport_id', $sportIds));
         }
@@ -124,7 +126,7 @@ class MatchController extends Controller
             ],
             'eventOptions' => Event::query()
                 ->whereHas('meets', fn ($meets) => $meets->whereKey(Meet::current()->id))
-                ->when($managedSportId !== null, fn ($query) => $query->where('sport_id', $managedSportId))
+                ->when($isTournamentManager, fn ($query) => $query->whereIn('sport_id', $managedSportIds))
                 ->with('sport:id,name')
                 ->get(['id', 'sport_id', 'name', 'gender', 'age_division'])
                 ->map(fn (Event $event): array => [
@@ -134,8 +136,8 @@ class MatchController extends Controller
                 ->values(),
             'scheduleOptions' => EventSchedule::query()
                 ->when(
-                    $managedSportId !== null,
-                    fn ($query) => $query->whereHas('event', fn ($event) => $event->where('sport_id', $managedSportId)),
+                    $isTournamentManager,
+                    fn ($query) => $query->whereHas('event', fn ($event) => $event->whereIn('sport_id', $managedSportIds)),
                 )
                 ->with('venue:id,name')
                 ->get()
@@ -154,8 +156,8 @@ class MatchController extends Controller
             'entryOptions' => Entry::query()
                 ->where('status', EntryStatus::Confirmed->value)
                 ->when(
-                    $managedSportId !== null,
-                    fn ($query) => $query->whereHas('event', fn ($event) => $event->where('sport_id', $managedSportId)),
+                    $isTournamentManager,
+                    fn ($query) => $query->whereHas('event', fn ($event) => $event->whereIn('sport_id', $managedSportIds)),
                 )
                 ->with([
                     'athlete:id,first_name,last_name,school_id',

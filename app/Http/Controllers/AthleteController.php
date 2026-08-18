@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\UserRole;
+use App\Enums\Permission;
 use App\Http\Controllers\Concerns\BuildsSchoolOptionsByDelegation;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\AthleteRequest;
@@ -52,6 +53,19 @@ class AthleteController extends Controller
                 'delegation.officers',
                 fn ($officers) => $officers->whereKey($user->getKey()),
             );
+        } elseif ($user->role === UserRole::Coach) {
+            $query->whereHas('delegation.personnel', fn ($personnel) => $personnel->where('user_id', $user->id));
+        } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+            $assignments = $user->athleteOversightAssignments()->where('active', true)->get();
+            $query->whereHas('school', function ($school) use ($assignments): void {
+                $school->where(function ($scope) use ($assignments): void {
+                    foreach ($assignments as $assignment) {
+                        $scope->orWhere(fn ($item) => $assignment->school_district_id !== null
+                            ? $item->where('school_district_id', $assignment->school_district_id)
+                            : $item->where('district_id', $assignment->district_id));
+                    }
+                });
+            });
         }
 
         $this->applySearch($query, $search, ['first_name', 'last_name', 'lrn']);

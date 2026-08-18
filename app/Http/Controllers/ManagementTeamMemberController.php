@@ -77,11 +77,11 @@ class ManagementTeamMemberController extends Controller
 
         $managementTeamMember->forceFill(['status' => $validated['status']])->save();
 
-        $managementTeamMember->load(['managementTeam:id,name', 'user:id,name']);
+        $managementTeamMember->load(['managementTeam:id,name', 'user:id,name', 'person:id,full_name']);
 
         $this->audit->record('management_team_member.status_updated', $managementTeamMember, [
             'team' => $managementTeamMember->managementTeam->name,
-            'user' => $managementTeamMember->user->name,
+            'user' => $this->memberName($managementTeamMember),
             'status' => $managementTeamMember->status->value,
         ]);
 
@@ -95,11 +95,11 @@ class ManagementTeamMemberController extends Controller
      */
     public function destroy(ManagementTeamMember $managementTeamMember): RedirectResponse
     {
-        $managementTeamMember->load(['managementTeam:id,name', 'user:id,name']);
+        $managementTeamMember->load(['managementTeam:id,name', 'user:id,name', 'person:id,full_name']);
 
         $context = [
             'team' => $managementTeamMember->managementTeam->name,
-            'user' => $managementTeamMember->user->name,
+            'user' => $this->memberName($managementTeamMember),
         ];
 
         $managementTeamMember->delete();
@@ -109,5 +109,10 @@ class ManagementTeamMemberController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Member removed.')]);
 
         return back();
+    }
+
+    private function memberName(ManagementTeamMember $member): string
+    {
+        return $member->user?->name ?? $member->person?->full_name ?? __('Unknown person');
     }
 }

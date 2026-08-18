@@ -11,6 +11,7 @@ use App\Models\EventSchedule;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
+use App\Models\Person;
 use App\Models\ResultPlacement;
 use App\Models\School;
 use App\Models\ScoringSession;
@@ -481,7 +482,8 @@ test('a Chess match with no live session never fabricates a score', function () 
 test('the mini portal profile carries real description/photo/paragames fields from the Sport row', function () {
     Meet::factory()->active()->published()->featured()->create();
     Sport::query()->create([
-        'name' => 'Paragames - Athletics',
+        'name' => 'Para Athletics',
+        'classification' => 'paragames',
         'short_description' => 'A short blurb.',
         'description' => 'A full description.',
     ]);
@@ -577,6 +579,31 @@ test('technical officials come from sport_user with a real duty label, defaultin
             ->where('sport.technical_officials.0.duty', null)
             ->where('sport.technical_officials.1.name', 'Referee Person')
             ->where('sport.technical_officials.1.duty', 'Referee'));
+});
+
+test('technical officials include meet assignments backed by imported people without user accounts', function () {
+    $meet = Meet::factory()->active()->published()->featured()->create();
+    $sport = basketballSport();
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $sport->id]);
+    $person = Person::query()->create([
+        'source_key' => 'public-to-person',
+        'full_name' => 'Imported Official',
+        'normalized_name' => 'imported official',
+    ]);
+
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'person_id' => $person->id,
+        'user_id' => null,
+        'role' => MeetSportAssignmentRole::TechnicalOfficial,
+        'original_designation' => 'ICT / Technical Official',
+    ]);
+
+    $this->get('/basketball')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('sport.technical_officials', 1)
+            ->where('sport.technical_officials.0.name', 'Imported Official')
+            ->where('sport.technical_officials.0.duty', 'ICT / Technical Official'));
 });
 
 test('sport routes now cover the full 28-sport catalog, not just the original 12', function () {

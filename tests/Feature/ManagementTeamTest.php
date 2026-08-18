@@ -32,11 +32,13 @@ test('a meet has many management teams, and a team has many members', function (
         ->and($member->user->managementTeamMemberships()->first()->id)->toBe($member->id);
 });
 
-test('a meet cannot have two teams of the same type', function () {
+test('a meet can have multiple twg units of the same broad type but not the same source unit', function () {
     $meet = Meet::factory()->create();
-    ManagementTeam::factory()->create(['meet_id' => $meet->id, 'team_type' => ManagementTeamType::ICT]);
+    ManagementTeam::factory()->create(['meet_id' => $meet->id, 'team_type' => ManagementTeamType::MeetManagement, 'source_code' => 'SECRETARIAT']);
+    ManagementTeam::factory()->create(['meet_id' => $meet->id, 'team_type' => ManagementTeamType::MeetManagement, 'source_code' => 'LOGISTICS']);
 
-    expect(fn () => ManagementTeam::factory()->create(['meet_id' => $meet->id, 'team_type' => ManagementTeamType::ICT]))
+    expect($meet->managementTeams()->count())->toBe(2)
+        ->and(fn () => ManagementTeam::factory()->create(['meet_id' => $meet->id, 'team_type' => ManagementTeamType::MeetManagement, 'source_code' => 'SECRETARIAT']))
         ->toThrow(QueryException::class);
 });
 

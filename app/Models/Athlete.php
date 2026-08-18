@@ -152,4 +152,9 @@ class Athlete extends Model
     {
         return $this->hasOne(MedicalClearance::class);
     }
+
+    public function entries(): HasMany
+    {
+        return $this->hasMany(Entry::class);
+    }
 }

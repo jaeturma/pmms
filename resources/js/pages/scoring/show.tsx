@@ -14,7 +14,6 @@ import { GoalBallGameControl } from '@/components/goal-ball-game-control';
 import { LiveBadge } from '@/components/live-badge';
 import type { LiveSession, Participant } from '@/components/live-score-display';
 import {
-    CorrectionDialog,
     isBasketballState,
     isBilliardState,
     isBocceState,
@@ -40,6 +39,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { VolleyballSepakTakrawGameControl } from '@/components/volleyball-sepak-takraw-game-control';
 import { WrestlingGameControl } from '@/components/wrestling-game-control';
+import { cn } from '@/lib/utils';
 import { index as matchesIndex } from '@/routes/matches';
 import {
     end as endRoute,
@@ -50,6 +50,7 @@ import {
     show as pollRoute,
     start as startRoute,
 } from '@/routes/scoring';
+import { destroy as removeEventRoute } from '@/routes/scoring/events';
 
 /** Configuring Echo here rather than in `app.tsx` keeps pusher-js out of
  * every other page's bundle — `useEcho` below is the only call site of
@@ -205,15 +206,22 @@ export default function ScoringBoard({
         );
     };
 
-    const correct = (side: 'a' | 'b', delta: number, reason: string) => {
+    const removePlay = (eventId: number) => {
         if (session === null) {
             return;
         }
 
-        router.patch(
-            scoreRoute(session.id).url,
-            { type: 'correction', side, delta, reason },
-            { preserveScroll: true },
+        const reason = window.prompt(
+            'Why are you reversing this point or foul?',
+        )?.trim();
+
+        if (!reason) {
+            return;
+        }
+
+        router.delete(
+            removeEventRoute({ session: session.id, event: eventId }).url,
+            { data: { reason }, preserveScroll: true },
         );
     };
 
@@ -320,6 +328,7 @@ export default function ScoringBoard({
                                                 setSideALabel(e.target.value)
                                             }
                                             required
+                                            readOnly={suggestedLabels[0] !== null}
                                         />
                                     </div>
                                     <div className="grid gap-2">
@@ -331,6 +340,7 @@ export default function ScoringBoard({
                                                 setSideBLabel(e.target.value)
                                             }
                                             required
+                                            readOnly={suggestedLabels[1] !== null}
                                         />
                                     </div>
                                     {suggestedBoardType !== 'generic' && (
@@ -381,7 +391,7 @@ export default function ScoringBoard({
                         ref={containerRef}
                         className={
                             fullscreen
-                                ? 'flex flex-1 flex-col items-center justify-center gap-8 bg-background p-8'
+                                ? 'flex min-h-full flex-col items-center justify-start gap-8 overflow-y-auto bg-background p-8'
                                 : 'flex flex-col gap-4'
                         }
                     >
@@ -395,10 +405,12 @@ export default function ScoringBoard({
                             hidePlayByPlay={isManager && isActive}
                         />
 
+
                         {isManager && isActive && basketballState && (
                             <BasketballGameControl
                                 session={session}
                                 state={basketballState}
+                                onSessionChange={setSession}
                             />
                         )}
 
@@ -505,13 +517,6 @@ export default function ScoringBoard({
                                                     </Button>
                                                 ))}
                                             </div>
-                                            <CorrectionDialog
-                                                side="a"
-                                                label={session.side_a_label}
-                                                onSubmit={(delta, reason) =>
-                                                    correct('a', delta, reason)
-                                                }
-                                            />
                                         </div>
                                         <div className="flex flex-col items-center gap-2">
                                             <div className="flex flex-wrap justify-center gap-2">
@@ -531,13 +536,6 @@ export default function ScoringBoard({
                                                     </Button>
                                                 ))}
                                             </div>
-                                            <CorrectionDialog
-                                                side="b"
-                                                label={session.side_b_label}
-                                                onSubmit={(delta, reason) =>
-                                                    correct('b', delta, reason)
-                                                }
-                                            />
                                         </div>
                                     </div>
 
@@ -643,9 +641,16 @@ export default function ScoringBoard({
                             )}
 
                         {isManager && isActive && (
-                            <div className="mx-auto w-full max-w-2xl print:hidden">
+                            <div
+                                className={cn(
+                                    'mx-auto w-full print:hidden',
+                                    fullscreen ? 'max-w-4xl' : 'max-w-2xl',
+                                )}
+                            >
                                 <PlayByPlayList
                                     playByPlay={session.playByPlay}
+                                    onRemove={removePlay}
+                                    scrollable
                                 />
                             </div>
                         )}

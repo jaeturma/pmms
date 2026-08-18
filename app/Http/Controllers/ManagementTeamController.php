@@ -39,7 +39,7 @@ class ManagementTeamController extends Controller
     public function index(): Response
     {
         $query = ManagementTeam::query()
-            ->with('members.user:id,name,email')
+            ->with(['members.user:id,name,email', 'members.person:id,full_name'])
             ->where('meet_id', Meet::current()->id)
             ->orderBy('team_type');
 
@@ -91,8 +91,8 @@ class ManagementTeamController extends Controller
     {
         return [
             'id' => $member->id,
-            'user' => $member->user->name,
-            'user_email' => $member->user->email,
+            'user' => $member->user?->name ?? $member->person?->full_name ?? __('Unknown person'),
+            'user_email' => $member->user?->email ?? '',
             'role_title' => $member->role_title,
             'is_head' => $member->is_head,
             'responsibilities' => $member->responsibilities,

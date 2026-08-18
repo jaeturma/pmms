@@ -397,6 +397,8 @@ export type PortalSportCard = {
     name: string;
     short_description: string | null;
     photo_url: string | null;
+    classification: 'regular' | 'paragames';
+    icon_key: string | null;
     is_paragames: boolean;
     category_count: number;
     is_live: boolean;

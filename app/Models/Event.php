@@ -29,7 +29,16 @@ use Illuminate\Support\Carbon;
 #[Fillable([
     'sport_id',
     'sport_category_id',
+    'code',
     'name',
+    'slug',
+    'event_type',
+    'discipline',
+    'weight_class',
+    'distance',
+    'team_size',
+    'is_medal_event',
+    'display_order',
     'gender',
     'age_division',
     'is_team_event',
@@ -53,6 +62,9 @@ class Event extends Model
             'is_team_event' => 'boolean',
             'max_entries_per_delegation' => 'integer',
             'active' => 'boolean',
+            'team_size' => 'integer',
+            'is_medal_event' => 'boolean',
+            'display_order' => 'integer',
         ];
     }
 
