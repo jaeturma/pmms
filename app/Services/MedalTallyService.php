@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Enums\AgeDivision;
+use App\Enums\DelegationStatus;
 use App\Enums\ResultStatus;
+use App\Models\Delegation;
 use App\Models\ResultPlacement;
 use App\Models\SchoolDistrict;
 use Illuminate\Database\Eloquent\Builder;
@@ -45,18 +47,49 @@ class MedalTallyService
             ->with('entry.athlete.school.district', 'entry.athlete.school.schoolDistrict')
             ->get();
 
-        $multiDistrictMunicipalityIds = $this->multiDistrictMunicipalityIds($placements);
+        // Start with every approved delegation in the meet, rather than only
+        // the delegations that already own a medal. This keeps the tally and
+        // standings useful before the first result is submitted: registered
+        // municipalities/schools appear with zero counts and zero points.
+        $delegations = Delegation::query()
+            ->where('status', DelegationStatus::Approved->value)
+            ->when($meetId !== null && $meetId > 0, fn ($query) => $query->where('meet_id', $meetId))
+            ->with(['school.district', 'school.schoolDistrict', 'district', 'athletes.school.district', 'athletes.school.schoolDistrict'])
+            ->get();
+
+        $eligibleSchools = $delegations
+            ->flatMap(fn (Delegation $delegation): Collection => collect([$delegation->school])
+                ->merge($delegation->athletes->pluck('school')))
+            ->filter()
+            ->keyBy('id');
+
+        // Placements remain authoritative and are included defensively for
+        // historical data whose delegation may predate approval enforcement.
+        $placementSchools = $placements->pluck('entry.athlete.school')->keyBy('id');
+        // Once medals exist, retain the established medal-winner-only rows.
+        // The approved-delegation fallback is specifically for the otherwise
+        // blank pre-results state requested by the tally views.
+        $allSchools = $placements->isEmpty() ? $eligibleSchools : $placementSchools;
+        $multiDistrictMunicipalityIds = $this->multiDistrictMunicipalityIdsForSchools($allSchools);
 
         // Grouped by the placed athlete's own school — not the delegation's
         // — so a municipal delegation's medals split correctly across the
         // several schools it pools, and the district/municipality rollup
         // below (unchanged) sums them back up automatically.
-        $schools = $placements
+        $medalsBySchool = $placements
             ->groupBy(fn (ResultPlacement $placement): int => $placement->entry->athlete->school_id)
-            ->map(function (Collection $group) use ($multiDistrictMunicipalityIds): array {
-                $school = $group->firstOrFail()->entry->athlete->school;
+            ->map(fn (Collection $group): array => $this->medals($group));
+
+        $schools = $allSchools
+            ->map(function ($school) use ($multiDistrictMunicipalityIds, $medalsBySchool): array {
                 $showSchoolDistrict = $school->school_district_id !== null
                     && $multiDistrictMunicipalityIds->has($school->district_id);
+                $medals = $medalsBySchool->get($school->id, [
+                    'gold' => 0,
+                    'silver' => 0,
+                    'bronze' => 0,
+                    'total' => 0,
+                ]);
 
                 return [
                     'school' => $school->name,
@@ -69,7 +102,8 @@ class MedalTallyService
                     // without a second name-matched lookup.
                     'municipality_id' => $school->district_id,
                     'district' => $showSchoolDistrict ? $school->schoolDistrict->name : $school->district->name,
-                    ...$this->medals($group),
+                    ...$medals,
+                    'points' => $this->points($medals['gold'], $medals['silver'], $medals['bronze']),
                 ];
             });
 
@@ -90,6 +124,26 @@ class MedalTallyService
                     'points' => $this->points($gold, $silver, $bronze),
                 ];
             });
+
+        if ($placements->isEmpty()) {
+            $delegations
+                ->map(fn (Delegation $delegation) => $delegation->district ?? $delegation->school?->district)
+                ->filter()
+                ->unique('id')
+                ->each(function ($district) use ($districts): void {
+                    if (! $districts->has($district->name)) {
+                        $districts->put($district->name, [
+                            'district' => $district->name,
+                            'district_id' => $district->id,
+                            'gold' => 0,
+                            'silver' => 0,
+                            'bronze' => 0,
+                            'total' => 0,
+                            'points' => 0,
+                        ]);
+                    }
+                });
+        }
 
         return [
             'districts' => $this->ordered($districts, 'district'),
@@ -369,8 +423,19 @@ class MedalTallyService
      */
     private function multiDistrictMunicipalityIds(Collection $placements): Collection
     {
-        $municipalityIds = $placements
-            ->pluck('entry.athlete.school.district_id')
+        return $this->multiDistrictMunicipalityIdsForSchools(
+            $placements->pluck('entry.athlete.school')->keyBy('id'),
+        );
+    }
+
+    /**
+     * @param  Collection<int, \App\Models\School>  $schools
+     * @return Collection<int, int>
+     */
+    private function multiDistrictMunicipalityIdsForSchools(Collection $schools): Collection
+    {
+        $municipalityIds = $schools
+            ->pluck('district_id')
             ->unique()
             ->filter()
             ->values();

@@ -69,3 +69,71 @@ test('approved coach scope limits registration and DSAC accreditation confirms t
     expect($athlete->accreditation()->exists())->toBeTrue()
         ->and(Entry::query()->sole()->fresh()->status)->toBe(EntryStatus::Confirmed);
 });
+
+test('an active ICT team member can review and approve a coach registration', function () {
+    $meet = Meet::factory()->registrationOpen()->create();
+    $sport = Sport::factory()->create();
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $sport->id]);
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+    $meet->events()->attach($event);
+    $delegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $coach = User::factory()->coach()->create();
+    $coachRequest = CoachAssignmentRequest::query()->create([
+        'user_id' => $coach->id,
+        'meet_sport_id' => $meetSport->id,
+        'event_id' => $event->id,
+        'delegation_id' => $delegation->id,
+        'school_id' => schoolForDelegation($delegation)->id,
+        'status' => 'pending',
+    ]);
+
+    $ict = User::factory()->create();
+    $ictTeam = ManagementTeam::factory()->create([
+        'meet_id' => $meet->id,
+        'team_type' => ManagementTeamType::ICT,
+    ]);
+    ManagementTeamMember::factory()->create([
+        'management_team_id' => $ictTeam->id,
+        'user_id' => $ict->id,
+        'status' => ManagementTeamMemberStatus::Active,
+    ]);
+
+    $this->actingAs($ict)
+        ->get('/coach/assignment-requests')
+        ->assertOk();
+
+    $this->actingAs($ict)
+        ->patch("/coach/assignment-requests/{$coachRequest->id}", ['status' => 'approved'])
+        ->assertSessionHasNoErrors();
+
+    expect($coachRequest->fresh()->status)->toBe('approved')
+        ->and($coach->fresh()->role)->toBe(\App\Enums\UserRole::Coach);
+});
+
+test('an inactive ICT team membership cannot approve a coach registration', function () {
+    $meet = Meet::factory()->registrationOpen()->create();
+    $sport = Sport::factory()->create();
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $sport->id]);
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+    $meet->events()->attach($event);
+    $delegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $coachRequest = CoachAssignmentRequest::query()->create([
+        'user_id' => User::factory()->coach()->create()->id,
+        'meet_sport_id' => $meetSport->id,
+        'event_id' => $event->id,
+        'delegation_id' => $delegation->id,
+        'school_id' => schoolForDelegation($delegation)->id,
+        'status' => 'pending',
+    ]);
+    $ict = User::factory()->create();
+    $ictTeam = ManagementTeam::factory()->create(['team_type' => ManagementTeamType::ICT]);
+    ManagementTeamMember::factory()->create([
+        'management_team_id' => $ictTeam->id,
+        'user_id' => $ict->id,
+        'status' => ManagementTeamMemberStatus::Ended,
+    ]);
+
+    $this->actingAs($ict)
+        ->patch("/coach/assignment-requests/{$coachRequest->id}", ['status' => 'approved'])
+        ->assertForbidden();
+});

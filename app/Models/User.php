@@ -105,6 +105,22 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     }
 
     /**
+     * Coach registrations may be reviewed by a system administrator or any
+     * active member of the ICT management team.
+     */
+    public function canReviewCoachRegistrations(): bool
+    {
+        return $this->isAdmin() || $this->managementTeamMemberships()
+            ->where('status', ManagementTeamMemberStatus::Active)
+            ->whereHas('managementTeam', fn ($team) => $team
+                ->where('team_type', ManagementTeamType::ICT->value)
+                ->orWhereIn('source_code', [
+                    'CENTRAL_ICT', 'ICT', 'INFORMATION',
+                ]))
+            ->exists();
+    }
+
+    /**
      * Sports this Technical Official is assigned to operate live scoring
      * for — meaningless for every other role, mirrors Personnel::sports().
      *

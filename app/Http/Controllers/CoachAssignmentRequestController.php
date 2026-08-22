@@ -27,7 +27,7 @@ class CoachAssignmentRequestController extends Controller
         $user = $request->user();
         $reviewableIds = $this->reviewableMeetSportIds($user);
         $canRequest = $this->isCoachApplicant($user);
-        abort_unless($canRequest || $reviewableIds->isNotEmpty() || $user->isAdmin(), 403);
+        abort_unless($canRequest || $reviewableIds->isNotEmpty() || $user->canReviewCoachRegistrations(), 403);
 
         $query = CoachAssignmentRequest::query()->with([
             'user:id,name,email', 'meetSport.meet:id,name', 'meetSport.sport:id,name',
@@ -36,7 +36,7 @@ class CoachAssignmentRequestController extends Controller
 
         if ($canRequest) {
             $query->where('user_id', $user->id);
-        } elseif (! $user->isAdmin()) {
+        } elseif (! $user->canReviewCoachRegistrations()) {
             $query->whereIn('meet_sport_id', $reviewableIds);
         }
 
@@ -48,7 +48,7 @@ class CoachAssignmentRequestController extends Controller
                 'school' => $item->school->name, 'status' => $item->status, 'review_notes' => $item->review_notes,
             ]),
             'canRequest' => $canRequest,
-            'canReview' => $user->isAdmin() || $reviewableIds->isNotEmpty(),
+            'canReview' => $user->canReviewCoachRegistrations() || $reviewableIds->isNotEmpty(),
             'options' => $canRequest ? $this->requestOptions() : [],
         ]);
     }
@@ -84,7 +84,7 @@ class CoachAssignmentRequestController extends Controller
     {
         /** @var User $reviewer */
         $reviewer = $request->user();
-        abort_unless($reviewer->isAdmin() || $this->reviewableMeetSportIds($reviewer)->contains($coachAssignmentRequest->meet_sport_id), 403);
+        abort_unless($reviewer->canReviewCoachRegistrations() || $this->reviewableMeetSportIds($reviewer)->contains($coachAssignmentRequest->meet_sport_id), 403);
         $data = $request->validate(['status' => ['required', Rule::in(['approved', 'rejected'])], 'review_notes' => ['nullable', 'string', 'max:1000']]);
 
         DB::transaction(function () use ($coachAssignmentRequest, $reviewer, $data): void {

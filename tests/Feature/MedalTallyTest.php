@@ -61,6 +61,36 @@ test('every authenticated role can read the tally', function (User $user) {
     'admin' => fn () => User::factory()->admin()->create(),
 ]);
 
+test('approved delegations appear with zero medals and points before results are submitted', function () {
+    $meet = Meet::current();
+    $district = District::factory()->create(['name' => 'Zero Municipality']);
+    $school = School::factory()->create([
+        'name' => 'Zero Medal School',
+        'district_id' => $district->id,
+    ]);
+
+    Delegation::factory()->approved()->create([
+        'meet_id' => $meet->id,
+        'school_id' => $school->id,
+    ]);
+
+    $this->actingAs(User::factory()->create())
+        ->get('/tally')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('districts', 1)
+            ->where('districts.0.district', 'Zero Municipality')
+            ->where('districts.0.gold', 0)
+            ->where('districts.0.silver', 0)
+            ->where('districts.0.bronze', 0)
+            ->where('districts.0.total', 0)
+            ->where('districts.0.points', 0)
+            ->has('schools', 1)
+            ->where('schools.0.school', 'Zero Medal School')
+            ->where('schools.0.total', 0)
+            ->where('schools.0.points', 0)
+            ->where('totals.total', 0));
+});
+
 test('only validated results feed the tally, ranks above three are ignored', function () {
     $validated = EventResult::factory()->validated()->create();
     $school = School::factory()->create(['name' => 'Winner School']);
@@ -145,7 +175,10 @@ test('reopening an official result removes it from the tally automatically', fun
 
     $this->actingAs($viewer)
         ->get('/tally')
-        ->assertInertia(fn (AssertableInertia $page) => $page->has('schools', 0));
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('schools', 1)
+            ->where('schools.0.total', 0)
+            ->where('schools.0.points', 0));
 });
 
 test('district standings aggregate their schools', function () {
