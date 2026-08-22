@@ -66,6 +66,9 @@ type Match = {
     status: string;
     status_label: string;
     schedule_label: string | null;
+    competition_area: string | null;
+    live_scoring_enabled: boolean;
+    awards_medals: boolean;
     participants: Participant[];
     transitions: Transition[];
     is_scheduled: boolean;
@@ -114,6 +117,9 @@ function MatchFormDialog({
                 : 'none',
             round_label: match?.round_label ?? '',
             sequence: match ? String(match.sequence) : '1',
+            competition_area: match?.competition_area ?? '',
+            live_scoring_enabled: match?.live_scoring_enabled ?? false,
+            awards_medals: match?.awards_medals ?? false,
         });
 
     transform((current) => ({
@@ -234,6 +240,15 @@ function MatchFormDialog({
                             </SelectContent>
                         </Select>
                         <InputError message={errors.event_schedule_id} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="competition-area">Competition area</Label>
+                        <Input id="competition-area" value={data.competition_area} onChange={(e) => setData('competition_area', e.target.value)} placeholder="Court, lane, mat, or ring" />
+                        <InputError message={errors.competition_area} />
+                    </div>
+                    <div className="flex flex-wrap gap-6">
+                        <label className="flex items-center gap-2 text-sm"><Checkbox checked={data.live_scoring_enabled} onCheckedChange={(checked) => setData('live_scoring_enabled', checked === true)} />Live scoreboard</label>
+                        <label className="flex items-center gap-2 text-sm"><Checkbox checked={data.awards_medals} onCheckedChange={(checked) => setData('awards_medals', checked === true)} />Awards medals</label>
                     </div>
                     <DialogFooter>
                         <Button type="submit" disabled={processing}>
@@ -502,6 +517,7 @@ export default function Matches({
                                                 variant="outline"
                                                 size="sm"
                                                 asChild
+                                                disabled={!match.live_scoring_enabled}
                                             >
                                                 <Link
                                                     href={

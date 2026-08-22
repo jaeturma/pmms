@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['user_id', 'meet_sport_id', 'delegation_id', 'school_id', 'status', 'review_notes'])]
+#[Fillable(['user_id', 'meet_sport_id', 'event_id', 'delegation_id', 'school_id', 'status', 'review_notes'])]
 class CoachAssignmentRequest extends Model
 {
     protected function casts(): array
@@ -27,6 +27,11 @@ class CoachAssignmentRequest extends Model
     public function delegation(): BelongsTo
     {
         return $this->belongsTo(Delegation::class);
+    }
+
+    public function event(): BelongsTo
+    {
+        return $this->belongsTo(Event::class);
     }
 
     public function school(): BelongsTo

@@ -1,10 +1,12 @@
 <?php
 
+use App\Enums\RequirementStatus;
 use App\Models\Accreditation;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
 use App\Models\District;
+use App\Models\EligibilityDocument;
 use App\Models\EligibilityReview;
 use App\Models\Personnel;
 use App\Models\School;
@@ -20,6 +22,10 @@ function eligibleAthlete(?Delegation $delegation = null): Athlete
     EligibilityReview::factory()->approved()->create([
         'athlete_id' => $athlete->id,
         'meet_id' => $delegation->meet_id,
+    ]);
+    EligibilityDocument::factory()->create([
+        'athlete_id' => $athlete->id,
+        'status' => RequirementStatus::Verified,
     ]);
 
     return $athlete;
@@ -76,10 +82,10 @@ test('the accreditation view flags who is eligible but not yet accredited', func
             ->where('athletes.1.can_accredit', false));
 });
 
-test('managers can accredit an eligible athlete of an approved delegation', function () {
+test('a super administrator can accredit an eligible athlete of an approved delegation', function () {
     $athlete = eligibleAthlete();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/accreditations', ['athlete_id' => $athlete->id])
         ->assertRedirect()
         ->assertSessionHasNoErrors();
@@ -142,6 +148,10 @@ test('double accreditation is rejected', function () {
         'athlete_id' => $accreditation->athlete_id,
         'meet_id' => $accreditation->delegation->meet_id,
     ]);
+    EligibilityDocument::factory()->create([
+        'athlete_id' => $accreditation->athlete_id,
+        'status' => RequirementStatus::Verified,
+    ]);
 
     $this->actingAs(User::factory()->admin()->create())
         ->post('/accreditations', ['athlete_id' => $accreditation->athlete_id])
@@ -187,6 +197,10 @@ test('managers can revoke and later re-accredit with a new number', function () 
     EligibilityReview::factory()->approved()->create([
         'athlete_id' => $athlete->id,
         'meet_id' => $athlete->delegation->meet_id,
+    ]);
+    EligibilityDocument::factory()->create([
+        'athlete_id' => $athlete->id,
+        'status' => RequirementStatus::Verified,
     ]);
 
     $this->actingAs($admin)

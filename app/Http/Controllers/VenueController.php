@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\VenueRequest;
+use App\Models\District;
 use App\Models\Venue;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
@@ -25,7 +26,12 @@ class VenueController extends Controller
     {
         $search = $this->searchTerm($request);
 
-        $query = Venue::query()->orderBy('name');
+        $query = Venue::query()
+            ->with(['municipality:id,name', 'competitionAreas:id,venue_id,name',
+                'meetSportAssignments.meetSport.sport:id,name',
+                'gameCoordinatorAssignments.person:id,full_name',
+                'gameCoordinatorAssignments.meetSport.sport:id,name'])
+            ->orderBy('name');
 
         $this->applySearch($query, $search, ['name', 'address']);
 
@@ -35,10 +41,32 @@ class VenueController extends Controller
                     'id' => $venue->id,
                     'name' => $venue->name,
                     'address' => $venue->address,
+                    'short_name' => $venue->short_name,
+                    'municipality_id' => $venue->municipality_id,
+                    'municipality' => $venue->municipality?->name,
+                    'latitude' => $venue->latitude,
+                    'longitude' => $venue->longitude,
+                    'gps_location' => $venue->latitude !== null && $venue->longitude !== null
+                        ? $venue->latitude.', '.$venue->longitude
+                        : null,
+                    'public_notes' => $venue->public_notes,
+                    'internal_notes' => $venue->internal_notes,
+                    'readiness_status' => $venue->readiness_status,
+                    'sports' => $venue->meetSportAssignments->pluck('meetSport.sport.name')->filter()->unique()->values(),
+                    'competition_areas' => $venue->competitionAreas->pluck('name')->values(),
+                    'game_coordinators' => $venue->gameCoordinatorAssignments->map(fn ($assignment): array => [
+                        'id' => $assignment->id,
+                        'name' => $assignment->person->full_name,
+                        'contact_number' => $assignment->source_contact_text,
+                        'sport' => $assignment->meetSport?->sport?->name,
+                        'is_lead' => $assignment->is_lead,
+                    ])->values(),
                     'notes' => $venue->notes,
                     'active' => $venue->active,
                 ]),
             'filters' => ['search' => $search],
+            'municipalityOptions' => District::query()->where('active', true)->orderBy('name')->get(['id', 'name'])
+                ->map(fn (District $district): array => ['id' => $district->id, 'label' => $district->name]),
             'canManage' => Gate::allows('manage-meet-data'),
         ]);
     }
@@ -48,7 +76,7 @@ class VenueController extends Controller
      */
     public function store(VenueRequest $request): RedirectResponse
     {
-        $venue = Venue::create($request->validated());
+        $venue = Venue::create($request->venueData());
 
         $this->audit->record('venue.created', $venue, ['name' => $venue->name]);
 
@@ -62,7 +90,7 @@ class VenueController extends Controller
      */
     public function update(VenueRequest $request, Venue $venue): RedirectResponse
     {
-        $venue->update($request->validated());
+        $venue->update($request->venueData());
 
         $this->audit->record('venue.updated', $venue, ['name' => $venue->name]);
 

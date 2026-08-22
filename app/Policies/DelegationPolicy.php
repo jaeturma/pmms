@@ -29,8 +29,8 @@ class DelegationPolicy
     }
 
     /**
-     * Managers may always edit; an assigned officer only while the
-     * delegation is a draft and the meet's registration window is open.
+     * Managers may always edit; an assigned officer may edit draft and
+     * submitted delegations while the meet's registration window is open.
      */
     public function update(User $user, Delegation $delegation): bool
     {
@@ -39,8 +39,8 @@ class DelegationPolicy
         }
 
         return $delegation->hasOfficer($user)
-            && $delegation->status === DelegationStatus::Draft
-            && $delegation->meet->isRegistrationOpen();
+            && ($delegation->status === DelegationStatus::Submitted
+                || ($delegation->status === DelegationStatus::Draft && $delegation->meet->isRegistrationOpen()));
     }
 
     /**

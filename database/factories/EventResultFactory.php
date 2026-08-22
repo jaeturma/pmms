@@ -33,14 +33,17 @@ class EventResultFactory extends Factory
     }
 
     /**
-     * Indicate that the result is validated.
+     * Legacy fixture helper: before the production submission workflow,
+     * "validated" meant publicly official. Keep callers representing an
+     * already-published result correct by creating the new Official state.
      */
     public function validated(): static
     {
         return $this->state(fn (array $attributes) => [
-            'status' => ResultStatus::Validated,
+            'status' => ResultStatus::Official,
             'validated_by' => User::factory()->organizer(),
             'validated_at' => now(),
+            'official_at' => now(),
         ]);
     }
 

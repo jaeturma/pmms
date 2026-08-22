@@ -83,7 +83,11 @@ class PortalController extends Controller
 
         $slots = EventSchedule::query()
             ->where('meet_id', $meet->id)
-            ->with(['venue:id,name,address', 'event.sport:id,name'])
+            ->with([
+                'venue:id,name,address,public_notes',
+                'competitionArea:id,name',
+                'event.sport:id,name',
+            ])
             ->orderBy('scheduled_date')
             ->orderBy('starts_at')
             ->get();
@@ -140,6 +144,7 @@ class PortalController extends Controller
                                 $slot->event->gender->label(),
                                 $slot->event->age_division->label(),
                             ),
+                            'competition_area' => $slot->competitionArea?->name,
                             'note' => $slot->note,
                         ])
                         ->values()
@@ -151,6 +156,7 @@ class PortalController extends Controller
                 ->map(fn (EventSchedule $slot): array => [
                     'name' => $slot->venue->name,
                     'address' => $slot->venue->address,
+                    'public_notes' => $slot->venue->public_notes,
                 ])
                 ->unique('name')
                 ->sortBy('name')
@@ -173,7 +179,7 @@ class PortalController extends Controller
 
         $results = EventResult::query()
             ->where('meet_id', $meet->id)
-            ->where('status', ResultStatus::Validated->value)
+            ->where('status', ResultStatus::Official->value)
             ->when($sportId > 0, fn ($query) => $query->whereHas(
                 'event',
                 fn ($event) => $event->where('sport_id', $sportId),
@@ -372,7 +378,7 @@ class PortalController extends Controller
 
         $validatedResults = EventResult::query()
             ->where('meet_id', $meet->id)
-            ->where('status', ResultStatus::Validated->value)
+            ->where('status', ResultStatus::Official->value)
             ->when(
                 $athleticsSportId !== null,
                 fn ($query) => $query->whereHas('event', fn ($event) => $event->where('sport_id', $athleticsSportId)),
@@ -528,7 +534,7 @@ class PortalController extends Controller
     {
         $result = EventResult::query()
             ->where('event_id', $match->event_id)
-            ->where('status', ResultStatus::Validated->value)
+            ->where('status', ResultStatus::Official->value)
             ->with([
                 'event.sport:id,name',
                 'placements' => fn ($placements) => $placements->orderBy('rank'),
@@ -808,7 +814,7 @@ class PortalController extends Controller
         $placements = ResultPlacement::query()
             ->whereHas('result', fn ($query) => $query
                 ->where('meet_id', $meet->id)
-                ->where('status', ResultStatus::Validated->value))
+                ->where('status', ResultStatus::Official->value))
             ->where(function ($query) use ($term) {
                 $query->whereHas('entry.athlete', fn ($athlete) => $athlete
                     ->where('first_name', 'like', "%{$term}%")
@@ -1327,7 +1333,7 @@ class PortalController extends Controller
 
         $results = EventResult::query()
             ->where('meet_id', $meet->id)
-            ->where('status', ResultStatus::Validated->value)
+            ->where('status', ResultStatus::Official->value)
             ->whereHas('event', fn ($query) => $query->where('sport_id', $sport->id))
             ->with([
                 'placements' => fn ($placements) => $placements->orderBy('rank')->limit(1),
@@ -1514,7 +1520,7 @@ class PortalController extends Controller
     {
         return EventResult::query()
             ->where('meet_id', $meet->id)
-            ->where('status', ResultStatus::Validated->value)
+            ->where('status', ResultStatus::Official->value)
             ->with('event.sport:id,name')
             ->get()
             ->map(fn (EventResult $result): array => [
@@ -1685,7 +1691,7 @@ class PortalController extends Controller
     {
         $result = EventResult::query()
             ->where('meet_id', $meet->id)
-            ->where('status', ResultStatus::Validated->value)
+            ->where('status', ResultStatus::Official->value)
             ->with([
                 'event.sport:id,name',
                 'placements' => fn ($placements) => $placements->orderBy('rank')->limit(3),

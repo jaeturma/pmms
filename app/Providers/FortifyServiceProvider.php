@@ -5,8 +5,13 @@ namespace App\Providers;
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\EnsureRecaptchaIsValid;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Models\District;
+use App\Models\Event;
+use App\Models\User;
+use App\Services\RegistrationCodeChallenge;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -47,6 +52,19 @@ class FortifyServiceProvider extends ServiceProvider
     {
         Fortify::resetUserPasswordsUsing(ResetUserPassword::class);
         Fortify::createUsersUsing(CreateNewUser::class);
+        Fortify::authenticateUsing(function (Request $request): ?User {
+            $login = Str::lower(trim((string) $request->input('email')));
+            $user = User::query()
+                ->whereNull('disabled_at')
+                ->where(function ($query) use ($login) {
+                    $query->where('username', $login)->orWhere('email', $login);
+                })
+                ->first();
+
+            return $user !== null && Hash::check((string) $request->input('password'), $user->password)
+                ? $user
+                : null;
+        });
 
         // Fortify's own default login pipeline (AuthenticatedSessionController::
         // loginPipeline()) with EnsureRecaptchaIsValid prepended — reCAPTCHA is
@@ -88,9 +106,27 @@ class FortifyServiceProvider extends ServiceProvider
             'status' => $request->session()->get('status'),
         ]));
 
-        Fortify::registerView(fn () => Inertia::render('auth/register', [
-            'passwordRules' => Password::defaults()->toPasswordRulesString(),
-        ]));
+        Fortify::registerView(function (Request $request) {
+            return Inertia::render('auth/register', [
+                'passwordRules' => Password::defaults()->toPasswordRulesString(),
+                'municipalities' => District::query()
+                    ->where('active', true)
+                    ->orderBy('name')
+                    ->get(['id', 'name']),
+                'events' => Event::query()
+                    ->where('active', true)
+                    ->whereHas('sport', fn ($query) => $query->where('active', true))
+                    ->with('sport:id,name')
+                    ->orderBy('sport_id')
+                    ->orderBy('display_order')
+                    ->get()
+                    ->map(fn (Event $event): array => [
+                        'id' => $event->id,
+                        'label' => $event->sport->name.' — '.$event->name,
+                    ]),
+                'codeChallengeImage' => app(RegistrationCodeChallenge::class)->generate($request),
+            ]);
+        });
 
         Fortify::twoFactorChallengeView(fn () => Inertia::render('auth/two-factor-challenge'));
 

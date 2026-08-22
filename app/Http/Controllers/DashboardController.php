@@ -10,6 +10,7 @@ use App\Models\Accreditation;
 use App\Models\Announcement;
 use App\Models\Athlete;
 use App\Models\AuditLog;
+use App\Models\CoachAssignmentRequest;
 use App\Models\Delegation;
 use App\Models\Entry;
 use App\Models\EventResult;
@@ -47,6 +48,7 @@ class DashboardController extends Controller
                 'events_count' => $currentMeet->events_count,
             ],
             'operations' => $this->operations($request, $tally),
+            'coachAccreditation' => $this->coachAccreditation($request, $currentMeet),
             'stats' => [
                 [
                     'key' => 'schools',
@@ -110,6 +112,60 @@ class DashboardController extends Controller
     }
 
     /**
+     * Show a coach their accreditation outcome directly on the dashboard.
+     * The assignment request remains the useful fallback until approval has
+     * produced and linked the coach's personnel roster row.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function coachAccreditation(Request $request, Meet $meet): ?array
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        if ($user->role !== UserRole::Coach) {
+            return null;
+        }
+
+        $personnel = Personnel::query()
+            ->where('user_id', $user->id)
+            ->whereHas('delegation', fn ($query) => $query->where('meet_id', $meet->id))
+            ->with(['accreditation', 'delegation.school:id,name', 'delegation.district:id,name', 'school:id,name', 'sports:id,name'])
+            ->latest('id')
+            ->first();
+
+        $requestRecord = CoachAssignmentRequest::query()
+            ->where('user_id', $user->id)
+            ->whereHas('meetSport', fn ($query) => $query->where('meet_id', $meet->id))
+            ->with(['event:id,name', 'meetSport.sport:id,name', 'delegation.school:id,name', 'delegation.district:id,name', 'school:id,name'])
+            ->latest('id')
+            ->first();
+
+        $accreditation = $personnel?->accreditation;
+        $requestStatus = $requestRecord?->status;
+        $status = $accreditation !== null
+            ? 'Accredited'
+            : match ($requestStatus) {
+                'approved' => 'Pending accreditation',
+                'rejected' => 'Enrollment rejected',
+                'pending' => 'Enrollment under review',
+                default => 'Not yet accredited',
+            };
+
+        return [
+            'status' => $status,
+            'accredited' => $accreditation !== null,
+            'number' => $accreditation?->number,
+            'accredited_on' => $accreditation?->accredited_at?->format('M j, Y'),
+            'team' => $personnel?->delegation->registrantName() ?? $requestRecord?->delegation->registrantName(),
+            'school' => $personnel?->school?->name ?? $requestRecord?->school?->name,
+            'sport' => $personnel?->sports->pluck('name')->join(', ') ?: $requestRecord?->meetSport?->sport?->name,
+            'event' => $requestRecord?->event?->name,
+            'review_notes' => $requestRecord?->review_notes,
+        ];
+    }
+
+    /**
      * Meet-day operations widgets for the active meet (read-side only).
      * Managers get the operational queues, officers their own delegation's
      * protests, viewers the schedule and tally summaries.
@@ -158,6 +214,7 @@ class DashboardController extends Controller
                 'pending_results' => EventResult::query()
                     ->where('meet_id', $meet->id)
                     ->where('status', ResultStatus::Encoded->value)
+                    ->whereNull('tm_confirmed_at')
                     ->count(),
                 'open_protests' => Protest::query()
                     ->whereIn('status', [ProtestStatus::Filed->value, ProtestStatus::UnderReview->value])

@@ -10,7 +10,6 @@ use App\Models\SchoolDistrict;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -26,9 +25,14 @@ class SchoolController extends Controller
     public function index(Request $request): Response
     {
         $search = $this->searchTerm($request);
+        $setup = $request->string('setup')->toString();
+        $type = $request->string('type')->toString();
 
         $query = School::query()
             ->with('district:id,name', 'schoolDistrict:id,name')
+            ->when($setup === 'assigned', fn ($query) => $query->whereNotNull('district_id')->whereNotNull('school_district_id'))
+            ->when($setup === 'unassigned', fn ($query) => $query->where(fn ($location) => $location->whereNull('district_id')->orWhereNull('school_district_id')))
+            ->when(in_array($type, ['Public', 'Private'], true), fn ($query) => $query->where('school_type', $type))
             ->orderBy('name');
 
         $this->applySearch($query, $search, ['name', 'school_id_code', 'district.name']);
@@ -41,16 +45,17 @@ class SchoolController extends Controller
                     'school_district_id' => $school->school_district_id,
                     'name' => $school->name,
                     'school_id_code' => $school->school_id_code,
-                    'level' => $school->level->value,
+                    'school_type' => $school->school_type,
+                    'level' => $school->level?->value,
                     'address' => $school->address,
                     'active' => $school->active,
-                    'district' => ['id' => $school->district->id, 'name' => $school->district->name],
+                    'district' => $school->district === null ? null : ['id' => $school->district->id, 'name' => $school->district->name],
                     'school_district' => $school->schoolDistrict === null ? null : [
                         'id' => $school->schoolDistrict->id,
                         'name' => $school->schoolDistrict->name,
                     ],
                 ]),
-            'filters' => ['search' => $search],
+            'filters' => ['search' => $search, 'setup' => $setup, 'type' => $type],
             'districts' => District::query()
                 ->where('active', true)
                 ->orderBy('name')
@@ -59,7 +64,7 @@ class SchoolController extends Controller
                 ->where('active', true)
                 ->orderBy('name')
                 ->get(['id', 'district_id', 'name']),
-            'canManage' => Gate::allows('manage-meet-data'),
+            'canManage' => $request->user()->canManageSchoolMasterData(),
         ]);
     }
 
@@ -94,8 +99,9 @@ class SchoolController extends Controller
     /**
      * Archive a school instead of deleting it.
      */
-    public function archive(School $school): RedirectResponse
+    public function archive(Request $request, School $school): RedirectResponse
     {
+        abort_unless($request->user()->canManageSchoolMasterData(), 403);
         $school->forceFill(['active' => false])->save();
 
         $this->audit->record('school.archived', $school, ['name' => $school->name]);
@@ -108,8 +114,9 @@ class SchoolController extends Controller
     /**
      * Restore an archived school.
      */
-    public function restore(School $school): RedirectResponse
+    public function restore(Request $request, School $school): RedirectResponse
     {
+        abort_unless($request->user()->canManageSchoolMasterData(), 403);
         $school->forceFill(['active' => true])->save();
 
         $this->audit->record('school.restored', $school, ['name' => $school->name]);
@@ -122,8 +129,9 @@ class SchoolController extends Controller
     /**
      * Delete a school that no delegation references.
      */
-    public function destroy(School $school): RedirectResponse
+    public function destroy(Request $request, School $school): RedirectResponse
     {
+        abort_unless($request->user()->canManageSchoolMasterData(), 403);
         if ($school->delegations()->exists()) {
             Inertia::flash('toast', [
                 'type' => 'error',

@@ -5,14 +5,17 @@ use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\MeetStatus;
 use App\Models\Athlete;
 use App\Models\AuditLog;
+use App\Models\CompetitionArea;
 use App\Models\Delegation;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\EventMatch;
 use App\Models\EventSchedule;
+use App\Models\EventVenue;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
+use App\Models\MeetSportVenue;
 use App\Models\ScoringSession;
 use App\Models\SportCategory;
 use App\Models\User;
@@ -84,6 +87,104 @@ test('the schedule renders for every role with the manage flag', function () {
         ->get('/schedule')
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('canManage', true));
+});
+
+test('the event picker includes active events from sports enabled for the current meet', function () {
+    $meet = Meet::current();
+    $event = Event::factory()->create();
+    MeetSport::factory()->create([
+        'meet_id' => $meet->id,
+        'sport_id' => $event->sport_id,
+        'active' => true,
+    ]);
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->get('/schedule')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('eventOptions.0.id', $event->id));
+});
+
+test('the venue picker exposes only venues assigned to each event', function () {
+    $meet = Meet::current();
+    $event = Event::factory()->create();
+    $meet->events()->attach($event);
+    $assigned = Venue::factory()->create();
+    $unassigned = Venue::factory()->create();
+    EventVenue::create([
+        'event_id' => $event->id,
+        'venue_id' => $assigned->id,
+        'playing_area_type' => 'court',
+        'playing_area_count' => 1,
+    ]);
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->get('/schedule')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('venueOptions', 1)
+            ->where('venueOptions.0.event_id', $event->id)
+            ->where('venueOptions.0.id', $assigned->id)
+            ->where('venueOptions.0.playing_area_type', 'court'));
+
+    expect($unassigned->exists)->toBeTrue();
+});
+
+test('the venue picker falls back to venues assigned to the event sport', function () {
+    $meet = Meet::current();
+    $event = Event::factory()->create();
+    $meetSport = MeetSport::factory()->create([
+        'meet_id' => $meet->id,
+        'sport_id' => $event->sport_id,
+        'active' => true,
+    ]);
+    $venue = Venue::factory()->create();
+    CompetitionArea::create([
+        'venue_id' => $venue->id,
+        'name' => 'Table 1',
+        'area_type' => 'table',
+    ]);
+    MeetSportVenue::create([
+        'meet_sport_id' => $meetSport->id,
+        'venue_id' => $venue->id,
+        'expected_area_count' => 2,
+    ]);
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->get('/schedule')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('venueOptions', 1)
+            ->where('venueOptions.0.event_id', $event->id)
+            ->where('venueOptions.0.id', $venue->id)
+            ->where('venueOptions.0.playing_area_type', 'table')
+            ->where('venueOptions.0.playing_area_count', 2));
+});
+
+test('an event cannot be scheduled at an unassigned venue', function () {
+    $input = validSlotInput();
+    $assigned = Venue::factory()->create();
+    EventVenue::create([
+        'event_id' => $input['event_id'],
+        'venue_id' => $assigned->id,
+        'playing_area_type' => 'venue',
+        'playing_area_count' => 1,
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/schedule', $input)
+        ->assertSessionHasErrors('venue_id');
+});
+
+test('a court or table must be selected when an event has multiple playing areas', function () {
+    $input = validSlotInput();
+    EventVenue::create([
+        'event_id' => $input['event_id'],
+        'venue_id' => $input['venue_id'],
+        'playing_area_type' => 'table',
+        'playing_area_count' => 2,
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/schedule', $input)
+        ->assertSessionHasErrors('competition_area_id');
 });
 
 test('managers can schedule an event of a registration-closed or active meet', function (MeetStatus $status) {
@@ -164,6 +265,35 @@ test('overlapping slots at the same venue on the same day are blocked', function
         ->assertSessionHasErrors('starts_at');
 
     expect(EventSchedule::query()->count())->toBe(1);
+});
+
+test('overlapping slots are blocked within the same competition area', function () {
+    $venue = Venue::factory()->create();
+    $area = CompetitionArea::create(['venue_id' => $venue->id, 'name' => 'Court 1', 'area_type' => 'court']);
+    EventSchedule::factory()->create([
+        'venue_id' => $venue->id, 'competition_area_id' => $area->id,
+        'scheduled_date' => '2026-08-10', 'starts_at' => '08:00:00', 'ends_at' => '10:00:00',
+    ]);
+    $input = [...validSlotInput(venue: $venue), 'competition_area_id' => $area->id, 'starts_at' => '09:00', 'ends_at' => '11:00'];
+
+    $this->actingAs(User::factory()->admin()->create())->post('/schedule', $input)
+        ->assertSessionHasErrors('starts_at');
+});
+
+test('different competition areas allow simultaneous slots', function () {
+    $venue = Venue::factory()->create();
+    $courtOne = CompetitionArea::create(['venue_id' => $venue->id, 'name' => 'Court 1', 'area_type' => 'court']);
+    $courtTwo = CompetitionArea::create(['venue_id' => $venue->id, 'name' => 'Court 2', 'area_type' => 'court']);
+    EventSchedule::factory()->create([
+        'venue_id' => $venue->id, 'competition_area_id' => $courtOne->id,
+        'scheduled_date' => '2026-08-10', 'starts_at' => '08:00:00', 'ends_at' => '10:00:00',
+    ]);
+    $input = [...validSlotInput(venue: $venue), 'competition_area_id' => $courtTwo->id, 'starts_at' => '09:00', 'ends_at' => '11:00'];
+
+    $this->actingAs(User::factory()->admin()->create())->post('/schedule', $input)
+        ->assertRedirect()->assertSessionDoesntHaveErrors();
+
+    expect(EventSchedule::where('competition_area_id', $courtTwo->id)->exists())->toBeTrue();
 });
 
 test('back-to-back slots and other venues do not conflict', function () {

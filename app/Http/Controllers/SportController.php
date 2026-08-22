@@ -2,9 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\SportRequest;
+use App\Models\Meet;
+use App\Models\MeetSportAssignment;
 use App\Models\Sport;
 use App\Models\User;
 use App\Services\AuditLogger;
@@ -29,32 +33,52 @@ class SportController extends Controller
     public function index(Request $request): Response
     {
         $search = $this->searchTerm($request);
+        $meetId = Meet::current()->id;
+        $managerRoles = $this->tournamentManagerRoles();
 
         $query = Sport::query()
             ->withCount('events')
-            ->with(['technicalOfficials:id,name,email', 'tournamentManager:id,name,email'])
+            ->with([
+                'technicalOfficials:id,name,email',
+                'tournamentManager:id,name,email',
+                'meetSports' => fn ($query) => $query->where('meet_id', $meetId)->with([
+                    'assignments' => fn ($assignments) => $assignments
+                        ->where('status', MeetSportAssignmentStatus::Active->value)
+                        ->whereIn('role', $managerRoles)
+                        ->with(['user:id,name,email', 'person:id,full_name']),
+                ]),
+            ])
             ->orderBy('name');
 
         $this->applySearch($query, $search, ['name']);
 
         return Inertia::render('catalog/sports', [
             'sports' => $query->paginate($this->registryPageSize)->withQueryString()
-                ->through(fn (Sport $sport): array => [
-                    'id' => $sport->id,
-                    'name' => $sport->name,
-                    'active' => $sport->active,
-                    'events_count' => $sport->events_count,
-                    'technical_officials' => $sport->technicalOfficials
-                        ->map(fn (User $official): array => [
-                            'id' => $official->id,
-                            'name' => $official->name,
-                        ])
-                        ->values(),
-                    'tournament_manager' => $sport->tournamentManager === null ? null : [
-                        'id' => $sport->tournamentManager->id,
-                        'name' => $sport->tournamentManager->name,
-                    ],
-                ]),
+                ->through(function (Sport $sport): array {
+                    $assignment = $sport->meetSports->first()?->assignments
+                        ->sortBy(fn (MeetSportAssignment $item): int => array_search($item->role, $this->tournamentManagerRoles(), true))
+                        ->first();
+                    $manager = $assignment?->user;
+
+                    return [
+                        'id' => $sport->id,
+                        'name' => $sport->name,
+                        'active' => $sport->active,
+                        'events_count' => $sport->events_count,
+                        'technical_officials' => $sport->technicalOfficials
+                            ->map(fn (User $official): array => [
+                                'id' => $official->id,
+                                'name' => $official->name,
+                            ])
+                            ->values(),
+                        'tournament_manager' => $assignment === null && $sport->tournamentManager === null ? null : [
+                            'id' => $manager?->id ?? $sport->tournamentManager?->id,
+                            'name' => $manager?->name ?? $assignment?->person?->full_name ?? $sport->tournamentManager?->name,
+                            'role' => $assignment?->role->label() ?? 'Tournament Manager',
+                            'source' => $assignment === null ? 'legacy' : 'meet_assignment',
+                        ],
+                    ];
+                }),
             'filters' => ['search' => $search],
             'technicalOfficialOptions' => User::query()
                 ->where('role', UserRole::TechnicalOfficial->value)
@@ -66,6 +90,19 @@ class SportController extends Controller
                 ->get(['id', 'name', 'email']),
             'canManage' => Gate::allows('manage-meet-data'),
         ]);
+    }
+
+    /** @return list<MeetSportAssignmentRole> */
+    private function tournamentManagerRoles(): array
+    {
+        return [
+            MeetSportAssignmentRole::TournamentManager,
+            MeetSportAssignmentRole::TrackTournamentManager,
+            MeetSportAssignmentRole::FieldTournamentManager,
+            MeetSportAssignmentRole::BoysTournamentManager,
+            MeetSportAssignmentRole::GirlsTournamentManager,
+            MeetSportAssignmentRole::CategoryTournamentManager,
+        ];
     }
 
     /**

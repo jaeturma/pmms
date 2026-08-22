@@ -129,9 +129,22 @@ type Operations = {
 type Props = {
     currentMeet: CurrentMeet | null;
     operations: Operations | null;
+    coachAccreditation: CoachAccreditation | null;
     stats: Stat[];
     recentActivity: ActivityEntry[];
     announcements: Announcement[];
+};
+
+type CoachAccreditation = {
+    status: string;
+    accredited: boolean;
+    number: string | null;
+    accredited_on: string | null;
+    team: string | null;
+    school: string | null;
+    sport: string | null;
+    event: string | null;
+    review_notes: string | null;
 };
 
 const statIcons: Record<string, LucideIcon> = {
@@ -248,7 +261,7 @@ function EventsOverviewCard({ overview }: { overview: EventsOverview }) {
     ];
 
     return (
-        <Card>
+        <Card data-tone="violet">
             <CardHeader>
                 <CardTitle className="text-sm font-medium">
                     Events overview
@@ -374,7 +387,7 @@ function MeetOperations({ operations }: { operations: Operations }) {
                 <div className="grid gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4">
                     <Link href={resultsIndex()} className="block">
                         <StatCard
-                            label="Results awaiting validation"
+                            label="Results requiring TM confirmation"
                             value={queues.pending_results}
                             icon={Award}
                             tone="warning"
@@ -407,7 +420,7 @@ function MeetOperations({ operations }: { operations: Operations }) {
             )}
 
             <div className="grid gap-4 md:grid-cols-2 md:gap-6">
-                <Card>
+                <Card data-tone="cyan">
                     <CardHeader className="flex flex-row items-center justify-between gap-2">
                         <CardTitle className="text-sm font-medium">
                             Today's schedule
@@ -468,7 +481,7 @@ function MeetOperations({ operations }: { operations: Operations }) {
                     </CardContent>
                 </Card>
 
-                <Card>
+                <Card data-tone="gold">
                     <CardHeader className="flex flex-row items-center justify-between gap-2">
                         <CardTitle className="text-sm font-medium">
                             Medal tally — top five
@@ -539,7 +552,7 @@ function MeetOperations({ operations }: { operations: Operations }) {
             <EventsOverviewCard overview={eventsOverview} />
 
             {myProtests && (
-                <Card>
+                <Card data-tone="destructive">
                     <CardHeader className="flex flex-row items-center justify-between gap-2">
                         <CardTitle className="text-sm font-medium">
                             Your delegation's protests
@@ -581,6 +594,7 @@ function MeetOperations({ operations }: { operations: Operations }) {
 export default function Dashboard({
     currentMeet,
     operations,
+    coachAccreditation,
     stats,
     recentActivity,
     announcements,
@@ -588,14 +602,17 @@ export default function Dashboard({
     return (
         <>
             <Head title="Dashboard" />
-            <div className="flex h-full flex-1 flex-col gap-6 p-4">
+            <div
+                data-dashboard="true"
+                className="flex h-full flex-1 flex-col gap-6 p-4"
+            >
                 <PageHeader
                     title="Dashboard"
                     description="Overview of activity across the system."
                 />
 
                 {currentMeet && (
-                    <Card>
+                    <Card data-tone="primary">
                         <CardHeader className="flex flex-row items-center justify-between gap-2">
                             <CardTitle>{currentMeet.name}</CardTitle>
                             <Badge>{currentMeet.status_label}</Badge>
@@ -609,6 +626,55 @@ export default function Dashboard({
                                 · {currentMeet.events_count} event
                                 {currentMeet.events_count === 1 ? '' : 's'}
                             </p>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {coachAccreditation && (
+                    <Card data-tone="success">
+                        <CardHeader className="flex flex-row items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                                <span className="flex size-9 items-center justify-center rounded-[5px] bg-primary/10 text-primary">
+                                    <IdCard className="size-5" aria-hidden="true" />
+                                </span>
+                                <div>
+                                    <CardTitle>Accreditation status</CardTitle>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        Your coach credential for {currentMeet?.name}.
+                                    </p>
+                                </div>
+                            </div>
+                            <Badge variant={coachAccreditation.accredited ? 'default' : 'secondary'}>
+                                {coachAccreditation.status}
+                            </Badge>
+                        </CardHeader>
+                        <CardContent>
+                            <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                                <div>
+                                    <dt className="text-muted-foreground">Accreditation no.</dt>
+                                    <dd className="font-medium">{coachAccreditation.number ?? 'Not assigned'}</dd>
+                                </div>
+                                <div>
+                                    <dt className="text-muted-foreground">Municipality / Team</dt>
+                                    <dd className="font-medium">{coachAccreditation.team ?? 'Not assigned'}</dd>
+                                </div>
+                                <div>
+                                    <dt className="text-muted-foreground">School</dt>
+                                    <dd className="font-medium">{coachAccreditation.school ?? 'Not assigned'}</dd>
+                                </div>
+                                <div>
+                                    <dt className="text-muted-foreground">Sport / Event</dt>
+                                    <dd className="font-medium">
+                                        {[coachAccreditation.sport, coachAccreditation.event].filter(Boolean).join(' — ') || 'Not assigned'}
+                                    </dd>
+                                </div>
+                            </dl>
+                            {(coachAccreditation.accredited_on || coachAccreditation.review_notes) && (
+                                <p className="mt-4 border-t pt-3 text-sm text-muted-foreground">
+                                    {coachAccreditation.accredited_on && `Accredited on ${coachAccreditation.accredited_on}.`}
+                                    {coachAccreditation.review_notes && ` ${coachAccreditation.review_notes}`}
+                                </p>
+                            )}
                         </CardContent>
                     </Card>
                 )}

@@ -19,4 +19,13 @@ return [
         'password' => env('PMMS_ADMIN_PASSWORD'),
     ],
 
+    'accounts' => [
+        'default_reset_password' => env('PMMS_DEFAULT_RESET_PASSWORD'),
+    ],
+
+    'results' => [
+        'signed_result_form_required' => (bool) env('PMMS_SIGNED_RESULT_FORM_REQUIRED', true),
+        'supporting_documents_public' => (bool) env('PMMS_RESULT_DOCUMENTS_PUBLIC', false),
+    ],
+
 ];

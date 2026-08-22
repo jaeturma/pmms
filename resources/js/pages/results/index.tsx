@@ -1,5 +1,5 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { Award, Plus, Printer, Trash2 } from 'lucide-react';
+import { Award, FileUp, Plus, Printer, Send, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -58,6 +58,7 @@ type Result = {
     id: number;
     meet_id: number;
     event_id: number;
+    match_id: number | null;
     meet: string;
     event: string;
     status: string;
@@ -66,6 +67,14 @@ type Result = {
     encoded_at: string;
     validated_by: string | null;
     validated_at: string | null;
+    version: number;
+    reference: string;
+    can_form: boolean;
+    can_review: boolean;
+    form_generated: boolean;
+    tm_confirmed: boolean;
+    can_tm_confirm: boolean;
+    signed_form: { id: number; name: string } | null;
     /** Superset of the page-level `canManage` prop — also true for a
      * Tournament Manager on their own sport's result (Phase 13). Gates the
      * per-row Validate/Delete/Correct actions instead of the page-level
@@ -80,6 +89,11 @@ type Option = { id: number; label: string };
 type EventOption = Option & { meet_id: number };
 
 type EntryOption = Option & { meet_id: number; event_id: number };
+type CompetitionOption = Option & {
+    event_id: number;
+    context: string;
+    entries: Option[];
+};
 
 type PlacementRow = {
     entry_id: string;
@@ -96,6 +110,7 @@ type Props = {
     activeMeets: Option[];
     encodedEventKeys: string[];
     entryOptions: EntryOption[];
+    competitionOptions: CompetitionOption[];
     /** Admin/Organizer only — kept for parity with other registry pages'
      * props even though this page's own UI now reads the per-row
      * `Result.can_manage` instead (a Tournament Manager's validate/correct/
@@ -110,18 +125,14 @@ type Props = {
 
 function EncodeDialog({
     result,
-    activeMeets,
-    eventOptionsByMeet,
-    encodedEventKeys,
     entryOptions,
+    competitionOptions,
     open,
     onOpenChange,
 }: {
     result: Result | null;
-    activeMeets: Option[];
-    eventOptionsByMeet: EventOption[];
-    encodedEventKeys: string[];
     entryOptions: EntryOption[];
+    competitionOptions: CompetitionOption[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
@@ -129,6 +140,7 @@ function EncodeDialog({
         useForm({
             meet_id: result ? String(result.meet_id) : '',
             event_id: result ? String(result.event_id) : '',
+            match_id: result?.match_id ? String(result.match_id) : '',
             placements: (result
                 ? result.placements.map((placement) => ({
                       entry_id: String(placement.entry_id),
@@ -151,18 +163,10 @@ function EncodeDialog({
         })),
     }));
 
-    const eventOptions = eventOptionsByMeet.filter(
-        (option) =>
-            String(option.meet_id) === data.meet_id &&
-            (result !== null ||
-                !encodedEventKeys.includes(`${option.meet_id}-${option.id}`)),
-    );
-
-    const availableEntries = entryOptions.filter(
-        (option) =>
-            String(option.meet_id) === data.meet_id &&
-            String(option.event_id) === data.event_id,
-    );
+    const competition = competitionOptions.find((option) => String(option.id) === data.match_id);
+    const availableEntries = result
+        ? entryOptions.filter((option) => String(option.meet_id) === data.meet_id && String(option.event_id) === data.event_id)
+        : (competition?.entries ?? []);
 
     const setRow = (i: number, patch: Partial<PlacementRow>) => {
         setData(
@@ -226,21 +230,21 @@ function EncodeDialog({
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
                     {!result && (
-                        <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
                             <div className="space-y-2">
-                                <Label htmlFor="result-meet">Meet</Label>
+                                <Label htmlFor="result-match">Scheduled competition</Label>
                                 <Select
-                                    value={data.meet_id}
+                                    value={data.match_id}
                                     onValueChange={(value) => {
-                                        setData('meet_id', value);
-                                        setData('event_id', '');
+                                        setData('match_id', value);
+                                        setData('placements', [{ entry_id: '', rank: '1', mark: '', is_tie: false }]);
                                     }}
                                 >
-                                    <SelectTrigger id="result-meet">
-                                        <SelectValue placeholder="Active meets" />
+                                    <SelectTrigger id="result-match">
+                                        <SelectValue placeholder="Select a completed competition" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {activeMeets.map((option) => (
+                                        {competitionOptions.map((option) => (
                                             <SelectItem
                                                 key={option.id}
                                                 value={String(option.id)}
@@ -250,38 +254,8 @@ function EncodeDialog({
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                <InputError message={errors.meet_id} />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="result-event">Event</Label>
-                                <Select
-                                    value={data.event_id}
-                                    onValueChange={(value) =>
-                                        setData('event_id', value)
-                                    }
-                                    disabled={!data.meet_id}
-                                >
-                                    <SelectTrigger id="result-event">
-                                        <SelectValue
-                                            placeholder={
-                                                data.meet_id
-                                                    ? 'Select an event'
-                                                    : 'Select a meet first'
-                                            }
-                                        />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {eventOptions.map((option) => (
-                                            <SelectItem
-                                                key={option.id}
-                                                value={String(option.id)}
-                                            >
-                                                {option.label}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <InputError message={errors.event_id} />
+                                <InputError message={errors.match_id} />
+                                {competition && <p className="text-sm text-muted-foreground">{competition.context}</p>}
                             </div>
                         </div>
                     )}
@@ -309,7 +283,7 @@ function EncodeDialog({
                                         onValueChange={(value) =>
                                             setRow(i, { entry_id: value })
                                         }
-                                        disabled={!data.event_id}
+                                        disabled={!result && !data.match_id}
                                     >
                                         <SelectTrigger
                                             className="w-64"
@@ -451,11 +425,11 @@ function CorrectDialog({
 export default function Results({
     results,
     filters,
-    meetOptions,
     eventOptionsByMeet,
     activeMeets,
     encodedEventKeys,
     entryOptions,
+    competitionOptions,
     canEncode,
 }: Props) {
     const [formOpen, setFormOpen] = useState(false);
@@ -470,6 +444,14 @@ export default function Results({
     const openEdit = (result: Result) => {
         setEditing(result);
         setFormOpen(true);
+    };
+
+    const uploadSignedForm = (result: Result, file: File) => {
+        router.post(
+            `/results/${result.id}/attachments`,
+            { file },
+            { forceFormData: true, preserveScroll: true },
+        );
     };
 
     const applyFilters = (overrides: {
@@ -532,30 +514,6 @@ export default function Results({
                 />
 
                 <div className="flex flex-wrap gap-2">
-                    <Select
-                        value={String(filters.meet_id ?? 'all')}
-                        onValueChange={(value) =>
-                            applyFilters({ meet_id: value, event_id: 'all' })
-                        }
-                    >
-                        <SelectTrigger
-                            className="w-56"
-                            aria-label="Filter by meet"
-                        >
-                            <SelectValue placeholder="All meets" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All meets</SelectItem>
-                            {meetOptions.map((option) => (
-                                <SelectItem
-                                    key={option.id}
-                                    value={String(option.id)}
-                                >
-                                    {option.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
                     <Select
                         value={String(filters.event_id ?? 'all')}
                         onValueChange={(value) =>
@@ -628,6 +586,164 @@ export default function Results({
                                         >
                                             {result.status_label}
                                         </Badge>
+                                        {result.tm_confirmed ? (
+                                            <Badge variant="secondary">TM confirmed</Badge>
+                                        ) : result.match_id ? (
+                                            <Badge variant="outline">Awaiting TM confirmation</Badge>
+                                        ) : null}
+                                        {result.can_tm_confirm && !result.tm_confirmed && (
+                                            <Button
+                                                size="sm"
+                                                onClick={() =>
+                                                    router.post(
+                                                        `/results/${result.id}/tm-confirmation`,
+                                                        {},
+                                                        { preserveScroll: true },
+                                                    )
+                                                }
+                                            >
+                                                Confirm result
+                                            </Button>
+                                        )}
+                                        {result.can_form &&
+                                            (result.match_id === null || result.tm_confirmed) &&
+                                            !['official'].includes(
+                                                result.status,
+                                            ) && (
+                                                <>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        asChild
+                                                    >
+                                                        <a
+                                                            href={`/results/${result.id}/form`}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                        >
+                                                            <Printer />
+                                                            Result Form
+                                                        </a>
+                                                    </Button>
+                                                    <label className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-accent">
+                                                        <FileUp className="size-4" />
+                                                        Upload signed form
+                                                        <input
+                                                            className="sr-only"
+                                                            type="file"
+                                                            accept=".pdf,.jpg,.jpeg,.png"
+                                                            onChange={(event) => {
+                                                                const file =
+                                                                    event.target
+                                                                        .files?.[0];
+                                                                if (file) {
+                                                                    uploadSignedForm(
+                                                                        result,
+                                                                        file,
+                                                                    );
+                                                                }
+                                                                event.target.value =
+                                                                    '';
+                                                            }}
+                                                        />
+                                                    </label>
+                                                    <Button
+                                                        size="sm"
+                                                        disabled={
+                                                            !result.signed_form ||
+                                                            ![
+                                                                'encoded',
+                                                                'returned',
+                                                                'reopened',
+                                                            ].includes(
+                                                                result.status,
+                                                            )
+                                                        }
+                                                        onClick={() =>
+                                                            router.post(
+                                                                `/results/${result.id}/submit`,
+                                                                {},
+                                                                {
+                                                                    preserveScroll: true,
+                                                                },
+                                                            )
+                                                        }
+                                                    >
+                                                        <Send />
+                                                        Submit
+                                                    </Button>
+                                                </>
+                                            )}
+                                        {result.signed_form && (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                asChild
+                                            >
+                                                <a
+                                                    href={`/results/${result.id}/attachments/${result.signed_form.id}`}
+                                                >
+                                                    Signed form
+                                                </a>
+                                            </Button>
+                                        )}
+                                        {result.can_review &&
+                                            result.status === 'submitted' && (
+                                                <>
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() =>
+                                                            router.post(
+                                                                `/results/${result.id}/event-secretariat-validation`,
+                                                                {},
+                                                                {
+                                                                    preserveScroll: true,
+                                                                },
+                                                            )
+                                                        }
+                                                    >
+                                                        Validate
+                                                    </Button>
+                                                    <Button
+                                                        variant="destructive"
+                                                        size="sm"
+                                                        onClick={() => {
+                                                            const reason =
+                                                                window.prompt(
+                                                                    'Reason for returning this result',
+                                                                );
+                                                            if (reason) {
+                                                                router.post(
+                                                                    `/results/${result.id}/return`,
+                                                                    { reason },
+                                                                    {
+                                                                        preserveScroll: true,
+                                                                    },
+                                                                );
+                                                            }
+                                                        }}
+                                                    >
+                                                        Return
+                                                    </Button>
+                                                </>
+                                            )}
+                                        {result.can_review &&
+                                            result.status === 'validated' && (
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        router.post(
+                                                            `/results/${result.id}/official`,
+                                                            {},
+                                                            {
+                                                                preserveScroll: true,
+                                                            },
+                                                        )
+                                                    }
+                                                >
+                                                    Make official
+                                                </Button>
+                                            )}
                                         {canEncode &&
                                             result.status === 'encoded' && (
                                                 <>
@@ -779,10 +895,8 @@ export default function Results({
                 <EncodeDialog
                     key={editing?.id ?? 'create'}
                     result={editing}
-                    activeMeets={activeMeets}
-                    eventOptionsByMeet={eventOptionsByMeet}
-                    encodedEventKeys={encodedEventKeys}
                     entryOptions={entryOptions}
+                    competitionOptions={competitionOptions}
                     open={formOpen}
                     onOpenChange={setFormOpen}
                 />

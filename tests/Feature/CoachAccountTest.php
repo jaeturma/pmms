@@ -4,13 +4,16 @@ use App\Enums\DelegationStatus;
 use App\Enums\EligibilityStatus;
 use App\Enums\EntryStatus;
 use App\Models\Athlete;
+use App\Models\CoachAssignmentRequest;
 use App\Models\Delegation;
 use App\Models\EligibilityReview;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\EventResult;
 use App\Models\Meet;
+use App\Models\MeetSport;
 use App\Models\Personnel;
+use App\Models\Sport;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\UploadedFile;
@@ -31,6 +34,22 @@ function coachFor(Delegation $delegation): User
     Personnel::factory()->coach()->create([
         'delegation_id' => $delegation->id,
         'user_id' => $coach->id,
+    ]);
+
+    $sport = Sport::factory()->create();
+    $event = Event::factory()->create([
+        'sport_id' => $sport->id,
+        'gender' => 'boys',
+        'age_division' => 'secondary',
+    ]);
+    $delegation->meet->events()->attach($event);
+    CoachAssignmentRequest::query()->create([
+        'user_id' => $coach->id,
+        'meet_sport_id' => MeetSport::factory()->create(['meet_id' => $delegation->meet_id, 'sport_id' => $sport->id])->id,
+        'event_id' => $event->id,
+        'delegation_id' => $delegation->id,
+        'school_id' => schoolForDelegation($delegation)->id,
+        'status' => 'approved',
     ]);
 
     return $coach;
@@ -56,6 +75,62 @@ test('a coach can view and register athletes for their own delegation', function
         ->assertSessionHasNoErrors();
 
     $this->assertDatabaseHas('athletes', ['delegation_id' => $delegation->id, 'first_name' => 'Juan']);
+});
+
+test('a coach registers an athlete only in an assigned event with photos and accreditation documents', function () {
+    $delegation = Delegation::factory()->create(['status' => DelegationStatus::Draft]);
+    $coach = coachFor($delegation);
+    $assignment = $coach->coachAssignmentRequests()->with('event')->where('delegation_id', $delegation->id)->firstOrFail();
+    $assignment->event->forceFill(['gender' => 'boys', 'age_division' => 'secondary'])->save();
+
+    $this->actingAs($coach)->post('/athletes', [
+        'delegation_id' => $delegation->id,
+        'school_id' => schoolForDelegation($delegation)->id,
+        'event_id' => $assignment->event_id,
+        'first_name' => 'Pedro',
+        'last_name' => 'Santos',
+        'sex' => 'male',
+        'birthdate' => now()->subYears(15)->toDateString(),
+        'lrn' => '321654987012',
+        'grade_level' => 9,
+        'photo' => UploadedFile::fake()->image('profile.jpg'),
+        'sports_photo' => UploadedFile::fake()->image('sports.jpg'),
+        'school_id_document' => UploadedFile::fake()->create('school-id.pdf', 100, 'application/pdf'),
+        'birth_certificate' => UploadedFile::fake()->create('birth-cert.pdf', 100, 'application/pdf'),
+        'report_card' => UploadedFile::fake()->create('report-card.pdf', 100, 'application/pdf'),
+    ])->assertSessionHasNoErrors();
+
+    $athlete = Athlete::query()->where('lrn', '321654987012')->firstOrFail();
+    expect($athlete->photo_upload_id)->not->toBeNull()
+        ->and($athlete->sports_photo_upload_id)->not->toBeNull()
+        ->and($athlete->entries()->where('event_id', $assignment->event_id)->exists())->toBeTrue()
+        ->and($athlete->eligibilityDocuments()->count())->toBe(3)
+        ->and($athlete->eligibilityReview?->status)->toBe(EligibilityStatus::Pending);
+
+    $otherEvent = Event::factory()->create(['gender' => 'boys', 'age_division' => 'secondary']);
+    $delegation->meet->events()->attach($otherEvent);
+    $this->actingAs($coach)->post('/athletes', [
+        'delegation_id' => $delegation->id, 'school_id' => schoolForDelegation($delegation)->id,
+        'event_id' => $otherEvent->id, 'first_name' => 'Wrong', 'last_name' => 'Sport', 'sex' => 'male',
+        'birthdate' => now()->subYears(15)->toDateString(), 'lrn' => '321654987013', 'grade_level' => 9,
+    ])->assertSessionHasErrors('event_id');
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put("/athletes/{$athlete->id}", [
+            'first_name' => 'Not', 'last_name' => 'Allowed', 'sex' => 'male',
+            'birthdate' => now()->subYears(15)->toDateString(), 'lrn' => $athlete->lrn, 'grade_level' => 9,
+        ])->assertForbidden();
+
+    $this->actingAs($coach)->put("/athletes/{$athlete->id}", [
+        'first_name' => 'Pedro Updated', 'last_name' => 'Santos', 'sex' => 'male',
+        'birthdate' => now()->subYears(15)->toDateString(), 'lrn' => $athlete->lrn, 'grade_level' => 9,
+    ])->assertSessionHasNoErrors();
+    expect($athlete->fresh()->first_name)->toBe('Pedro Updated');
+
+    $photoUploadId = $athlete->photo_upload_id;
+    $this->actingAs($coach)->delete("/athletes/{$athlete->id}")->assertRedirect('/athletes');
+    $this->assertSoftDeleted('athletes', ['id' => $athlete->id]);
+    $this->assertDatabaseHas('file_uploads', ['id' => $photoUploadId]);
 });
 
 test('a coach cannot view or register athletes for another delegation', function () {
@@ -109,6 +184,14 @@ test('a coach can submit and withdraw an entry but cannot confirm it', function 
     ]);
     $event = Event::factory()->create(['gender' => 'boys', 'age_division' => 'secondary']);
     $meet->events()->attach($event);
+    CoachAssignmentRequest::query()->create([
+        'user_id' => $coach->id,
+        'meet_sport_id' => MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $event->sport_id])->id,
+        'event_id' => $event->id,
+        'delegation_id' => $delegation->id,
+        'school_id' => schoolForDelegation($delegation)->id,
+        'status' => 'approved',
+    ]);
 
     $this->actingAs($coach)
         ->post('/entries', ['athlete_id' => $athlete->id, 'event_id' => $event->id])

@@ -40,11 +40,13 @@ test('login succeeds once the reCAPTCHA token verifies', function () {
 });
 
 test('registration is blocked without a reCAPTCHA response once enabled and configured', function () {
+    $this->get(route('register'));
     $this->post(route('register.store'), [
         'name' => 'Test User',
         'email' => 'test@example.com',
         'password' => 'password',
         'password_confirmation' => 'password',
+        'code_challenge' => 'ABC12',
     ])->assertSessionHasErrors('recaptcha');
 
     $this->assertGuest();
@@ -55,12 +57,14 @@ test('registration succeeds once the reCAPTCHA token verifies', function () {
         'https://www.google.com/recaptcha/api/siteverify' => Http::response(['success' => true]),
     ]);
 
+    $this->get(route('register'));
     $this->post(route('register.store'), [
         'name' => 'Test User',
         'email' => 'test@example.com',
         'password' => 'password',
         'password_confirmation' => 'password',
         'g-recaptcha-response' => 'a-token',
+        'code_challenge' => 'ABC12',
     ])->assertRedirect(route('dashboard', absolute: false));
 
     $this->assertAuthenticated();

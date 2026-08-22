@@ -93,7 +93,7 @@ function CreateScheduleDialog({
         venue_id: string;
         notes: string;
     }>({
-        meet_id: '',
+        meet_id: meetOptions[0] ? String(meetOptions[0].id) : '',
         meal_type: '',
         date: '',
         starts_at: '',
@@ -129,28 +129,6 @@ reset();
                     <DialogTitle>Add meal schedule</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="schedule-meet">Meet</Label>
-                        <Select
-                            value={data.meet_id}
-                            onValueChange={(value) => setData('meet_id', value)}
-                        >
-                            <SelectTrigger id="schedule-meet">
-                                <SelectValue placeholder="Select a meet" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {meetOptions.map((meet) => (
-                                    <SelectItem
-                                        key={meet.id}
-                                        value={String(meet.id)}
-                                    >
-                                        {meet.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <InputError message={errors.meet_id} />
-                    </div>
                     <div className="space-y-2">
                         <Label htmlFor="schedule-meal-type">Meal</Label>
                         <Select
@@ -273,7 +251,7 @@ function CreateAnnouncementDialog({
         title: string;
         message: string;
     }>({
-        meet_id: '',
+        meet_id: meetOptions[0] ? String(meetOptions[0].id) : '',
         title: '',
         message: '',
     });
@@ -306,28 +284,6 @@ reset();
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
                     <div className="space-y-2">
-                        <Label htmlFor="announcement-meet">Meet</Label>
-                        <Select
-                            value={data.meet_id}
-                            onValueChange={(value) => setData('meet_id', value)}
-                        >
-                            <SelectTrigger id="announcement-meet">
-                                <SelectValue placeholder="Select a meet" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {meetOptions.map((meet) => (
-                                    <SelectItem
-                                        key={meet.id}
-                                        value={String(meet.id)}
-                                    >
-                                        {meet.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <InputError message={errors.meet_id} />
-                    </div>
-                    <div className="space-y-2">
                         <Label htmlFor="announcement-title">Title</Label>
                         <Input
                             id="announcement-title"
@@ -359,20 +315,12 @@ reset();
 export default function Food({
     schedules,
     announcements,
-    filters,
     meetOptions,
     venueOptions,
     mealTypeOptions,
 }: Props) {
     const [createScheduleOpen, setCreateScheduleOpen] = useState(false);
     const [createAnnouncementOpen, setCreateAnnouncementOpen] = useState(false);
-
-    const applyMeetFilter = (value: string) => {
-        router.get(index().url, value === 'all' ? {} : { meet_id: value }, {
-            preserveState: true,
-            preserveScroll: true,
-        });
-    };
 
     return (
         <>
@@ -397,23 +345,6 @@ export default function Food({
                         </div>
                     }
                 />
-
-                <Select
-                    value={filters.meet_id ? String(filters.meet_id) : 'all'}
-                    onValueChange={applyMeetFilter}
-                >
-                    <SelectTrigger className="w-64" aria-label="Filter by meet">
-                        <SelectValue placeholder="All meets" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All meets</SelectItem>
-                        {meetOptions.map((meet) => (
-                            <SelectItem key={meet.id} value={String(meet.id)}>
-                                {meet.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
 
                 <Card>
                     <CardHeader>

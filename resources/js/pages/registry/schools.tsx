@@ -47,14 +47,15 @@ import {
 
 type School = {
     id: number;
-    district_id: number;
+    district_id: number | null;
     school_district_id: number | null;
     name: string;
     school_id_code: string;
-    level: string;
+    school_type: 'Public' | 'Private' | null;
+    level: string | null;
     address: string | null;
     active: boolean;
-    district: { id: number; name: string };
+    district: { id: number; name: string } | null;
     school_district: { id: number; name: string } | null;
 };
 
@@ -71,13 +72,14 @@ type SchoolDistrictOption = {
 
 type Props = {
     schools: Paginated<School>;
-    filters: { search: string };
+    filters: { search: string; setup: string; type: string };
     districts: DistrictOption[];
     schoolDistricts: SchoolDistrictOption[];
     canManage: boolean;
 };
 
-const NO_SCHOOL_DISTRICT = 'none';
+const NO_SCHOOL_TYPE = 'none';
+const NO_LEVEL = 'none';
 
 const levelLabels: Record<string, string> = {
     elementary: 'Elementary',
@@ -99,12 +101,13 @@ function SchoolFormDialog({
     onOpenChange: (open: boolean) => void;
 }) {
     const { data, setData, post, put, processing, errors, reset } = useForm({
-        district_id: school ? String(school.district_id) : '',
+        district_id: school?.district_id ? String(school.district_id) : '',
         school_district_id: school?.school_district_id
             ? String(school.school_district_id)
             : '',
         name: school?.name ?? '',
         school_id_code: school?.school_id_code ?? '',
+        school_type: school?.school_type ?? '',
         level: school?.level ?? '',
         address: school?.address ?? '',
     });
@@ -141,7 +144,7 @@ function SchoolFormDialog({
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
                     <div className="space-y-2">
-                        <Label htmlFor="school-district">District</Label>
+                        <Label htmlFor="school-district">Municipality</Label>
                         <Select
                             value={data.district_id}
                             onValueChange={(value) => {
@@ -177,16 +180,35 @@ function SchoolFormDialog({
                         <InputError message={errors.district_id} />
                     </div>
                     <div className="space-y-2">
-                        <Label htmlFor="school-school-district">
-                            Specific school district (optional)
-                        </Label>
+                        <Label htmlFor="school-type">School type</Label>
                         <Select
-                            value={data.school_district_id || NO_SCHOOL_DISTRICT}
+                            value={data.school_type || NO_SCHOOL_TYPE}
                             onValueChange={(value) =>
                                 setData(
-                                    'school_district_id',
-                                    value === NO_SCHOOL_DISTRICT ? '' : value,
+                                    'school_type',
+                                    value === NO_SCHOOL_TYPE ? '' : value,
                                 )
+                            }
+                        >
+                            <SelectTrigger id="school-type">
+                                <SelectValue placeholder="Select a type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value={NO_SCHOOL_TYPE}>Unclassified</SelectItem>
+                                <SelectItem value="Public">Public</SelectItem>
+                                <SelectItem value="Private">Private</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <InputError message={errors.school_type} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="school-school-district">
+                            School district
+                        </Label>
+                        <Select
+                            value={data.school_district_id}
+                            onValueChange={(value) =>
+                                setData('school_district_id', value)
                             }
                             disabled={availableSchoolDistricts.length === 0}
                         >
@@ -194,9 +216,6 @@ function SchoolFormDialog({
                                 <SelectValue placeholder="None" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value={NO_SCHOOL_DISTRICT}>
-                                    None
-                                </SelectItem>
                                 {availableSchoolDistricts.map((option) => (
                                     <SelectItem
                                         key={option.id}
@@ -232,13 +251,16 @@ function SchoolFormDialog({
                     <div className="space-y-2">
                         <Label htmlFor="school-level">Level</Label>
                         <Select
-                            value={data.level}
-                            onValueChange={(value) => setData('level', value)}
+                            value={data.level || NO_LEVEL}
+                            onValueChange={(value) =>
+                                setData('level', value === NO_LEVEL ? '' : value)
+                            }
                         >
                             <SelectTrigger id="school-level">
                                 <SelectValue placeholder="Select a level" />
                             </SelectTrigger>
                             <SelectContent>
+                                <SelectItem value={NO_LEVEL}>Unclassified</SelectItem>
                                 {Object.entries(levelLabels).map(
                                     ([value, label]) => (
                                         <SelectItem key={value} value={value}>
@@ -321,7 +343,43 @@ export default function Schools({
                     initial={filters.search}
                     placeholder="Search schools"
                     url={index().url}
+                    extraParams={{ setup: filters.setup, type: filters.type }}
                 />
+
+                <div className="flex flex-wrap gap-3">
+                    <Select
+                        value={filters.setup || 'all'}
+                        onValueChange={(setup) =>
+                            router.get(index().url, {
+                                ...filters,
+                                setup: setup === 'all' ? '' : setup,
+                            }, { preserveState: true })
+                        }
+                    >
+                        <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All assignments</SelectItem>
+                            <SelectItem value="assigned">Assigned</SelectItem>
+                            <SelectItem value="unassigned">Unassigned</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select
+                        value={filters.type || 'all'}
+                        onValueChange={(type) =>
+                            router.get(index().url, {
+                                ...filters,
+                                type: type === 'all' ? '' : type,
+                            }, { preserveState: true })
+                        }
+                    >
+                        <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All types</SelectItem>
+                            <SelectItem value="Public">Public</SelectItem>
+                            <SelectItem value="Private">Private</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
 
                 {schools.data.length === 0 ? (
                     <EmptyState
@@ -341,8 +399,9 @@ export default function Schools({
                                 <TableRow>
                                     <TableHead>Name</TableHead>
                                     <TableHead>School ID</TableHead>
-                                    <TableHead>District</TableHead>
-                                    <TableHead>Specific district</TableHead>
+                                    <TableHead>Type</TableHead>
+                                    <TableHead>Municipality</TableHead>
+                                    <TableHead>School district</TableHead>
                                     <TableHead>Level</TableHead>
                                     <TableHead>Status</TableHead>
                                     {canManage && (
@@ -361,22 +420,23 @@ export default function Schools({
                                         <TableCell>
                                             {school.school_id_code}
                                         </TableCell>
+                                        <TableCell>{school.school_type ?? 'Unclassified'}</TableCell>
                                         <TableCell>
-                                            {school.district.name}
+                                            {school.district?.name ?? 'Unassigned'}
                                         </TableCell>
                                         <TableCell className="text-muted-foreground">
                                             {school.school_district?.name ??
                                                 '—'}
                                         </TableCell>
                                         <TableCell>
-                                            {levelLabels[school.level] ??
-                                                school.level}
+                                            {(school.level && levelLabels[school.level]) ??
+                                                school.level ?? 'Unclassified'}
                                         </TableCell>
                                         <TableCell>
                                             <Badge
                                                 variant={
                                                     school.active
-                                                        ? 'secondary'
+                                                        ? 'success'
                                                         : 'outline'
                                                 }
                                             >
@@ -384,6 +444,12 @@ export default function Schools({
                                                     ? 'Active'
                                                     : 'Archived'}
                                             </Badge>
+                                            {(school.district_id === null ||
+                                                school.school_district_id === null) && (
+                                                <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                                                    Needs Municipality/District Assignment
+                                                </p>
+                                            )}
                                         </TableCell>
                                         {canManage && (
                                             <TableCell className="text-right">
@@ -477,7 +543,7 @@ export default function Schools({
                     page={schools}
                     url={index().url}
                     label="schools"
-                    params={filters.search ? { search: filters.search } : {}}
+                    params={filters}
                 />
             </div>
 

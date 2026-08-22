@@ -1,5 +1,5 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { Medal, Plus } from 'lucide-react';
+import { Medal, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -55,6 +55,16 @@ type MeetEvent = {
     max_entries_per_delegation: number;
     active: boolean;
     sport: { id: number; name: string };
+    venues: EventVenue[];
+};
+
+type EventVenue = {
+    venue_id: string;
+    venue_name?: string;
+    playing_area_type: 'venue' | 'court' | 'table';
+    playing_area_count: string;
+    coordinator_ids: string[];
+    coordinator_names?: string[];
 };
 
 type SportOption = {
@@ -66,6 +76,8 @@ type Props = {
     events: Paginated<MeetEvent>;
     filters: { search: string };
     sports: SportOption[];
+    venues: { id: number; name: string }[];
+    people: { id: number; full_name: string }[];
     canManage: boolean;
 };
 
@@ -83,11 +95,15 @@ const divisionLabels: Record<string, string> = {
 function EventFormDialog({
     event,
     sports,
+    venues,
+    people,
     open,
     onOpenChange,
 }: {
     event: MeetEvent | null;
     sports: SportOption[];
+    venues: { id: number; name: string }[];
+    people: { id: number; full_name: string }[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
@@ -100,7 +116,23 @@ function EventFormDialog({
         max_entries_per_delegation: event
             ? String(event.max_entries_per_delegation)
             : '1',
+        venues:
+            event?.venues.map((venue) => ({
+                ...venue,
+                venue_id: String(venue.venue_id),
+                playing_area_count: String(venue.playing_area_count),
+                coordinator_ids: venue.coordinator_ids.map(String),
+            })) ?? [],
     });
+
+    const updateVenue = (index: number, values: Partial<EventVenue>) => {
+        setData(
+            'venues',
+            data.venues.map((venue, venueIndex) =>
+                venueIndex === index ? { ...venue, ...values } : venue,
+            ),
+        );
+    };
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -248,6 +280,177 @@ function EventFormDialog({
                         <Label htmlFor="event-team">Team event</Label>
                     </div>
                     <InputError message={errors.is_team_event} />
+                    <div className="space-y-3 border-t pt-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <Label>Playing venues</Label>
+                                <p className="text-sm text-muted-foreground">
+                                    Add venues, courts, or tables and up to two
+                                    game coordinators.
+                                </p>
+                            </div>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                    setData('venues', [
+                                        ...data.venues,
+                                        {
+                                            venue_id: '',
+                                            playing_area_type: 'venue',
+                                            playing_area_count: '1',
+                                            coordinator_ids: [],
+                                        },
+                                    ])
+                                }
+                            >
+                                <Plus /> Add venue
+                            </Button>
+                        </div>
+                        {data.venues.map((assignment, index) => (
+                            <div
+                                key={index}
+                                className="space-y-3 rounded-lg border p-3"
+                            >
+                                <div className="grid gap-3 sm:grid-cols-[1fr_140px_90px_auto]">
+                                    <Select
+                                        value={String(assignment.venue_id)}
+                                        onValueChange={(value) =>
+                                            updateVenue(index, {
+                                                venue_id: value,
+                                            })
+                                        }
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select venue" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {venues.map((venue) => (
+                                                <SelectItem
+                                                    key={venue.id}
+                                                    value={String(venue.id)}
+                                                >
+                                                    {venue.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <Select
+                                        value={assignment.playing_area_type}
+                                        onValueChange={(value) =>
+                                            updateVenue(index, {
+                                                playing_area_type:
+                                                    value as EventVenue['playing_area_type'],
+                                            })
+                                        }
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="venue">
+                                                Venue
+                                            </SelectItem>
+                                            <SelectItem value="court">
+                                                Court
+                                            </SelectItem>
+                                            <SelectItem value="table">
+                                                Table
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <Input
+                                        type="number"
+                                        min={1}
+                                        max={100}
+                                        aria-label="Number of playing areas"
+                                        value={String(
+                                            assignment.playing_area_count,
+                                        )}
+                                        onChange={(e) =>
+                                            updateVenue(index, {
+                                                playing_area_count:
+                                                    e.target.value,
+                                            })
+                                        }
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        aria-label="Remove venue"
+                                        onClick={() =>
+                                            setData(
+                                                'venues',
+                                                data.venues.filter(
+                                                    (_, venueIndex) =>
+                                                        venueIndex !== index,
+                                                ),
+                                            )
+                                        }
+                                    >
+                                        <Trash2 />
+                                    </Button>
+                                </div>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    {[0, 1].map((coordinatorIndex) => (
+                                        <select
+                                            key={coordinatorIndex}
+                                            className="h-9 rounded-md border bg-background px-3 text-sm"
+                                            aria-label={`Game coordinator ${coordinatorIndex + 1}`}
+                                            value={String(
+                                                assignment.coordinator_ids[
+                                                    coordinatorIndex
+                                                ] ?? '',
+                                            )}
+                                            onChange={(e) => {
+                                                const ids = [
+                                                    ...assignment.coordinator_ids,
+                                                ];
+                                                if (e.target.value)
+                                                    ids[coordinatorIndex] =
+                                                        e.target.value;
+                                                else
+                                                    ids.splice(
+                                                        coordinatorIndex,
+                                                        1,
+                                                    );
+                                                updateVenue(index, {
+                                                    coordinator_ids:
+                                                        ids.filter(Boolean),
+                                                });
+                                            }}
+                                        >
+                                            <option value="">
+                                                Coordinator{' '}
+                                                {coordinatorIndex + 1}{' '}
+                                                (optional)
+                                            </option>
+                                            {people.map((person) => (
+                                                <option
+                                                    key={person.id}
+                                                    value={person.id}
+                                                >
+                                                    {person.full_name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    ))}
+                                </div>
+                                <InputError
+                                    message={
+                                        (errors as Record<string, string>)[
+                                            `venues.${index}.venue_id`
+                                        ] ??
+                                        (errors as Record<string, string>)[
+                                            `venues.${index}.coordinator_ids`
+                                        ]
+                                    }
+                                />
+                            </div>
+                        ))}
+                    </div>
                     <DialogFooter>
                         <Button type="submit" disabled={processing}>
                             {event ? 'Save changes' : 'Create event'}
@@ -259,7 +462,14 @@ function EventFormDialog({
     );
 }
 
-export default function Events({ events, filters, sports, canManage }: Props) {
+export default function Events({
+    events,
+    filters,
+    sports,
+    venues,
+    people,
+    canManage,
+}: Props) {
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<MeetEvent | null>(null);
 
@@ -318,6 +528,7 @@ export default function Events({ events, filters, sports, canManage }: Props) {
                                     <TableHead>Division</TableHead>
                                     <TableHead>Type</TableHead>
                                     <TableHead>Max entries</TableHead>
+                                    <TableHead>Playing areas</TableHead>
                                     <TableHead>Status</TableHead>
                                     {canManage && (
                                         <TableHead className="text-right">
@@ -351,6 +562,16 @@ export default function Events({ events, filters, sports, canManage }: Props) {
                                         </TableCell>
                                         <TableCell>
                                             {event.max_entries_per_delegation}
+                                        </TableCell>
+                                        <TableCell className="max-w-64 text-sm">
+                                            {event.venues.length === 0
+                                                ? 'Not assigned'
+                                                : event.venues
+                                                      .map(
+                                                          (venue) =>
+                                                              `${venue.venue_name}: ${venue.playing_area_count} ${venue.playing_area_type}${Number(venue.playing_area_count) === 1 ? '' : 's'}`,
+                                                      )
+                                                      .join(', ')}
                                         </TableCell>
                                         <TableCell>
                                             <Badge
@@ -465,6 +686,8 @@ export default function Events({ events, filters, sports, canManage }: Props) {
                 key={editing?.id ?? 'create'}
                 event={editing}
                 sports={sports}
+                venues={venues}
+                people={people}
                 open={formOpen}
                 onOpenChange={setFormOpen}
             />

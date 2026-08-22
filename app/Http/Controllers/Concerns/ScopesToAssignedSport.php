@@ -22,7 +22,11 @@ trait ScopesToAssignedSport
     protected function userOperatesSport(User $user, int $sportId): bool
     {
         return match ($user->role) {
-            UserRole::TechnicalOfficial => $user->sports()->whereKey($sportId)->exists(),
+            UserRole::TechnicalOfficial => $this->userAssignedSportIds($user, [
+                MeetSportAssignmentRole::TechnicalOfficial,
+                MeetSportAssignmentRole::TournamentSecretary,
+                MeetSportAssignmentRole::TournamentICT,
+            ])->contains($sportId) || $user->sports()->whereKey($sportId)->exists(),
             UserRole::TournamentManager => $this->userManagedSportIds($user)->contains($sportId),
             default => false,
         };
@@ -33,21 +37,39 @@ trait ScopesToAssignedSport
      */
     protected function userManagedSportIds(User $user): Collection
     {
-        $assigned = $user->meetSportAssignments()
-            ->where('status', MeetSportAssignmentStatus::Active)
-            ->whereIn('role', [
-                MeetSportAssignmentRole::TournamentManager,
-                MeetSportAssignmentRole::AssistantTournamentManager,
-            ])
-            ->whereHas('meetSport.meet', fn ($query) => $query->where('id', Meet::current()->id))
-            ->with('meetSport:id,sport_id')
-            ->get()
-            ->pluck('meetSport.sport_id');
+        $assigned = $this->userAssignedSportIds($user, [
+            MeetSportAssignmentRole::TournamentManager,
+            MeetSportAssignmentRole::AssistantTournamentManager,
+            MeetSportAssignmentRole::TrackTournamentManager,
+            MeetSportAssignmentRole::FieldTournamentManager,
+            MeetSportAssignmentRole::BoysTournamentManager,
+            MeetSportAssignmentRole::GirlsTournamentManager,
+            MeetSportAssignmentRole::CategoryTournamentManager,
+        ]);
 
         if ($user->managedSport !== null) {
             $assigned->push($user->managedSport->id);
         }
 
         return $assigned->filter()->map(fn ($id): int => (int) $id)->unique()->values();
+    }
+
+    /**
+     * @param  list<MeetSportAssignmentRole>  $roles
+     * @return Collection<int, int>
+     */
+    protected function userAssignedSportIds(User $user, array $roles): Collection
+    {
+        return $user->meetSportAssignments()
+            ->where('status', MeetSportAssignmentStatus::Active)
+            ->whereIn('role', $roles)
+            ->whereHas('meetSport.meet', fn ($query) => $query->where('id', Meet::current()->id))
+            ->with('meetSport:id,sport_id')
+            ->get()
+            ->pluck('meetSport.sport_id')
+            ->filter()
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values();
     }
 }

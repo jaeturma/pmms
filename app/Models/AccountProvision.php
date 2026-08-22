@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['person_id', 'suggested_username', 'target_role', 'status', 'reason'])]
+#[Fillable(['person_id', 'linked_user_id', 'suggested_username', 'email', 'target_role', 'status', 'reason'])]
 class AccountProvision extends Model
 {
     protected $hidden = ['activation_token_hash'];
@@ -19,5 +19,10 @@ class AccountProvision extends Model
     public function person(): BelongsTo
     {
         return $this->belongsTo(Person::class);
+    }
+
+    public function linkedUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'linked_user_id');
     }
 }

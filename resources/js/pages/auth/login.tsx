@@ -1,6 +1,5 @@
 import { Form, Head, usePage } from '@inertiajs/react';
 import InputError from '@/components/input-error';
-import PasskeyVerify from '@/components/passkey-verify';
 import PasswordInput from '@/components/password-input';
 import RecaptchaWidget from '@/components/recaptcha-widget';
 import TextLink from '@/components/text-link';
@@ -25,8 +24,6 @@ export default function Login({ status, canResetPassword }: Props) {
         <>
             <Head title="Log in" />
 
-            <PasskeyVerify />
-
             <Form
                 {...store.form()}
                 resetOnSuccess={['password']}
@@ -34,18 +31,18 @@ export default function Login({ status, canResetPassword }: Props) {
             >
                 {({ processing, errors }) => (
                     <>
-                        <div className="grid gap-6">
+                        <div className="grid gap-6 rounded-xl border bg-card p-6 shadow-[0_2px_8px_rgba(0,0,0,0.2)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.45)]">
                             <div className="grid gap-2">
-                                <Label htmlFor="email">Email address</Label>
+                                <Label htmlFor="email">Username or email</Label>
                                 <Input
                                     id="email"
-                                    type="email"
+                                    type="text"
                                     name="email"
                                     required
                                     autoFocus
                                     tabIndex={1}
-                                    autoComplete="email"
-                                    placeholder="email@example.com"
+                                    autoComplete="username"
+                                    placeholder="Username or email"
                                 />
                                 <InputError message={errors.email} />
                             </div>
@@ -125,5 +122,5 @@ export default function Login({ status, canResetPassword }: Props) {
 
 Login.layout = {
     title: 'Log in to your account',
-    description: 'Enter your email and password below to log in',
+    description: 'Enter your username or email and password below to log in',
 };

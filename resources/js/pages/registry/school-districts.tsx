@@ -268,7 +268,7 @@ export default function SchoolDistricts({
                                             <Badge
                                                 variant={
                                                     schoolDistrict.active
-                                                        ? 'secondary'
+                                                        ? 'success'
                                                         : 'outline'
                                                 }
                                             >

@@ -37,10 +37,12 @@ class AdminUserSeeder extends Seeder
 
         User::query()->firstOrNew(['email' => $email])->forceFill([
             'name' => $name,
+            'username' => 'admin',
             'email' => $email,
             'password' => Hash::make($password),
             'role' => UserRole::Admin,
             'email_verified_at' => now(),
+            'must_change_password' => false,
         ])->save();
     }
 }

@@ -18,6 +18,8 @@ type Athlete = {
     meet: string;
     photo_url: string | null;
     sports_photo_url: string | null;
+    sports: string;
+    accreditation_status: string;
     can_update: boolean;
 };
 
@@ -33,6 +35,8 @@ export default function AthleteShow({ athlete }: Props) {
         ['Birthdate', `${athlete.birthdate} (age ${athlete.age})`],
         ['LRN', athlete.lrn],
         ['Grade level', `Grade ${athlete.grade_level}`],
+        ['Sport', athlete.sports || 'Not assigned'],
+        ['Accreditation status', athlete.accreditation_status],
         ['School', athlete.school],
         ['Meet', athlete.meet],
     ];

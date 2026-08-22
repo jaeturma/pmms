@@ -170,6 +170,7 @@ export type PortalScheduleSlot = {
     starts_at: string;
     ends_at: string;
     event: string;
+    competition_area: string | null;
     note: string | null;
 };
 
@@ -181,6 +182,7 @@ export type PortalScheduleVenueGroup = {
 export type PortalVenueGuideEntry = {
     name: string;
     address: string | null;
+    public_notes: string | null;
 };
 
 export type PortalResultRow = {

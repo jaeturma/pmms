@@ -95,6 +95,14 @@ class Meet extends Model
         return $this->hasMany(MeetSport::class);
     }
 
+    /**
+     * @return HasMany<Delegation, $this>
+     */
+    public function delegations(): HasMany
+    {
+        return $this->hasMany(Delegation::class);
+    }
+
     /** Canonical sports enabled for this meet. */
     public function sports(): BelongsToMany
     {

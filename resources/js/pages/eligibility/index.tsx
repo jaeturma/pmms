@@ -50,10 +50,17 @@ type DocumentRow = {
     uploaded_at: string | null;
     url: string;
     can_delete: boolean;
+    status: string;
+    status_label: string;
+    remarks: string | null;
+    verified_by: string | null;
+    verified_at: string | null;
+    can_verify: boolean;
 };
 
 type ReviewRow = {
     id: number;
+    athlete_id: number;
     athlete: string;
     school: string;
     meet: string;
@@ -63,8 +70,224 @@ type ReviewRow = {
     reviewer: string | null;
     decided_at: string | null;
     documents: DocumentRow[];
+    requirements_validated: boolean;
+    requirements_summary: string;
+    can_review: boolean;
     can_decide: boolean;
+    can_accredit: boolean;
 };
+
+function ReviewDialog({
+    review,
+    open,
+    onOpenChange,
+    onDecision,
+}: {
+    review: ReviewRow;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onDecision: (mode: 'approve' | 'return' | 'reject') => void;
+}) {
+    const updateDocument = (
+        document: DocumentRow,
+        status: 'verified' | 'rejected' | 'under_review',
+    ) => {
+        router.patch(
+            `/eligibility/documents/${document.id}/status`,
+            { status },
+            { preserveScroll: true },
+        );
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle>Review athlete requirements</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-1">
+                    <p className="font-medium">{review.athlete}</p>
+                    <p className="text-sm text-muted-foreground">
+                        {review.school} · {review.meet}
+                    </p>
+                    <Badge
+                        variant={
+                            review.requirements_validated
+                                ? 'outline'
+                                : 'destructive'
+                        }
+                        className={
+                            review.requirements_validated
+                                ? statusBadgeClasses.approved
+                                : undefined
+                        }
+                    >
+                        {review.requirements_summary}
+                    </Badge>
+                </div>
+
+                <div className="space-y-3">
+                    {review.documents.length === 0 ? (
+                        <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                            No requirements have been uploaded.
+                        </p>
+                    ) : (
+                        review.documents.map((document) => (
+                            <div
+                                key={document.id}
+                                className="rounded-lg border p-3"
+                            >
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                    <div>
+                                        <a
+                                            href={document.url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="font-medium underline underline-offset-2"
+                                        >
+                                            {document.label}
+                                        </a>
+                                        <p className="text-xs text-muted-foreground">
+                                            {document.file_name}
+                                        </p>
+                                    </div>
+                                    <Badge variant="outline">
+                                        {document.status_label}
+                                    </Badge>
+                                </div>
+                                {(document.verified_by || document.remarks) && (
+                                    <p className="mt-2 text-xs text-muted-foreground">
+                                        {document.verified_by
+                                            ? `Checked by ${document.verified_by}${document.verified_at ? ` ${document.verified_at}` : ''}`
+                                            : ''}
+                                        {document.remarks
+                                            ? ` · ${document.remarks}`
+                                            : ''}
+                                    </p>
+                                )}
+                                {document.can_verify && (
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                        <Button
+                                            size="sm"
+                                            onClick={() =>
+                                                updateDocument(
+                                                    document,
+                                                    'verified',
+                                                )
+                                            }
+                                        >
+                                            Validate
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() =>
+                                                updateDocument(
+                                                    document,
+                                                    'under_review',
+                                                )
+                                            }
+                                        >
+                                            Mark under review
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="destructive"
+                                            onClick={() =>
+                                                updateDocument(
+                                                    document,
+                                                    'rejected',
+                                                )
+                                            }
+                                        >
+                                            Reject requirement
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+                        ))
+                    )}
+                </div>
+
+                {review.can_decide && (
+                    <DialogFooter className="flex-wrap">
+                        <Button
+                            variant="outline"
+                            onClick={() => onDecision('return')}
+                        >
+                            Return
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={() => onDecision('reject')}
+                        >
+                            Reject
+                        </Button>
+                        <Button onClick={() => onDecision('approve')}>
+                            Approve final review
+                        </Button>
+                    </DialogFooter>
+                )}
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function AccreditDialog({
+    review,
+    open,
+    onOpenChange,
+}: {
+    review: ReviewRow;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+}) {
+    const [processing, setProcessing] = useState(false);
+
+    const accredit = () => {
+        setProcessing(true);
+        router.post(
+            '/accreditations',
+            { athlete_id: review.athlete_id },
+            {
+                preserveScroll: true,
+                onSuccess: () => onOpenChange(false),
+                onFinish: () => setProcessing(false),
+            },
+        );
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>Accredit athlete</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3">
+                    <div>
+                        <p className="font-medium">{review.athlete}</p>
+                        <p className="text-sm text-muted-foreground">
+                            {review.school} · {review.meet}
+                        </p>
+                    </div>
+                    <div className="rounded-lg border p-3 text-sm">
+                        <p>{review.requirements_summary}</p>
+                        <p>Final DSAC review: {review.status_label}</p>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                        Accreditation confirms the athlete and any submitted
+                        competition entries. This action is audited.
+                    </p>
+                </div>
+                <DialogFooter>
+                    <Button onClick={accredit} disabled={processing}>
+                        Accredit athlete
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
 
 type Counts = {
     pending: number;
@@ -319,6 +542,8 @@ export default function Eligibility({
         review: ReviewRow;
         mode: 'approve' | 'return' | 'reject';
     } | null>(null);
+    const [reviewing, setReviewing] = useState<ReviewRow | null>(null);
+    const [accrediting, setAccrediting] = useState<ReviewRow | null>(null);
 
     const applyStatusFilter = (value: string) => {
         router.get(
@@ -531,44 +756,34 @@ export default function Eligibility({
                                                 {review.remarks ?? '—'}
                                             </TableCell>
                                             <TableCell className="text-right">
+                                                {review.can_review && (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                            setReviewing(review)
+                                                        }
+                                                    >
+                                                        Review
+                                                    </Button>
+                                                )}
                                                 {review.can_decide && (
-                                                    <div className="flex justify-end gap-2">
-                                                        <Button
-                                                            size="sm"
-                                                            onClick={() =>
-                                                                setDecision({
-                                                                    review,
-                                                                    mode: 'approve',
-                                                                })
-                                                            }
-                                                        >
-                                                            Approve
-                                                        </Button>
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            onClick={() =>
-                                                                setDecision({
-                                                                    review,
-                                                                    mode: 'return',
-                                                                })
-                                                            }
-                                                        >
-                                                            Return
-                                                        </Button>
-                                                        <Button
-                                                            variant="destructive"
-                                                            size="sm"
-                                                            onClick={() =>
-                                                                setDecision({
-                                                                    review,
-                                                                    mode: 'reject',
-                                                                })
-                                                            }
-                                                        >
-                                                            Reject
-                                                        </Button>
-                                                    </div>
+                                                    <span className="ml-2 text-xs text-muted-foreground">
+                                                        Ready for final review
+                                                    </span>
+                                                )}
+                                                {review.can_accredit && (
+                                                    <Button
+                                                        size="sm"
+                                                        className="ml-2"
+                                                        onClick={() =>
+                                                            setAccrediting(
+                                                                review,
+                                                            )
+                                                        }
+                                                    >
+                                                        Accredit
+                                                    </Button>
                                                 )}
                                             </TableCell>
                                         </TableRow>
@@ -611,6 +826,32 @@ export default function Eligibility({
                         if (!open) {
                             setDecision(null);
                         }
+                    }}
+                />
+            )}
+
+            {reviewing && (
+                <ReviewDialog
+                    key={reviewing.id}
+                    review={reviewing}
+                    open={reviewing !== null}
+                    onOpenChange={(open) => {
+                        if (!open) setReviewing(null);
+                    }}
+                    onDecision={(mode) => {
+                        setDecision({ review: reviewing, mode });
+                        setReviewing(null);
+                    }}
+                />
+            )}
+
+            {accrediting && (
+                <AccreditDialog
+                    key={accrediting.id}
+                    review={accrediting}
+                    open={accrediting !== null}
+                    onOpenChange={(open) => {
+                        if (!open) setAccrediting(null);
                     }}
                 />
             )}

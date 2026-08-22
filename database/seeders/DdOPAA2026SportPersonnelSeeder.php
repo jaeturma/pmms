@@ -10,6 +10,7 @@ use App\Models\MeetSportAssignment;
 use App\Models\Person;
 use App\Models\SchoolDistrict;
 use App\Services\DdOPAA2026Source;
+use App\Services\ProductionUsername;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -21,6 +22,18 @@ class DdOPAA2026SportPersonnelSeeder extends Seeder
         DB::transaction(function (): void {
             $source = app(DdOPAA2026Source::class);
             $meet = Meet::query()->where('name', 'DdOPAA Meet 2026')->firstOrFail();
+
+            MeetSportAssignment::query()
+                ->whereNotNull('person_id')
+                ->orderBy('id')
+                ->get()
+                ->groupBy(fn (MeetSportAssignment $assignment): string => implode('|', [
+                    $assignment->meet_sport_id,
+                    $assignment->person_id,
+                    $assignment->role->value,
+                ]))
+                ->each(fn ($duplicates) => $duplicates->slice(1)->each->delete());
+
             $meetSports = MeetSport::query()->with('sport')->where('meet_id', $meet->id)->get()->keyBy(fn (MeetSport $ms) => $ms->sport->code);
             $municipalities = District::query()->get()->keyBy(fn (District $district) => Str::upper($district->name));
             $schoolDistricts = SchoolDistrict::query()->get()->keyBy(fn (SchoolDistrict $district) => Str::upper($district->nickname ?: Str::slug($district->name, '_')));
@@ -35,13 +48,26 @@ class DdOPAA2026SportPersonnelSeeder extends Seeder
                 $schoolDistrict = $row['school_district'] ? ($schoolDistricts[$row['school_district']] ?? null) : null;
 
                 foreach ($this->roles($row['role_code']) as $role) {
-                    MeetSportAssignment::query()->updateOrCreate([
+                    $identity = [
                         'meet_sport_id' => $meetSports[$row['sport']]->id,
-                        'person_id' => $person->id,
                         'role' => $role,
-                        'source_sequence' => $row['sequence'],
-                    ], [
+                    ];
+
+                    // Once accounts have been provisioned, the original table's
+                    // unique key is meet_sport_id/user_id/role. Match that key on
+                    // reruns so we update the existing assignment instead of
+                    // finding another row by person and colliding while saving.
+                    if ($person->user_id !== null) {
+                        $identity['user_id'] = $person->user_id;
+                    } else {
+                        $identity['person_id'] = $person->id;
+                        $identity['source_sequence'] = $row['sequence'];
+                    }
+
+                    MeetSportAssignment::query()->updateOrCreate($identity, [
+                        'person_id' => $person->id,
                         'user_id' => $person->user_id,
+                        'source_sequence' => $row['sequence'],
                         'original_designation' => $row['role_label'],
                         'assignment_scope' => $row['scope'] ?: ($row['role_code'] === 'ASSISTANT_TM_TRACK' ? 'TRACK' : null),
                         'source_district_text' => $row['district_text'],
@@ -54,7 +80,7 @@ class DdOPAA2026SportPersonnelSeeder extends Seeder
                 }
 
                 AccountProvision::query()->updateOrCreate(['person_id' => $person->id], [
-                    'suggested_username' => Str::lower(str_replace('_', '.', $person->source_key)),
+                    'suggested_username' => app(ProductionUsername::class)->uniqueFor($person),
                     'target_role' => str_contains($row['role_code'], 'TOURNAMENT_MANAGER') ? 'tournament_manager' : 'technical_official',
                     'status' => $person->user_id ? 'linked' : 'pending',
                     'reason' => 'DdOPAA 2026 final TM/TO worksheet assignment',

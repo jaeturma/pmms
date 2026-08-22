@@ -14,11 +14,12 @@ use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
- * @property int $district_id
+ * @property int|null $district_id
  * @property int|null $school_district_id
  * @property string $name
  * @property string $school_id_code
- * @property SchoolLevel $level
+ * @property SchoolLevel|null $level
+ * @property string|null $school_type
  * @property string|null $address
  * @property bool $active
  * @property Carbon|null $created_at
@@ -28,7 +29,7 @@ use Illuminate\Support\Carbon;
  * @property-read int|null $personnel_count
  * @property-read int|null $entries_count
  */
-#[Fillable(['district_id', 'school_district_id', 'name', 'school_id_code', 'level', 'address'])]
+#[Fillable(['district_id', 'school_district_id', 'name', 'school_id_code', 'school_type', 'level', 'address'])]
 class School extends Model
 {
     /** @use HasFactory<SchoolFactory> */

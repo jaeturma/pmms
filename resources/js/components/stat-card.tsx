@@ -49,7 +49,7 @@ export function StatCard({
     tone,
 }: Props) {
     return (
-        <Card>
+        <Card data-tone={tone}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
                     {label}

@@ -91,14 +91,14 @@ test('public placements carry no sensitive or internal fields', function () {
                 ->missing('entry')));
 });
 
-test('a correction removes the result from the portal automatically', function () {
+test('reopening removes the official result from the portal automatically', function () {
     [$meet, $result] = publishedMeetWithValidatedResult();
 
     $this->actingAs(User::factory()->admin()->create())
-        ->patch("/results/{$result->id}/correct", ['reason' => 'Protest upheld.'])
+        ->post("/results/{$result->id}/reopen", ['reason' => 'Protest upheld.'])
         ->assertSessionHasNoErrors();
 
-    expect($result->refresh()->status)->toBe(ResultStatus::Encoded);
+    expect($result->refresh()->status)->toBe(ResultStatus::Reopened);
 
     $this->get("/meets/{$meet->id}/results")
         ->assertInertia(fn (AssertableInertia $page) => $page->has('results', 0));

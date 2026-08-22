@@ -506,7 +506,7 @@ test('a tournament manager sees their own sport\'s encoded results plus all vali
         ->assertForbidden();
 });
 
-test('a tournament manager can validate, correct, and delete a result in their managed sport', function () {
+test('a tournament manager cannot validate but can delete a draft in their managed sport', function () {
     $sport = Sport::factory()->create();
     $event = Event::factory()->create(['sport_id' => $sport->id]);
 
@@ -517,13 +517,7 @@ test('a tournament manager can validate, correct, and delete a result in their m
 
     $this->actingAs($manager)
         ->patch("/results/{$encoded->id}/validate")
-        ->assertRedirect();
-
-    expect($encoded->refresh()->status)->toBe(ResultStatus::Validated);
-
-    $this->actingAs($manager)
-        ->patch("/results/{$encoded->id}/correct", ['reason' => 'lane infringement'])
-        ->assertSessionHasNoErrors();
+        ->assertForbidden();
 
     expect($encoded->refresh()->status)->toBe(ResultStatus::Encoded);
 
@@ -555,7 +549,7 @@ test('a tournament manager cannot validate, correct, or delete a result outside 
         ->assertForbidden();
 
     expect($otherEncoded->refresh()->status)->toBe(ResultStatus::Encoded)
-        ->and($otherValidated->refresh()->status)->toBe(ResultStatus::Validated);
+        ->and($otherValidated->refresh()->status)->toBe(ResultStatus::Official);
 });
 
 test('entries with recorded placements cannot be deleted', function () {

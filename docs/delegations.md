@@ -37,7 +37,7 @@ deployment can never accidentally create a school-rooted delegation.
 |---|---|---|---|
 | See in list | all delegations | own only | viewers: all, read-only |
 | Register (create) | ✔ (meet must be `registration_open`) | ✘ | ✘ |
-| Edit head details | ✔ always | ✔ while draft + registration open | ✘ |
+| Edit head details | ✔ always | ✔ while draft/submitted + registration open | ✘ |
 | Submit | ✔ | ✔ while registration open | ✘ |
 | Approve / Return | ✔ (submitted only) | ✘ | ✘ |
 | Assign officers | ✔ (role-checked: only `delegation_officer` users) | ✘ | ✘ |

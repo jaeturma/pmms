@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -26,7 +27,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['meet_id', 'event_id', 'event_schedule_id', 'round_label', 'sequence'])]
+#[Fillable(['meet_id', 'event_id', 'event_schedule_id', 'competition_area', 'round_label', 'sequence', 'live_scoring_enabled', 'awards_medals'])]
 class EventMatch extends Model
 {
     /** @use HasFactory<EventMatchFactory> */
@@ -44,6 +45,8 @@ class EventMatch extends Model
         return [
             'sequence' => 'integer',
             'status' => MatchStatus::class,
+            'live_scoring_enabled' => 'boolean',
+            'awards_medals' => 'boolean',
         ];
     }
 
@@ -85,5 +88,10 @@ class EventMatch extends Model
     public function scoringSessions(): HasMany
     {
         return $this->hasMany(ScoringSession::class, 'match_id');
+    }
+
+    public function result(): HasOne
+    {
+        return $this->hasOne(EventResult::class, 'match_id');
     }
 }

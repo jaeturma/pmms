@@ -2,18 +2,22 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\EligibilityDocumentType;
 use App\Enums\UserRole;
-use App\Enums\Permission;
 use App\Http\Controllers\Concerns\BuildsSchoolOptionsByDelegation;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\AthleteRequest;
 use App\Models\Athlete;
 use App\Models\Delegation;
+use App\Models\EligibilityDocument;
+use App\Models\EligibilityReview;
+use App\Models\Entry;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\FileUploadService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -44,7 +48,17 @@ class AthleteController extends Controller
         $search = $this->searchTerm($request);
 
         $query = Athlete::query()
-            ->with(['school:id,name', 'delegation.meet:id,name'])
+            ->with([
+                'school:id,district_id,school_district_id,name',
+                'school.district:id,name',
+                'school.schoolDistrict:id,name',
+                'delegation.meet:id,name',
+                'delegation.school:id,name',
+                'delegation.district:id,name',
+                'eligibilityReview:id,athlete_id,status',
+                'accreditation:id,athlete_id',
+                'entries.event.sport:id,name',
+            ])
             ->orderBy('last_name')
             ->orderBy('first_name');
 
@@ -54,7 +68,10 @@ class AthleteController extends Controller
                 fn ($officers) => $officers->whereKey($user->getKey()),
             );
         } elseif ($user->role === UserRole::Coach) {
-            $query->whereHas('delegation.personnel', fn ($personnel) => $personnel->where('user_id', $user->id));
+            $approved = $user->coachAssignmentRequests()->where('status', 'approved');
+            $query->whereHas('entries', fn ($entries) => $entries
+                ->whereIn('delegation_id', (clone $approved)->select('delegation_id'))
+                ->whereIn('event_id', (clone $approved)->select('event_id')));
         } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer)) {
             $assignments = $user->athleteOversightAssignments()->where('active', true)->get();
             $query->whereHas('school', function ($school) use ($assignments): void {
@@ -78,30 +95,50 @@ class AthleteController extends Controller
                 'officers',
                 fn ($officers) => $officers->whereKey($user->getKey()),
             );
+        } elseif ($user->role === UserRole::Coach) {
+            $delegations->whereIn('id', $user->coachAssignmentRequests()->where('status', 'approved')->select('delegation_id'));
         }
+
+        $availableDelegations = $delegations->get()
+            ->filter(fn (Delegation $delegation): bool => $user->can('create', [Athlete::class, $delegation]))
+            ->values();
 
         return Inertia::render('athletes/index', [
             'athletes' => $query->paginate($this->registryPageSize)->withQueryString()
                 ->through(fn (Athlete $athlete): array => [
                     'id' => $athlete->id,
                     'name' => $athlete->fullName(),
+                    'first_name' => $athlete->first_name,
+                    'middle_name' => $athlete->middle_name,
+                    'last_name' => $athlete->last_name,
+                    'name_extension' => $athlete->name_extension,
+                    'sex' => $athlete->sex->value,
+                    'birthdate' => $athlete->birthdate->toDateString(),
+                    'lrn' => $athlete->lrn,
                     'sex_label' => $athlete->sex->label(),
                     'age' => $athlete->age(),
                     'grade_level' => $athlete->grade_level,
                     'school' => $athlete->school->name,
-                    'meet' => $athlete->delegation->meet->name,
+                    'district' => $athlete->school->schoolDistrict?->name ?? $athlete->school->district->name,
+                    'delegation' => $athlete->delegation->registrantName(),
+                    'sports' => $athlete->entries->pluck('event.sport.name')->filter()->unique()->values()->join(', '),
+                    'accreditation_status' => $athlete->accreditation !== null
+                        ? __('Accredited')
+                        : ($athlete->eligibilityReview?->status->label() ?? __('Documents not submitted')),
                     'can_update' => $user->can('update', $athlete),
                     'can_delete' => $user->can('delete', $athlete),
                 ]),
             'filters' => ['search' => $search],
-            'delegationOptions' => $delegations->get()
-                ->filter(fn (Delegation $delegation): bool => $user->can('create', [Athlete::class, $delegation]))
+            'delegationOptions' => $availableDelegations
                 ->map(fn (Delegation $delegation): array => [
                     'id' => $delegation->id,
-                    'label' => "{$delegation->registrantName()} — {$delegation->meet->name}",
+                    'label' => $delegation->registrantName(),
                 ])
                 ->values(),
-            'schoolOptionsByDelegation' => $this->schoolOptionsByDelegation($delegations->get()),
+            'schoolOptionsByDelegation' => $this->schoolOptionsByDelegation($availableDelegations),
+            'fixedDelegationId' => $user->role === UserRole::Coach
+                ? $availableDelegations->first()?->id
+                : null,
         ]);
     }
 
@@ -112,13 +149,17 @@ class AthleteController extends Controller
     {
         Gate::authorize('view', $athlete);
 
+        $athlete->loadMissing(['eligibilityReview:id,athlete_id,status', 'accreditation:id,athlete_id', 'entries.event.sport:id,name']);
+
         $this->audit->record('athlete.viewed', $athlete, ['name' => $athlete->fullName()]);
 
         return Inertia::render('athletes/show', [
             'athlete' => [
                 'id' => $athlete->id,
                 'first_name' => $athlete->first_name,
+                'middle_name' => $athlete->middle_name,
                 'last_name' => $athlete->last_name,
+                'name_extension' => $athlete->name_extension,
                 'sex' => $athlete->sex->value,
                 'sex_label' => $athlete->sex->label(),
                 'birthdate' => $athlete->birthdate->toDateString(),
@@ -131,6 +172,10 @@ class AthleteController extends Controller
                     ? null
                     : route('athletes.photo', $athlete),
                 'sports_photo_url' => $athlete->sportsPhotoUrl(),
+                'sports' => $athlete->entries->pluck('event.sport.name')->filter()->unique()->values()->join(', '),
+                'accreditation_status' => $athlete->accreditation !== null
+                    ? __('Accredited')
+                    : ($athlete->eligibilityReview?->status->label() ?? __('Documents not submitted')),
                 'can_update' => Gate::allows('update', $athlete),
             ],
         ]);
@@ -175,7 +220,8 @@ class AthleteController extends Controller
 
         Gate::authorize('create', [Athlete::class, $delegation]);
 
-        $athlete = new Athlete($request->safe()->except(['photo', 'sports_photo']));
+        $fileFields = ['photo', 'sports_photo', 'school_id_document', 'birth_certificate', 'report_card', 'event_id'];
+        $athlete = new Athlete($request->safe()->except($fileFields));
 
         /** @var User $user */
         $user = $request->user();
@@ -188,7 +234,43 @@ class AthleteController extends Controller
             $athlete->sports_photo_upload_id = $this->uploads->store($request->file('sports_photo'), $user, 'sports_photo')->id;
         }
 
-        $athlete->save();
+        DB::transaction(function () use ($request, $athlete, $user): void {
+            $athlete->save();
+
+            if ($request->user()?->role === UserRole::Coach && $request->filled('event_id')) {
+                Entry::query()->create([
+                    'delegation_id' => $athlete->delegation_id,
+                    'athlete_id' => $athlete->id,
+                    'event_id' => $request->integer('event_id'),
+                ]);
+            }
+
+            $documents = [
+                'school_id_document' => EligibilityDocumentType::SchoolId,
+                'birth_certificate' => EligibilityDocumentType::BirthCertificate,
+                'report_card' => EligibilityDocumentType::ReportCard,
+            ];
+
+            foreach ($documents as $field => $type) {
+                if (! $request->hasFile($field)) {
+                    continue;
+                }
+
+                $upload = $this->uploads->store($request->file($field), $user, $field);
+                EligibilityDocument::query()->create([
+                    'athlete_id' => $athlete->id,
+                    'file_upload_id' => $upload->id,
+                    'document_type' => $type->value,
+                ]);
+            }
+
+            if ($athlete->eligibilityDocuments()->exists()) {
+                EligibilityReview::query()->firstOrCreate([
+                    'athlete_id' => $athlete->id,
+                    'meet_id' => $athlete->delegation->meet_id,
+                ]);
+            }
+        });
 
         $this->audit->record('athlete.created', $athlete, [
             'name' => $athlete->fullName(),
@@ -208,7 +290,8 @@ class AthleteController extends Controller
     {
         Gate::authorize('update', $athlete);
 
-        $athlete->fill($request->safe()->except(['photo', 'sports_photo', 'delegation_id']));
+        $fileFields = ['photo', 'sports_photo', 'school_id_document', 'birth_certificate', 'report_card'];
+        $athlete->fill($request->safe()->except([...$fileFields, 'delegation_id']));
 
         /** @var User $user */
         $user = $request->user();
@@ -228,6 +311,32 @@ class AthleteController extends Controller
 
         $athlete->save();
 
+        $documents = [
+            'school_id_document' => EligibilityDocumentType::SchoolId,
+            'birth_certificate' => EligibilityDocumentType::BirthCertificate,
+            'report_card' => EligibilityDocumentType::ReportCard,
+        ];
+
+        foreach ($documents as $field => $type) {
+            if (! $request->hasFile($field)) {
+                continue;
+            }
+
+            $upload = $this->uploads->store($request->file($field), $user, $field);
+            EligibilityDocument::query()->create([
+                'athlete_id' => $athlete->id,
+                'file_upload_id' => $upload->id,
+                'document_type' => $type->value,
+            ]);
+        }
+
+        if ($athlete->eligibilityDocuments()->exists()) {
+            EligibilityReview::query()->firstOrCreate([
+                'athlete_id' => $athlete->id,
+                'meet_id' => $athlete->delegation->meet_id,
+            ]);
+        }
+
         if ($oldPhoto !== null) {
             $this->uploads->delete($oldPhoto);
         }
@@ -243,26 +352,13 @@ class AthleteController extends Controller
         return back();
     }
 
-    /**
-     * Remove an athlete and their photo.
-     */
+    /** Soft-delete an athlete while retaining accreditation evidence. */
     public function destroy(Athlete $athlete): RedirectResponse
     {
         Gate::authorize('delete', $athlete);
 
         $name = $athlete->fullName();
-        $photo = $athlete->photo;
-        $sportsPhoto = $athlete->sportsPhoto;
-
         $athlete->delete();
-
-        if ($photo !== null) {
-            $this->uploads->delete($photo);
-        }
-
-        if ($sportsPhoto !== null) {
-            $this->uploads->delete($sportsPhoto);
-        }
 
         $this->audit->record('athlete.deleted', $athlete, ['name' => $name]);
 

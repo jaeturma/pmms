@@ -85,6 +85,20 @@ test('an officer can register personnel for their open draft delegation', functi
     expect(AuditLog::query()->where('action', 'personnel.created')->exists())->toBeTrue();
 });
 
+test('an officer can update officials and coaches in a submitted active-meet delegation', function () {
+    $delegation = Delegation::factory()->submitted()->create(['meet_id' => Meet::factory()->active()->create()]);
+    $officer = personnelOfficerFor($delegation);
+
+    $this->actingAs($officer)
+        ->post('/personnel', validPersonnelPayload($delegation))
+        ->assertRedirect();
+
+    $this->assertDatabaseHas('personnel', [
+        'delegation_id' => $delegation->id,
+        'last_name' => 'Santos',
+    ]);
+});
+
 test('officers cannot register personnel for closed or foreign delegations', function (callable $setup) {
     [$delegation, $officer] = $setup();
 

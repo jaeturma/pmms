@@ -126,7 +126,7 @@ test('tied ranks award shared medals', function () {
             ->where('schools.1.gold', 1));
 });
 
-test('a correction ripples into the tally automatically', function () {
+test('reopening an official result removes it from the tally automatically', function () {
     $result = EventResult::factory()->validated()->create();
     $school = School::factory()->create();
     placeSchool($result, $school, 1);
@@ -138,10 +138,10 @@ test('a correction ripples into the tally automatically', function () {
         ->assertInertia(fn (AssertableInertia $page) => $page->has('schools', 1));
 
     $this->actingAs(User::factory()->admin()->create())
-        ->patch("/results/{$result->id}/correct", ['reason' => 'Wrong athlete placed first.'])
+        ->post("/results/{$result->id}/reopen", ['reason' => 'Wrong athlete placed first.'])
         ->assertSessionHasNoErrors();
 
-    expect($result->refresh()->status)->toBe(ResultStatus::Encoded);
+    expect($result->refresh()->status)->toBe(ResultStatus::Reopened);
 
     $this->actingAs($viewer)
         ->get('/tally')

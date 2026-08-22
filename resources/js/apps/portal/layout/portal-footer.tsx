@@ -1,6 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
 import type { PortalNavShared } from '@/apps/portal/types';
-import { home } from '@/routes';
 import {
     about as publicAbout,
     faqs as publicFaqs,
@@ -22,11 +21,7 @@ export function PortalFooter() {
     return (
         <footer className="border-t border-[var(--portal-border)] bg-[var(--portal-ink)] text-[var(--portal-ink-foreground)]">
             <div className="w-full px-4 py-5 sm:px-6 lg:px-10 xl:px-16 2xl:px-24">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <Link href={home().url} className="text-sm font-bold">
-                        {nav?.meetName ?? 'Provincial Meet Portal'}
-                    </Link>
-
+                <div className="flex items-center justify-between gap-6">
                     {nav && (
                         <nav
                             className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:flex sm:flex-wrap"
@@ -76,12 +71,11 @@ export function PortalFooter() {
                             </Link>
                         </nav>
                     )}
+                    <p className="ml-auto shrink-0 text-right text-xs text-[var(--portal-ink-foreground)]/70">
+                        &copy; {new Date().getFullYear()} Schools Division Office.
+                        All rights reserved.
+                    </p>
                 </div>
-
-                <p className="mt-4 text-xs text-[var(--portal-ink-foreground)]/70">
-                    &copy; {new Date().getFullYear()} Schools Division Office.
-                    All rights reserved.
-                </p>
             </div>
         </footer>
     );

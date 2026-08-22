@@ -4,23 +4,24 @@ namespace App\Http\Controllers;
 
 use App\Enums\EligibilityDocumentType;
 use App\Enums\EligibilityStatus;
-use App\Enums\RequirementStatus;
 use App\Enums\Permission;
+use App\Enums\RequirementStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Models\Athlete;
 use App\Models\Delegation;
+use App\Models\EligibilityCheck;
 use App\Models\EligibilityDocument;
 use App\Models\EligibilityReview;
-use App\Models\User;
-use App\Models\EligibilityCheck;
 use App\Models\Event;
 use App\Models\Meet;
 use App\Models\Sport;
 use App\Models\SportCategory;
+use App\Models\TechnicalOfficialAccreditation;
+use App\Models\User;
+use App\Services\AuditLogger;
 use App\Services\Eligibility\AthleteEligibilityChecker;
 use App\Services\Eligibility\TechnicalOfficialEligibilityChecker;
-use App\Services\AuditLogger;
 use App\Services\FileUploadService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -86,7 +87,7 @@ class EligibilityController extends Controller
                 'checked_at' => now(), 'snapshot' => $evaluation->toArray()]);
             $this->audit->record('technical_official.eligibility.checked', $official, ['result' => $evaluation->result()->value]);
         }
-        $credential = $sport === null ? null : \App\Models\TechnicalOfficialAccreditation::query()
+        $credential = $sport === null ? null : TechnicalOfficialAccreditation::query()
             ->where('user_id', $official->id)->where('sport_id', $sport->id)->latest()->first();
 
         return Inertia::render('technical-officials/eligibility', [
@@ -126,6 +127,8 @@ class EligibilityController extends Controller
                 'athlete.school:id,name',
                 'athlete.delegation.meet:id,name',
                 'athlete.eligibilityDocuments.fileUpload:id,original_name',
+                'athlete.eligibilityDocuments.verifier:id,name',
+                'athlete.accreditation:id,athlete_id',
                 'reviewer:id,name',
             ]);
 
@@ -135,7 +138,9 @@ class EligibilityController extends Controller
                 fn ($officers) => $officers->whereKey($user->getKey()),
             );
         } elseif ($user->role === UserRole::Coach) {
-            $base->whereHas('athlete.delegation.personnel', fn ($personnel) => $personnel->where('user_id', $user->id));
+            $base->whereHas('athlete.delegation', fn ($delegation) => $delegation->whereIn(
+                'id', $user->coachAssignmentRequests()->where('status', 'approved')->select('delegation_id'),
+            ));
         } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer) && ! $user->hasPermission(Permission::AthleteEligibilityReview)) {
             $assignments = $user->athleteOversightAssignments()->where('active', true)->get();
             $base->whereHas('athlete.school', function ($school) use ($assignments): void {
@@ -214,8 +219,13 @@ class EligibilityController extends Controller
      */
     private function reviewRow(EligibilityReview $review, User $user): array
     {
+        $requirementsValidated = $review->athlete->eligibilityDocuments->isNotEmpty()
+            && $review->athlete->eligibilityDocuments
+                ->every(fn (EligibilityDocument $document): bool => $document->status === RequirementStatus::Verified);
+
         return [
             'id' => $review->id,
+            'athlete_id' => $review->athlete_id,
             'athlete' => $review->athlete->fullName(),
             'school' => $review->athlete->school->name,
             'meet' => $review->athlete->delegation->meet->name,
@@ -228,8 +238,20 @@ class EligibilityController extends Controller
                 ->map(fn (EligibilityDocument $document): array => $this->documentRow($document, $review, $user))
                 ->values()
                 ->all(),
+            'requirements_validated' => $requirementsValidated,
+            'requirements_summary' => sprintf(
+                '%d of %d validated',
+                $review->athlete->eligibilityDocuments->where('status', RequirementStatus::Verified)->count(),
+                $review->athlete->eligibilityDocuments->count(),
+            ),
+            'can_review' => $user->can('view', $review),
             'can_decide' => $review->status === EligibilityStatus::Pending
+                && $requirementsValidated
                 && $user->can('decide', $review),
+            'can_accredit' => $review->status === EligibilityStatus::Approved
+                && $requirementsValidated
+                && $review->athlete->accreditation === null
+                && $user->isDsacAccreditationLeader($review->meet),
         ];
     }
 
@@ -244,6 +266,17 @@ class EligibilityController extends Controller
             'file_name' => $document->fileUpload->original_name,
             'uploaded_at' => $document->created_at !== null ? $document->created_at->format('M j, Y') : null,
             'url' => route('eligibility.documents.download', $document),
+            'status' => $document->status->value,
+            'status_label' => str($document->status->value)->replace('_', ' ')->title()->toString(),
+            'remarks' => $document->remarks,
+            'verified_by' => $document->verifier?->name,
+            'verified_at' => $document->verified_at?->diffForHumans(),
+            'can_verify' => $user->hasPermission(
+                $document->document_type === EligibilityDocumentType::MedicalCertificate
+                    ? Permission::MedicalClearanceEvaluate
+                    : Permission::AthleteDocumentsVerify,
+                $review->meet,
+            ),
             'can_delete' => ! in_array($review->status, [EligibilityStatus::Approved, EligibilityStatus::Rejected], true)
                 && $user->can('upload', [EligibilityReview::class, $review->athlete->delegation]),
         ];
@@ -400,6 +433,7 @@ class EligibilityController extends Controller
             'verified_at' => $data['status'] === RequirementStatus::UnderReview->value ? null : now(), 'remarks' => $data['remarks'] ?? null])->save();
         $action = $data['status'] === RequirementStatus::Verified->value ? 'athlete.document.verified' : ($data['status'] === RequirementStatus::Rejected->value ? 'athlete.document.rejected' : 'athlete.document.under_review');
         $this->audit->record($action, $document, ['athlete' => $document->athlete->fullName(), 'type' => $document->document_type->value]);
+
         return back();
     }
 
@@ -409,6 +443,16 @@ class EligibilityController extends Controller
     public function approve(Request $request, EligibilityReview $review): RedirectResponse
     {
         Gate::authorize('decide', $review);
+
+        $review->loadMissing('athlete.eligibilityDocuments');
+
+        if ($review->athlete->eligibilityDocuments->isEmpty()
+            || $review->athlete->eligibilityDocuments
+                ->contains(fn (EligibilityDocument $document): bool => $document->status !== RequirementStatus::Verified)) {
+            throw ValidationException::withMessages([
+                'requirements' => __('Every submitted eligibility requirement must be validated before final DSAC review.'),
+            ]);
+        }
 
         $request->validate(['remarks' => ['nullable', 'string', 'max:500']]);
 

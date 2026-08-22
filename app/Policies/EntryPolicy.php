@@ -27,13 +27,13 @@ class EntryPolicy
      * roster edits, entries do not require the delegation to still be a
      * draft.
      */
-    public function create(User $user, Delegation $delegation): bool
+    public function create(User $user, Delegation $delegation, ?\App\Models\Event $event = null): bool
     {
         if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
             return true;
         }
 
-        return ($delegation->hasOfficer($user) || $delegation->hasCoach($user))
+        return ($delegation->hasOfficer($user) || ($event !== null && $user->hasApprovedCoachScope($delegation, $event)))
             && $delegation->meet->isRegistrationOpen();
     }
 
@@ -56,7 +56,7 @@ class EntryPolicy
         }
 
         return $entry->status === EntryStatus::Submitted
-            && ($entry->delegation->hasOfficer($user) || $entry->delegation->hasCoach($user))
+            && ($entry->delegation->hasOfficer($user) || $user->hasApprovedCoachScope($entry->delegation, $entry->event))
             && $entry->delegation->meet->isRegistrationOpen();
     }
 
@@ -73,7 +73,7 @@ class EntryPolicy
             return true;
         }
 
-        return ($entry->delegation->hasOfficer($user) || $entry->delegation->hasCoach($user))
+        return ($entry->delegation->hasOfficer($user) || $user->hasApprovedCoachScope($entry->delegation, $entry->event))
             && $entry->delegation->meet->isRegistrationOpen();
     }
 }

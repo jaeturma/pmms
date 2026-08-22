@@ -1,5 +1,8 @@
 <?php
 
+use App\Models\District;
+use App\Models\Event;
+
 use Illuminate\Support\Facades\RateLimiter;
 use Laravel\Fortify\Features;
 
@@ -14,15 +17,66 @@ test('registration screen can be rendered', function () {
 });
 
 test('new users can register', function () {
+    $this->get(route('register'));
     $response = $this->post(route('register.store'), [
         'name' => 'Test User',
         'email' => 'test@example.com',
         'password' => 'password',
         'password_confirmation' => 'password',
+        'code_challenge' => 'ABC12',
     ]);
 
     $this->assertAuthenticated();
     $response->assertRedirect(route('dashboard', absolute: false));
+});
+
+test('coach registration requires and stores a municipality team', function () {
+    $municipality = District::factory()->create();
+    $events = Event::factory()->count(2)->create();
+
+    $this->get(route('register'));
+    $this->post(route('register.store'), [
+        'name' => 'Coach User',
+        'email' => 'coach@example.com',
+        'password' => 'password',
+        'password_confirmation' => 'password',
+        'account_type' => 'coach',
+        'code_challenge' => 'ABC12',
+    ])->assertSessionHasErrors('district_id');
+
+    $this->get(route('register'));
+    $this->post(route('register.store'), [
+        'name' => 'Coach User',
+        'email' => 'coach@example.com',
+        'password' => 'password',
+        'password_confirmation' => 'password',
+        'account_type' => 'coach',
+        'district_id' => $municipality->id,
+        'event_ids' => $events->modelKeys(),
+        'code_challenge' => 'ABC12',
+    ])->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('coach_onboarding_requests', [
+        'district_id' => $municipality->id,
+        'event_id' => $events->first()->id,
+    ]);
+    foreach ($events as $event) {
+        $this->assertDatabaseHas('coach_onboarding_request_event', ['event_id' => $event->id]);
+    }
+});
+
+test('registration rejects an incorrect image verification code', function () {
+    $this->get(route('register'));
+
+    $this->post(route('register.store'), [
+        'name' => 'Test User',
+        'email' => 'wrong-code@example.com',
+        'password' => 'password',
+        'password_confirmation' => 'password',
+        'code_challenge' => 'WRONG',
+    ])->assertSessionHasErrors('code_challenge');
+
+    $this->assertGuest();
 });
 
 test('registration is rate limited (WP-06-03)', function () {

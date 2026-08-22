@@ -163,12 +163,13 @@ class Delegation extends Model
     }
 
     /**
-     * Officers may edit the delegation (and its roster) only while it is a
-     * draft and the meet's registration window is open.
+     * Draft registration follows the meet window. A submitted delegation
+     * remains a working roster until it is approved, so assigned officers
+     * and coaches can still correct officials and personnel after submission.
      */
     public function isEditableByOfficers(): bool
     {
-        return $this->status === DelegationStatus::Draft
-            && $this->meet->isRegistrationOpen();
+        return $this->status === DelegationStatus::Submitted
+            || ($this->status === DelegationStatus::Draft && $this->meet->isRegistrationOpen());
     }
 }

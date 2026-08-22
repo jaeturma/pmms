@@ -1,7 +1,12 @@
 <?php
 
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
 use App\Models\AuditLog;
 use App\Models\Event;
+use App\Models\Meet;
+use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
 use App\Models\Sport;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
@@ -25,6 +30,25 @@ test('the sports catalog renders with the manage flag per role', function () {
         ->get('/sports')
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('canManage', true));
+});
+
+test('sports show the tournament manager from the active meet assignment', function () {
+    $meet = Meet::factory()->active()->create();
+    $sport = Sport::factory()->create();
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $sport->id]);
+    $manager = User::factory()->tournamentManager()->create(['name' => 'Assigned Meet Manager']);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $manager->id,
+        'role' => MeetSportAssignmentRole::TournamentManager,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get('/sports')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('sports.data.0.tournament_manager.name', 'Assigned Meet Manager')
+            ->where('sports.data.0.tournament_manager.source', 'meet_assignment'));
 });
 
 test('organizers can create sports', function () {

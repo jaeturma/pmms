@@ -35,6 +35,17 @@ class EventRequest extends FormRequest
             'age_division' => ['required', Rule::enum(AgeDivision::class)],
             'is_team_event' => ['required', 'boolean'],
             'max_entries_per_delegation' => ['required', 'integer', 'min:1', 'max:50'],
+            'venues' => ['sometimes', 'array'],
+            'venues.*.venue_id' => ['required', 'integer', 'distinct', Rule::exists('venues', 'id')->where('active', true)],
+            'venues.*.playing_area_type' => ['required', Rule::in(['venue', 'court', 'table'])],
+            'venues.*.playing_area_count' => ['required', 'integer', 'min:1', 'max:100'],
+            'venues.*.coordinator_ids' => ['sometimes', 'array', 'max:2'],
+            'venues.*.coordinator_ids.*' => ['required', 'integer', 'distinct', Rule::exists('people', 'id')],
         ];
+    }
+
+    public function eventData(): array
+    {
+        return $this->safe()->except('venues');
     }
 }

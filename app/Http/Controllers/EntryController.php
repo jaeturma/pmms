@@ -57,6 +57,9 @@ class EntryController extends Controller
                 'delegation.officers',
                 fn ($officers) => $officers->whereKey($user->getKey()),
             );
+        } elseif ($user->role === UserRole::Coach) {
+            $query->whereIn('delegation_id', $user->coachAssignmentRequests()->where('status', 'approved')->select('delegation_id'));
+            $query->whereIn('event_id', $user->coachAssignmentRequests()->where('status', 'approved')->select('event_id'));
         }
 
         if ($eventId > 0) {
@@ -76,6 +79,8 @@ class EntryController extends Controller
                 'officers',
                 fn ($officers) => $officers->whereKey($user->getKey()),
             );
+        } elseif ($user->role === UserRole::Coach) {
+            $delegationScope->whereIn('id', $user->coachAssignmentRequests()->where('status', 'approved')->select('delegation_id'));
         }
 
         $delegations = $delegationScope->get();
@@ -151,6 +156,9 @@ class EntryController extends Controller
                 ->values(),
             'eventOptionsByMeet' => Event::query()
                 ->whereHas('meets', fn ($meets) => $meets->where('status', MeetStatus::RegistrationOpen->value))
+                ->when($user->role === UserRole::Coach, fn ($events) => $events->whereIn(
+                    'id', $user->coachAssignmentRequests()->where('status', 'approved')->select('event_id'),
+                ))
                 ->with(['sport:id,name', 'meets:id'])
                 ->get(['id', 'sport_id', 'name', 'gender', 'age_division'])
                 ->flatMap(fn (Event $event) => $event->meets->map(fn (Meet $meet): array => [
@@ -184,9 +192,9 @@ class EntryController extends Controller
 
         $delegation = $athlete->delegation;
 
-        Gate::authorize('create', [Entry::class, $delegation]);
-
         $event = Event::query()->findOrFail($request->integer('event_id'));
+
+        Gate::authorize('create', [Entry::class, $delegation, $event]);
 
         if (! $delegation->meet->events()->whereKey($event->id)->exists()) {
             throw ValidationException::withMessages([
@@ -207,6 +215,12 @@ class EntryController extends Controller
         }
 
         if (Entry::query()->where('athlete_id', $athlete->id)->where('event_id', $event->id)->exists()) {
+            if ($request->user()?->role === UserRole::Coach) {
+                Inertia::flash('toast', ['type' => 'success', 'message' => __('Entry already submitted.')]);
+
+                return back();
+            }
+
             throw ValidationException::withMessages([
                 'event_id' => __('This athlete is already entered in that event.'),
             ]);

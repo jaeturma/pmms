@@ -1,5 +1,5 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { MapPin, Plus } from 'lucide-react';
+import { ExternalLink, MapPin, Phone, Plus, Users } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -20,6 +20,14 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import {
     Table,
     TableBody,
@@ -41,17 +49,39 @@ type Venue = {
     id: number;
     name: string;
     address: string | null;
+    short_name: string | null;
+    municipality_id: number | null;
+    municipality: string | null;
+    latitude: string | number | null;
+    longitude: string | number | null;
+    gps_location: string | null;
+    public_notes: string | null;
+    internal_notes: string | null;
+    readiness_status: string;
+    sports: string[];
+    competition_areas: string[];
+    game_coordinators: VenueCoordinator[];
     notes: string | null;
     active: boolean;
+};
+
+type VenueCoordinator = {
+    id: number;
+    name: string;
+    contact_number: string | null;
+    sport: string | null;
+    is_lead: boolean;
 };
 
 type Props = {
     venues: Paginated<Venue>;
     filters: { search: string };
     canManage: boolean;
+    municipalityOptions: Option[];
 };
+type Option = { id: number; label: string };
 
-function VenueFormDialog({
+function VenueDetailsDialog({
     venue,
     open,
     onOpenChange,
@@ -60,9 +90,159 @@ function VenueFormDialog({
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
+    if (!venue) {
+        return null;
+    }
+
+    const mapsUrl =
+        venue.latitude && venue.longitude
+            ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${venue.latitude},${venue.longitude}`)}`
+            : null;
+    const mapsEmbedUrl =
+        venue.latitude && venue.longitude
+            ? `https://maps.google.com/maps?q=${encodeURIComponent(`${venue.latitude},${venue.longitude}`)}&z=15&output=embed`
+            : null;
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+                <DialogHeader>
+                    <DialogTitle>{venue.name}</DialogTitle>
+                </DialogHeader>
+
+                <div className="grid gap-5 sm:grid-cols-2">
+                    <div className="space-y-4">
+                        <div>
+                            <p className="text-sm font-medium">Address</p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                {venue.address ?? 'No address provided'}
+                            </p>
+                            {venue.municipality && (
+                                <p className="text-sm text-muted-foreground">
+                                    {venue.municipality}
+                                </p>
+                            )}
+                        </div>
+
+                        <div>
+                            <p className="text-sm font-medium">Readiness</p>
+                            <Badge className="mt-1" variant="outline">
+                                {venue.readiness_status.replaceAll('_', ' ')}
+                            </Badge>
+                        </div>
+
+                        {mapsUrl ? (
+                            <Button asChild variant="outline">
+                                <a
+                                    href={mapsUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                >
+                                    <MapPin /> Open in Google Maps
+                                    <ExternalLink />
+                                </a>
+                            </Button>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">
+                                Map unavailable—coordinates have not been set.
+                            </p>
+                        )}
+                    </div>
+
+                    <div>
+                        <div className="mb-3 flex items-center gap-2">
+                            <Users className="size-4" />
+                            <p className="text-sm font-medium">
+                                Game coordinators
+                            </p>
+                        </div>
+                        {venue.game_coordinators.length > 0 ? (
+                            <div className="space-y-3">
+                                {venue.game_coordinators.map((coordinator) => (
+                                    <div
+                                        key={coordinator.id}
+                                        className="rounded-lg border p-3"
+                                    >
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div>
+                                                <p className="font-medium">
+                                                    {coordinator.name}
+                                                </p>
+                                                {coordinator.sport && (
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {coordinator.sport}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            {coordinator.is_lead && (
+                                                <Badge variant="secondary">
+                                                    Lead
+                                                </Badge>
+                                            )}
+                                        </div>
+                                        <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                                            <Phone className="size-4" />
+                                            {coordinator.contact_number ? (
+                                                <a
+                                                    href={`tel:${coordinator.contact_number}`}
+                                                    className="hover:text-foreground hover:underline"
+                                                >
+                                                    {coordinator.contact_number}
+                                                </a>
+                                            ) : (
+                                                <span>No contact number</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">
+                                No coordinator assigned.
+                            </p>
+                        )}
+                    </div>
+
+                    {mapsEmbedUrl && (
+                        <div className="overflow-hidden rounded-xl border sm:col-span-2">
+                            <iframe
+                                title={`${venue.name} location on Google Maps`}
+                                src={mapsEmbedUrl}
+                                className="h-72 w-full"
+                                loading="lazy"
+                                referrerPolicy="no-referrer-when-downgrade"
+                                allowFullScreen
+                            />
+                        </div>
+                    )}
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function VenueFormDialog({
+    venue,
+    municipalityOptions,
+    open,
+    onOpenChange,
+}: {
+    venue: Venue | null;
+    municipalityOptions: Option[];
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+}) {
     const { data, setData, post, put, processing, errors, reset } = useForm({
         name: venue?.name ?? '',
+        short_name: venue?.short_name ?? '',
         address: venue?.address ?? '',
+        municipality_id: venue?.municipality_id
+            ? String(venue.municipality_id)
+            : '',
+        gps_location: venue?.gps_location ?? '',
+        public_notes: venue?.public_notes ?? '',
+        internal_notes: venue?.internal_notes ?? '',
+        readiness_status: venue?.readiness_status ?? 'planned',
         notes: venue?.notes ?? '',
     });
 
@@ -86,13 +266,13 @@ function VenueFormDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
                 <DialogHeader>
                     <DialogTitle>
                         {venue ? 'Edit venue' : 'Add venue'}
                     </DialogTitle>
                 </DialogHeader>
-                <form onSubmit={submit} className="space-y-4">
+                <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                         <Label htmlFor="venue-name">Name</Label>
                         <Input
@@ -104,6 +284,17 @@ function VenueFormDialog({
                         <InputError message={errors.name} />
                     </div>
                     <div className="space-y-2">
+                        <Label htmlFor="venue-short-name">Short name</Label>
+                        <Input
+                            id="venue-short-name"
+                            value={data.short_name}
+                            onChange={(e) =>
+                                setData('short_name', e.target.value)
+                            }
+                        />
+                        <InputError message={errors.short_name} />
+                    </div>
+                    <div className="space-y-2">
                         <Label htmlFor="venue-address">Address</Label>
                         <Input
                             id="venue-address"
@@ -111,6 +302,80 @@ function VenueFormDialog({
                             onChange={(e) => setData('address', e.target.value)}
                         />
                         <InputError message={errors.address} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="venue-municipality">Municipality</Label>
+                        <Select
+                            value={data.municipality_id || 'none'}
+                            onValueChange={(value) =>
+                                setData(
+                                    'municipality_id',
+                                    value === 'none' ? '' : value,
+                                )
+                            }
+                        >
+                            <SelectTrigger id="venue-municipality">
+                                <SelectValue placeholder="Unassigned" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">Unassigned</SelectItem>
+                                {municipalityOptions.map((option) => (
+                                    <SelectItem
+                                        key={option.id}
+                                        value={String(option.id)}
+                                    >
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <InputError message={errors.municipality_id} />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="venue-gps-location">
+                            Google Maps location
+                        </Label>
+                        <Input
+                            id="venue-gps-location"
+                            value={data.gps_location}
+                            onChange={(e) =>
+                                setData('gps_location', e.target.value)
+                            }
+                            placeholder="7.123456, 125.123456 or paste a Google Maps URL"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            Accepts coordinates, a Google Maps share link, or an
+                            embed URL.
+                        </p>
+                        <InputError message={errors.gps_location} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="venue-readiness">
+                            Readiness status
+                        </Label>
+                        <Select
+                            value={data.readiness_status}
+                            onValueChange={(value) =>
+                                setData('readiness_status', value)
+                            }
+                        >
+                            <SelectTrigger id="venue-readiness">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="planned">Planned</SelectItem>
+                                <SelectItem value="for_validation">
+                                    For validation
+                                </SelectItem>
+                                <SelectItem value="ready">Ready</SelectItem>
+                                <SelectItem value="needs_attention">
+                                    Needs attention
+                                </SelectItem>
+                                <SelectItem value="unavailable">
+                                    Unavailable
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="venue-notes">Notes</Label>
@@ -122,7 +387,33 @@ function VenueFormDialog({
                         />
                         <InputError message={errors.notes} />
                     </div>
-                    <DialogFooter>
+                    <div className="space-y-2">
+                        <Label htmlFor="venue-public-notes">Public notes</Label>
+                        <Textarea
+                            id="venue-public-notes"
+                            className="min-h-20"
+                            value={data.public_notes}
+                            onChange={(e) =>
+                                setData('public_notes', e.target.value)
+                            }
+                        />
+                        <InputError message={errors.public_notes} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="venue-internal-notes">
+                            Internal notes
+                        </Label>
+                        <Textarea
+                            id="venue-internal-notes"
+                            className="min-h-20"
+                            value={data.internal_notes}
+                            onChange={(e) =>
+                                setData('internal_notes', e.target.value)
+                            }
+                        />
+                        <InputError message={errors.internal_notes} />
+                    </div>
+                    <DialogFooter className="sm:col-span-2">
                         <Button type="submit" disabled={processing}>
                             {venue ? 'Save changes' : 'Create venue'}
                         </Button>
@@ -133,9 +424,15 @@ function VenueFormDialog({
     );
 }
 
-export default function Venues({ venues, filters, canManage }: Props) {
+export default function Venues({
+    venues,
+    filters,
+    canManage,
+    municipalityOptions,
+}: Props) {
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<Venue | null>(null);
+    const [viewing, setViewing] = useState<Venue | null>(null);
 
     const openCreate = () => {
         setEditing(null);
@@ -188,13 +485,11 @@ export default function Venues({ venues, filters, canManage }: Props) {
                                 <TableRow>
                                     <TableHead>Name</TableHead>
                                     <TableHead>Address</TableHead>
-                                    <TableHead>Notes</TableHead>
+                                    <TableHead>Assignments</TableHead>
                                     <TableHead>Status</TableHead>
-                                    {canManage && (
-                                        <TableHead className="text-right">
-                                            Actions
-                                        </TableHead>
-                                    )}
+                                    <TableHead className="text-right">
+                                        Actions
+                                    </TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -205,15 +500,29 @@ export default function Venues({ venues, filters, canManage }: Props) {
                                         </TableCell>
                                         <TableCell>
                                             {venue.address ?? '—'}
+                                            {venue.municipality && (
+                                                <span className="block text-xs text-muted-foreground">
+                                                    {venue.municipality}
+                                                </span>
+                                            )}
                                         </TableCell>
                                         <TableCell className="max-w-64 truncate">
-                                            {venue.notes ?? '—'}
+                                            <span className="block">
+                                                {venue.sports.join(', ') ||
+                                                    'No sports assigned'}
+                                            </span>
+                                            <span className="block text-xs text-muted-foreground">
+                                                {venue.competition_areas.length}{' '}
+                                                area(s) ·{' '}
+                                                {venue.game_coordinators.length}{' '}
+                                                coordinator(s)
+                                            </span>
                                         </TableCell>
                                         <TableCell>
                                             <Badge
                                                 variant={
                                                     venue.active
-                                                        ? 'secondary'
+                                                        ? 'success'
                                                         : 'outline'
                                                 }
                                             >
@@ -225,6 +534,15 @@ export default function Venues({ venues, filters, canManage }: Props) {
                                         {canManage && (
                                             <TableCell className="text-right">
                                                 <div className="flex justify-end gap-2">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                            setViewing(venue)
+                                                        }
+                                                    >
+                                                        View
+                                                    </Button>
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
@@ -303,6 +621,19 @@ export default function Venues({ venues, filters, canManage }: Props) {
                                                 </div>
                                             </TableCell>
                                         )}
+                                        {!canManage && (
+                                            <TableCell className="text-right">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        setViewing(venue)
+                                                    }
+                                                >
+                                                    View
+                                                </Button>
+                                            </TableCell>
+                                        )}
                                     </TableRow>
                                 ))}
                             </TableBody>
@@ -321,8 +652,20 @@ export default function Venues({ venues, filters, canManage }: Props) {
             <VenueFormDialog
                 key={editing?.id ?? 'create'}
                 venue={editing}
+                municipalityOptions={municipalityOptions}
                 open={formOpen}
-                onOpenChange={setFormOpen}
+                onOpenChange={(open) => {
+                    setFormOpen(open);
+
+                    if (!open) {
+                        setEditing(null);
+                    }
+                }}
+            />
+            <VenueDetailsDialog
+                venue={viewing}
+                open={viewing !== null}
+                onOpenChange={(open) => !open && setViewing(null)}
             />
         </>
     );

@@ -1,18 +1,29 @@
 <?php
 
 use App\Enums\SchoolLevel;
+use App\Enums\ManagementTeamMemberStatus;
+use App\Enums\ManagementTeamType;
 use App\Models\AuditLog;
 use App\Models\District;
+use App\Models\ManagementTeam;
+use App\Models\ManagementTeamMember;
 use App\Models\School;
+use App\Models\SchoolDistrict;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 
 function validSchoolPayload(District $district): array
 {
+    $schoolDistrict = SchoolDistrict::factory()->create([
+        'district_id' => $district->id,
+    ]);
+
     return [
         'district_id' => $district->id,
+        'school_district_id' => $schoolDistrict->id,
         'name' => 'Poblacion Elementary School',
         'school_id_code' => '123456',
+        'school_type' => 'Public',
         'level' => SchoolLevel::Elementary->value,
         'address' => 'Poblacion, Sample Town',
     ];
@@ -91,10 +102,10 @@ test('the school registry paginates fifteen rows per page', function () {
             ->where('schools.current_page', 2));
 });
 
-test('organizers can create schools', function () {
+test('administrators can create schools', function () {
     $district = District::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/schools', validSchoolPayload($district))
         ->assertRedirect();
 
@@ -106,7 +117,41 @@ test('organizers can create schools', function () {
     expect(AuditLog::query()->where('action', 'school.created')->exists())->toBeTrue();
 });
 
-test('viewers and delegation officers cannot create schools', function (User $user) {
+test('active ICT team members can create and update schools', function () {
+    $ict = User::factory()->create();
+    $team = ManagementTeam::factory()->create([
+        'team_type' => ManagementTeamType::ICT,
+    ]);
+    ManagementTeamMember::factory()->create([
+        'management_team_id' => $team->id,
+        'user_id' => $ict->id,
+        'status' => ManagementTeamMemberStatus::Active,
+    ]);
+    $district = District::factory()->create();
+
+    $this->actingAs($ict)
+        ->post('/schools', validSchoolPayload($district))
+        ->assertRedirect()
+        ->assertSessionDoesntHaveErrors();
+
+    $school = School::query()->where('school_id_code', '123456')->firstOrFail();
+    $schoolDistrict = SchoolDistrict::factory()->create([
+        'district_id' => $district->id,
+    ]);
+
+    $this->actingAs($ict)
+        ->put("/schools/{$school->id}", [
+            ...validSchoolPayload($district),
+            'school_district_id' => $schoolDistrict->id,
+            'name' => 'ICT Updated School',
+        ])
+        ->assertRedirect()
+        ->assertSessionDoesntHaveErrors();
+
+    expect($school->refresh()->name)->toBe('ICT Updated School');
+});
+
+test('unauthorized roles cannot create schools', function (User $user) {
     $district = District::factory()->create();
 
     $this->actingAs($user)
@@ -115,6 +160,8 @@ test('viewers and delegation officers cannot create schools', function (User $us
 })->with([
     'viewer' => fn () => User::factory()->create(),
     'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+    'organizer' => fn () => User::factory()->organizer()->create(),
+    'coach' => fn () => User::factory()->coach()->create(),
 ]);
 
 test('school validation rejects bad payloads', function (array $overrides, string $errorField) {
@@ -124,7 +171,7 @@ test('school validation rejects bad payloads', function (array $overrides, strin
         ->post('/schools', [...validSchoolPayload($district), ...$overrides])
         ->assertSessionHasErrors($errorField);
 })->with([
-    'missing district' => [['district_id' => 999999], 'district_id'],
+    'unknown district' => [['district_id' => 999999], 'district_id'],
     'invalid level' => [['level' => 'college'], 'level'],
     'missing name' => [['name' => ''], 'name'],
     'missing code' => [['school_id_code' => ''], 'school_id_code'],
@@ -139,14 +186,15 @@ test('school id codes must be unique', function () {
         ->assertSessionHasErrors('school_id_code');
 });
 
-test('school names must be unique within a district but not across districts', function () {
+test('similar school names with different official ids are preserved', function () {
     $district = District::factory()->create();
     $other = District::factory()->create();
     School::factory()->create(['district_id' => $district->id, 'name' => 'Poblacion Elementary School']);
 
     $this->actingAs(User::factory()->admin()->create())
         ->post('/schools', validSchoolPayload($district))
-        ->assertSessionHasErrors('name');
+        ->assertRedirect()
+        ->assertSessionDoesntHaveErrors();
 
     $this->actingAs(User::factory()->admin()->create())
         ->post('/schools', [...validSchoolPayload($other), 'school_id_code' => '654321'])
@@ -159,11 +207,28 @@ test('school names must be unique within a district but not across districts', f
     ]);
 });
 
+test('school district must belong to the selected municipality', function () {
+    $municipality = District::factory()->create();
+    $otherMunicipality = District::factory()->create();
+    $schoolDistrict = SchoolDistrict::factory()->create(['district_id' => $otherMunicipality->id]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/schools', [
+            ...validSchoolPayload($municipality),
+            'school_district_id' => $schoolDistrict->id,
+        ])
+        ->assertSessionHasErrors('school_district_id');
+});
+
 test('admins can update a school', function () {
     $school = School::factory()->create();
+    $schoolDistrict = SchoolDistrict::factory()->create([
+        'district_id' => $school->district_id,
+    ]);
 
     $payload = [
         'district_id' => $school->district_id,
+        'school_district_id' => $schoolDistrict->id,
         'name' => 'Renamed Integrated School',
         'school_id_code' => $school->school_id_code,
         'level' => SchoolLevel::Integrated->value,

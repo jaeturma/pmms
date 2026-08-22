@@ -1,6 +1,8 @@
 <?php
 
 use App\Enums\SportPortalSlug;
+use App\Http\Controllers\AccountActivationController;
+use App\Http\Controllers\AccountProvisionController;
 use App\Http\Controllers\AccreditationController;
 use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\AthleteController;
@@ -49,6 +51,8 @@ use App\Http\Controllers\ProtestController;
 use App\Http\Controllers\ReadinessChecklistController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ResultController;
+use App\Http\Controllers\ResultWorkflowController;
+use App\Http\Controllers\RequiredPasswordChangeController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\SchoolController;
 use App\Http\Controllers\SchoolDistrictController;
@@ -63,6 +67,18 @@ use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\VenueController;
 use App\Http\Controllers\VenueEmergencyPlanController;
 use Illuminate\Support\Facades\Route;
+
+Route::middleware('throttle:10,1')->group(function () {
+    Route::get('account-activation/{token}', [AccountActivationController::class, 'show'])->name('account-activation.show');
+    Route::post('account-activation/{token}', [AccountActivationController::class, 'activate'])->name('account-activation.activate');
+});
+
+Route::middleware('auth')->group(function () {
+    Route::get('change-password', [RequiredPasswordChangeController::class, 'edit'])->name('password-change.edit');
+    Route::put('change-password', [RequiredPasswordChangeController::class, 'update'])
+        ->middleware('throttle:6,1')
+        ->name('password-change.update');
+});
 
 // Public portal — guest routes, throttled, published data only.
 Route::middleware('throttle:60,1')->group(function () {
@@ -162,6 +178,9 @@ Route::middleware('throttle:60,1')->group(function () {
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::post('coach/assignment-requests', [CoachAssignmentRequestController::class, 'store'])->name('coach.assignment-requests.store');
+    Route::get('coach/assignment-requests', [CoachAssignmentRequestController::class, 'index'])->name('coach.assignment-requests.index');
+    Route::patch('coach/assignment-requests/{coachAssignmentRequest}', [CoachAssignmentRequestController::class, 'review'])->name('coach.assignment-requests.review');
+    Route::post('accreditations', [AccreditationController::class, 'store'])->name('accreditation.store');
 
     Route::post('uploads', [FileUploadController::class, 'store'])->name('uploads.store');
     Route::get('uploads/{upload}', [FileUploadController::class, 'download'])->name('uploads.download');
@@ -170,6 +189,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('districts', [DistrictController::class, 'index'])->name('districts.index');
     Route::get('school-districts', [SchoolDistrictController::class, 'index'])->name('school-districts.index');
     Route::get('schools', [SchoolController::class, 'index'])->name('schools.index');
+    Route::post('schools', [SchoolController::class, 'store'])->name('schools.store');
+    Route::put('schools/{school}', [SchoolController::class, 'update'])->name('schools.update');
+    Route::patch('schools/{school}/archive', [SchoolController::class, 'archive'])->name('schools.archive');
+    Route::patch('schools/{school}/restore', [SchoolController::class, 'restore'])->name('schools.restore');
+    Route::delete('schools/{school}', [SchoolController::class, 'destroy'])->name('schools.destroy');
     Route::get('sports', [SportController::class, 'index'])->name('sports.index');
     Route::get('events', [EventController::class, 'index'])->name('events.index');
     Route::get('meets', [MeetController::class, 'index'])->name('meets.index');
@@ -223,6 +247,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('matches/{match}/scoring-session', [ScoringSessionController::class, 'show'])->name('scoring.show');
     Route::get('matches/{match}/scoreboard', [ScoringSessionController::class, 'board'])->name('scoring.board');
     Route::get('results', [ResultController::class, 'index'])->name('results.index');
+    Route::get('results/{result}/form', [ResultWorkflowController::class, 'form'])->name('results.form');
+    Route::post('results/{result}/attachments', [ResultWorkflowController::class, 'upload'])->name('results.attachments.store');
+    Route::get('results/{result}/attachments/{attachment}', [ResultWorkflowController::class, 'download'])->name('results.attachments.download');
+    Route::post('results/{result}/submit', [ResultWorkflowController::class, 'submit'])->name('results.submit');
+    Route::post('results/{result}/tm-confirmation', [ResultWorkflowController::class, 'confirmByTournamentManager'])->name('results.tm-confirm');
+    Route::post('results/{result}/return', [ResultWorkflowController::class, 'returnResult'])->name('results.return');
+    Route::post('results/{result}/event-secretariat-validation', [ResultWorkflowController::class, 'validateResult'])->name('results.event-secretariat.validate');
+    Route::post('results/{result}/official', [ResultWorkflowController::class, 'makeOfficial'])->name('results.official');
+    Route::post('results/{result}/reopen', [ResultWorkflowController::class, 'reopen'])->name('results.reopen');
     Route::get('tally', [TallyController::class, 'index'])->name('tally.index');
 
     Route::get('protests', [ProtestController::class, 'index'])->name('protests.index');
@@ -376,6 +409,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('system-settings.update');
 
     Route::middleware('role:admin,organizer')->group(function () {
+        Route::get('account-provisions', [AccountProvisionController::class, 'index'])->name('account-provisions.index');
+        Route::post('account-provisions/{accountProvision}/invite', [AccountProvisionController::class, 'invite'])->name('account-provisions.invite');
+        Route::post('account-provisions/{accountProvision}/reset-password', [AccountProvisionController::class, 'resetPassword'])->name('account-provisions.reset-password');
         Route::post('districts', [DistrictController::class, 'store'])->name('districts.store');
         Route::put('districts/{district}', [DistrictController::class, 'update'])->name('districts.update');
         Route::patch('districts/{district}/archive', [DistrictController::class, 'archive'])->name('districts.archive');
@@ -387,12 +423,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('school-districts/{schoolDistrict}/archive', [SchoolDistrictController::class, 'archive'])->name('school-districts.archive');
         Route::patch('school-districts/{schoolDistrict}/restore', [SchoolDistrictController::class, 'restore'])->name('school-districts.restore');
         Route::delete('school-districts/{schoolDistrict}', [SchoolDistrictController::class, 'destroy'])->name('school-districts.destroy');
-
-        Route::post('schools', [SchoolController::class, 'store'])->name('schools.store');
-        Route::put('schools/{school}', [SchoolController::class, 'update'])->name('schools.update');
-        Route::patch('schools/{school}/archive', [SchoolController::class, 'archive'])->name('schools.archive');
-        Route::patch('schools/{school}/restore', [SchoolController::class, 'restore'])->name('schools.restore');
-        Route::delete('schools/{school}', [SchoolController::class, 'destroy'])->name('schools.destroy');
 
         Route::post('sports', [SportController::class, 'store'])->name('sports.store');
         Route::put('sports/{sport}', [SportController::class, 'update'])->name('sports.update');
@@ -437,7 +467,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('delegations', [DelegationController::class, 'store'])->name('delegations.store');
         Route::delete('delegations/{delegation}', [DelegationController::class, 'destroy'])->name('delegations.destroy');
 
-        Route::post('accreditations', [AccreditationController::class, 'store'])->name('accreditation.store');
         Route::delete('accreditations/{accreditation}', [AccreditationController::class, 'destroy'])->name('accreditation.destroy');
 
         Route::patch('protests/{protest}/review', [ProtestController::class, 'review'])->name('protests.review');

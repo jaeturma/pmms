@@ -24,7 +24,8 @@ trait BuildsSchoolOptionsByDelegation
         $schoolsByDistrict = School::query()
             ->where('active', true)
             ->orderBy('name')
-            ->get(['id', 'name', 'district_id'])
+            ->with(['district:id,name', 'schoolDistrict:id,name'])
+            ->get(['id', 'name', 'district_id', 'school_district_id'])
             ->groupBy('district_id');
 
         return $delegations
@@ -35,7 +36,13 @@ trait BuildsSchoolOptionsByDelegation
 
                 return [
                     $delegation->id => $options
-                        ->map(fn (School $school): array => ['id' => $school->id, 'name' => $school->name])
+                        ->map(fn (School $school): array => [
+                            'id' => $school->id,
+                            'name' => $school->name,
+                            'district' => $school->district?->name ?? '',
+                            'school_district_id' => $school->school_district_id,
+                            'school_district' => $school->schoolDistrict?->name ?? $school->district?->name ?? '',
+                        ])
                         ->values()
                         ->all(),
                 ];

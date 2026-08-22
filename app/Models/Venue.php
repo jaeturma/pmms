@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
@@ -18,7 +19,11 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'address', 'notes'])]
+#[Fillable([
+    'source_code', 'source_system', 'name', 'short_name', 'address', 'municipality_id',
+    'latitude', 'longitude', 'public_notes', 'internal_notes', 'readiness_status',
+    'source_venue_text', 'source_notes', 'notes',
+])]
 class Venue extends Model
 {
     /** @use HasFactory<VenueFactory> */
@@ -42,6 +47,31 @@ class Venue extends Model
     public function schedules(): HasMany
     {
         return $this->hasMany(EventSchedule::class);
+    }
+
+    public function eventAssignments(): HasMany
+    {
+        return $this->hasMany(EventVenue::class);
+    }
+
+    public function competitionAreas(): HasMany
+    {
+        return $this->hasMany(CompetitionArea::class)->orderBy('display_order');
+    }
+
+    public function municipality(): BelongsTo
+    {
+        return $this->belongsTo(District::class, 'municipality_id');
+    }
+
+    public function meetSportAssignments(): HasMany
+    {
+        return $this->hasMany(MeetSportVenue::class);
+    }
+
+    public function gameCoordinatorAssignments(): HasMany
+    {
+        return $this->hasMany(GameCoordinatorAssignment::class);
     }
 
     /**
@@ -70,6 +100,9 @@ class Venue extends Model
     public function isInUse(): bool
     {
         return $this->schedules()->exists()
+            || $this->eventAssignments()->exists()
+            || $this->meetSportAssignments()->exists()
+            || $this->gameCoordinatorAssignments()->exists()
             || $this->emergencyPlans()->exists()
             || $this->evacuationRoutes()->exists();
     }

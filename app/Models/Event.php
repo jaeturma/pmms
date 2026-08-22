@@ -105,4 +105,10 @@ class Event extends Model
     {
         return $this->belongsToMany(Meet::class, 'meet_events')->withTimestamps();
     }
+
+    /** Physical venues and their playable courts/tables for this event. */
+    public function venueAssignments(): HasMany
+    {
+        return $this->hasMany(EventVenue::class);
+    }
 }

@@ -109,6 +109,24 @@ class DdOPAA2026Source
         return $rows;
     }
 
+    /** @return list<array{person:string,username:string,target_role:string,reason:string}> */
+    public function accountProvisions(): array
+    {
+        $rows = [];
+        foreach ($this->statementsContaining('INSERT INTO pmms_user_provisioning') as $sql) {
+            if (preg_match("/SELECT p\.id,'([^']*)','([^']*)','([^']*)'.*?person_key='([^']+)'/s", $sql, $match)) {
+                $rows[] = [
+                    'person' => $match[4],
+                    'username' => $match[1],
+                    'target_role' => $match[2],
+                    'reason' => $match[3],
+                ];
+            }
+        }
+
+        return $rows;
+    }
+
     /** @return list<string> */
     private function statementsContaining(string $needle): array
     {

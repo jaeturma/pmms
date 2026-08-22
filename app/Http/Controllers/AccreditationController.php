@@ -4,14 +4,19 @@ namespace App\Http\Controllers;
 
 use App\Enums\DelegationStatus;
 use App\Enums\EligibilityStatus;
+use App\Enums\EntryStatus;
+use App\Enums\RequirementStatus;
+use App\Enums\UserRole;
 use App\Models\Accreditation;
 use App\Models\Athlete;
 use App\Models\Delegation;
+use App\Models\Entry;
 use App\Models\Personnel;
 use App\Models\User;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -89,6 +94,8 @@ class AccreditationController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        /** @var User $user */
+        $user = $request->user();
         $request->validate([
             'athlete_id' => [
                 'nullable', 'integer', Rule::exists('athletes', 'id'),
@@ -101,14 +108,23 @@ class AccreditationController extends Controller
 
         if ($athleteId > 0) {
             $athlete = Athlete::query()
-                ->with(['delegation', 'eligibilityReview'])
+                ->with(['delegation.meet', 'eligibilityReview', 'eligibilityDocuments'])
                 ->findOrFail($athleteId);
+
+            abort_unless($user->isDsacAccreditationLeader($athlete->delegation->meet), 403);
 
             $this->assertDelegationApproved($athlete->delegation, 'athlete_id');
 
             if ($athlete->eligibilityReview?->status !== EligibilityStatus::Approved) {
                 throw ValidationException::withMessages([
                     'athlete_id' => __('Athletes need an approved eligibility review before accreditation.'),
+                ]);
+            }
+
+            if ($athlete->eligibilityDocuments->isEmpty()
+                || $athlete->eligibilityDocuments->contains(fn ($document) => $document->status !== RequirementStatus::Verified)) {
+                throw ValidationException::withMessages([
+                    'athlete_id' => __('Every submitted eligibility requirement must be validated before accreditation.'),
                 ]);
             }
 
@@ -124,6 +140,7 @@ class AccreditationController extends Controller
                 'accredited_at' => now(),
             ]);
         } else {
+            abort_unless($user->hasRole(UserRole::Admin, UserRole::Organizer), 403);
             $person = Personnel::query()
                 ->with('delegation')
                 ->findOrFail($request->integer('personnel_id'));
@@ -143,12 +160,18 @@ class AccreditationController extends Controller
             ]);
         }
 
-        /** @var User $user */
-        $user = $request->user();
+        DB::transaction(function () use ($accreditation, $user, $athleteId): void {
+            $accreditation->accredited_by = $user->id;
+            $accreditation->save();
+            $accreditation->assignNumber();
 
-        $accreditation->accredited_by = $user->id;
-        $accreditation->save();
-        $accreditation->assignNumber();
+            if ($athleteId > 0) {
+                Entry::query()
+                    ->where('athlete_id', $athleteId)
+                    ->where('status', EntryStatus::Submitted->value)
+                    ->update(['status' => EntryStatus::Confirmed->value, 'updated_at' => now()]);
+            }
+        });
 
         $this->audit->record('accreditation.granted', $accreditation, $this->context($accreditation));
 

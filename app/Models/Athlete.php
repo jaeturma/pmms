@@ -8,6 +8,7 @@ use Database\Factories\AthleteFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -28,11 +29,11 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['delegation_id', 'school_id', 'first_name', 'last_name', 'sex', 'birthdate', 'lrn', 'grade_level'])]
+#[Fillable(['delegation_id', 'school_id', 'first_name', 'middle_name', 'last_name', 'name_extension', 'sex', 'birthdate', 'lrn', 'grade_level'])]
 class Athlete extends Model
 {
     /** @use HasFactory<AthleteFactory> */
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     /**
      * Get the attributes that should be cast.
@@ -102,7 +103,9 @@ class Athlete extends Model
 
     public function fullName(): string
     {
-        return "{$this->first_name} {$this->last_name}";
+        return collect([$this->first_name, $this->middle_name, $this->last_name, $this->name_extension])
+            ->filter()
+            ->join(' ');
     }
 
     public function age(): int

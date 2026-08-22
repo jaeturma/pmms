@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\MeetSportAssignmentRole;
 use App\Enums\ScoringSessionStatus;
 use App\Models\Division;
 use App\Models\Meet;
@@ -56,6 +57,16 @@ class HandleInertiaRequests extends Middleware
                         ->distinct()
                         ->pluck('management_teams.team_type')
                         ->values(),
+                    'can_review_coaches' => $user->isAdmin() || $user->meetSportAssignments()
+                        ->where('status', 'active')
+                        ->whereIn('role', [
+                            MeetSportAssignmentRole::TournamentManager->value,
+                            MeetSportAssignmentRole::TournamentICT->value,
+                            MeetSportAssignmentRole::TournamentSecretary->value,
+                        ])->exists(),
+                    'can_request_coach_enrollment' => $user->role->value === 'coach'
+                        || $user->coachOnboardingRequest()->whereIn('status', ['pending', 'rejected'])->exists(),
+                    'can_manage_school_master_data' => $user->canManageSchoolMasterData(),
                 ],
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',

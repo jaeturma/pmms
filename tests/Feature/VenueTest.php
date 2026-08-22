@@ -1,6 +1,11 @@
 <?php
 
 use App\Models\AuditLog;
+use App\Models\GameCoordinatorAssignment;
+use App\Models\Meet;
+use App\Models\MeetSport;
+use App\Models\Person;
+use App\Models\Sport;
 use App\Models\User;
 use App\Models\Venue;
 use Inertia\Testing\AssertableInertia;
@@ -26,6 +31,41 @@ test('the venue registry renders with the manage flag per role', function () {
             ->where('canManage', true));
 });
 
+test('venue details include coordinator contact and map coordinates', function () {
+    $venue = Venue::factory()->create([
+        'latitude' => '7.1234567',
+        'longitude' => '125.1234567',
+    ]);
+    $sport = Sport::factory()->create(['name' => 'Table Tennis']);
+    $meetSport = MeetSport::factory()->create([
+        'meet_id' => Meet::current()->id,
+        'sport_id' => $sport->id,
+    ]);
+    $person = Person::create([
+        'source_key' => 'venue-coordinator-test',
+        'full_name' => 'Juan Dela Cruz',
+        'normalized_name' => 'juan dela cruz',
+    ]);
+    GameCoordinatorAssignment::create([
+        'meet_sport_id' => $meetSport->id,
+        'venue_id' => $venue->id,
+        'person_id' => $person->id,
+        'is_lead' => true,
+        'status' => 'active',
+        'source_contact_text' => '0917 123 4567',
+    ]);
+
+    $this->actingAs(User::factory()->create())
+        ->get('/venues')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('venues.data.0.latitude', 7.1234567)
+            ->where('venues.data.0.longitude', 125.1234567)
+            ->where('venues.data.0.game_coordinators.0.name', 'Juan Dela Cruz')
+            ->where('venues.data.0.game_coordinators.0.contact_number', '0917 123 4567')
+            ->where('venues.data.0.game_coordinators.0.sport', 'Table Tennis')
+            ->where('venues.data.0.game_coordinators.0.is_lead', true));
+});
+
 test('organizers can create venues', function () {
     $this->actingAs(User::factory()->organizer()->create())
         ->post('/venues', [
@@ -42,6 +82,52 @@ test('organizers can create venues', function () {
     ]);
 
     expect(AuditLog::query()->where('action', 'venue.created')->exists())->toBeTrue();
+});
+
+test('google maps coordinates and URLs are accepted and persisted', function (string $location) {
+    $this->actingAs(User::factory()->organizer()->create())
+        ->post('/venues', [
+            'name' => 'Mapped Venue',
+            'gps_location' => $location,
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $venue = Venue::query()->where('name', 'Mapped Venue')->firstOrFail();
+
+    expect((float) $venue->latitude)->toBe(7.123456)
+        ->and((float) $venue->longitude)->toBe(125.123456);
+})->with([
+    'coordinates' => '7.123456, 125.123456',
+    'maps query URL' => 'https://www.google.com/maps/search/?api=1&query=7.123456%2C125.123456',
+    'maps place URL' => 'https://www.google.com/maps/place/Test/@7.123456,125.123456,15z',
+]);
+
+test('updating a venue replaces its saved google maps location', function () {
+    $venue = Venue::factory()->create([
+        'latitude' => 7.1,
+        'longitude' => 125.1,
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put("/venues/{$venue->id}", [
+            'name' => $venue->name,
+            'gps_location' => '7.765432, 125.765432',
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect((float) $venue->refresh()->latitude)->toBe(7.765432)
+        ->and((float) $venue->longitude)->toBe(125.765432);
+});
+
+test('invalid google maps locations are rejected', function () {
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/venues', [
+            'name' => 'Invalid Map Venue',
+            'gps_location' => 'not a coordinate or maps URL',
+        ])
+        ->assertSessionHasErrors('gps_location');
 });
 
 test('viewers and delegation officers cannot create venues', function (User $user) {

@@ -7,7 +7,10 @@ use App\Concerns\ProfileValidationRules;
 use App\Models\CoachOnboardingRequest;
 use App\Models\User;
 use App\Services\RecaptchaVerifier;
+use App\Services\RegistrationCodeChallenge;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Laravel\Fortify\Contracts\CreatesNewUsers;
 
@@ -17,7 +20,11 @@ class CreateNewUser implements CreatesNewUsers
 
     private readonly RecaptchaVerifier $recaptcha;
 
-    public function __construct(RecaptchaVerifier $recaptcha)
+    public function __construct(
+        RecaptchaVerifier $recaptcha,
+        private readonly RegistrationCodeChallenge $codeChallenge,
+        private readonly Request $request,
+    )
     {
         $this->recaptcha = $recaptcha;
     }
@@ -25,7 +32,7 @@ class CreateNewUser implements CreatesNewUsers
     /**
      * Validate and create a newly registered user.
      *
-     * @param  array<string, string>  $input
+     * @param  array<string, mixed>  $input
      */
     public function create(array $input): User
     {
@@ -33,6 +40,14 @@ class CreateNewUser implements CreatesNewUsers
             ...$this->profileRules(),
             'password' => $this->passwordRules(),
             'account_type' => ['nullable', 'in:viewer,coach'],
+            'district_id' => [
+                Rule::requiredIf(($input['account_type'] ?? 'viewer') === 'coach'),
+                'nullable',
+                Rule::exists('districts', 'id')->where('active', true),
+            ],
+            'event_ids' => [Rule::requiredIf(($input['account_type'] ?? 'viewer') === 'coach'), 'nullable', 'array', 'min:1'],
+            'event_ids.*' => ['integer', 'distinct', Rule::exists('events', 'id')->where('active', true)],
+            'code_challenge' => ['required', 'string', 'size:5'],
         ])->validate();
 
         // Same reCAPTCHA check as the login pipeline
@@ -46,6 +61,12 @@ class CreateNewUser implements CreatesNewUsers
             ]);
         }
 
+        if (! $this->codeChallenge->verify($this->request, $input['code_challenge'] ?? null)) {
+            throw ValidationException::withMessages([
+                'code_challenge' => [__('The image verification code is incorrect. Refresh the page for a new code.')],
+            ]);
+        }
+
         $user = User::create([
             'name' => $input['name'],
             'email' => $input['email'],
@@ -53,7 +74,12 @@ class CreateNewUser implements CreatesNewUsers
         ]);
 
         if (($input['account_type'] ?? 'viewer') === 'coach') {
-            CoachOnboardingRequest::query()->create(['user_id' => $user->id]);
+            $onboardingRequest = CoachOnboardingRequest::query()->create([
+                'user_id' => $user->id,
+                'district_id' => $input['district_id'],
+                'event_id' => $input['event_ids'][0],
+            ]);
+            $onboardingRequest->events()->sync($input['event_ids']);
         }
 
         return $user;

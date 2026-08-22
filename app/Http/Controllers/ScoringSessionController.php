@@ -19,6 +19,7 @@ use App\Models\ScoreEvent;
 use App\Models\ScoringSession;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\CompetitionResultService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -47,7 +48,10 @@ class ScoringSessionController extends Controller
 {
     use ScopesToAssignedSport;
 
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(
+        private readonly AuditLogger $audit,
+        private readonly CompetitionResultService $competitionResults,
+    ) {}
 
     /**
      * Current (most recent) scoring session for a match, for the
@@ -121,6 +125,12 @@ class ScoringSessionController extends Controller
     public function store(Request $request, EventMatch $match): RedirectResponse
     {
         $this->authorizeManage($request, $match);
+
+        if (! $match->live_scoring_enabled) {
+            throw ValidationException::withMessages([
+                'match_id' => __('Live scoring is disabled for this competition.'),
+            ]);
+        }
 
         if ($match->status !== MatchStatus::Scheduled) {
             throw ValidationException::withMessages([
@@ -425,6 +435,11 @@ class ScoringSessionController extends Controller
             'payload' => ['score_a' => $session->score_a, 'score_b' => $session->score_b],
             'recorded_by' => $user->id,
         ]);
+
+        $session->match->forceFill(['status' => MatchStatus::Completed])->save();
+        if ($session->match->event_schedule_id !== null) {
+            $this->competitionResults->createFromLiveScore($session->fresh(), $user);
+        }
 
         $this->audit->record('scoring.ended', $session, $this->context($session));
 

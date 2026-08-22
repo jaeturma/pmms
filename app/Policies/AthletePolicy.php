@@ -2,8 +2,8 @@
 
 namespace App\Policies;
 
-use App\Enums\UserRole;
 use App\Enums\Permission;
+use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\Delegation;
 use App\Models\User;
@@ -36,34 +36,31 @@ class AthletePolicy
             ->where(function ($query) use ($athlete) {
                 $query->where(fn ($scope) => $scope->where('authority_type', 'district_sports_coordinator')->where('school_district_id', $athlete->school->school_district_id))
                     ->orWhere(fn ($scope) => $scope->where('authority_type', 'municipality_team_manager')->where('district_id', $athlete->school->district_id));
-            })->exists()) return true;
-
-        return $athlete->delegation->hasOfficer($user) || $athlete->delegation->hasCoach($user);
-    }
-
-    /**
-     * Managers may register athletes for any delegation; officers and
-     * coaches only for their own, while it is a draft and registration is
-     * open.
-     */
-    public function create(User $user, Delegation $delegation): bool
-    {
-        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+            })->exists()) {
             return true;
         }
 
-        return ($delegation->hasOfficer($user) || $delegation->hasCoach($user)) && $delegation->isEditableByOfficers();
+        return $athlete->delegation->hasOfficer($user) || $user->hasApprovedCoachScope($athlete->delegation);
+    }
+
+    /** Athlete roster mutations belong exclusively to an approved coach. */
+    public function create(User $user, Delegation $delegation): bool
+    {
+        return $user->role === UserRole::Coach
+            && $user->hasApprovedCoachScope($delegation);
     }
 
     public function update(User $user, Athlete $athlete): bool
     {
-        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
-            return true;
-        }
-
-        $delegation = $athlete->delegation;
-
-        return ($delegation->hasOfficer($user) || $delegation->hasCoach($user)) && $delegation->isEditableByOfficers();
+        return $user->role === UserRole::Coach
+            && $user->hasApprovedCoachScope($athlete->delegation)
+            && $athlete->entries()->whereIn(
+                'event_id',
+                $user->coachAssignmentRequests()
+                    ->where('status', 'approved')
+                    ->where('delegation_id', $athlete->delegation_id)
+                    ->select('event_id'),
+            )->exists();
     }
 
     public function delete(User $user, Athlete $athlete): bool

@@ -2,8 +2,6 @@
 
 namespace App\Policies;
 
-use App\Enums\ManagementTeamMemberStatus;
-use App\Enums\ManagementTeamType;
 use App\Enums\Permission;
 use App\Enums\UserRole;
 use App\Models\Delegation;
@@ -49,7 +47,7 @@ class EligibilityReviewPolicy
             return true;
         }
 
-        return $review->athlete->delegation->hasOfficer($user) || $review->athlete->delegation->hasCoach($user);
+        return $review->athlete->delegation->hasOfficer($user) || $user->hasApprovedCoachScope($review->athlete->delegation);
     }
 
     /**
@@ -63,7 +61,7 @@ class EligibilityReviewPolicy
             return true;
         }
 
-        return ($delegation->hasOfficer($user) || $delegation->hasCoach($user))
+        return ($delegation->hasOfficer($user) || $user->hasApprovedCoachScope($delegation))
             && $delegation->meet->isRegistrationOpen();
     }
 
@@ -74,6 +72,6 @@ class EligibilityReviewPolicy
      */
     public function decide(User $user, EligibilityReview $review): bool
     {
-        return $user->hasPermission(Permission::AthleteEligibilityApprove, $review->meet);
+        return $user->isDsacAccreditationLeader($review->meet);
     }
 }

@@ -5,10 +5,13 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\EventRequest;
 use App\Models\Event;
+use App\Models\Person;
 use App\Models\Sport;
+use App\Models\Venue;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -27,7 +30,7 @@ class EventController extends Controller
         $search = $this->searchTerm($request);
 
         $query = Event::query()
-            ->with('sport:id,name')
+            ->with(['sport:id,name', 'venueAssignments.venue:id,name', 'venueAssignments.coordinators:id,full_name'])
             ->orderBy('name');
 
         $this->applySearch($query, $search, ['name', 'sport.name']);
@@ -44,6 +47,14 @@ class EventController extends Controller
                     'max_entries_per_delegation' => $event->max_entries_per_delegation,
                     'active' => $event->active,
                     'sport' => ['id' => $event->sport->id, 'name' => $event->sport->name],
+                    'venues' => $event->venueAssignments->map(fn ($assignment): array => [
+                        'venue_id' => $assignment->venue_id,
+                        'venue_name' => $assignment->venue->name,
+                        'playing_area_type' => $assignment->playing_area_type,
+                        'playing_area_count' => $assignment->playing_area_count,
+                        'coordinator_ids' => $assignment->coordinators->pluck('id')->all(),
+                        'coordinator_names' => $assignment->coordinators->pluck('full_name')->all(),
+                    ]),
                 ]),
             'filters' => ['search' => $search],
             'sports' => Sport::query()
@@ -51,6 +62,8 @@ class EventController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name']),
             'canManage' => Gate::allows('manage-meet-data'),
+            'venues' => Venue::query()->where('active', true)->orderBy('name')->get(['id', 'name']),
+            'people' => Person::query()->orderBy('full_name')->get(['id', 'full_name']),
         ]);
     }
 
@@ -59,7 +72,12 @@ class EventController extends Controller
      */
     public function store(EventRequest $request): RedirectResponse
     {
-        $event = Event::create($request->validated());
+        $event = DB::transaction(function () use ($request): Event {
+            $event = Event::create($request->eventData());
+            $this->syncVenues($event, $request->validated('venues', []));
+
+            return $event;
+        });
 
         $this->audit->record('event.created', $event, ['name' => $event->name]);
 
@@ -73,7 +91,10 @@ class EventController extends Controller
      */
     public function update(EventRequest $request, Event $event): RedirectResponse
     {
-        $event->update($request->validated());
+        DB::transaction(function () use ($request, $event): void {
+            $event->update($request->eventData());
+            $this->syncVenues($event, $request->validated('venues', []));
+        });
 
         $this->audit->record('event.updated', $event, ['name' => $event->name]);
 
@@ -131,5 +152,24 @@ class EventController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Event deleted.')]);
 
         return back();
+    }
+
+    private function syncVenues(Event $event, array $venues): void
+    {
+        $keep = [];
+
+        foreach ($venues as $venue) {
+            $assignment = $event->venueAssignments()->updateOrCreate(
+                ['venue_id' => $venue['venue_id']],
+                [
+                    'playing_area_type' => $venue['playing_area_type'],
+                    'playing_area_count' => $venue['playing_area_count'],
+                ],
+            );
+            $assignment->coordinators()->sync($venue['coordinator_ids'] ?? []);
+            $keep[] = $assignment->id;
+        }
+
+        $event->venueAssignments()->when($keep !== [], fn ($query) => $query->whereNotIn('id', $keep))->delete();
     }
 }

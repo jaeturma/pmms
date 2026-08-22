@@ -26,7 +26,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['meet_id', 'event_id'])]
+#[Fillable(['meet_id', 'event_id', 'match_id', 'event_schedule_id', 'scoring_session_id', 'result_source'])]
 class EventResult extends Model
 {
     /** @use HasFactory<EventResultFactory> */
@@ -43,6 +43,13 @@ class EventResult extends Model
             'status' => ResultStatus::class,
             'encoded_at' => 'datetime',
             'validated_at' => 'datetime',
+            'version' => 'integer',
+            'form_generated_version' => 'integer',
+            'form_generated_at' => 'datetime',
+            'tm_confirmed_at' => 'datetime',
+            'submitted_at' => 'datetime',
+            'returned_at' => 'datetime',
+            'official_at' => 'datetime',
         ];
     }
 
@@ -60,6 +67,21 @@ class EventResult extends Model
     public function event(): BelongsTo
     {
         return $this->belongsTo(Event::class);
+    }
+
+    public function match(): BelongsTo
+    {
+        return $this->belongsTo(EventMatch::class, 'match_id');
+    }
+
+    public function schedule(): BelongsTo
+    {
+        return $this->belongsTo(EventSchedule::class, 'event_schedule_id');
+    }
+
+    public function scoringSession(): BelongsTo
+    {
+        return $this->belongsTo(ScoringSession::class);
     }
 
     /**
@@ -86,8 +108,40 @@ class EventResult extends Model
         return $this->belongsTo(User::class, 'validated_by');
     }
 
+    public function tmConfirmedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'tm_confirmed_by');
+    }
+
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(ResultAttachment::class);
+    }
+
+    public function currentSignedForm(): ?ResultAttachment
+    {
+        return $this->attachments()
+            ->where('attachment_type', ResultAttachment::SIGNED_RESULT_FORM)
+            ->where('result_version', $this->version)
+            ->where('is_current', true)
+            ->latest('id')
+            ->first();
+    }
+
+    public function referenceNumber(): string
+    {
+        $code = strtoupper((string) ($this->event?->sport?->code ?: 'RESULT'));
+
+        return sprintf('DDOPAA2026-%s-%06d', preg_replace('/[^A-Z0-9]+/', '-', $code), $this->id);
+    }
+
+    public function isLocked(): bool
+    {
+        return $this->status === ResultStatus::Official;
+    }
+
     public function isValidated(): bool
     {
-        return $this->status === ResultStatus::Validated;
+        return in_array($this->status, [ResultStatus::Validated, ResultStatus::Official], true);
     }
 }

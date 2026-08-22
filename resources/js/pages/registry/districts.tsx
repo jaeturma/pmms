@@ -365,7 +365,7 @@ export default function Districts({ districts, filters, canManage }: Props) {
                                             <Badge
                                                 variant={
                                                     district.active
-                                                        ? 'secondary'
+                                                        ? 'success'
                                                         : 'outline'
                                                 }
                                             >

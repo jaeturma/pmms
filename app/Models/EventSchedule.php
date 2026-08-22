@@ -25,7 +25,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['meet_id', 'event_id', 'sport_category_id', 'venue_id', 'scheduled_date', 'starts_at', 'ends_at', 'note'])]
+#[Fillable(['meet_id', 'event_id', 'sport_category_id', 'venue_id', 'competition_area_id', 'scheduled_date', 'starts_at', 'ends_at', 'note'])]
 class EventSchedule extends Model
 {
     /** @use HasFactory<EventScheduleFactory> */
@@ -65,6 +65,11 @@ class EventSchedule extends Model
     public function venue(): BelongsTo
     {
         return $this->belongsTo(Venue::class);
+    }
+
+    public function competitionArea(): BelongsTo
+    {
+        return $this->belongsTo(CompetitionArea::class);
     }
 
     /**

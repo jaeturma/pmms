@@ -3,14 +3,15 @@
 use App\Enums\EligibilityStatus;
 use App\Enums\ManagementTeamMemberStatus;
 use App\Enums\ManagementTeamType;
+use App\Enums\RequirementStatus;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
 use App\Models\EligibilityDocument;
 use App\Models\EligibilityReview;
+use App\Models\Entry;
 use App\Models\ManagementTeam;
 use App\Models\ManagementTeamMember;
-use App\Models\Entry;
 use App\Models\Meet;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
@@ -145,7 +146,15 @@ test('DSAC can approve a pending review and officers cannot decide', function ()
     $this->actingAs($organizer)->patch("/eligibility/reviews/{$review->id}/approve")->assertForbidden();
 
     $team = ManagementTeam::factory()->create(['meet_id' => $delegation->meet_id, 'team_type' => ManagementTeamType::DivisionScreeningAndAccreditation]);
-    $member = ManagementTeamMember::factory()->create(['management_team_id' => $team->id, 'status' => ManagementTeamMemberStatus::Active]);
+    EligibilityDocument::factory()->create([
+        'athlete_id' => $athlete->id,
+        'status' => RequirementStatus::Verified,
+    ]);
+    $member = ManagementTeamMember::factory()->create([
+        'management_team_id' => $team->id,
+        'role_title' => 'Chairperson',
+        'status' => ManagementTeamMemberStatus::Active,
+    ]);
     $dsac = $member->user;
 
     $this->actingAs($dsac)
@@ -158,6 +167,79 @@ test('DSAC can approve a pending review and officers cannot decide', function ()
         ->and($review->reviewer_id)->toBe($dsac->id)
         ->and($review->decided_at)->not->toBeNull()
         ->and(AuditLog::query()->where('action', 'eligibility.approved')->exists())->toBeTrue();
+});
+
+test('DSAC members validate requirements one by one but only leadership performs final review', function () {
+    $delegation = Delegation::factory()->create();
+    $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);
+    $review = EligibilityReview::factory()->create([
+        'athlete_id' => $athlete->id,
+        'meet_id' => $delegation->meet_id,
+    ]);
+    $document = EligibilityDocument::factory()->create([
+        'athlete_id' => $athlete->id,
+        'document_type' => 'birth_certificate',
+        'status' => RequirementStatus::Submitted,
+    ]);
+    $team = ManagementTeam::factory()->create([
+        'meet_id' => $delegation->meet_id,
+        'team_type' => ManagementTeamType::DivisionScreeningAndAccreditation,
+        'source_code' => 'DSAC',
+    ]);
+    $member = ManagementTeamMember::factory()->create([
+        'management_team_id' => $team->id,
+        'role_title' => 'Member',
+        'status' => ManagementTeamMemberStatus::Active,
+    ])->user;
+    $leader = ManagementTeamMember::factory()->create([
+        'management_team_id' => $team->id,
+        'role_title' => 'Assistant Chairperson',
+        'status' => ManagementTeamMemberStatus::Active,
+    ])->user;
+
+    $this->actingAs($member)
+        ->patch("/eligibility/documents/{$document->id}/status", ['status' => 'verified'])
+        ->assertSessionHasNoErrors();
+
+    expect($document->fresh()->status)->toBe(RequirementStatus::Verified)
+        ->and($document->fresh()->verified_by)->toBe($member->id);
+
+    $this->actingAs($member)
+        ->patch("/eligibility/reviews/{$review->id}/approve")
+        ->assertForbidden();
+
+    $this->actingAs($leader)
+        ->patch("/eligibility/reviews/{$review->id}/approve", ['remarks' => 'All requirements validated.'])
+        ->assertSessionHasNoErrors();
+
+    expect($review->fresh()->status)->toBe(EligibilityStatus::Approved)
+        ->and($review->fresh()->reviewer_id)->toBe($leader->id);
+});
+
+test('DSAC leadership cannot approve while any requirement is not validated', function () {
+    $delegation = Delegation::factory()->create();
+    $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);
+    $review = EligibilityReview::factory()->create(['athlete_id' => $athlete->id, 'meet_id' => $delegation->meet_id]);
+    EligibilityDocument::factory()->create([
+        'athlete_id' => $athlete->id,
+        'document_type' => 'birth_certificate',
+        'status' => RequirementStatus::Submitted,
+    ]);
+    $team = ManagementTeam::factory()->create([
+        'meet_id' => $delegation->meet_id,
+        'team_type' => ManagementTeamType::DivisionScreeningAndAccreditation,
+    ]);
+    $leader = ManagementTeamMember::factory()->create([
+        'management_team_id' => $team->id,
+        'role_title' => 'Chairperson',
+        'status' => ManagementTeamMemberStatus::Active,
+    ])->user;
+
+    $this->actingAs($leader)
+        ->patch("/eligibility/reviews/{$review->id}/approve")
+        ->assertSessionHasErrors('requirements');
+
+    expect($review->fresh()->status)->toBe(EligibilityStatus::Pending);
 });
 
 test('returning a review requires remarks', function () {

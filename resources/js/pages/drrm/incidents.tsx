@@ -88,7 +88,7 @@ function ReportIncidentDialog({
         category: string;
         description: string;
     }>({
-        meet_id: '',
+        meet_id: meetOptions[0] ? String(meetOptions[0].id) : '',
         venue_id: '',
         category: '',
         description: '',
@@ -121,25 +121,6 @@ function ReportIncidentDialog({
                     <DialogTitle>Report emergency incident</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="incident-meet">Meet</Label>
-                        <Select
-                            value={data.meet_id}
-                            onValueChange={(v) => setData('meet_id', v)}
-                        >
-                            <SelectTrigger id="incident-meet">
-                                <SelectValue placeholder="Select a meet" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {meetOptions.map((m) => (
-                                    <SelectItem key={m.id} value={String(m.id)}>
-                                        {m.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <InputError message={errors.meet_id} />
-                    </div>
                     <div className="space-y-2">
                         <Label htmlFor="incident-venue">Venue (optional)</Label>
                         <Select
@@ -351,19 +332,11 @@ function IncidentCard({ incident }: { incident: Incident }) {
 
 export default function DrrmIncidents({
     incidents,
-    filters,
     meetOptions,
     venueOptions,
     categoryOptions,
 }: Props) {
     const [reportOpen, setReportOpen] = useState(false);
-
-    const applyMeetFilter = (value: string) => {
-        router.get(index().url, value === 'all' ? {} : { meet_id: value }, {
-            preserveState: true,
-            preserveScroll: true,
-        });
-    };
 
     return (
         <>
@@ -382,23 +355,6 @@ export default function DrrmIncidents({
                         </Button>
                     }
                 />
-
-                <Select
-                    value={filters.meet_id ? String(filters.meet_id) : 'all'}
-                    onValueChange={applyMeetFilter}
-                >
-                    <SelectTrigger className="w-64" aria-label="Filter by meet">
-                        <SelectValue placeholder="All meets" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All meets</SelectItem>
-                        {meetOptions.map((m) => (
-                            <SelectItem key={m.id} value={String(m.id)}>
-                                {m.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
 
                 {incidents.length === 0 ? (
                     <EmptyState

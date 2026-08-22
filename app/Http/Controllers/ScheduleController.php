@@ -8,10 +8,13 @@ use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\ScopesToAssignedSport;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\ScheduleRequest;
+use App\Models\CompetitionArea;
 use App\Models\Event;
+use App\Models\EventVenue;
 use App\Models\EventMatch;
 use App\Models\EventSchedule;
 use App\Models\Meet;
+use App\Models\MeetSportVenue;
 use App\Models\SportCategory;
 use App\Models\User;
 use App\Models\Venue;
@@ -54,7 +57,7 @@ class ScheduleController extends Controller
         $date = $request->string('date')->toString();
 
         $query = EventSchedule::query()
-            ->with(['event.sport:id,name', 'sportCategory:id,display_name', 'venue:id,name'])
+            ->with(['event.sport:id,name', 'sportCategory:id,display_name', 'venue:id,name', 'competitionArea:id,name'])
             ->orderBy('scheduled_date')
             ->orderBy('starts_at');
 
@@ -71,6 +74,65 @@ class ScheduleController extends Controller
         $meet = Meet::current();
         $meetIsSchedulable = in_array($meet->status, [MeetStatus::RegistrationClosed, MeetStatus::Active], true);
 
+        // Older meet setup uses the explicit meet_events pivot, while the
+        // production import enables whole sports through meet_sports. Both
+        // are valid sources for the event picker.
+        $meetSportIds = $meet->meetSports()->where('active', true)->pluck('sport_id');
+        $schedulableEvents = Event::query()
+            ->where('active', true)
+            ->where(function ($query) use ($meet, $meetSportIds): void {
+                $query->whereHas('meets', fn ($meets) => $meets->whereKey($meet->id))
+                    ->when($meetSportIds->isNotEmpty(), fn ($events) => $events->orWhereIn('sport_id', $meetSportIds));
+            })
+            ->when($isTournamentManager, fn ($query) => $query->whereIn('sport_id', $managedSportIds))
+            ->with('sport:id,name')
+            ->orderBy('sport_id')
+            ->orderBy('name')
+            ->get(['id', 'sport_id', 'name', 'gender', 'age_division']);
+
+        $eventVenueAssignments = EventVenue::query()
+            ->whereIn('event_id', $schedulableEvents->pluck('id'))
+            ->whereHas('venue', fn ($venues) => $venues->where('active', true))
+            ->with('venue:id,name')
+            ->get()
+            ->groupBy('event_id');
+
+        $sportVenueAssignments = MeetSportVenue::query()
+            ->whereHas('meetSport', fn ($meetSports) => $meetSports
+                ->where('meet_id', $meet->id)
+                ->where('active', true))
+            ->whereHas('venue', fn ($venues) => $venues->where('active', true))
+            ->with([
+                'venue:id,name',
+                'venue.competitionAreas:id,venue_id,area_type',
+                'meetSport:id,sport_id',
+            ])
+            ->get()
+            ->groupBy(fn (MeetSportVenue $assignment): int => $assignment->meetSport->sport_id);
+
+        $venueOptions = $schedulableEvents->flatMap(function (Event $event) use ($eventVenueAssignments, $sportVenueAssignments) {
+            $directAssignments = $eventVenueAssignments->get($event->id, collect());
+
+            if ($directAssignments->isNotEmpty()) {
+                return $directAssignments->map(fn (EventVenue $assignment): array => [
+                    'id' => $assignment->venue_id,
+                    'event_id' => $event->id,
+                    'label' => $assignment->venue->name,
+                    'playing_area_type' => $assignment->playing_area_type,
+                    'playing_area_count' => $assignment->playing_area_count,
+                ]);
+            }
+
+            return $sportVenueAssignments->get($event->sport_id, collect())
+                ->map(fn (MeetSportVenue $assignment): array => [
+                    'id' => $assignment->venue_id,
+                    'event_id' => $event->id,
+                    'label' => $assignment->venue->name,
+                    'playing_area_type' => $assignment->venue->competitionAreas->first()?->area_type ?? 'venue',
+                    'playing_area_count' => $assignment->expected_area_count ?? 1,
+                ]);
+        })->values();
+
         $slots = $query->paginate($this->registryPageSize)->withQueryString();
 
         $matchesBySchedule = $this->matchesForSlots($slots->pluck('id'), $user);
@@ -85,6 +147,7 @@ class ScheduleController extends Controller
                         'event_id' => $schedule->event_id,
                         'sport_category_id' => $schedule->sport_category_id,
                         'venue_id' => $schedule->venue_id,
+                        'competition_area_id' => $schedule->competition_area_id,
                         'event' => sprintf(
                             '%s — %s (%s, %s)',
                             $schedule->event->sport->name,
@@ -94,6 +157,7 @@ class ScheduleController extends Controller
                         ),
                         'sport_category' => $schedule->sportCategory?->display_name,
                         'venue' => $schedule->venue->name,
+                        'competition_area' => $schedule->competitionArea?->name,
                         'date' => $schedule->scheduled_date->toDateString(),
                         'date_label' => $schedule->scheduled_date->format('D, M j, Y'),
                         'starts_at' => substr($schedule->starts_at, 0, 5),
@@ -113,11 +177,7 @@ class ScheduleController extends Controller
             'venueFilterOptions' => Venue::query()->orderBy('name')->get(['id', 'name'])
                 ->map(fn (Venue $venue): array => ['id' => $venue->id, 'label' => $venue->name]),
             'meetIsSchedulable' => $meetIsSchedulable,
-            'eventOptions' => Event::query()
-                ->whereHas('meets', fn ($meets) => $meets->whereKey($meet->id))
-                ->when($isTournamentManager, fn ($query) => $query->whereIn('sport_id', $managedSportIds))
-                ->with('sport:id,name')
-                ->get(['id', 'sport_id', 'name', 'gender', 'age_division'])
+            'eventOptions' => $schedulableEvents
                 ->map(fn (Event $event): array => [
                     'id' => $event->id,
                     'sport_id' => $event->sport_id,
@@ -130,8 +190,18 @@ class ScheduleController extends Controller
                     ),
                 ])
                 ->values(),
-            'venueOptions' => Venue::query()->where('active', true)->orderBy('name')->get(['id', 'name'])
-                ->map(fn (Venue $venue): array => ['id' => $venue->id, 'label' => $venue->name]),
+            'venueOptions' => $venueOptions,
+            'competitionAreaOptions' => CompetitionArea::query()
+                ->where('status', '!=', 'unavailable')
+                ->orderBy('venue_id')
+                ->orderBy('display_order')
+                ->get(['id', 'venue_id', 'name', 'area_type'])
+                ->map(fn (CompetitionArea $area): array => [
+                    'id' => $area->id,
+                    'venue_id' => $area->venue_id,
+                    'label' => $area->name,
+                    'area_type' => $area->area_type,
+                ]),
             'sportCategoryOptions' => SportCategory::query()->where('active', true)->orderBy('display_name')
                 ->get(['id', 'sport_id', 'display_name'])
                 ->map(fn (SportCategory $category): array => [
@@ -238,17 +308,30 @@ class ScheduleController extends Controller
             ]);
         }
 
-        if (! $meet->events()->whereKey($data['event_id'])->exists()) {
+        $event = Event::query()->find($data['event_id']);
+        $eventBelongsToMeet = $meet->events()->whereKey($data['event_id'])->exists()
+            || ($event !== null && $meet->meetSports()
+                ->where('active', true)
+                ->where('sport_id', $event->sport_id)
+                ->exists());
+
+        if (! $eventBelongsToMeet) {
             throw ValidationException::withMessages([
                 'event_id' => __('That event is not part of the selected meet.'),
             ]);
         }
 
-        $sportId = (int) Event::query()->whereKey($data['event_id'])->value('sport_id');
+        $sportId = (int) $event?->sport_id;
         abort_unless($this->canManageSlot($user, $sportId), 403);
 
         $conflict = EventSchedule::query()
             ->where('venue_id', $data['venue_id'])
+            ->when(
+                ! empty($data['competition_area_id']),
+                fn ($query) => $query->where(fn ($scope) => $scope
+                    ->where('competition_area_id', $data['competition_area_id'])
+                    ->orWhereNull('competition_area_id')),
+            )
             ->whereDate('scheduled_date', $data['scheduled_date'])
             ->where('starts_at', '<', $data['ends_at'])
             ->where('ends_at', '>', $data['starts_at'])
@@ -258,7 +341,7 @@ class ScheduleController extends Controller
 
         if ($conflict !== null) {
             throw ValidationException::withMessages([
-                'starts_at' => __('The venue is already booked :start–:end that day for :event.', [
+                'starts_at' => __('The selected venue or competition area is already booked :start–:end that day for :event.', [
                     'start' => substr($conflict->starts_at, 0, 5),
                     'end' => substr($conflict->ends_at, 0, 5),
                     'event' => $conflict->event->name,
@@ -329,6 +412,7 @@ class ScheduleController extends Controller
             'meet' => $schedule->meet->name,
             'event' => $schedule->event->name,
             'venue' => $schedule->venue->name,
+            'competition_area' => $schedule->competitionArea?->name,
             'date' => $schedule->scheduled_date->toDateString(),
             'time' => substr($schedule->starts_at, 0, 5).'–'.substr($schedule->ends_at, 0, 5),
         ];

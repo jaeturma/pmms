@@ -26,6 +26,8 @@ class EventMatchFactory extends Factory
             'event_schedule_id' => null,
             'round_label' => 'Heat 1',
             'sequence' => 1,
+            'live_scoring_enabled' => true,
+            'awards_medals' => false,
             'status' => MatchStatus::Scheduled,
         ];
     }

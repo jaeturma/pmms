@@ -9,6 +9,11 @@ use Illuminate\Validation\Rule;
 
 class SchoolRequest extends FormRequest
 {
+    public function authorize(): bool
+    {
+        return $this->user()?->canManageSchoolMasterData() ?? false;
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *
@@ -20,19 +25,18 @@ class SchoolRequest extends FormRequest
         $schoolId = $school instanceof School ? $school->id : null;
 
         return [
-            'district_id' => ['required', 'integer', Rule::exists('districts', 'id')],
+            'district_id' => ['required', 'integer', Rule::exists('districts', 'id')->where('active', true)],
             'school_district_id' => [
-                'nullable',
+                'required',
                 'integer',
-                Rule::exists('school_districts', 'id')->where('district_id', $this->integer('district_id')),
+                Rule::exists('school_districts', 'id')
+                    ->where('district_id', $this->integer('district_id'))
+                    ->where('active', true),
             ],
             'name' => [
                 'required',
                 'string',
                 'max:160',
-                Rule::unique('schools', 'name')
-                    ->where('district_id', $this->integer('district_id'))
-                    ->ignore($schoolId),
             ],
             'school_id_code' => [
                 'required',
@@ -40,7 +44,8 @@ class SchoolRequest extends FormRequest
                 'max:20',
                 Rule::unique('schools', 'school_id_code')->ignore($schoolId),
             ],
-            'level' => ['required', Rule::enum(SchoolLevel::class)],
+            'school_type' => ['nullable', Rule::in(['Public', 'Private'])],
+            'level' => ['nullable', Rule::enum(SchoolLevel::class)],
             'address' => ['nullable', 'string', 'max:255'],
         ];
     }

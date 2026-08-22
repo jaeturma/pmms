@@ -78,6 +78,11 @@ export default function PortalSchedule({ meet, hasAthletics, days, selectedDay, 
                                                     <span className="font-medium">
                                                         {slot.starts_at}–{slot.ends_at} · {slot.event}
                                                     </span>
+                                                    {slot.competition_area && (
+                                                        <span className="text-xs text-[var(--portal-muted-foreground)]">
+                                                            Competition area: {slot.competition_area}
+                                                        </span>
+                                                    )}
                                                     {slot.note && <span className="text-xs text-[var(--portal-muted-foreground)]">{slot.note}</span>}
                                                 </li>
                                             ))}

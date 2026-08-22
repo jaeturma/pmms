@@ -236,15 +236,37 @@ test('an assigned officer can update their draft delegation while registration i
     expect($delegation->refresh()->head_name)->toBe('Maria Santos');
 });
 
-test('officers cannot update delegations that are submitted, closed, or not theirs', function (callable $setup) {
+test('an assigned officer can update their submitted delegation while registration is open', function () {
+    $delegation = Delegation::factory()->submitted()->create();
+    $officer = delegationOfficerFor($delegation);
+
+    $this->actingAs($officer)
+        ->put("/delegations/{$delegation->id}", ['head_name' => 'Maria Santos'])
+        ->assertRedirect();
+
+    expect($delegation->refresh()->head_name)->toBe('Maria Santos');
+});
+
+test('an assigned officer can correct a submitted delegation after the meet becomes active', function () {
+    $delegation = Delegation::factory()->submitted()->create(['meet_id' => Meet::factory()->active()->create()]);
+    $officer = delegationOfficerFor($delegation);
+
+    $this->actingAs($officer)
+        ->put("/delegations/{$delegation->id}", ['head_name' => 'Updated Municipality Head'])
+        ->assertRedirect();
+
+    expect($delegation->refresh()->head_name)->toBe('Updated Municipality Head');
+});
+
+test('officers cannot update delegations that are approved, closed, or not theirs', function (callable $setup) {
     [$delegation, $officer] = $setup();
 
     $this->actingAs($officer)
         ->put("/delegations/{$delegation->id}", ['head_name' => 'Blocked Update'])
         ->assertForbidden();
 })->with([
-    'submitted delegation' => fn () => (function () {
-        $delegation = Delegation::factory()->submitted()->create();
+    'approved delegation' => fn () => (function () {
+        $delegation = Delegation::factory()->approved()->create();
 
         return [$delegation, delegationOfficerFor($delegation)];
     })(),

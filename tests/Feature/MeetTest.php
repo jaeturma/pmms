@@ -2,6 +2,7 @@
 
 use App\Enums\MeetStatus;
 use App\Models\AuditLog;
+use App\Models\Delegation;
 use App\Models\Event;
 use App\Models\Meet;
 use App\Models\User;
@@ -189,6 +190,15 @@ test('deactivating the active meet leaves no meet active, audited', function () 
 test('the registration window hook follows meet status', function () {
     expect(Meet::factory()->registrationOpen()->create()->isRegistrationOpen())->toBeTrue()
         ->and(Meet::factory()->create()->isRegistrationOpen())->toBeFalse();
+});
+
+test('a meet exposes its registered delegations', function () {
+    $meet = Meet::factory()->create();
+    $delegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+
+    expect($meet->delegations()->whereKey($delegation)->exists())->toBeTrue()
+        ->and(Meet::query()->with('delegations')->findOrFail($meet->id)->delegations)
+        ->toHaveCount(1);
 });
 
 test('the dashboard shows the one meet this deployment runs', function () {

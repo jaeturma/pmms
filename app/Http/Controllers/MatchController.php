@@ -94,6 +94,9 @@ class MatchController extends Controller
                     'event' => $this->eventLabel($match->event),
                     'round_label' => $match->round_label,
                     'sequence' => $match->sequence,
+                    'competition_area' => $match->competition_area,
+                    'live_scoring_enabled' => $match->live_scoring_enabled,
+                    'awards_medals' => $match->awards_medals,
                     'status' => $match->status->value,
                     'status_label' => $match->status->label(),
                     'schedule_label' => $match->schedule === null ? null : sprintf(

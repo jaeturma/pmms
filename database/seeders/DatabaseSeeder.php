@@ -12,22 +12,24 @@ class DatabaseSeeder extends Seeder
     /** Seed only the production DdOPAA Meet 2026 dataset. */
     public function run(): void
     {
-        $this->call(AdminUserSeeder::class);
+        if (app()->environment('local') && blank(config('pmms.accounts.default_reset_password'))) {
+            config()->set('pmms.accounts.default_reset_password', 'DdOPAA26!');
+            $this->command?->warn(
+                'PMMS_DEFAULT_RESET_PASSWORD is not set; using the explicitly approved local initial password DdOPAA26!.',
+            );
+        }
+
+        if (app()->environment('local') && blank(config('pmms.admin.password'))) {
+            config()->set('pmms.admin.password', 'DdOPAA26!');
+        }
+
         $this->call(DivisionRegistrySeeder::class);
+        $this->call(DdOPAA2026SchoolSeeder::class);
         $this->call(SportsCatalogSeeder::class);
 
         $this->call(DdOPAA2026FinalSeeder::class);
+        $this->call(AdminUserSeeder::class);
+        $this->call(DdOPAA2026UserProvisioningSeeder::class);
 
-        // Ddopaa2026ShowcaseSeeder guards itself to local/testing, so it's
-        // always safe to call — a production run no-ops.
-
-        // RoleShowcaseSeeder needs Ddopaa2026ShowcaseSeeder's meet and
-        // delegations; same local/testing self-guard, always safe to call.
-
-        // Dedicated, single-sport Tournament ICT accounts for exercising
-        // the Basketball, Baseball, and Boxing live scoreboards.
-
-        // Player-attributed Basketball points/fouls and substitutions need
-        // real confirmed entries plus a match roster for both sides.
     }
 }

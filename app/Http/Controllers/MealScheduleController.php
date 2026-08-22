@@ -39,7 +39,7 @@ class MealScheduleController extends Controller
 
         abort_unless($this->policy->viewAny($user), 403);
 
-        $meetId = $request->integer('meet_id');
+        $meetId = Meet::current()->id;
         $accessibleMeetIds = $this->accessibleMeetIds($user, ManagementTeamType::Food);
 
         $schedules = MealSchedule::query()
@@ -58,6 +58,7 @@ class MealScheduleController extends Controller
             ->get();
 
         $meetOptions = Meet::query()
+            ->whereKey($meetId)
             ->when($accessibleMeetIds !== null, fn ($q) => $q->whereIn('id', $accessibleMeetIds))
             ->orderByDesc('id')
             ->get(['id', 'name'])

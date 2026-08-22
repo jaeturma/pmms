@@ -30,6 +30,9 @@ class MatchRequest extends FormRequest
             'event_schedule_id' => ['nullable', 'integer', Rule::exists('event_schedules', 'id')],
             'round_label' => ['required', 'string', 'max:60'],
             'sequence' => ['required', 'integer', 'min:1', 'max:999'],
+            'competition_area' => ['nullable', 'string', 'max:100'],
+            'live_scoring_enabled' => ['sometimes', 'boolean'],
+            'awards_medals' => ['sometimes', 'boolean'],
         ];
     }
 }

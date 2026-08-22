@@ -205,7 +205,10 @@ class MedalTallyService
         return ResultPlacement::query()
             ->whereIn('rank', [1, 2, 3])
             ->whereHas('result', fn ($result) => $result
-                ->where('status', ResultStatus::Validated->value)
+                ->where('status', ResultStatus::Official->value)
+                ->where(fn ($eligible) => $eligible
+                    ->whereNull('match_id')
+                    ->orWhereHas('match', fn ($match) => $match->where('awards_medals', true)))
                 ->when($meetId !== null && $meetId > 0, fn ($query) => $query->where('meet_id', $meetId)))
             ->when(
                 $sportId !== null && $sportId > 0,

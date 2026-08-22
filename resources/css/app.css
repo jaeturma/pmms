@@ -15,9 +15,13 @@
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
         'Noto Color Emoji';
 
-    --radius-lg: var(--radius);
-    --radius-md: calc(var(--radius) - 2px);
-    --radius-sm: calc(var(--radius) - 4px);
+    --radius-sm: 5px;
+    --radius-md: 5px;
+    --radius-lg: 5px;
+    --radius-xl: 5px;
+    --radius-2xl: 5px;
+    --radius-3xl: 5px;
+    --radius-4xl: 5px;
 
     --color-background: var(--background);
     --color-foreground: var(--foreground);
@@ -145,6 +149,139 @@
     }
 }
 
+/* Product-wide geometry: interactive controls and primary data surfaces. */
+[data-slot='button'],
+[data-slot='card'],
+[data-slot='table-container'] {
+    border-radius: 5px;
+}
+
+/* Backend semantic action palette. */
+[data-backend='true'] [data-slot='button'][data-action='edit'] {
+    background-color: #f59e0b !important;
+    border-color: #f59e0b !important;
+    color: #111827 !important;
+}
+[data-backend='true'] [data-slot='button'][data-action='archive'] {
+    background-color: #6b7280 !important;
+    border-color: #6b7280 !important;
+    color: #fff !important;
+}
+[data-backend='true'] [data-slot='button'][data-action='view'] {
+    background-color: #38bdf8 !important;
+    border-color: #38bdf8 !important;
+    color: #082f49 !important;
+}
+[data-backend='true'] [data-slot='button'][data-action='delete'] {
+    background-color: #dc2626 !important;
+    border-color: #dc2626 !important;
+    color: #fff !important;
+}
+[data-backend='true'] [data-slot='button'][data-action='reset-password'] {
+    background-color: #f97316 !important;
+    border-color: #f97316 !important;
+    color: #fff !important;
+}
+[data-backend='true'] [data-slot='button'][data-action='submit'] {
+    background-color: #1e3a8a !important;
+    border-color: #1e3a8a !important;
+    color: #fff !important;
+}
+[data-backend='true'] [data-slot='button'][data-action='approve'] {
+    background-color: #059669 !important;
+    border-color: #059669 !important;
+    color: #fff !important;
+}
+[data-backend='true'] [data-slot='button'][data-action='create'] {
+    background-color: #16a34a !important;
+    border-color: #16a34a !important;
+    color: #fff !important;
+}
+[data-backend='true'] [data-slot='button'][data-action='export'] {
+    background-color: #0f766e !important;
+    border-color: #0f766e !important;
+    color: #fff !important;
+}
+[data-backend='true'] [data-slot='button'][data-action='cancel'] {
+    background-color: #64748b !important;
+    border-color: #64748b !important;
+    color: #fff !important;
+}
+
+[data-backend='true'] [data-slot='button'][data-action]:hover {
+    filter: brightness(0.9);
+}
+
+[data-backend='true'] [data-slot='badge'][data-status='active'] {
+    background-color: #059669 !important;
+    border-color: #059669 !important;
+    color: #fff !important;
+}
+
+/* Dashboard card backgrounds use a restrained, repeatable list palette. */
+[data-dashboard='true'] [data-slot='card'][data-tone='primary'] {
+    background-color: #eff6ff;
+}
+[data-dashboard='true'] [data-slot='card'][data-tone='success'] {
+    background-color: #ecfdf5;
+}
+[data-dashboard='true'] [data-slot='card'][data-tone='warning'] {
+    background-color: #fffbeb;
+}
+[data-dashboard='true'] [data-slot='card'][data-tone='destructive'] {
+    background-color: #fff1f2;
+}
+[data-dashboard='true'] [data-slot='card'][data-tone='gold'] {
+    background-color: #fefce8;
+}
+[data-dashboard='true'] [data-slot='card'][data-tone='violet'] {
+    background-color: #f5f3ff;
+}
+[data-dashboard='true'] [data-slot='card'][data-tone='cyan'] {
+    background-color: #ecfeff;
+}
+
+.dark [data-dashboard='true'] [data-slot='card'][data-tone='primary'] {
+    background-color: rgb(23 37 84 / 0.45);
+}
+.dark [data-dashboard='true'] [data-slot='card'][data-tone='success'] {
+    background-color: rgb(6 78 59 / 0.35);
+}
+.dark [data-dashboard='true'] [data-slot='card'][data-tone='warning'],
+.dark [data-dashboard='true'] [data-slot='card'][data-tone='gold'] {
+    background-color: rgb(113 63 18 / 0.35);
+}
+.dark [data-dashboard='true'] [data-slot='card'][data-tone='destructive'] {
+    background-color: rgb(127 29 29 / 0.35);
+}
+.dark [data-dashboard='true'] [data-slot='card'][data-tone='violet'] {
+    background-color: rgb(76 29 149 / 0.35);
+}
+.dark [data-dashboard='true'] [data-slot='card'][data-tone='cyan'] {
+    background-color: rgb(22 78 99 / 0.35);
+}
+
+/* Give adjacent backend cards recognizable, restrained color accents. */
+[data-backend='true'] [data-slot='card'] {
+    border-top: 4px solid #2563eb;
+}
+[data-backend='true'] [data-slot='card']:nth-of-type(4n + 2) {
+    border-top-color: #7c3aed;
+}
+[data-backend='true'] [data-slot='card']:nth-of-type(4n + 3) {
+    border-top-color: #059669;
+}
+[data-backend='true'] [data-slot='card']:nth-of-type(4n + 4) {
+    border-top-color: #f59e0b;
+}
+
+/* Product-wide geometry: interactive controls and primary data surfaces. */
+[data-slot='button'],
+[data-slot='card'],
+[data-slot='table-container'] {
+    border-radius: 5px;
+}
+
 @keyframes score-pop {
     0% {
         transform: scale(1);
@@ -204,15 +341,17 @@
     --medal-silver-foreground: oklch(0.25 0 0);
     --medal-bronze: oklch(0.6 0.09 50);
     --medal-bronze-foreground: oklch(0.985 0 0);
-    --border: oklch(0.9 0.01 260);
-    --input: oklch(0.9 0.01 260);
+    /* Shared 50%-gray outline used by cards, fields, selects, dialogs,
+     * tables, and the rest of the design-system components. */
+    --border: oklch(0.62 0 0);
+    --input: oklch(0.62 0 0);
     --ring: oklch(0.55 0.14 263);
     --chart-1: oklch(0.4 0.19 263);
     --chart-2: oklch(0.8 0.16 85);
     --chart-3: oklch(0.6 0.15 145);
     --chart-4: oklch(0.75 0.15 70);
     --chart-5: oklch(0.577 0.245 27.325);
-    --radius: 0.625rem;
+    --radius: 5px;
     /* PMMS navy — sampled from the approved reference images' sidebar
      * (docs/ui-ux/references/admin-dashboard.png and siblings). */
     --sidebar: oklch(0.25 0.09 258);
@@ -252,8 +391,8 @@
     --medal-silver-foreground: oklch(0.145 0 0);
     --medal-bronze: oklch(0.62 0.09 50);
     --medal-bronze-foreground: oklch(0.985 0 0);
-    --border: oklch(0.27 0.02 260);
-    --input: oklch(0.27 0.02 260);
+    --border: oklch(0.62 0 0);
+    --input: oklch(0.62 0 0);
     --ring: oklch(0.55 0.16 263);
     --chart-1: oklch(0.6 0.17 263);
     --chart-2: oklch(0.8 0.16 85);

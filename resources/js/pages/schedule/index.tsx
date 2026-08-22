@@ -44,9 +44,11 @@ type ScheduleSlot = {
     event_id: number;
     sport_category_id: number | null;
     venue_id: number;
+    competition_area_id: number | null;
     event: string;
     sport_category: string | null;
     venue: string;
+    competition_area: string | null;
     date: string;
     date_label: string;
     starts_at: string;
@@ -61,7 +63,17 @@ type Option = { id: number; label: string };
 
 type EventOption = Option & { sport_id: number };
 
+type VenueOption = Option & {
+    event_id: number;
+    playing_area_type: 'venue' | 'court' | 'table';
+    playing_area_count: number;
+};
+
 type SportCategoryOption = Option & { sport_id: number };
+type CompetitionAreaOption = Option & {
+    venue_id: number;
+    area_type: string;
+};
 
 type Props = {
     schedules: Paginated<ScheduleSlot>;
@@ -73,7 +85,8 @@ type Props = {
     venueFilterOptions: Option[];
     meetIsSchedulable: boolean;
     eventOptions: EventOption[];
-    venueOptions: Option[];
+    venueOptions: VenueOption[];
+    competitionAreaOptions: CompetitionAreaOption[];
     sportCategoryOptions: SportCategoryOption[];
     canManage: boolean;
 };
@@ -82,13 +95,15 @@ function SlotFormDialog({
     slot,
     eventOptions,
     venueOptions,
+    competitionAreaOptions,
     sportCategoryOptions,
     open,
     onOpenChange,
 }: {
     slot: ScheduleSlot | null;
     eventOptions: EventOption[];
-    venueOptions: Option[];
+    venueOptions: VenueOption[];
+    competitionAreaOptions: CompetitionAreaOption[];
     sportCategoryOptions: SportCategoryOption[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -99,6 +114,9 @@ function SlotFormDialog({
             ? String(slot.sport_category_id)
             : '',
         venue_id: slot ? String(slot.venue_id) : '',
+        competition_area_id: slot?.competition_area_id
+            ? String(slot.competition_area_id)
+            : '',
         scheduled_date: slot?.date ?? '',
         starts_at: slot?.starts_at ?? '',
         ends_at: slot?.ends_at ?? '',
@@ -112,6 +130,18 @@ function SlotFormDialog({
     const categoryOptions = sportCategoryOptions.filter(
         (option) => option.sport_id === selectedEventSportId,
     );
+    const eventVenueOptions = venueOptions.filter(
+        (option) => String(option.event_id) === data.event_id,
+    );
+    const selectedVenue = eventVenueOptions.find(
+        (option) => String(option.id) === data.venue_id,
+    );
+    const areaOptions = competitionAreaOptions.filter(
+        (option) =>
+            String(option.venue_id) === data.venue_id &&
+            option.area_type === selectedVenue?.playing_area_type,
+    );
+    const needsArea = (selectedVenue?.playing_area_count ?? 1) > 1;
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -147,6 +177,8 @@ function SlotFormDialog({
                             onValueChange={(value) => {
                                 setData('event_id', value);
                                 setData('sport_category_id', '');
+                                setData('venue_id', '');
+                                setData('competition_area_id', '');
                             }}
                         >
                             <SelectTrigger id="slot-event">
@@ -206,15 +238,17 @@ function SlotFormDialog({
                         <Label htmlFor="slot-venue">Venue</Label>
                         <Select
                             value={data.venue_id}
-                            onValueChange={(value) =>
-                                setData('venue_id', value)
-                            }
+                            onValueChange={(value) => {
+                                setData('venue_id', value);
+                                setData('competition_area_id', '');
+                            }}
+                            disabled={!data.event_id}
                         >
                             <SelectTrigger id="slot-venue">
                                 <SelectValue placeholder="Select a venue" />
                             </SelectTrigger>
                             <SelectContent>
-                                {venueOptions.map((option) => (
+                                {eventVenueOptions.map((option) => (
                                     <SelectItem
                                         key={option.id}
                                         value={String(option.id)}
@@ -226,6 +260,34 @@ function SlotFormDialog({
                         </Select>
                         <InputError message={errors.venue_id} />
                     </div>
+                    {needsArea && (
+                        <div className="space-y-2">
+                            <Label htmlFor="slot-area">
+                                {selectedVenue?.playing_area_type === 'table' ? 'Table' : 'Court'}
+                            </Label>
+                            <Select
+                                value={data.competition_area_id}
+                                onValueChange={(value) =>
+                                    setData('competition_area_id', value)
+                                }
+                                disabled={areaOptions.length === 0}
+                            >
+                                <SelectTrigger id="slot-area">
+                                    <SelectValue
+                                        placeholder={`Select a ${selectedVenue?.playing_area_type}`}
+                                    />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {areaOptions.map((option) => (
+                                        <SelectItem key={option.id} value={String(option.id)}>
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <InputError message={errors.competition_area_id} />
+                        </div>
+                    )}
                     <div className="grid gap-4 sm:grid-cols-3">
                         <div className="space-y-2">
                             <Label htmlFor="slot-date">Date</Label>
@@ -292,6 +354,7 @@ export default function Schedule({
     meetIsSchedulable,
     eventOptions,
     venueOptions,
+    competitionAreaOptions,
     sportCategoryOptions,
     canManage,
 }: Props) {
@@ -462,7 +525,14 @@ export default function Schedule({
                                         <TableCell>
                                             {slot.sport_category ?? '—'}
                                         </TableCell>
-                                        <TableCell>{slot.venue}</TableCell>
+                                        <TableCell>
+                                            {slot.venue}
+                                            {slot.competition_area && (
+                                                <span className="block text-xs text-muted-foreground">
+                                                    {slot.competition_area}
+                                                </span>
+                                            )}
+                                        </TableCell>
                                         <TableCell className="max-w-48 truncate">
                                             {slot.note ?? '—'}
                                         </TableCell>
@@ -571,6 +641,7 @@ export default function Schedule({
                 slot={editing}
                 eventOptions={eventOptions}
                 venueOptions={venueOptions}
+                competitionAreaOptions={competitionAreaOptions}
                 sportCategoryOptions={sportCategoryOptions}
                 open={formOpen}
                 onOpenChange={setFormOpen}
