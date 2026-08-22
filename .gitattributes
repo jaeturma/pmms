@@ -1,11 +1,47 @@
+# Normalize all text files to LF
 * text=auto eol=lf
 
-*.blade.php diff=html
-*.css diff=css
-*.html diff=html
-*.md diff=markdown
+# Laravel / PHP
 *.php diff=php
+*.blade.php diff=html
 
+# Web assets
+*.css diff=css
+*.scss diff=css
+*.html diff=html
+*.js diff
+*.ts diff
+*.vue diff
+
+# Data / configuration
+*.json diff
+*.xml diff
+*.yml diff
+*.yaml diff
+
+# Documentation
+*.md diff=markdown
+*.txt text
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.7z binary
+*.rar binary
+*.mp3 binary
+*.mp4 binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+
+# Exclude from Git archives
 CHANGELOG.md export-ignore
 README.md export-ignore
 .github/workflows/browser-tests.yml export-ignore
