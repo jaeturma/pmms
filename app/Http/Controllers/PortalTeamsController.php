@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\EligibilityStatus;
 use App\Enums\EntryStatus;
 use App\Enums\PersonnelRole;
+use App\Models\CoachAssignmentRequest;
 use App\Models\Delegation;
 use App\Models\District;
 use App\Models\Entry;
@@ -216,7 +218,13 @@ class PortalTeamsController extends Controller
         $entries = Entry::query()
             ->whereHas('delegation', fn ($query) => $query->where('meet_id', $meet->id))
             ->whereHas('athlete.school', fn ($query) => $query->where('district_id', $district->id))
-            ->where('status', EntryStatus::Confirmed->value)
+            ->where('status', '!=', EntryStatus::Withdrawn->value)
+            ->where(function ($query) use ($meet): void {
+                $query->where('status', EntryStatus::Confirmed->value)
+                    ->orWhereHas('athlete.eligibilityReview', fn ($reviews) => $reviews
+                        ->where('meet_id', $meet->id)
+                        ->where('status', EligibilityStatus::Approved->value));
+            })
             ->with([
                 'athlete:id,first_name,last_name,school_id',
                 'athlete.school:id,name',
@@ -233,11 +241,30 @@ class PortalTeamsController extends Controller
             ->with(['school:id,name', 'sports:id,name'])
             ->get();
 
-        $coachesBySport = $personnel
+        $personnelCoaches = $personnel
             ->flatMap(fn (Personnel $coach) => $coach->sports->map(fn (Sport $sport): array => [
                 'sport' => $sport->name,
-                'coach' => $coach,
-            ]))
+                'name' => $coach->fullName(),
+                'role' => $coach->role->label(),
+                'school' => $coach->school->name,
+            ]));
+
+        $approvedAccountCoaches = CoachAssignmentRequest::query()
+            ->where('status', 'approved')
+            ->whereHas('meetSport', fn ($query) => $query->where('meet_id', $meet->id))
+            ->whereHas('school', fn ($query) => $query->where('district_id', $district->id))
+            ->with(['user:id,name', 'meetSport.sport:id,name', 'school:id,name'])
+            ->get()
+            ->map(fn (CoachAssignmentRequest $request): array => [
+                'sport' => $request->meetSport->sport->name,
+                'name' => $request->user->name,
+                'role' => 'Coach',
+                'school' => $request->school->name,
+            ]);
+
+        $coachesBySport = $personnelCoaches
+            ->merge($approvedAccountCoaches)
+            ->unique(fn (array $coach): string => Str::lower($coach['sport'].'|'.$coach['name'].'|'.$coach['school']))
             ->groupBy('sport');
 
         $sportNames = $athletesBySport->keys()
@@ -269,10 +296,10 @@ class PortalTeamsController extends Controller
                     ->values()
                     ->all(),
                 'coaches' => ($coachesBySport->get($sportName) ?? collect())
-                    ->map(fn (array $row): array => [
-                        'name' => $row['coach']->fullName(),
-                        'role' => $row['coach']->role->label(),
-                        'school' => $row['coach']->school->name,
+                    ->map(fn (array $coach): array => [
+                        'name' => $coach['name'],
+                        'role' => $coach['role'],
+                        'school' => $coach['school'],
                     ])
                     ->sortBy('name')
                     ->values()

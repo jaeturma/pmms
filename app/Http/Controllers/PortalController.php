@@ -902,6 +902,16 @@ class PortalController extends Controller
         [$liveNow, $otherLiveCount, $todayGames, $completedGames, $upcomingGames, $venues]
             = $this->sportPortalData($meet, $sport);
 
+        if (! auth()->check()) {
+            $liveNow = null;
+            $otherLiveCount = 0;
+            $todayGames = collect($todayGames)->map(fn (array $game): array => [
+                ...$game,
+                'score_a' => null,
+                'score_b' => null,
+            ])->all();
+        }
+
         return Inertia::render('portal/sport-portal', [
             ...$base,
             'liveNow' => $liveNow,

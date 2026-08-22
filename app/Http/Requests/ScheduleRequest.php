@@ -2,11 +2,13 @@
 
 namespace App\Http\Requests;
 
+use App\Models\CompetitionArea;
 use App\Models\Event;
 use App\Models\EventVenue;
 use App\Models\Meet;
 use App\Models\MeetSportVenue;
 use App\Models\SportCategory;
+use App\Models\SportCategoryCompetitionArea;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -59,11 +61,39 @@ class ScheduleRequest extends FormRequest
             $venueId = $this->integer('venue_id');
 
             if ($eventId > 0 && $venueId > 0) {
+                $event = Event::query()->find($eventId);
+                $meetSportId = $event === null ? null : MeetSportVenue::query()
+                    ->whereHas('meetSport', fn ($meetSports) => $meetSports
+                        ->where('meet_id', Meet::current()->id)
+                        ->where('sport_id', $event->sport_id)
+                        ->where('active', true))
+                    ->value('meet_sport_id');
+                $hasCategoryConfiguration = $meetSportId !== null && SportCategoryCompetitionArea::query()
+                    ->where('meet_sport_id', $meetSportId)
+                    ->where('status', 'active')
+                    ->exists();
+
+                if ($hasCategoryConfiguration) {
+                    if ($categoryId <= 0) {
+                        $validator->errors()->add('sport_category_id', __('Select a sport category before choosing its venue.'));
+                    } elseif ($areaId <= 0) {
+                        $validator->errors()->add('competition_area_id', __('Select an available competition area for this category.'));
+                    } elseif (! SportCategoryCompetitionArea::query()
+                        ->where('meet_sport_id', $meetSportId)
+                        ->where('sport_category_id', $categoryId)
+                        ->where('venue_id', $venueId)
+                        ->where('competition_area_id', $areaId)
+                        ->where('status', 'active')
+                        ->exists()) {
+                        $validator->errors()->add('venue_id', __('That venue or competition area is not available to the selected category.'));
+                    }
+                }
+
                 $venueAssignments = EventVenue::query()->where('event_id', $eventId);
 
                 // Events with configured venues must use one of them. Events
                 // without assignments retain legacy behavior until configured.
-                if ($venueAssignments->exists()) {
+                if (! $hasCategoryConfiguration && $venueAssignments->exists()) {
                     $assignment = (clone $venueAssignments)->where('venue_id', $venueId)->first();
 
                     if ($assignment === null) {
@@ -73,7 +103,7 @@ class ScheduleRequest extends FormRequest
                             'competition_area_id',
                             __('Select a :area for this event.', ['area' => $assignment->playing_area_type]),
                         );
-                    } elseif ($areaId > 0 && ! \App\Models\CompetitionArea::query()
+                    } elseif ($areaId > 0 && ! CompetitionArea::query()
                         ->whereKey($areaId)
                         ->where('area_type', $assignment->playing_area_type)
                         ->exists()) {
@@ -108,7 +138,7 @@ class ScheduleRequest extends FormRequest
             }
 
             if ($areaId > 0 && $venueId > 0) {
-                $areaMatchesVenue = \App\Models\CompetitionArea::query()
+                $areaMatchesVenue = CompetitionArea::query()
                     ->whereKey($areaId)
                     ->where('venue_id', $venueId)
                     ->exists();

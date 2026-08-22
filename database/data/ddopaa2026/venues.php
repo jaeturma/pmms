@@ -59,7 +59,7 @@ return [
         ['name' => 'New Alegria Gym', 'source' => 'NEW ALEGRIA GYM', 'areas' => ['room', 1, 'Competition Room'], 'coordinators' => [['Medelito Morabe', null]]],
     ]],
     ['sport' => 'SEPAK_TAKRAW', 'area_text' => '4 COURTS', 'venues' => [
-        ['name' => 'Sports Complex', 'source' => 'SPORTS COMPLEX COURTS', 'areas' => ['court', 4, 'Court'], 'coordinators' => [['Dennis Suarez', null], ['Rouge Dela Torre', null]]],
+        ['name' => 'Compostela Sports Complex', 'legacy_names' => ['Sports Complex'], 'source' => 'SPORTS COMPLEX COURTS', 'areas' => ['court', 4, 'Court'], 'coordinators' => [['Dennis Suarez', null], ['Rouge Dela Torre', null]]],
     ]],
     ['sport' => 'SOFTBALL', 'area_text' => '2 DIAMONDS', 'venues' => [
         ['name' => 'Tent City', 'source' => 'TENT CITY', 'areas' => ['diamond', 2, 'Diamond'], 'coordinators' => [['Oscar Blasé', null], ['Rosalino Pogoy', null]]],
@@ -74,13 +74,13 @@ return [
         ['name' => 'DDOSC', 'source' => 'DDOSC', 'areas' => ['court', 4, 'Court'], 'coordinators' => [['Josette Asilo', null], ['Marissa Juntilla', null]]],
     ]],
     ['sport' => 'TENNIS', 'area_text' => '4 COURTS', 'status' => 'ambiguous', 'notes' => 'Four courts across two venues without a stated distribution.', 'venues' => [
-        ['name' => 'Sports Complex', 'source' => '1 SPORTS COMPLEX-ELEMENTARY', 'expected' => 4, 'coordinators' => [['Cynthia Vasquez', null]]],
+        ['name' => 'Compostela Sports Complex', 'legacy_names' => ['Sports Complex'], 'source' => '1 SPORTS COMPLEX-ELEMENTARY', 'expected' => 4, 'coordinators' => [['Cynthia Vasquez', null]]],
         ['name' => 'Parish Hall', 'source' => 'PARISH HALL-SECONDARY', 'expected' => 4, 'coordinators' => [['Ramelyn Masiga', null]]],
     ]],
     ['sport' => 'VOLLEYBALL', 'area_text' => '4 COVERED COURTS', 'venues' => [
-        ['name' => 'Sports Complex', 'source' => '2 COURTS SPORTS COMPLEX', 'areas' => ['court', 2, 'Court'], 'coordinators' => [['Cyril Estrada', null]]],
-        ['name' => 'P6 Gym', 'source' => 'P6 GYM', 'areas' => ['court', 1, 'Main Court'], 'coordinators' => [['Ronan Ayco', null]]],
-        ['name' => 'P7 Gym', 'source' => 'P7 GYM', 'areas' => ['court', 1, 'Main Court'], 'coordinators' => [['Eleuterio Saberon', null]]],
+        ['name' => 'Compostela Sports Complex', 'legacy_names' => ['Sports Complex'], 'source' => '2 COURTS SPORTS COMPLEX', 'areas' => ['court', 2, 'Court'], 'coordinators' => [['Cyril Estrada', null]]],
+        ['name' => 'Purok 6', 'legacy_names' => ['P6 Gym'], 'source' => 'P6 GYM', 'areas' => ['court', 1, 'Court 1'], 'coordinators' => [['Ronan Ayco', null]]],
+        ['name' => 'Purok 7', 'legacy_names' => ['P7 Gym'], 'source' => 'P7 GYM', 'areas' => ['court', 1, 'Court 1'], 'coordinators' => [['Eleuterio Saberon', null]]],
     ]],
     ['sport' => 'WEIGHTLIFTING', 'area_text' => '1 GYM', 'venues' => [
         ['name' => 'Congressional Gym', 'source' => 'CONG GYM', 'areas' => ['gym', 1, 'Competition Floor'], 'coordinators' => [['Ligaya Ang', null]]],

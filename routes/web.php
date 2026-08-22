@@ -50,9 +50,9 @@ use App\Http\Controllers\PortalTeamsController;
 use App\Http\Controllers\ProtestController;
 use App\Http\Controllers\ReadinessChecklistController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\RequiredPasswordChangeController;
 use App\Http\Controllers\ResultController;
 use App\Http\Controllers\ResultWorkflowController;
-use App\Http\Controllers\RequiredPasswordChangeController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\SchoolController;
 use App\Http\Controllers\SchoolDistrictController;
@@ -63,6 +63,7 @@ use App\Http\Controllers\TallyController;
 use App\Http\Controllers\TechnicalOfficialAccreditationController;
 use App\Http\Controllers\TransportRequestController;
 use App\Http\Controllers\TransportTripController;
+use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\VenueController;
 use App\Http\Controllers\VenueEmergencyPlanController;
@@ -125,9 +126,11 @@ Route::middleware('throttle:60,1')->group(function () {
         ->whereNumber('meet')
         ->name('public.search');
     Route::get('meets/{meet}/matches/{match}/scoreboard', [PortalController::class, 'scoreboard'])
+        ->middleware('auth')
         ->whereNumber(['meet', 'match'])
         ->name('public.scoreboard');
     Route::get('meets/{meet}/matches/{match}/scoreboard/poll', [PortalController::class, 'scoreboardPoll'])
+        ->middleware('auth')
         ->whereNumber(['meet', 'match'])
         ->name('public.scoreboard.poll');
 
@@ -160,6 +163,7 @@ Route::middleware('throttle:60,1')->group(function () {
     // own poll endpoint below (`public.sport-portal.poll`) since the
     // payload shape (`liveNow`/`otherLiveCount`) is identical.
     Route::get('live/{sportSlug}', [PortalController::class, 'liveSportPortal'])
+        ->middleware('auth')
         ->whereIn('sportSlug', SportPortalSlug::values())
         ->name('public.live-sport-portal');
 
@@ -168,6 +172,7 @@ Route::middleware('throttle:60,1')->group(function () {
     // (`SportPortalSlug::values()`) so this can never intercept any other
     // top-level route.
     Route::get('{sportSlug}/poll', [PortalController::class, 'sportPortalPoll'])
+        ->middleware('auth')
         ->whereIn('sportSlug', SportPortalSlug::values())
         ->name('public.sport-portal.poll');
     Route::get('{sportSlug}', [PortalController::class, 'sportPortal'])
@@ -180,6 +185,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('coach/assignment-requests', [CoachAssignmentRequestController::class, 'store'])->name('coach.assignment-requests.store');
     Route::get('coach/assignment-requests', [CoachAssignmentRequestController::class, 'index'])->name('coach.assignment-requests.index');
     Route::patch('coach/assignment-requests/{coachAssignmentRequest}', [CoachAssignmentRequestController::class, 'review'])->name('coach.assignment-requests.review');
+    Route::post('coach/assignment-requests/{coachAssignmentRequest}/reset-password', [CoachAssignmentRequestController::class, 'resetPassword'])
+        ->middleware('throttle:6,1')->name('coach.assignment-requests.reset-password');
+    Route::patch('coach/onboarding-requests/{coachOnboardingRequest}', [CoachAssignmentRequestController::class, 'reviewOnboarding'])->name('coach.onboarding-requests.review');
+    Route::post('coach/onboarding-requests/{coachOnboardingRequest}/reset-password', [CoachAssignmentRequestController::class, 'resetOnboardingPassword'])
+        ->middleware('throttle:6,1')->name('coach.onboarding-requests.reset-password');
+
+    Route::get('system/users', [UserManagementController::class, 'index'])->name('system.users.index');
+    Route::post('system/users', [UserManagementController::class, 'store'])->name('system.users.store');
+    Route::put('system/users/{user}', [UserManagementController::class, 'update'])->name('system.users.update');
+    Route::post('system/users/{user}/approve', [UserManagementController::class, 'approve'])->name('system.users.approve');
+    Route::post('system/users/{user}/reset-password', [UserManagementController::class, 'resetPassword'])
+        ->middleware('throttle:6,1')->name('system.users.reset-password');
     Route::post('accreditations', [AccreditationController::class, 'store'])->name('accreditation.store');
 
     Route::post('uploads', [FileUploadController::class, 'store'])->name('uploads.store');

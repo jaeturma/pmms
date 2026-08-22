@@ -1,5 +1,5 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { UserCheck } from 'lucide-react';
+import { KeyRound, UserCheck } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import InputError from '@/components/input-error';
@@ -35,6 +35,15 @@ type RequestRow = {
     status: string;
     review_notes: string | null;
 };
+type RegistrationRow = {
+    id: number;
+    coach: string;
+    email: string;
+    team: string | null;
+    events: string;
+    status: string;
+    review_notes: string | null;
+};
 type Option = {
     meet_sport_id: number;
     event_id: number;
@@ -43,6 +52,7 @@ type Option = {
     label: string;
 };
 type Props = {
+    registrations: RegistrationRow[];
     requests: RequestRow[];
     options: Option[];
     canRequest: boolean;
@@ -50,6 +60,7 @@ type Props = {
 };
 
 export default function CoachAssignments({
+    registrations,
     requests,
     options,
     canRequest,
@@ -85,9 +96,125 @@ export default function CoachAssignments({
             <Head title="Coach Enrollments" />
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
-                    title="Coach Enrollments"
-                    description="Enroll coaches by sports event and team, then review their access."
+                    title="Coach Registration"
+                    description="Approve coach accounts, reset passwords, and manage event enrollment requests."
                 />
+                {registrations.length > 0 && (
+                    <div className="space-y-2">
+                        <h2 className="text-lg font-semibold">
+                            Account registrations
+                        </h2>
+                        <div className="overflow-x-auto rounded-xl border">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Coach</TableHead>
+                                        <TableHead>Team</TableHead>
+                                        <TableHead>
+                                            Requested sports/events
+                                        </TableHead>
+                                        <TableHead>Status</TableHead>
+                                        {canReview && (
+                                            <TableHead className="text-right">
+                                                Actions
+                                            </TableHead>
+                                        )}
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {registrations.map((item) => (
+                                        <TableRow key={item.id}>
+                                            <TableCell>
+                                                <div className="font-medium">
+                                                    {item.coach}
+                                                </div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    {item.email}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                {item.team ?? '—'}
+                                            </TableCell>
+                                            <TableCell className="max-w-md whitespace-normal">
+                                                {item.events}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge
+                                                    variant={
+                                                        item.status ===
+                                                        'approved'
+                                                            ? 'secondary'
+                                                            : 'outline'
+                                                    }
+                                                >
+                                                    {item.status}
+                                                </Badge>
+                                            </TableCell>
+                                            {canReview && (
+                                                <TableCell className="space-x-2 text-right whitespace-nowrap">
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() =>
+                                                            router.patch(
+                                                                `/coach/onboarding-requests/${item.id}`,
+                                                                {
+                                                                    status: 'approved',
+                                                                },
+                                                                {
+                                                                    preserveScroll: true,
+                                                                },
+                                                            )
+                                                        }
+                                                    >
+                                                        Approve
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="destructive"
+                                                        onClick={() =>
+                                                            router.patch(
+                                                                `/coach/onboarding-requests/${item.id}`,
+                                                                {
+                                                                    status: 'rejected',
+                                                                },
+                                                                {
+                                                                    preserveScroll: true,
+                                                                },
+                                                            )
+                                                        }
+                                                    >
+                                                        Reject
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => {
+                                                            if (
+                                                                window.confirm(
+                                                                    `Reset ${item.coach}'s password to DdOPaa2026!?`,
+                                                                )
+                                                            )
+                                                                router.post(
+                                                                    `/coach/onboarding-requests/${item.id}/reset-password`,
+                                                                    {},
+                                                                    {
+                                                                        preserveScroll: true,
+                                                                    },
+                                                                );
+                                                        }}
+                                                    >
+                                                        <KeyRound className="size-4" />
+                                                        Reset password
+                                                    </Button>
+                                                </TableCell>
+                                            )}
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </div>
+                )}
                 {canRequest && (
                     <form
                         onSubmit={submit}
@@ -128,7 +255,7 @@ export default function CoachAssignments({
                 {requests.length === 0 ? (
                     <EmptyState
                         icon={UserCheck}
-                        title="No coach enrollments"
+                        title="No event enrollment requests"
                         description="Enrollment requests will appear here."
                     />
                 ) : (
@@ -180,7 +307,7 @@ export default function CoachAssignments({
                                             </Badge>
                                         </TableCell>
                                         {canReview && (
-                                            <TableCell className="space-x-2 text-right">
+                                            <TableCell className="space-x-2 text-right whitespace-nowrap">
                                                 <Button
                                                     size="sm"
                                                     onClick={() =>
@@ -214,6 +341,28 @@ export default function CoachAssignments({
                                                 >
                                                     Reject
                                                 </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => {
+                                                        if (
+                                                            window.confirm(
+                                                                `Reset ${item.coach}'s password to DdOPaa2026!?`,
+                                                            )
+                                                        ) {
+                                                            router.post(
+                                                                `/coach/assignment-requests/${item.id}/reset-password`,
+                                                                {},
+                                                                {
+                                                                    preserveScroll: true,
+                                                                },
+                                                            );
+                                                        }
+                                                    }}
+                                                >
+                                                    <KeyRound className="size-4" />
+                                                    Reset password
+                                                </Button>
                                             </TableCell>
                                         )}
                                     </TableRow>
@@ -228,7 +377,5 @@ export default function CoachAssignments({
 }
 
 CoachAssignments.layout = {
-    breadcrumbs: [
-        { title: 'Coach Enrollments', href: '/coach/assignment-requests' },
-    ],
+    breadcrumbs: [{ title: 'Coach', href: '/coach/assignment-requests' }],
 };

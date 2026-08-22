@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\AthleteOversightType;
 use App\Enums\ManagementTeamMemberStatus;
 use App\Enums\ManagementTeamType;
+use App\Enums\MeetSportAssignmentRole;
 use App\Enums\Permission;
 use App\Enums\UserRole;
 use Database\Factories\UserFactory;
@@ -19,6 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Laravel\Fortify\Contracts\PasskeyUser;
 use Laravel\Fortify\PasskeyAuthenticatable;
@@ -31,6 +33,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property UserRole $role
+ * @property string $approval_status
  * @property string|null $two_factor_secret
  * @property string|null $two_factor_recovery_codes
  * @property Carbon|null $two_factor_confirmed_at
@@ -59,6 +62,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             'password_changed_at' => 'datetime',
             'disabled_at' => 'datetime',
             'role' => UserRole::class,
+            'approved_at' => 'datetime',
             'two_factor_confirmed_at' => 'datetime',
         ];
     }
@@ -77,9 +81,11 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     {
         return $this->isAdmin() || $this->managementTeamMemberships()
             ->where('status', ManagementTeamMemberStatus::Active)
-            ->whereHas('managementTeam', fn ($team) => $team->whereIn('source_code', [
-                'CENTRAL_ICT', 'ICT', 'INFORMATION',
-            ]))
+            ->whereHas('managementTeam', fn ($team) => $team
+                ->where('team_type', ManagementTeamType::ICT->value)
+                ->orWhereIn('source_code', [
+                    'CENTRAL_ICT', 'ICT', 'INFORMATION',
+                ]))
             ->exists();
     }
 
@@ -118,6 +124,22 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
                     'CENTRAL_ICT', 'ICT', 'INFORMATION',
                 ]))
             ->exists();
+    }
+
+    /** @return Collection<int, int> */
+    public function tournamentAthleteSportIds(): Collection
+    {
+        return $this->meetSportAssignments()
+            ->where('meet_sport_assignments.status', 'active')
+            ->whereIn('meet_sport_assignments.role', [
+                MeetSportAssignmentRole::TournamentManager->value,
+                MeetSportAssignmentRole::TechnicalOfficial->value,
+                MeetSportAssignmentRole::TournamentICT->value,
+                MeetSportAssignmentRole::TournamentSecretary->value,
+            ])
+            ->join('meet_sports', 'meet_sports.id', '=', 'meet_sport_assignments.meet_sport_id')
+            ->distinct()
+            ->pluck('meet_sports.sport_id');
     }
 
     /**

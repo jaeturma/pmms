@@ -7,6 +7,7 @@ use App\Enums\ManagementTeamType;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\RequirementStatus;
+use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\CoachAssignmentRequest;
 use App\Models\Delegation;
@@ -31,10 +32,10 @@ test('approved coach scope limits registration and DSAC accreditation confirms t
     $delegation = Delegation::factory()->create(['meet_id' => $meet->id, 'status' => DelegationStatus::Draft]);
     $school = schoolForDelegation($delegation);
     $coach = User::factory()->coach()->create();
-    $manager = User::factory()->tournamentManager()->create();
+    $manager = User::factory()->create();
     MeetSportAssignment::factory()->create([
         'meet_sport_id' => $meetSport->id, 'user_id' => $manager->id,
-        'role' => MeetSportAssignmentRole::TournamentManager,
+        'role' => MeetSportAssignmentRole::TournamentSecretary,
         'status' => MeetSportAssignmentStatus::Active,
     ]);
 
@@ -56,7 +57,10 @@ test('approved coach scope limits registration and DSAC accreditation confirms t
     expect(Entry::query()->sole()->status)->toBe(EntryStatus::Submitted);
 
     $delegation->forceFill(['status' => DelegationStatus::Approved])->save();
-    EligibilityReview::factory()->approved()->create(['athlete_id' => $athlete->id, 'meet_id' => $meet->id]);
+    $athlete->eligibilityReview()->update([
+        'status' => 'approved',
+        'decided_at' => now(),
+    ]);
     EligibilityDocument::factory()->create(['athlete_id' => $athlete->id, 'status' => RequirementStatus::Verified]);
     $team = ManagementTeam::factory()->create(['meet_id' => $meet->id, 'team_type' => ManagementTeamType::DivisionScreeningAndAccreditation]);
     $dsac = ManagementTeamMember::factory()->create([
@@ -107,7 +111,7 @@ test('an active ICT team member can review and approve a coach registration', fu
         ->assertSessionHasNoErrors();
 
     expect($coachRequest->fresh()->status)->toBe('approved')
-        ->and($coach->fresh()->role)->toBe(\App\Enums\UserRole::Coach);
+        ->and($coach->fresh()->role)->toBe(UserRole::Coach);
 });
 
 test('an inactive ICT team membership cannot approve a coach registration', function () {

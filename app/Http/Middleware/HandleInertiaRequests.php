@@ -57,16 +57,17 @@ class HandleInertiaRequests extends Middleware
                         ->distinct()
                         ->pluck('management_teams.team_type')
                         ->values(),
-                    'can_review_coaches' => $user->isAdmin() || $user->meetSportAssignments()
+                    'can_review_coaches' => $user->canReviewCoachRegistrations() || $user->meetSportAssignments()
                         ->where('status', 'active')
                         ->whereIn('role', [
-                            MeetSportAssignmentRole::TournamentManager->value,
                             MeetSportAssignmentRole::TournamentICT->value,
                             MeetSportAssignmentRole::TournamentSecretary->value,
                         ])->exists(),
                     'can_request_coach_enrollment' => $user->role->value === 'coach'
                         || $user->coachOnboardingRequest()->whereIn('status', ['pending', 'rejected'])->exists(),
                     'can_manage_school_master_data' => $user->canManageSchoolMasterData(),
+                    'can_manage_accounts' => $user->canManageProductionAccounts(),
+                    'can_view_tournament_athletes' => $user->tournamentAthleteSportIds()->isNotEmpty(),
                 ],
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',

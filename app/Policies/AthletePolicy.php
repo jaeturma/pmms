@@ -19,7 +19,8 @@ class AthletePolicy
     {
         return $user->hasRole(UserRole::Admin, UserRole::Organizer, UserRole::DelegationOfficer, UserRole::Coach)
             || $user->hasPermission(Permission::DistrictAthletesView)
-            || $user->hasPermission(Permission::MunicipalityAthletesView);
+            || $user->hasPermission(Permission::MunicipalityAthletesView)
+            || $user->tournamentAthleteSportIds()->isNotEmpty();
     }
 
     /**
@@ -29,6 +30,10 @@ class AthletePolicy
     public function view(User $user, Athlete $athlete): bool
     {
         if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+            return true;
+        }
+
+        if ($athlete->entries()->whereHas('event', fn ($event) => $event->whereIn('sport_id', $user->tournamentAthleteSportIds()))->exists()) {
             return true;
         }
 
@@ -43,24 +48,42 @@ class AthletePolicy
         return $athlete->delegation->hasOfficer($user) || $user->hasApprovedCoachScope($athlete->delegation);
     }
 
-    /** Athlete roster mutations belong exclusively to an approved coach. */
+    /**
+     * Managers may maintain every roster. Delegation officers are limited to
+     * their own editable roster, while coaches require an approved assignment.
+     */
     public function create(User $user, Delegation $delegation): bool
     {
-        return $user->role === UserRole::Coach
-            && $user->hasApprovedCoachScope($delegation);
+        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+            return true;
+        }
+
+        if ($user->role === UserRole::Coach) {
+            return $user->hasApprovedCoachScope($delegation);
+        }
+
+        return $delegation->hasOfficer($user) && $delegation->isEditableByOfficers();
     }
 
     public function update(User $user, Athlete $athlete): bool
     {
-        return $user->role === UserRole::Coach
-            && $user->hasApprovedCoachScope($athlete->delegation)
-            && $athlete->entries()->whereIn(
-                'event_id',
-                $user->coachAssignmentRequests()
-                    ->where('status', 'approved')
-                    ->where('delegation_id', $athlete->delegation_id)
-                    ->select('event_id'),
-            )->exists();
+        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+            return true;
+        }
+
+        if ($user->role === UserRole::Coach) {
+            return $user->hasApprovedCoachScope($athlete->delegation)
+                && $athlete->entries()->whereIn(
+                    'event_id',
+                    $user->coachAssignmentRequests()
+                        ->where('status', 'approved')
+                        ->where('delegation_id', $athlete->delegation_id)
+                        ->select('event_id'),
+                )->exists();
+        }
+
+        return $athlete->delegation->hasOfficer($user)
+            && $athlete->delegation->isEditableByOfficers();
     }
 
     public function delete(User $user, Athlete $athlete): bool

@@ -54,9 +54,9 @@ test('result sheet CSV downloads are audited', function () {
         ->and(AuditLog::query()->where('action', 'report.result_sheet_exported')->exists())->toBeTrue();
 });
 
-test('the medal tally report counts validated results only', function () {
+test('the medal tally report counts official results only', function () {
     $validated = ResultPlacement::factory()->create();
-    $validated->result->forceFill(['status' => 'validated', 'validated_at' => now()])->save();
+    $validated->result->forceFill(['status' => 'official', 'validated_at' => now(), 'official_at' => now()])->save();
 
     ResultPlacement::factory()->create();
 

@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\EligibilityDocumentType;
 use App\Enums\EligibilityStatus;
 use App\Enums\ManagementTeamMemberStatus;
 use App\Enums\ManagementTeamType;
@@ -39,6 +40,20 @@ function uploadDocumentFor(Athlete $athlete, User $actor): void
     ]);
 }
 
+function createVerifiedQualificationDocuments(Athlete $athlete, ?EligibilityDocumentType $except = null): void
+{
+    foreach (EligibilityDocumentType::qualificationRequirements() as $type) {
+        if ($type === $except) {
+            continue;
+        }
+        EligibilityDocument::factory()->create([
+            'athlete_id' => $athlete->id,
+            'document_type' => $type,
+            'status' => RequirementStatus::Verified,
+        ]);
+    }
+}
+
 test('guests are redirected and viewers are forbidden', function () {
     $this->get('/eligibility')->assertRedirect('/login');
 
@@ -64,6 +79,22 @@ test('an officer upload creates a document and a pending review', function () {
     expect(EligibilityDocument::query()->count())->toBe(1)
         ->and(EligibilityReview::query()->sole()->status)->toBe(EligibilityStatus::Pending)
         ->and(AuditLog::query()->where('action', 'eligibility.document_uploaded')->exists())->toBeTrue();
+});
+
+test('an incomplete athlete remains in the DSAC queue with all five checklist requirements', function () {
+    $athlete = Athlete::factory()->create();
+    EligibilityReview::factory()->create([
+        'athlete_id' => $athlete->id,
+        'meet_id' => $athlete->delegation->meet_id,
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get('/eligibility')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('reviews.data.0.requirement_checklist', 5)
+            ->where('reviews.data.0.requirements_validated', false)
+            ->where('reviews.data.0.requirements_summary', '0 of 5 required documents validated'));
 });
 
 test('officers cannot upload for foreign athletes or when registration is closed', function () {
@@ -146,10 +177,7 @@ test('DSAC can approve a pending review and officers cannot decide', function ()
     $this->actingAs($organizer)->patch("/eligibility/reviews/{$review->id}/approve")->assertForbidden();
 
     $team = ManagementTeam::factory()->create(['meet_id' => $delegation->meet_id, 'team_type' => ManagementTeamType::DivisionScreeningAndAccreditation]);
-    EligibilityDocument::factory()->create([
-        'athlete_id' => $athlete->id,
-        'status' => RequirementStatus::Verified,
-    ]);
+    createVerifiedQualificationDocuments($athlete);
     $member = ManagementTeamMember::factory()->create([
         'management_team_id' => $team->id,
         'role_title' => 'Chairperson',
@@ -203,6 +231,7 @@ test('DSAC members validate requirements one by one but only leadership performs
 
     expect($document->fresh()->status)->toBe(RequirementStatus::Verified)
         ->and($document->fresh()->verified_by)->toBe($member->id);
+    createVerifiedQualificationDocuments($athlete, EligibilityDocumentType::BirthCertificate);
 
     $this->actingAs($member)
         ->patch("/eligibility/reviews/{$review->id}/approve")

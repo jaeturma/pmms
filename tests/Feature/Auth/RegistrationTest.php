@@ -2,7 +2,6 @@
 
 use App\Models\District;
 use App\Models\Event;
-
 use Illuminate\Support\Facades\RateLimiter;
 use Laravel\Fortify\Features;
 
@@ -16,7 +15,7 @@ test('registration screen can be rendered', function () {
     $response->assertOk();
 });
 
-test('new users can register', function () {
+test('new users register pending approval and are not logged in', function () {
     $this->get(route('register'));
     $response = $this->post(route('register.store'), [
         'name' => 'Test User',
@@ -26,8 +25,9 @@ test('new users can register', function () {
         'code_challenge' => 'ABC12',
     ]);
 
-    $this->assertAuthenticated();
-    $response->assertRedirect(route('dashboard', absolute: false));
+    $this->assertGuest();
+    $response->assertRedirect(route('login'));
+    $this->assertDatabaseHas('users', ['email' => 'test@example.com', 'approval_status' => 'pending']);
 });
 
 test('coach registration requires and stores a municipality team', function () {
@@ -63,6 +63,11 @@ test('coach registration requires and stores a municipality team', function () {
     foreach ($events as $event) {
         $this->assertDatabaseHas('coach_onboarding_request_event', ['event_id' => $event->id]);
     }
+    $this->assertGuest();
+    $this->assertDatabaseHas('users', [
+        'email' => 'coach@example.com',
+        'approval_status' => 'pending',
+    ]);
 });
 
 test('registration rejects an incorrect image verification code', function () {

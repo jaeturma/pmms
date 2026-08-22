@@ -6,6 +6,8 @@ export type User = {
     role_label: string;
     team_types?: string[];
     can_review_coaches?: boolean;
+    can_manage_accounts?: boolean;
+    can_view_tournament_athletes?: boolean;
     can_manage_school_master_data?: boolean;
     can_request_coach_enrollment?: boolean;
     avatar?: string;

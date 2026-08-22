@@ -141,6 +141,8 @@ class EligibilityController extends Controller
             $base->whereHas('athlete.delegation', fn ($delegation) => $delegation->whereIn(
                 'id', $user->coachAssignmentRequests()->where('status', 'approved')->select('delegation_id'),
             ));
+        } elseif ($user->tournamentAthleteSportIds()->isNotEmpty()) {
+            $base->whereHas('athlete.entries.event', fn ($event) => $event->whereIn('sport_id', $user->tournamentAthleteSportIds()));
         } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer) && ! $user->hasPermission(Permission::AthleteEligibilityReview)) {
             $assignments = $user->athleteOversightAssignments()->where('active', true)->get();
             $base->whereHas('athlete.school', function ($school) use ($assignments): void {
@@ -209,7 +211,7 @@ class EligibilityController extends Controller
                     'value' => $type->value,
                     'label' => $type->label(),
                 ],
-                EligibilityDocumentType::cases(),
+                EligibilityDocumentType::qualificationRequirements(),
             ),
         ]);
     }
@@ -219,9 +221,19 @@ class EligibilityController extends Controller
      */
     private function reviewRow(EligibilityReview $review, User $user): array
     {
-        $requirementsValidated = $review->athlete->eligibilityDocuments->isNotEmpty()
-            && $review->athlete->eligibilityDocuments
-                ->every(fn (EligibilityDocument $document): bool => $document->status === RequirementStatus::Verified);
+        $required = collect(EligibilityDocumentType::qualificationRequirements());
+        $latestByType = $review->athlete->eligibilityDocuments->sortByDesc('id')->unique(fn (EligibilityDocument $document) => $document->document_type->value);
+        $checklist = $required->map(function (EligibilityDocumentType $type) use ($latestByType): array {
+            $document = $latestByType->first(fn (EligibilityDocument $item): bool => $item->document_type === $type);
+
+            return [
+                'type' => $type->value,
+                'label' => $type->label(),
+                'status' => $document?->status->value ?? RequirementStatus::Missing->value,
+                'status_label' => $document === null ? 'Missing / For submission' : str($document->status->value)->replace('_', ' ')->title()->toString(),
+            ];
+        });
+        $requirementsValidated = $checklist->every(fn (array $item): bool => $item['status'] === RequirementStatus::Verified->value);
 
         return [
             'id' => $review->id,
@@ -239,14 +251,14 @@ class EligibilityController extends Controller
                 ->values()
                 ->all(),
             'requirements_validated' => $requirementsValidated,
+            'requirement_checklist' => $checklist->values()->all(),
             'requirements_summary' => sprintf(
-                '%d of %d validated',
-                $review->athlete->eligibilityDocuments->where('status', RequirementStatus::Verified)->count(),
-                $review->athlete->eligibilityDocuments->count(),
+                '%d of %d required documents validated',
+                $checklist->where('status', RequirementStatus::Verified->value)->count(),
+                $required->count(),
             ),
             'can_review' => $user->can('view', $review),
             'can_decide' => $review->status === EligibilityStatus::Pending
-                && $requirementsValidated
                 && $user->can('decide', $review),
             'can_accredit' => $review->status === EligibilityStatus::Approved
                 && $requirementsValidated
@@ -446,11 +458,15 @@ class EligibilityController extends Controller
 
         $review->loadMissing('athlete.eligibilityDocuments');
 
-        if ($review->athlete->eligibilityDocuments->isEmpty()
-            || $review->athlete->eligibilityDocuments
-                ->contains(fn (EligibilityDocument $document): bool => $document->status !== RequirementStatus::Verified)) {
+        $documents = $review->athlete->eligibilityDocuments->sortByDesc('id');
+        $complete = collect(EligibilityDocumentType::qualificationRequirements())->every(
+            fn (EligibilityDocumentType $type): bool => $documents->contains(
+                fn (EligibilityDocument $document): bool => $document->document_type === $type && $document->status === RequirementStatus::Verified,
+            ),
+        );
+        if (! $complete) {
             throw ValidationException::withMessages([
-                'requirements' => __('Every submitted eligibility requirement must be validated before final DSAC review.'),
+                'requirements' => __('Athlete History, Form 10, PSA/Birth Certificate, Parents Consent, and Medical Certificate must all be validated before DSAC can qualify the athlete.'),
             ]);
         }
 

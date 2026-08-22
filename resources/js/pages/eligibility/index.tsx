@@ -70,6 +70,12 @@ type ReviewRow = {
     reviewer: string | null;
     decided_at: string | null;
     documents: DocumentRow[];
+    requirement_checklist: Array<{
+        type: string;
+        label: string;
+        status: string;
+        status_label: string;
+    }>;
     requirements_validated: boolean;
     requirements_summary: string;
     can_review: boolean;
@@ -127,6 +133,27 @@ function ReviewDialog({
                 </div>
 
                 <div className="space-y-3">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                        {review.requirement_checklist.map((requirement) => (
+                            <div
+                                key={requirement.type}
+                                className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm"
+                            >
+                                <span className="font-medium">
+                                    {requirement.label}
+                                </span>
+                                <Badge
+                                    variant={
+                                        requirement.status === 'verified'
+                                            ? 'outline'
+                                            : 'destructive'
+                                    }
+                                >
+                                    {requirement.status_label}
+                                </Badge>
+                            </div>
+                        ))}
+                    </div>
                     {review.documents.length === 0 ? (
                         <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
                             No requirements have been uploaded.
@@ -223,8 +250,11 @@ function ReviewDialog({
                         >
                             Reject
                         </Button>
-                        <Button onClick={() => onDecision('approve')}>
-                            Approve final review
+                        <Button
+                            disabled={!review.requirements_validated}
+                            onClick={() => onDecision('approve')}
+                        >
+                            Mark athlete qualified
                         </Button>
                     </DialogFooter>
                 )}

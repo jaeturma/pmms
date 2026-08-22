@@ -3,6 +3,7 @@ import { Contact, Pencil, Plus, RotateCcw, Save, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { AthletePhotoInput } from '@/components/athlete-photo-input';
 import { EmptyState } from '@/components/empty-state';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
@@ -105,9 +106,13 @@ function AthleteFormDialog({
         grade_level: string;
         photo: File | null;
         sports_photo: File | null;
+        athlete_history: File | null;
+        form_10: File | null;
         school_id_document: File | null;
         birth_certificate: File | null;
         report_card: File | null;
+        parental_consent: File | null;
+        medical_certificate: File | null;
     }>({
         delegation_id:
             fixedDelegationId === null ? '' : String(fixedDelegationId),
@@ -122,9 +127,13 @@ function AthleteFormDialog({
         grade_level: '',
         photo: null,
         sports_photo: null,
+        athlete_history: null,
+        form_10: null,
         school_id_document: null,
         birth_certificate: null,
         report_card: null,
+        parental_consent: null,
+        medical_certificate: null,
     });
     const [selectedDistrict, setSelectedDistrict] = useState('');
 
@@ -382,17 +391,19 @@ function AthleteFormDialog({
                                     eligibility review.
                                 </p>
                             </div>
-                            <div className="grid gap-4 sm:grid-cols-3">
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                                 {(
                                     [
-                                        ['school_id_document', 'School ID'],
+                                        ['athlete_history', 'Athlete History'],
+                                        ['form_10', 'Form 10'],
                                         [
                                             'birth_certificate',
-                                            'Birth certificate',
+                                            'PSA / Birth Certificate',
                                         ],
+                                        ['parental_consent', 'Parents Consent'],
                                         [
-                                            'report_card',
-                                            'Report card / grade proof',
+                                            'medical_certificate',
+                                            'Medical Certificate',
                                         ],
                                     ] as const
                                 ).map(([field, label]) => (
@@ -475,35 +486,21 @@ function AthleteFormDialog({
                         </div>
                         <div className="grid grid-cols-2 gap-4 lg:col-span-3">
                             <div className="space-y-2">
-                                <Label htmlFor="athlete-photo">
-                                    Profile photo (optional)
-                                </Label>
-                                <Input
+                                <AthletePhotoInput
                                     id="athlete-photo"
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={(e) =>
-                                        setData(
-                                            'photo',
-                                            e.target.files?.[0] ?? null,
-                                        )
-                                    }
+                                    label="Passport / Profile Photo"
+                                    guidance="Upload a clear front-facing identification photo."
+                                    onChange={(file) => setData('photo', file)}
                                 />
                                 <InputError message={errors.photo} />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="athlete-sports-photo">
-                                    Sports photo (optional)
-                                </Label>
-                                <Input
+                                <AthletePhotoInput
                                     id="athlete-sports-photo"
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={(e) =>
-                                        setData(
-                                            'sports_photo',
-                                            e.target.files?.[0] ?? null,
-                                        )
+                                    label="Sports Photo"
+                                    guidance="Upload a clear half-body or full-body sports photo."
+                                    onChange={(file) =>
+                                        setData('sports_photo', file)
                                     }
                                 />
                                 <InputError message={errors.sports_photo} />
@@ -552,9 +549,13 @@ function EditAthleteDialog({
         grade_level: String(athlete?.grade_level ?? ''),
         photo: null as File | null,
         sports_photo: null as File | null,
+        athlete_history: null as File | null,
+        form_10: null as File | null,
         school_id_document: null as File | null,
         birth_certificate: null as File | null,
         report_card: null as File | null,
+        parental_consent: null as File | null,
+        medical_certificate: null as File | null,
         _method: 'put',
     });
 
@@ -732,14 +733,19 @@ function EditAthleteDialog({
                                 document.
                             </p>
                         </div>
-                        <div className="grid gap-4 sm:grid-cols-3">
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                             {(
                                 [
-                                    ['school_id_document', 'School ID'],
-                                    ['birth_certificate', 'Birth certificate'],
+                                    ['athlete_history', 'Athlete History'],
+                                    ['form_10', 'Form 10'],
                                     [
-                                        'report_card',
-                                        'Report card / grade proof',
+                                        'birth_certificate',
+                                        'PSA / Birth Certificate',
+                                    ],
+                                    ['parental_consent', 'Parents Consent'],
+                                    [
+                                        'medical_certificate',
+                                        'Medical Certificate',
                                     ],
                                 ] as const
                             ).map(([field, label]) => (
@@ -765,35 +771,21 @@ function EditAthleteDialog({
                     </div>
                     <div className="grid grid-cols-2 gap-4 lg:col-span-3">
                         <div className="space-y-2">
-                            <Label htmlFor="edit-athlete-photo">
-                                Replace profile photo (optional)
-                            </Label>
-                            <Input
+                            <AthletePhotoInput
                                 id="edit-athlete-photo"
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) =>
-                                    setData(
-                                        'photo',
-                                        e.target.files?.[0] ?? null,
-                                    )
-                                }
+                                label="Passport / Profile Photo"
+                                guidance="Upload a clear front-facing identification photo."
+                                onChange={(file) => setData('photo', file)}
                             />
                             <InputError message={errors.photo} />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="edit-athlete-sports-photo">
-                                Replace sports photo (optional)
-                            </Label>
-                            <Input
+                            <AthletePhotoInput
                                 id="edit-athlete-sports-photo"
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) =>
-                                    setData(
-                                        'sports_photo',
-                                        e.target.files?.[0] ?? null,
-                                    )
+                                label="Sports Photo"
+                                guidance="Upload a clear half-body or full-body sports photo."
+                                onChange={(file) =>
+                                    setData('sports_photo', file)
                                 }
                             />
                             <InputError message={errors.sports_photo} />

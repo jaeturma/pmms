@@ -53,6 +53,28 @@ test('users can not authenticate with invalid password', function () {
     $this->assertGuest();
 });
 
+test('users awaiting approval cannot authenticate', function () {
+    $user = User::factory()->create(['approval_status' => 'pending']);
+
+    $this->post(route('login.store'), [
+        'email' => $user->email,
+        'password' => 'password',
+    ])->assertSessionHasErrors('email');
+
+    $this->assertGuest();
+});
+
+test('coach registrations awaiting approval cannot authenticate', function () {
+    $coach = User::factory()->coach()->create(['approval_status' => 'pending']);
+
+    $this->post(route('login.store'), [
+        'email' => $coach->email,
+        'password' => 'password',
+    ])->assertSessionHasErrors('email');
+
+    $this->assertGuest();
+});
+
 test('users can logout', function () {
     $user = User::factory()->create();
 

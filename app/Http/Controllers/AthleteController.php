@@ -12,7 +12,9 @@ use App\Models\Delegation;
 use App\Models\EligibilityDocument;
 use App\Models\EligibilityReview;
 use App\Models\Entry;
+use App\Models\FileUpload;
 use App\Models\User;
+use App\Services\AthletePhotoService;
 use App\Services\AuditLogger;
 use App\Services\FileUploadService;
 use Illuminate\Http\RedirectResponse;
@@ -32,6 +34,7 @@ class AthleteController extends Controller
     public function __construct(
         private readonly AuditLogger $audit,
         private readonly FileUploadService $uploads,
+        private readonly AthletePhotoService $athletePhotos,
     ) {}
 
     /**
@@ -72,6 +75,8 @@ class AthleteController extends Controller
             $query->whereHas('entries', fn ($entries) => $entries
                 ->whereIn('delegation_id', (clone $approved)->select('delegation_id'))
                 ->whereIn('event_id', (clone $approved)->select('event_id')));
+        } elseif ($user->tournamentAthleteSportIds()->isNotEmpty()) {
+            $query->whereHas('entries.event', fn ($event) => $event->whereIn('sport_id', $user->tournamentAthleteSportIds()));
         } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer)) {
             $assignments = $user->athleteOversightAssignments()->where('active', true)->get();
             $query->whereHas('school', function ($school) use ($assignments): void {
@@ -185,7 +190,7 @@ class AthleteController extends Controller
      * Serve the athlete's photo, authorized by athlete visibility rather
      * than upload ownership.
      */
-    public function photo(Athlete $athlete): HttpResponse
+    public function photo(Request $request, Athlete $athlete): HttpResponse
     {
         Gate::authorize('view', $athlete);
 
@@ -193,14 +198,14 @@ class AthleteController extends Controller
 
         abort_if($upload === null, 404);
 
-        return Storage::disk($upload->disk)->response($upload->path, $upload->original_name);
+        return $this->photoResponse($request, $upload);
     }
 
     /**
      * Serve the athlete's sports/action photo — same authorization as the
      * registry photo above.
      */
-    public function sportsPhoto(Athlete $athlete): HttpResponse
+    public function sportsPhoto(Request $request, Athlete $athlete): HttpResponse
     {
         Gate::authorize('view', $athlete);
 
@@ -208,7 +213,7 @@ class AthleteController extends Controller
 
         abort_if($upload === null, 404);
 
-        return Storage::disk($upload->disk)->response($upload->path, $upload->original_name);
+        return $this->photoResponse($request, $upload);
     }
 
     /**
@@ -220,18 +225,18 @@ class AthleteController extends Controller
 
         Gate::authorize('create', [Athlete::class, $delegation]);
 
-        $fileFields = ['photo', 'sports_photo', 'school_id_document', 'birth_certificate', 'report_card', 'event_id'];
+        $fileFields = ['photo', 'sports_photo', 'athlete_history', 'form_10', 'school_id_document', 'birth_certificate', 'report_card', 'parental_consent', 'medical_certificate', 'event_id'];
         $athlete = new Athlete($request->safe()->except($fileFields));
 
         /** @var User $user */
         $user = $request->user();
 
         if ($request->hasFile('photo')) {
-            $athlete->photo_upload_id = $this->uploads->store($request->file('photo'), $user, 'photo')->id;
+            $athlete->photo_upload_id = $this->athletePhotos->store($request->file('photo'), $user, 'passport')->id;
         }
 
         if ($request->hasFile('sports_photo')) {
-            $athlete->sports_photo_upload_id = $this->uploads->store($request->file('sports_photo'), $user, 'sports_photo')->id;
+            $athlete->sports_photo_upload_id = $this->athletePhotos->store($request->file('sports_photo'), $user, 'sports')->id;
         }
 
         DB::transaction(function () use ($request, $athlete, $user): void {
@@ -246,9 +251,13 @@ class AthleteController extends Controller
             }
 
             $documents = [
+                'athlete_history' => EligibilityDocumentType::AthleteHistory,
+                'form_10' => EligibilityDocumentType::Form10,
                 'school_id_document' => EligibilityDocumentType::SchoolId,
                 'birth_certificate' => EligibilityDocumentType::BirthCertificate,
                 'report_card' => EligibilityDocumentType::ReportCard,
+                'parental_consent' => EligibilityDocumentType::ParentalConsent,
+                'medical_certificate' => EligibilityDocumentType::MedicalCertificate,
             ];
 
             foreach ($documents as $field => $type) {
@@ -264,12 +273,10 @@ class AthleteController extends Controller
                 ]);
             }
 
-            if ($athlete->eligibilityDocuments()->exists()) {
-                EligibilityReview::query()->firstOrCreate([
-                    'athlete_id' => $athlete->id,
-                    'meet_id' => $athlete->delegation->meet_id,
-                ]);
-            }
+            EligibilityReview::query()->firstOrCreate([
+                'athlete_id' => $athlete->id,
+                'meet_id' => $athlete->delegation->meet_id,
+            ]);
         });
 
         $this->audit->record('athlete.created', $athlete, [
@@ -277,6 +284,12 @@ class AthleteController extends Controller
             'school' => $athlete->school->name,
             'registrant' => $delegation->registrantName(),
         ]);
+        if ($athlete->photo_upload_id !== null) {
+            $this->audit->record('athlete.passport_photo_uploaded', $athlete);
+        }
+        if ($athlete->sports_photo_upload_id !== null) {
+            $this->audit->record('athlete.sports_photo_uploaded', $athlete);
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Athlete registered.')]);
 
@@ -290,7 +303,7 @@ class AthleteController extends Controller
     {
         Gate::authorize('update', $athlete);
 
-        $fileFields = ['photo', 'sports_photo', 'school_id_document', 'birth_certificate', 'report_card'];
+        $fileFields = ['photo', 'sports_photo', 'athlete_history', 'form_10', 'school_id_document', 'birth_certificate', 'report_card', 'parental_consent', 'medical_certificate'];
         $athlete->fill($request->safe()->except([...$fileFields, 'delegation_id']));
 
         /** @var User $user */
@@ -301,20 +314,24 @@ class AthleteController extends Controller
 
         if ($request->hasFile('photo')) {
             $oldPhoto = $athlete->photo;
-            $athlete->photo_upload_id = $this->uploads->store($request->file('photo'), $user, 'photo')->id;
+            $athlete->photo_upload_id = $this->athletePhotos->store($request->file('photo'), $user, 'passport')->id;
         }
 
         if ($request->hasFile('sports_photo')) {
             $oldSportsPhoto = $athlete->sportsPhoto;
-            $athlete->sports_photo_upload_id = $this->uploads->store($request->file('sports_photo'), $user, 'sports_photo')->id;
+            $athlete->sports_photo_upload_id = $this->athletePhotos->store($request->file('sports_photo'), $user, 'sports')->id;
         }
 
         $athlete->save();
 
         $documents = [
+            'athlete_history' => EligibilityDocumentType::AthleteHistory,
+            'form_10' => EligibilityDocumentType::Form10,
             'school_id_document' => EligibilityDocumentType::SchoolId,
             'birth_certificate' => EligibilityDocumentType::BirthCertificate,
             'report_card' => EligibilityDocumentType::ReportCard,
+            'parental_consent' => EligibilityDocumentType::ParentalConsent,
+            'medical_certificate' => EligibilityDocumentType::MedicalCertificate,
         ];
 
         foreach ($documents as $field => $type) {
@@ -338,11 +355,17 @@ class AthleteController extends Controller
         }
 
         if ($oldPhoto !== null) {
-            $this->uploads->delete($oldPhoto);
+            $this->athletePhotos->delete($oldPhoto);
+            $this->audit->record('athlete.passport_photo_replaced', $athlete);
+        } elseif ($request->hasFile('photo')) {
+            $this->audit->record('athlete.passport_photo_uploaded', $athlete);
         }
 
         if ($oldSportsPhoto !== null) {
-            $this->uploads->delete($oldSportsPhoto);
+            $this->athletePhotos->delete($oldSportsPhoto);
+            $this->audit->record('athlete.sports_photo_replaced', $athlete);
+        } elseif ($request->hasFile('sports_photo')) {
+            $this->audit->record('athlete.sports_photo_uploaded', $athlete);
         }
 
         $this->audit->record('athlete.updated', $athlete, ['name' => $athlete->fullName()]);
@@ -350,6 +373,19 @@ class AthleteController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Athlete updated.')]);
 
         return back();
+    }
+
+    private function photoResponse(Request $request, FileUpload $upload): HttpResponse
+    {
+        $variant = $request->string('variant')->toString();
+        $path = in_array($variant, ['thumb', 'card'], true)
+            ? $this->athletePhotos->variantPath($upload, $variant)
+            : $upload->path;
+        if (! Storage::disk($upload->disk)->exists($path)) {
+            $path = $upload->path;
+        }
+
+        return Storage::disk($upload->disk)->response($path, basename($path), ['Content-Type' => 'image/jpeg']);
     }
 
     /** Soft-delete an athlete while retaining accreditation evidence. */

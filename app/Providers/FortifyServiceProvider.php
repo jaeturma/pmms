@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\EnsureRecaptchaIsValid;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Http\Responses\PendingRegistrationResponse;
 use App\Models\District;
 use App\Models\Event;
 use App\Models\User;
@@ -16,12 +17,14 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Laravel\Fortify\Actions\AttemptToAuthenticate;
 use Laravel\Fortify\Actions\CanonicalizeUsername;
 use Laravel\Fortify\Actions\EnsureLoginIsNotThrottled;
 use Laravel\Fortify\Actions\PrepareAuthenticatedSession;
 use Laravel\Fortify\Contracts\RedirectsIfTwoFactorAuthenticatable;
+use Laravel\Fortify\Contracts\RegisterResponse;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
 
@@ -32,7 +35,7 @@ class FortifyServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(RegisterResponse::class, PendingRegistrationResponse::class);
     }
 
     /**
@@ -61,9 +64,16 @@ class FortifyServiceProvider extends ServiceProvider
                 })
                 ->first();
 
-            return $user !== null && Hash::check((string) $request->input('password'), $user->password)
-                ? $user
-                : null;
+            if ($user === null || ! Hash::check((string) $request->input('password'), $user->password)) {
+                return null;
+            }
+            if ($user->approval_status !== 'approved') {
+                throw ValidationException::withMessages([
+                    Fortify::username() => [__('Your account is awaiting approval. Please contact the system administrator or ICT team if you need assistance.')],
+                ]);
+            }
+
+            return $user;
         });
 
         // Fortify's own default login pipeline (AuthenticatedSessionController::

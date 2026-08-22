@@ -185,7 +185,7 @@ test('decided protests are terminal', function () {
     expect($protest->refresh()->status)->toBe(ProtestStatus::Dismissed);
 });
 
-test('upheld result protests expose the correction link and the flow works end-to-end', function () {
+test('upheld result protests expose the correction link but official results stay locked', function () {
     $protest = Protest::factory()->upheld()->create();
     $result = $protest->result;
 
@@ -204,8 +204,8 @@ test('upheld result protests expose the correction link and the flow works end-t
         ])
         ->assertSessionHasNoErrors();
 
-    expect($result->refresh()->status)->toBe(ResultStatus::Encoded)
-        ->and(AuditLog::query()->where('action', 'result.corrected')->exists())->toBeTrue();
+    expect($result->refresh()->status)->toBe(ResultStatus::Official)
+        ->and(AuditLog::query()->where('action', 'result.corrected')->exists())->toBeFalse();
 });
 
 test('viewers cannot file protests at all', function () {

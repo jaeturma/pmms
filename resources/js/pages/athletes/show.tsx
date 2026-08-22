@@ -1,5 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, TriangleAlert } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -82,7 +82,7 @@ export default function AthleteShow({ athlete }: Props) {
                     <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-1">
                         <Card>
                             <CardHeader>
-                                <CardTitle>Profile photo</CardTitle>
+                                <CardTitle>Passport / Profile Photo</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 {athlete.photo_url ? (
@@ -90,12 +90,26 @@ export default function AthleteShow({ athlete }: Props) {
                                         src={athlete.photo_url}
                                         alt={`Profile photo of ${fullName}`}
                                         className="max-h-64 w-full rounded-lg object-contain"
+                                        loading="lazy"
                                     />
                                 ) : (
                                     <p className="text-sm text-muted-foreground">
                                         No profile photo on file.
                                     </p>
                                 )}
+                                <p className="mt-3 flex items-center gap-2 text-sm">
+                                    {athlete.photo_url ? (
+                                        <>
+                                            <CheckCircle2 className="size-4 text-emerald-600" />
+                                            Uploaded
+                                        </>
+                                    ) : (
+                                        <>
+                                            <TriangleAlert className="size-4 text-amber-600" />
+                                            Missing
+                                        </>
+                                    )}
+                                </p>
                             </CardContent>
                         </Card>
 
@@ -109,12 +123,26 @@ export default function AthleteShow({ athlete }: Props) {
                                         src={athlete.sports_photo_url}
                                         alt={`Sports photo of ${fullName}`}
                                         className="max-h-64 w-full rounded-lg object-contain"
+                                        loading="lazy"
                                     />
                                 ) : (
                                     <p className="text-sm text-muted-foreground">
                                         No sports photo on file.
                                     </p>
                                 )}
+                                <p className="mt-3 flex items-center gap-2 text-sm">
+                                    {athlete.sports_photo_url ? (
+                                        <>
+                                            <CheckCircle2 className="size-4 text-emerald-600" />
+                                            Uploaded
+                                        </>
+                                    ) : (
+                                        <>
+                                            <TriangleAlert className="size-4 text-amber-600" />
+                                            Missing
+                                        </>
+                                    )}
+                                </p>
                             </CardContent>
                         </Card>
                     </div>

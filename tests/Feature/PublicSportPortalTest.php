@@ -45,12 +45,17 @@ function attachTwoCompetitors(EventMatch $match): void
     }
 }
 
+beforeEach(function () {
+    $this->actingAs(User::factory()->create());
+});
+
 function basketballSport(): Sport
 {
     return Sport::query()->firstOrCreate(['name' => 'Basketball']);
 }
 
 test('guests can view a sport portal for the active meet; unknown slugs 404', function () {
+    auth()->logout();
     $meet = Meet::factory()->active()->published()->featured()->create();
     $sport = basketballSport();
     Event::factory()->create(['sport_id' => $sport->id]);

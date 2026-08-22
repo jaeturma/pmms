@@ -75,11 +75,15 @@ class AthleteRequest extends FormRequest
                     ->ignore($athlete instanceof Athlete ? $athlete->id : null),
             ],
             'grade_level' => ['required', 'integer', 'min:1', 'max:12'],
-            'photo' => ['nullable', 'image', 'max:5120'],
-            'sports_photo' => ['nullable', 'image', 'max:5120'],
+            'photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.config('pmms.athlete_photos.max_upload_kb')],
+            'sports_photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.config('pmms.athlete_photos.max_upload_kb')],
+            'athlete_history' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
+            'form_10' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
             'school_id_document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
             'birth_certificate' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
             'report_card' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
+            'parental_consent' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
+            'medical_certificate' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
         ];
 
         if ($athlete === null) {

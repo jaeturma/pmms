@@ -1,13 +1,16 @@
 <?php
 
 use App\Enums\ResultStatus;
+use App\Enums\MatchStatus;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
 use App\Models\District;
 use App\Models\Entry;
 use App\Models\Event;
+use App\Models\EventMatch;
 use App\Models\EventResult;
+use App\Models\EventSchedule;
 use App\Models\Meet;
 use App\Models\ResultPlacement;
 use App\Models\School;
@@ -32,7 +35,7 @@ function placeableEntry(Meet $meet, Event $event): Entry
 }
 
 /**
- * @return array{meet: Meet, event: Event, entries: array<int, Entry>}
+ * @return array{meet: Meet, event: Event, match: EventMatch, entries: array<int, Entry>}
  */
 function resultFixture(int $entryCount = 2): array
 {
@@ -46,7 +49,16 @@ function resultFixture(int $entryCount = 2): array
         $entries[] = placeableEntry($meet, $event);
     }
 
-    return ['meet' => $meet, 'event' => $event, 'entries' => $entries];
+    $schedule = EventSchedule::factory()->create(['meet_id' => $meet->id, 'event_id' => $event->id]);
+    $match = EventMatch::factory()->create([
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+        'event_schedule_id' => $schedule->id,
+        'status' => MatchStatus::Completed,
+    ]);
+    $match->entries()->sync(collect($entries)->pluck('id'));
+
+    return ['meet' => $meet, 'event' => $event, 'match' => $match, 'entries' => $entries];
 }
 
 test('a placement shows the athlete\'s own school, not the municipal delegation\'s', function () {
@@ -82,10 +94,9 @@ test('guests are redirected from results', function () {
 });
 
 test('unvalidated results are visible to managers only', function () {
-    EventResult::factory()->create();
-    ResultPlacement::factory()->create();
-
-    $validated = EventResult::factory()->validated()->create();
+    $meet = Meet::factory()->active()->create();
+    EventResult::factory()->count(2)->create(['meet_id' => $meet->id]);
+    $validated = EventResult::factory()->validated()->create(['meet_id' => $meet->id]);
 
     $this->actingAs(User::factory()->admin()->create())
         ->get('/results')
@@ -111,10 +122,11 @@ test('a technical official sees encoded results for their own sport only, plus a
     $otherSport = Sport::factory()->create();
     $ownEvent = Event::factory()->create(['sport_id' => $ownSport->id]);
     $otherEvent = Event::factory()->create(['sport_id' => $otherSport->id]);
+    $meet = Meet::factory()->active()->create();
 
-    $ownEncoded = EventResult::factory()->create(['event_id' => $ownEvent->id]);
-    EventResult::factory()->create(['event_id' => $otherEvent->id]);
-    $validated = EventResult::factory()->validated()->create();
+    $ownEncoded = EventResult::factory()->create(['meet_id' => $meet->id, 'event_id' => $ownEvent->id]);
+    EventResult::factory()->create(['meet_id' => $meet->id, 'event_id' => $otherEvent->id]);
+    $validated = EventResult::factory()->validated()->create(['meet_id' => $meet->id]);
 
     $official = User::factory()->technicalOfficial()->create();
     $official->sports()->attach($ownSport->id);
@@ -132,12 +144,13 @@ test('a technical official sees encoded results for their own sport only, plus a
 });
 
 test('managers can encode a result for an active meet', function () {
-    ['meet' => $meet, 'event' => $event, 'entries' => $entries] = resultFixture();
+    ['meet' => $meet, 'event' => $event, 'match' => $match, 'entries' => $entries] = resultFixture();
 
     $this->actingAs(User::factory()->organizer()->create())
         ->post('/results', [
             'meet_id' => $meet->id,
             'event_id' => $event->id,
+            'match_id' => $match->id,
             'placements' => [
                 ['entry_id' => $entries[0]->id, 'rank' => 1, 'mark' => '11.2s', 'is_tie' => false],
                 ['entry_id' => $entries[1]->id, 'rank' => 2, 'mark' => null, 'is_tie' => false],
@@ -151,16 +164,17 @@ test('managers can encode a result for an active meet', function () {
     expect($result->status)->toBe(ResultStatus::Encoded)
         ->and($result->encoded_by)->not->toBeNull()
         ->and($result->placements()->count())->toBe(2)
-        ->and(AuditLog::query()->where('action', 'result.encoded')->exists())->toBeTrue();
+        ->and(AuditLog::query()->where('action', 'result.manually_entered')->exists())->toBeTrue();
 });
 
 test('a match can be finalized with a result and no live scoring session was ever started (Phase 7)', function () {
-    ['meet' => $meet, 'event' => $event, 'entries' => $entries] = resultFixture();
+    ['meet' => $meet, 'event' => $event, 'match' => $match, 'entries' => $entries] = resultFixture();
 
     $this->actingAs(User::factory()->organizer()->create())
         ->post('/results', [
             'meet_id' => $meet->id,
             'event_id' => $event->id,
+            'match_id' => $match->id,
             'placements' => [
                 ['entry_id' => $entries[0]->id, 'rank' => 1, 'mark' => '11.2s', 'is_tie' => false],
                 ['entry_id' => $entries[1]->id, 'rank' => 2, 'mark' => null, 'is_tie' => false],
@@ -178,11 +192,20 @@ test('results cannot be encoded unless the meet is active', function () {
     $event = Event::factory()->create();
     $meet->events()->attach($event);
     $entry = placeableEntry($meet, $event);
+    $schedule = EventSchedule::factory()->create(['meet_id' => $meet->id, 'event_id' => $event->id]);
+    $match = EventMatch::factory()->create([
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+        'event_schedule_id' => $schedule->id,
+        'status' => MatchStatus::Completed,
+    ]);
+    $match->entries()->attach($entry);
 
     $this->actingAs(User::factory()->admin()->create())
         ->post('/results', [
             'meet_id' => $meet->id,
             'event_id' => $event->id,
+            'match_id' => $match->id,
             'placements' => [
                 ['entry_id' => $entry->id, 'rank' => 1, 'mark' => null, 'is_tie' => false],
             ],
@@ -193,23 +216,24 @@ test('results cannot be encoded unless the meet is active', function () {
 });
 
 test('an event gets only one result per meet', function () {
-    ['meet' => $meet, 'event' => $event, 'entries' => $entries] = resultFixture(1);
+    ['meet' => $meet, 'event' => $event, 'match' => $match, 'entries' => $entries] = resultFixture(1);
 
-    EventResult::factory()->create(['meet_id' => $meet->id, 'event_id' => $event->id]);
+    EventResult::factory()->create(['meet_id' => $meet->id, 'event_id' => $event->id, 'match_id' => $match->id]);
 
     $this->actingAs(User::factory()->admin()->create())
         ->post('/results', [
             'meet_id' => $meet->id,
             'event_id' => $event->id,
+            'match_id' => $match->id,
             'placements' => [
                 ['entry_id' => $entries[0]->id, 'rank' => 1, 'mark' => null, 'is_tie' => false],
             ],
         ])
-        ->assertSessionHasErrors('event_id');
+        ->assertSessionHasErrors('match_id');
 });
 
 test('only confirmed entries of the meet event are placeable', function () {
-    ['meet' => $meet, 'event' => $event, 'entries' => $entries] = resultFixture(1);
+    ['meet' => $meet, 'event' => $event, 'match' => $match, 'entries' => $entries] = resultFixture(1);
 
     $submitted = placeableEntry($meet, $event);
     $submitted->forceFill(['status' => 'submitted'])->save();
@@ -220,6 +244,7 @@ test('only confirmed entries of the meet event are placeable', function () {
         ->post('/results', [
             'meet_id' => $meet->id,
             'event_id' => $event->id,
+            'match_id' => $match->id,
             'placements' => [
                 ['entry_id' => $submitted->id, 'rank' => 1, 'mark' => null, 'is_tie' => false],
             ],
@@ -232,6 +257,7 @@ test('only confirmed entries of the meet event are placeable', function () {
         ->post('/results', [
             'meet_id' => $meet->id,
             'event_id' => $event->id,
+            'match_id' => $match->id,
             'placements' => [
                 ['entry_id' => $foreign->id, 'rank' => 1, 'mark' => null, 'is_tie' => false],
             ],
@@ -242,7 +268,7 @@ test('only confirmed entries of the meet event are placeable', function () {
 });
 
 test('duplicate ranks are rejected unless flagged as ties', function () {
-    ['meet' => $meet, 'event' => $event, 'entries' => $entries] = resultFixture();
+    ['meet' => $meet, 'event' => $event, 'match' => $match, 'entries' => $entries] = resultFixture();
 
     $admin = User::factory()->admin()->create();
 
@@ -250,6 +276,7 @@ test('duplicate ranks are rejected unless flagged as ties', function () {
         ->post('/results', [
             'meet_id' => $meet->id,
             'event_id' => $event->id,
+            'match_id' => $match->id,
             'placements' => [
                 ['entry_id' => $entries[0]->id, 'rank' => 1, 'mark' => null, 'is_tie' => false],
                 ['entry_id' => $entries[1]->id, 'rank' => 1, 'mark' => null, 'is_tie' => false],
@@ -261,6 +288,7 @@ test('duplicate ranks are rejected unless flagged as ties', function () {
         ->post('/results', [
             'meet_id' => $meet->id,
             'event_id' => $event->id,
+            'match_id' => $match->id,
             'placements' => [
                 ['entry_id' => $entries[0]->id, 'rank' => 1, 'mark' => null, 'is_tie' => true],
                 ['entry_id' => $entries[1]->id, 'rank' => 1, 'mark' => null, 'is_tie' => true],
@@ -272,12 +300,13 @@ test('duplicate ranks are rejected unless flagged as ties', function () {
 });
 
 test('an entry cannot be placed twice in one result', function () {
-    ['meet' => $meet, 'event' => $event, 'entries' => $entries] = resultFixture(1);
+    ['meet' => $meet, 'event' => $event, 'match' => $match, 'entries' => $entries] = resultFixture(1);
 
     $this->actingAs(User::factory()->admin()->create())
         ->post('/results', [
             'meet_id' => $meet->id,
             'event_id' => $event->id,
+            'match_id' => $match->id,
             'placements' => [
                 ['entry_id' => $entries[0]->id, 'rank' => 1, 'mark' => null, 'is_tie' => false],
                 ['entry_id' => $entries[0]->id, 'rank' => 2, 'mark' => null, 'is_tie' => false],
@@ -408,7 +437,7 @@ test('viewers and delegation officers cannot manage results', function (User $us
 ]);
 
 test('a technical official can encode and update a result for their own sport, but not validate, correct, or delete it', function () {
-    ['meet' => $meet, 'event' => $event, 'entries' => $entries] = resultFixture();
+    ['meet' => $meet, 'event' => $event, 'match' => $match, 'entries' => $entries] = resultFixture();
 
     $official = User::factory()->technicalOfficial()->create();
     $official->sports()->attach($event->sport_id);
@@ -417,6 +446,7 @@ test('a technical official can encode and update a result for their own sport, b
         ->post('/results', [
             'meet_id' => $meet->id,
             'event_id' => $event->id,
+            'match_id' => $match->id,
             'placements' => [
                 ['entry_id' => $entries[0]->id, 'rank' => 1, 'mark' => null, 'is_tie' => false],
                 ['entry_id' => $entries[1]->id, 'rank' => 2, 'mark' => null, 'is_tie' => false],
@@ -448,7 +478,7 @@ test('a technical official can encode and update a result for their own sport, b
 });
 
 test('a technical official cannot encode a result for a sport they are not assigned to', function () {
-    ['meet' => $meet, 'event' => $event, 'entries' => $entries] = resultFixture();
+    ['meet' => $meet, 'event' => $event, 'match' => $match, 'entries' => $entries] = resultFixture();
 
     // Deliberately not attached to $event's sport.
     $official = User::factory()->technicalOfficial()->create();
@@ -457,6 +487,7 @@ test('a technical official cannot encode a result for a sport they are not assig
         ->post('/results', [
             'meet_id' => $meet->id,
             'event_id' => $event->id,
+            'match_id' => $match->id,
             'placements' => [
                 ['entry_id' => $entries[0]->id, 'rank' => 1, 'mark' => null, 'is_tie' => false],
                 ['entry_id' => $entries[1]->id, 'rank' => 2, 'mark' => null, 'is_tie' => false],
@@ -472,10 +503,11 @@ test('a tournament manager sees their own sport\'s encoded results plus all vali
     $otherSport = Sport::factory()->create();
     $ownEvent = Event::factory()->create(['sport_id' => $ownSport->id]);
     $otherEvent = Event::factory()->create(['sport_id' => $otherSport->id]);
+    $meet = Meet::factory()->active()->create();
 
-    $ownEncoded = EventResult::factory()->create(['event_id' => $ownEvent->id]);
-    EventResult::factory()->create(['event_id' => $otherEvent->id]);
-    $validated = EventResult::factory()->validated()->create(['event_id' => $otherEvent->id]);
+    $ownEncoded = EventResult::factory()->create(['meet_id' => $meet->id, 'event_id' => $ownEvent->id]);
+    EventResult::factory()->create(['meet_id' => $meet->id, 'event_id' => $otherEvent->id]);
+    $validated = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $otherEvent->id]);
 
     $manager = User::factory()->tournamentManager()->create();
     $ownSport->forceFill(['tournament_manager_id' => $manager->id])->save();
@@ -492,13 +524,14 @@ test('a tournament manager sees their own sport\'s encoded results plus all vali
             ->where('canManage', false)
             ->where('canEncode', false));
 
-    ['meet' => $meet, 'event' => $encodeableEvent, 'entries' => $entries] = resultFixture(1);
+    ['meet' => $meet, 'event' => $encodeableEvent, 'match' => $match, 'entries' => $entries] = resultFixture(1);
     $encodeableEvent->forceFill(['sport_id' => $ownSport->id])->save();
 
     $this->actingAs($manager)
         ->post('/results', [
             'meet_id' => $meet->id,
             'event_id' => $encodeableEvent->id,
+            'match_id' => $match->id,
             'placements' => [
                 ['entry_id' => $entries[0]->id, 'rank' => 1, 'mark' => null, 'is_tie' => false],
             ],

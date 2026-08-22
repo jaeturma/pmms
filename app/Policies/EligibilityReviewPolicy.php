@@ -21,7 +21,8 @@ class EligibilityReviewPolicy
         return $user->hasRole(UserRole::Admin, UserRole::Organizer, UserRole::DelegationOfficer, UserRole::Coach)
             || $user->hasPermission(Permission::AthleteEligibilityReview)
             || $user->hasPermission(Permission::DistrictAthletesView)
-            || $user->hasPermission(Permission::MunicipalityAthletesView);
+            || $user->hasPermission(Permission::MunicipalityAthletesView)
+            || $user->tournamentAthleteSportIds()->isNotEmpty();
     }
 
     /**
@@ -35,6 +36,10 @@ class EligibilityReviewPolicy
         }
 
         if ($user->hasPermission(Permission::AthleteEligibilityReview, $review->meet)) {
+            return true;
+        }
+
+        if ($review->athlete->entries()->whereHas('event', fn ($event) => $event->whereIn('sport_id', $user->tournamentAthleteSportIds()))->exists()) {
             return true;
         }
 

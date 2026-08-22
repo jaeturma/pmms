@@ -13,7 +13,7 @@ class SportCategoriesSeeder extends Seeder
         'ARCHERY' => ['secondary'], 'BASKETBALL' => ['elementary', 'secondary'],
         'BASKETBALL_3X3' => ['secondary'], 'BASEBALL' => ['secondary'],
         'BOXING' => ['secondary'], 'FOOTBALL' => ['secondary'], 'SOFTBALL' => ['secondary'],
-        'TENNIS' => ['secondary'], 'VOLLEYBALL' => ['secondary'], 'WEIGHTLIFTING' => ['secondary'],
+        'TENNIS' => ['secondary'], 'VOLLEYBALL' => ['elementary', 'secondary'], 'WEIGHTLIFTING' => ['secondary'],
         'WRESTLING' => ['secondary'], 'PENCAK_SILAT' => ['secondary'], 'SEPAK_TAKRAW' => ['secondary'],
         'ATHLETICS' => ['elementary', 'secondary'], 'ARNIS' => ['elementary', 'secondary'],
         'BADMINTON' => ['elementary', 'secondary'], 'CHESS' => ['elementary', 'secondary'],
@@ -43,6 +43,23 @@ class SportCategoriesSeeder extends Seeder
                     ],
                 );
             }
+        }
+
+        $volleyball = Sport::query()->where('code', 'VOLLEYBALL')->firstOrFail();
+        foreach ([
+            ['elementary', 'boys', 'Elementary Boys'],
+            ['elementary', 'girls', 'Elementary Girls'],
+            ['secondary', 'boys', 'Secondary Boys'],
+            ['secondary', 'girls', 'Secondary Girls'],
+        ] as $index => [$level, $sex, $name]) {
+            SportCategory::query()->updateOrCreate(
+                ['sport_id' => $volleyball->id, 'meet_sport_id' => null, 'slug' => str($name)->slug()],
+                [
+                    'name' => $name, 'display_name' => $name, 'level' => $level, 'sex' => $sex,
+                    'classification' => $volleyball->classification, 'competition_format' => 'team',
+                    'participation_notes' => null, 'display_order' => $index + 1, 'active' => true,
+                ],
+            );
         }
 
         $gymnastics = Sport::query()->where('code', 'GYMNASTICS')->firstOrFail();

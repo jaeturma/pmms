@@ -65,8 +65,10 @@ type EventOption = Option & { sport_id: number };
 
 type VenueOption = Option & {
     event_id: number;
+    sport_category_id: number | null;
     playing_area_type: 'venue' | 'court' | 'table';
     playing_area_count: number;
+    competition_area_ids: number[];
 };
 
 type SportCategoryOption = Option & { sport_id: number };
@@ -131,7 +133,10 @@ function SlotFormDialog({
         (option) => option.sport_id === selectedEventSportId,
     );
     const eventVenueOptions = venueOptions.filter(
-        (option) => String(option.event_id) === data.event_id,
+        (option) =>
+            String(option.event_id) === data.event_id &&
+            (option.sport_category_id === null ||
+                String(option.sport_category_id) === data.sport_category_id),
     );
     const selectedVenue = eventVenueOptions.find(
         (option) => String(option.id) === data.venue_id,
@@ -139,9 +144,13 @@ function SlotFormDialog({
     const areaOptions = competitionAreaOptions.filter(
         (option) =>
             String(option.venue_id) === data.venue_id &&
-            option.area_type === selectedVenue?.playing_area_type,
+            option.area_type === selectedVenue?.playing_area_type &&
+            (selectedVenue?.competition_area_ids.length === 0 ||
+                selectedVenue?.competition_area_ids.includes(option.id)),
     );
-    const needsArea = (selectedVenue?.playing_area_count ?? 1) > 1;
+    const needsArea =
+        (selectedVenue?.competition_area_ids.length ?? 0) > 0 ||
+        (selectedVenue?.playing_area_count ?? 1) > 1;
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -198,18 +207,17 @@ function SlotFormDialog({
                         <InputError message={errors.event_id} />
                     </div>
                     <div className="space-y-2">
-                        <Label htmlFor="slot-category">
-                            Sport category (optional)
-                        </Label>
+                        <Label htmlFor="slot-category">Sport category</Label>
                         <Select
                             value={data.sport_category_id || 'none'}
-                            onValueChange={(value) =>
-                                setData(
-                                    'sport_category_id',
-                                    value === 'none' ? '' : value,
-                                )
-                            }
-                            disabled={!data.event_id}
+                            onValueChange={(value) => {
+                                setData('sport_category_id', value === 'none' ? '' : value);
+                                setData('venue_id', '');
+                                setData('competition_area_id', '');
+                            }}
+                            disabled={!data.event_id || (venueOptions.some(
+                                (option) => String(option.event_id) === data.event_id && option.sport_category_id !== null,
+                            ) && !data.sport_category_id)}
                         >
                             <SelectTrigger id="slot-category">
                                 <SelectValue

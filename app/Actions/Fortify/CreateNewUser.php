@@ -24,8 +24,7 @@ class CreateNewUser implements CreatesNewUsers
         RecaptchaVerifier $recaptcha,
         private readonly RegistrationCodeChallenge $codeChallenge,
         private readonly Request $request,
-    )
-    {
+    ) {
         $this->recaptcha = $recaptcha;
     }
 
@@ -72,6 +71,7 @@ class CreateNewUser implements CreatesNewUsers
             'email' => $input['email'],
             'password' => $input['password'],
         ]);
+        $user->forceFill(['approval_status' => 'pending', 'approved_at' => null, 'approved_by' => null])->save();
 
         if (($input['account_type'] ?? 'viewer') === 'coach') {
             $onboardingRequest = CoachOnboardingRequest::query()->create([

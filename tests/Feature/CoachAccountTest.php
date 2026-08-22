@@ -75,6 +75,9 @@ test('a coach can view and register athletes for their own delegation', function
         ->assertSessionHasNoErrors();
 
     $this->assertDatabaseHas('athletes', ['delegation_id' => $delegation->id, 'first_name' => 'Juan']);
+    $athlete = Athlete::query()->where('lrn', '123456789012')->sole();
+    expect($athlete->eligibilityReview?->status)->toBe(EligibilityStatus::Pending)
+        ->and($athlete->eligibilityDocuments()->count())->toBe(0);
 });
 
 test('a coach registers an athlete only in an assigned event with photos and accreditation documents', function () {
@@ -95,16 +98,18 @@ test('a coach registers an athlete only in an assigned event with photos and acc
         'grade_level' => 9,
         'photo' => UploadedFile::fake()->image('profile.jpg'),
         'sports_photo' => UploadedFile::fake()->image('sports.jpg'),
-        'school_id_document' => UploadedFile::fake()->create('school-id.pdf', 100, 'application/pdf'),
+        'athlete_history' => UploadedFile::fake()->create('athlete-history.pdf', 100, 'application/pdf'),
+        'form_10' => UploadedFile::fake()->create('form-10.pdf', 100, 'application/pdf'),
         'birth_certificate' => UploadedFile::fake()->create('birth-cert.pdf', 100, 'application/pdf'),
-        'report_card' => UploadedFile::fake()->create('report-card.pdf', 100, 'application/pdf'),
+        'parental_consent' => UploadedFile::fake()->create('parents-consent.pdf', 100, 'application/pdf'),
+        'medical_certificate' => UploadedFile::fake()->create('medical-certificate.pdf', 100, 'application/pdf'),
     ])->assertSessionHasNoErrors();
 
     $athlete = Athlete::query()->where('lrn', '321654987012')->firstOrFail();
     expect($athlete->photo_upload_id)->not->toBeNull()
         ->and($athlete->sports_photo_upload_id)->not->toBeNull()
         ->and($athlete->entries()->where('event_id', $assignment->event_id)->exists())->toBeTrue()
-        ->and($athlete->eligibilityDocuments()->count())->toBe(3)
+        ->and($athlete->eligibilityDocuments()->count())->toBe(5)
         ->and($athlete->eligibilityReview?->status)->toBe(EligibilityStatus::Pending);
 
     $otherEvent = Event::factory()->create(['gender' => 'boys', 'age_division' => 'secondary']);
@@ -117,9 +122,11 @@ test('a coach registers an athlete only in an assigned event with photos and acc
 
     $this->actingAs(User::factory()->admin()->create())
         ->put("/athletes/{$athlete->id}", [
-            'first_name' => 'Not', 'last_name' => 'Allowed', 'sex' => 'male',
+            'first_name' => 'Admin Updated', 'last_name' => 'Santos', 'sex' => 'male',
             'birthdate' => now()->subYears(15)->toDateString(), 'lrn' => $athlete->lrn, 'grade_level' => 9,
-        ])->assertForbidden();
+        ])->assertSessionHasNoErrors();
+
+    expect($athlete->fresh()->first_name)->toBe('Admin Updated');
 
     $this->actingAs($coach)->put("/athletes/{$athlete->id}", [
         'first_name' => 'Pedro Updated', 'last_name' => 'Santos', 'sex' => 'male',

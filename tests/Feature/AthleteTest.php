@@ -133,16 +133,21 @@ test('officers cannot register athletes for closed or foreign delegations', func
 
         return [$delegation, athleteOfficerFor($delegation)];
     })(),
-    'submitted delegation' => fn () => (function () {
-        $delegation = Delegation::factory()->submitted()->create();
-
-        return [$delegation, athleteOfficerFor($delegation)];
-    })(),
     'foreign delegation' => fn () => [
         Delegation::factory()->create(),
         User::factory()->delegationOfficer()->create(),
     ],
 ]);
+
+test('an officer can correct a submitted delegation roster before approval', function () {
+    $delegation = Delegation::factory()->submitted()->create();
+
+    $this->actingAs(athleteOfficerFor($delegation))
+        ->post('/athletes', validAthletePayload($delegation))
+        ->assertRedirect();
+
+    $this->assertDatabaseHas('athletes', ['delegation_id' => $delegation->id]);
+});
 
 test('managers can register athletes regardless of the window', function () {
     $delegation = Delegation::factory()->submitted()->create(['meet_id' => Meet::factory()->create()]);
@@ -280,7 +285,7 @@ test('the athlete sports photo is served to authorized users only', function () 
         ->assertForbidden();
 });
 
-test('updating and deleting an athlete cleans up the sports photo too', function () {
+test('updating an athlete cleans up the replaced sports photo while soft deletion retains evidence', function () {
     Storage::fake('local');
     $delegation = Delegation::factory()->create();
     $admin = User::factory()->admin()->create();
@@ -311,10 +316,11 @@ test('updating and deleting an athlete cleans up the sports photo too', function
         ->delete("/athletes/{$athlete->id}")
         ->assertRedirect();
 
-    $this->assertDatabaseMissing('file_uploads', ['id' => $replacementUpload->id]);
+    $this->assertSoftDeleted('athletes', ['id' => $athlete->id]);
+    $this->assertDatabaseHas('file_uploads', ['id' => $replacementUpload->id]);
 });
 
-test('updates and deletions are audited and clean up photos', function () {
+test('updates and soft deletions are audited and retain accreditation photos', function () {
     Storage::fake('local');
     $delegation = Delegation::factory()->create();
     $admin = User::factory()->admin()->create();
@@ -342,8 +348,8 @@ test('updates and deletions are audited and clean up photos', function () {
         ->delete("/athletes/{$athlete->id}")
         ->assertRedirect();
 
-    $this->assertDatabaseMissing('athletes', ['id' => $athlete->id]);
-    $this->assertDatabaseMissing('file_uploads', ['id' => $upload->id]);
+    $this->assertSoftDeleted('athletes', ['id' => $athlete->id]);
+    $this->assertDatabaseHas('file_uploads', ['id' => $upload->id]);
 
     expect(AuditLog::query()->where('action', 'athlete.deleted')->exists())->toBeTrue();
 });

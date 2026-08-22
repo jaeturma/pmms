@@ -252,6 +252,11 @@ const managerNavItems: NavItem[] = [
 
 const adminNavItems: NavItem[] = [
     {
+        title: 'Users and Roles',
+        href: '/system/users',
+        icon: Users,
+    },
+    {
         title: 'Account provisions',
         href: '/account-provisions',
         icon: UserCog,
@@ -318,6 +323,10 @@ export function AppSidebar() {
 
     const role = auth.user?.role;
     const teamTypes: string[] = auth.user?.team_types ?? [];
+    const canManageAccounts = auth.user?.can_manage_accounts ?? false;
+    const canReviewCoaches = auth.user?.can_review_coaches ?? false;
+    const canViewTournamentAthletes =
+        auth.user?.can_view_tournament_athletes ?? false;
 
     // A Technical Official only runs live scoring for their assigned
     // sport(s) — the full admin registry (Districts/Schools/Delegations/
@@ -515,6 +524,56 @@ export function AppSidebar() {
                 title: 'Assigned operations',
                 icon: LifeBuoy,
                 items: relevantOperations,
+            });
+    }
+
+    if (canManageAccounts && role !== 'admin') {
+        navSections.push({
+            title: 'System',
+            icon: Settings,
+            items: adminNavItems.filter(
+                (item) => item.title === 'Users and Roles',
+            ),
+        });
+    }
+
+    if (canReviewCoaches) {
+        const registration = navSections.find(
+            (section) => section.title === 'Registration',
+        );
+        const coachItem: NavItem = {
+            title: 'Coach',
+            href: '/coach/assignment-requests',
+            icon: UserCog,
+        };
+        if (registration) registration.items.push(coachItem);
+        else
+            navSections.push({
+                title: 'Registration',
+                icon: UsersRound,
+                items: [coachItem],
+            });
+    }
+
+    if (canViewTournamentAthletes) {
+        const registration = navSections.find(
+            (section) => section.title === 'Registration',
+        );
+        const athleteItems = byTitle(['Athletes', 'Eligibility'], mainNavItems);
+        if (registration) {
+            athleteItems.forEach((item) => {
+                if (
+                    !registration.items.some(
+                        (current) => current.title === item.title,
+                    )
+                )
+                    registration.items.push(item);
+            });
+        } else
+            navSections.push({
+                title: 'Registration',
+                icon: UsersRound,
+                items: athleteItems,
             });
     }
 

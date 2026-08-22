@@ -20,7 +20,31 @@ return [
     ],
 
     'accounts' => [
-        'default_reset_password' => env('PMMS_DEFAULT_RESET_PASSWORD'),
+        'default_reset_password' => env('PMMS_DEFAULT_RESET_PASSWORD', 'DdOPaa2026!'),
+    ],
+
+    'athlete_photos' => [
+        'max_upload_kb' => 20480,
+        'max_stored_kb' => 500,
+        'format' => 'jpeg',
+        'passport' => ['width' => 800, 'height' => 1000, 'aspect_ratio' => '4:5'],
+        'sports' => ['width' => 800, 'height' => 1000, 'aspect_ratio' => '4:5'],
+        'derivatives' => [
+            'thumb' => ['width' => 200, 'height' => 250],
+            'card' => ['width' => 480, 'height' => 600],
+        ],
+    ],
+
+    'athlete_photos' => [
+        'max_upload_kb' => 20480,
+        'max_stored_kb' => 500,
+        'format' => 'jpeg',
+        'passport' => ['width' => 800, 'height' => 1000, 'aspect_ratio' => '4:5'],
+        'sports' => ['width' => 800, 'height' => 1000, 'aspect_ratio' => '4:5'],
+        'derivatives' => [
+            'thumb' => ['width' => 200, 'height' => 250],
+            'card' => ['width' => 480, 'height' => 600],
+        ],
     ],
 
     'results' => [

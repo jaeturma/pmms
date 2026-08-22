@@ -65,9 +65,9 @@ test('registration succeeds once the reCAPTCHA token verifies', function () {
         'password_confirmation' => 'password',
         'g-recaptcha-response' => 'a-token',
         'code_challenge' => 'ABC12',
-    ])->assertRedirect(route('dashboard', absolute: false));
+    ])->assertRedirect(route('login', absolute: false));
 
-    $this->assertAuthenticated();
+    $this->assertGuest();
 });
 
 test('the login page shares the reCAPTCHA site key with guests only when it is ready', function () {

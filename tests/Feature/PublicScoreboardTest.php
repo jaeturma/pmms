@@ -8,6 +8,7 @@ use App\Models\Meet;
 use App\Models\ResultPlacement;
 use App\Models\ScoringSession;
 use App\Models\Sport;
+use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 
 /**
@@ -23,11 +24,19 @@ function publicScoreboardMatch(?Meet $meet = null): EventMatch
     ]);
 }
 
-test('guests can view the public scoreboard for a published meet; unpublished meets 404', function () {
+beforeEach(function () {
+    $this->actingAs(User::factory()->create());
+});
+
+test('only logged-in users can view a published scoreboard and unpublished meets stay hidden', function () {
     $meet = Meet::factory()->active()->published()->create();
     $match = publicScoreboardMatch($meet);
 
-    $this->get("/meets/{$meet->id}/matches/{$match->id}/scoreboard")
+    auth()->logout();
+    $this->get("/meets/{$meet->id}/matches/{$match->id}/scoreboard")->assertRedirect('/login');
+
+    $this->actingAs(User::factory()->create())
+        ->get("/meets/{$meet->id}/matches/{$match->id}/scoreboard")
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('portal/scoreboard')

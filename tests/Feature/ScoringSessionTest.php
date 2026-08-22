@@ -703,7 +703,7 @@ test('score never goes below zero', function () {
     expect($session->fresh()->score_a)->toBe(0);
 });
 
-test('ending a scoring session never creates or touches an EventResult', function () {
+test('ending a scoring session completes the match without creating an EventResult', function () {
     $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
     $session = ScoringSession::factory()->create(['match_id' => $match->id]);
 
@@ -713,7 +713,7 @@ test('ending a scoring session never creates or touches an EventResult', functio
 
     expect(EventResult::query()->count())->toBe(0)
         ->and(ResultPlacement::query()->count())->toBe(0)
-        ->and($match->fresh()->status)->toBe(MatchStatus::Scheduled);
+        ->and($match->fresh()->status)->toBe(MatchStatus::Completed);
 });
 
 test('a session cannot be mutated once it has ended', function () {

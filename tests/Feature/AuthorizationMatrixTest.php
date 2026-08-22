@@ -79,7 +79,7 @@ function forbiddenActionCases(): array
         'meet unpublish' => fn (): array => ['patch', '/meets/'.Meet::factory()->active()->published()->create()->id.'/unpublish'],
         'delegation create' => fn (): array => ['post', '/delegations'],
         'delegation delete' => fn (): array => ['delete', '/delegations/'.Delegation::factory()->create()->id],
-        'accreditation grant' => fn (): array => ['post', '/accreditations'],
+        'accreditation grant' => fn (): array => ['post', '/accreditations?athlete_id='.Athlete::factory()->create()->id],
         'accreditation revoke' => fn (): array => ['delete', '/accreditations/'.Accreditation::factory()->create()->id],
         'accreditation view (unassigned)' => fn (): array => ['get', '/delegations/'.Delegation::factory()->approved()->create()->id.'/accreditation'],
         'accreditation batch cards (unassigned)' => fn (): array => ['get', '/delegations/'.Delegation::factory()->approved()->create()->id.'/accreditation/cards'],

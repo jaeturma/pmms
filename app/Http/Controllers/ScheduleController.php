@@ -10,12 +10,13 @@ use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\ScheduleRequest;
 use App\Models\CompetitionArea;
 use App\Models\Event;
-use App\Models\EventVenue;
 use App\Models\EventMatch;
 use App\Models\EventSchedule;
+use App\Models\EventVenue;
 use App\Models\Meet;
 use App\Models\MeetSportVenue;
 use App\Models\SportCategory;
+use App\Models\SportCategoryCompetitionArea;
 use App\Models\User;
 use App\Models\Venue;
 use App\Services\AuditLogger;
@@ -110,16 +111,51 @@ class ScheduleController extends Controller
             ->get()
             ->groupBy(fn (MeetSportVenue $assignment): int => $assignment->meetSport->sport_id);
 
-        $venueOptions = $schedulableEvents->flatMap(function (Event $event) use ($eventVenueAssignments, $sportVenueAssignments) {
+        $categoryAreaAssignments = SportCategoryCompetitionArea::query()
+            ->where('status', 'active')
+            ->whereHas('meetSport', fn ($meetSports) => $meetSports
+                ->where('meet_id', $meet->id)
+                ->where('active', true))
+            ->whereHas('venue', fn ($venues) => $venues->where('active', true))
+            ->whereHas('competitionArea', fn ($areas) => $areas->where('status', '!=', 'unavailable'))
+            ->with(['meetSport:id,sport_id', 'venue:id,name', 'competitionArea:id,venue_id,area_type'])
+            ->get()
+            ->groupBy(fn (SportCategoryCompetitionArea $assignment): int => $assignment->meetSport->sport_id);
+        $configuredSportIds = $categoryAreaAssignments->keys();
+        $configuredCategoryIds = $categoryAreaAssignments->flatten(1)->pluck('sport_category_id')->unique();
+
+        $venueOptions = $schedulableEvents->flatMap(function (Event $event) use ($categoryAreaAssignments, $eventVenueAssignments, $sportVenueAssignments) {
+            $categoryAssignments = $categoryAreaAssignments->get($event->sport_id, collect());
+
+            if ($categoryAssignments->isNotEmpty()) {
+                return $categoryAssignments
+                    ->groupBy(fn (SportCategoryCompetitionArea $assignment): string => $assignment->sport_category_id.'-'.$assignment->venue_id)
+                    ->map(function ($assignments) use ($event): array {
+                        $assignment = $assignments->first();
+
+                        return [
+                            'id' => $assignment->venue_id,
+                            'event_id' => $event->id,
+                            'sport_category_id' => $assignment->sport_category_id,
+                            'label' => $assignment->venue->name,
+                            'playing_area_type' => $assignment->competitionArea->area_type,
+                            'playing_area_count' => $assignments->count(),
+                            'competition_area_ids' => $assignments->pluck('competition_area_id')->values(),
+                        ];
+                    });
+            }
+
             $directAssignments = $eventVenueAssignments->get($event->id, collect());
 
             if ($directAssignments->isNotEmpty()) {
                 return $directAssignments->map(fn (EventVenue $assignment): array => [
                     'id' => $assignment->venue_id,
                     'event_id' => $event->id,
+                    'sport_category_id' => null,
                     'label' => $assignment->venue->name,
                     'playing_area_type' => $assignment->playing_area_type,
                     'playing_area_count' => $assignment->playing_area_count,
+                    'competition_area_ids' => [],
                 ]);
             }
 
@@ -127,9 +163,11 @@ class ScheduleController extends Controller
                 ->map(fn (MeetSportVenue $assignment): array => [
                     'id' => $assignment->venue_id,
                     'event_id' => $event->id,
+                    'sport_category_id' => null,
                     'label' => $assignment->venue->name,
                     'playing_area_type' => $assignment->venue->competitionAreas->first()?->area_type ?? 'venue',
                     'playing_area_count' => $assignment->expected_area_count ?? 1,
+                    'competition_area_ids' => [],
                 ]);
         })->values();
 
@@ -202,7 +240,13 @@ class ScheduleController extends Controller
                     'label' => $area->name,
                     'area_type' => $area->area_type,
                 ]),
-            'sportCategoryOptions' => SportCategory::query()->where('active', true)->orderBy('display_name')
+            'sportCategoryOptions' => SportCategory::query()
+                ->where('active', true)
+                ->where(function ($categories) use ($configuredCategoryIds, $configuredSportIds): void {
+                    $categories->whereNotIn('sport_id', $configuredSportIds)
+                        ->orWhereIn('id', $configuredCategoryIds);
+                })
+                ->orderBy('display_name')
                 ->get(['id', 'sport_id', 'display_name'])
                 ->map(fn (SportCategory $category): array => [
                     'id' => $category->id,

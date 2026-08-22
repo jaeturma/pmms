@@ -113,6 +113,12 @@ class SportCategory extends Model
         return $this->hasMany(EventSchedule::class);
     }
 
+    /** Courts explicitly made available to this category for a meet. */
+    public function competitionAreaAvailabilities(): HasMany
+    {
+        return $this->hasMany(SportCategoryCompetitionArea::class);
+    }
+
     /**
      * The distinct venues this category's own schedule slots have been
      * booked into. Derived through `schedules()` rather than a direct FK

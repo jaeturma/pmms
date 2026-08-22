@@ -1,0 +1,109 @@
+<?php
+
+use App\Enums\ManagementTeamMemberStatus;
+use App\Enums\ManagementTeamType;
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
+use App\Enums\UserRole;
+use App\Models\CoachAssignmentRequest;
+use App\Models\CoachOnboardingRequest;
+use App\Models\Delegation;
+use App\Models\Event;
+use App\Models\ManagementTeam;
+use App\Models\ManagementTeamMember;
+use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
+
+test('an administrator can manage user roles and reset passwords', function () {
+    $admin = User::factory()->admin()->create();
+    $user = User::factory()->create();
+
+    $this->actingAs($admin)->get('/system/users')->assertOk();
+    $this->actingAs($admin)->post('/system/users', [
+        'name' => 'New Secretary',
+        'username' => 'new.secretary',
+        'email' => null,
+        'role' => UserRole::Organizer->value,
+    ])->assertSessionHasNoErrors();
+    $this->actingAs($admin)->put("/system/users/{$user->id}", [
+        'name' => 'Updated User',
+        'username' => 'updated.user',
+        'email' => 'updated@example.test',
+        'role' => UserRole::Organizer->value,
+        'disabled' => false,
+    ])->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)->post("/system/users/{$user->id}/reset-password")->assertSessionHasNoErrors();
+
+    $pending = User::factory()->create(['approval_status' => 'pending']);
+    $this->actingAs($admin)->post("/system/users/{$pending->id}/approve")->assertSessionHasNoErrors();
+
+    expect($user->fresh()->name)->toBe('Updated User')
+        ->and($user->fresh()->role)->toBe(UserRole::Organizer)
+        ->and(Hash::check('DdOPaa2026!', $user->fresh()->password))->toBeTrue()
+        ->and(User::query()->where('username', 'new.secretary')->exists())->toBeTrue();
+    expect($pending->fresh()->approval_status)->toBe('approved')
+        ->and($pending->fresh()->approved_by)->toBe($admin->id);
+});
+
+test('an active ICT team member can manage system users', function () {
+    $ict = User::factory()->create();
+    $team = ManagementTeam::factory()->create(['team_type' => ManagementTeamType::ICT]);
+    ManagementTeamMember::factory()->create([
+        'management_team_id' => $team->id,
+        'user_id' => $ict->id,
+        'status' => ManagementTeamMemberStatus::Active,
+    ]);
+
+    $this->actingAs($ict)->get('/system/users')->assertOk();
+});
+
+test('a tournament secretary can see coach registrations and reset the coach password', function () {
+    $meetSport = MeetSport::factory()->create();
+    $secretary = User::factory()->create();
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $secretary->id,
+        'role' => MeetSportAssignmentRole::TournamentSecretary,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+    $delegation = Delegation::factory()->create(['meet_id' => $meetSport->meet_id]);
+    $event = Event::factory()->create(['sport_id' => $meetSport->sport_id]);
+    $meetSport->meet->events()->attach($event);
+    $coach = User::factory()->coach()->create(['password' => Hash::make('OldPassword!')]);
+    $coachRequest = CoachAssignmentRequest::query()->create([
+        'user_id' => $coach->id,
+        'meet_sport_id' => $meetSport->id,
+        'event_id' => $event->id,
+        'delegation_id' => $delegation->id,
+        'school_id' => schoolForDelegation($delegation)->id,
+        'status' => 'pending',
+    ]);
+    $pendingCoach = User::factory()->create(['approval_status' => 'pending']);
+    $onboarding = CoachOnboardingRequest::query()->create([
+        'user_id' => $pendingCoach->id,
+        'district_id' => $delegation->district_id,
+        'event_id' => $event->id,
+        'status' => 'pending',
+    ]);
+    $onboarding->events()->attach($event);
+
+    $this->actingAs($secretary)->get('/coach/assignment-requests')->assertOk();
+    $this->actingAs($secretary)->patch("/coach/onboarding-requests/{$onboarding->id}", ['status' => 'approved'])->assertSessionHasNoErrors();
+    $this->actingAs($secretary)->post("/coach/assignment-requests/{$coachRequest->id}/reset-password")->assertSessionHasNoErrors();
+
+    expect(Hash::check('DdOPaa2026!', $coach->fresh()->password))->toBeTrue()
+        ->and($pendingCoach->fresh()->approval_status)->toBe('approved')
+        ->and($pendingCoach->fresh()->role)->toBe(UserRole::Coach)
+        ->and($pendingCoach->coachAssignmentRequests()->where('event_id', $event->id)->where('status', 'approved')->exists())->toBeTrue();
+});
+
+test('ordinary users cannot manage system accounts or reset coach passwords', function () {
+    $viewer = User::factory()->create();
+    $target = User::factory()->create();
+
+    $this->actingAs($viewer)->get('/system/users')->assertForbidden();
+    $this->actingAs($viewer)->post("/system/users/{$target->id}/reset-password")->assertForbidden();
+});

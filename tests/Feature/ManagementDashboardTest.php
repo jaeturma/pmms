@@ -148,7 +148,7 @@ test('operations progress counts results, eligibility, protests, and incidents f
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('operations', 1)
             ->where('operations.0.results.encoded', 1)
-            ->where('operations.0.results.validated', 1)
+            ->where('operations.0.results.validated', 0)
             ->where('operations.0.eligibility.pending', 1)
             ->where('operations.0.eligibility.returned', 1)
             ->where('operations.0.protests.filed', 1)
