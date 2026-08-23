@@ -8,8 +8,8 @@ use App\Enums\EntryStatus;
 use App\Enums\GenderCategory;
 use App\Enums\MatchStatus;
 use App\Enums\MeetStatus;
-use App\Enums\ScoreEventType;
 use App\Enums\SchoolLevel;
+use App\Enums\ScoreEventType;
 use App\Enums\ScoringSessionStatus;
 use App\Enums\Sex;
 use App\Enums\UserRole;
@@ -27,6 +27,7 @@ use App\Models\ScoringSession;
 use App\Models\Sport;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Collection;
 
 /**
  * Standalone, local-development-only sample dataset for the live
@@ -130,7 +131,7 @@ class BasketballLiveDemoSeeder extends Seeder
      * athletes registered to the same team event under one delegation, up
      * to `max_entries_per_delegation`).
      *
-     * @return \Illuminate\Support\Collection<int, Entry>
+     * @return Collection<int, Entry>
      */
     private function confirmedSquad(Delegation $delegation, School $school, Event $event, string $prefix)
     {
@@ -157,8 +158,8 @@ class BasketballLiveDemoSeeder extends Seeder
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, Entry>  $entries
-     * @return \Illuminate\Support\Collection<int, MatchRosterPlayer>
+     * @param  Collection<int, Entry>  $entries
+     * @return Collection<int, MatchRosterPlayer>
      */
     private function buildRoster(EventMatch $match, string $side, $entries)
     {
@@ -174,8 +175,8 @@ class BasketballLiveDemoSeeder extends Seeder
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, MatchRosterPlayer>  $playersA
-     * @param  \Illuminate\Support\Collection<int, MatchRosterPlayer>  $playersB
+     * @param  Collection<int, MatchRosterPlayer>  $playersA
+     * @param  Collection<int, MatchRosterPlayer>  $playersB
      */
     private function scriptSession(
         EventMatch $match,

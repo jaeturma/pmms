@@ -2,16 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\EntryStatus;
 use App\Enums\MeetStatus;
+use App\Enums\Permission;
 use App\Enums\ProtestStatus;
 use App\Enums\ResultStatus;
 use App\Enums\UserRole;
 use App\Models\Accreditation;
 use App\Models\Announcement;
 use App\Models\Athlete;
-use App\Models\AuditLog;
 use App\Models\CoachAssignmentRequest;
 use App\Models\Delegation;
+use App\Models\EligibilityReview;
 use App\Models\Entry;
 use App\Models\EventResult;
 use App\Models\EventSchedule;
@@ -19,10 +21,10 @@ use App\Models\Incident;
 use App\Models\Meet;
 use App\Models\Personnel;
 use App\Models\Protest;
-use App\Models\School;
 use App\Models\User;
 use App\Services\MedalTallyService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -35,6 +37,30 @@ class DashboardController extends Controller
     public function index(Request $request, MedalTallyService $tally): Response
     {
         $currentMeet = Meet::current()->loadCount('events');
+        /** @var User $user */
+        $user = $request->user();
+
+        $athletes = Athlete::query();
+        $entries = Entry::query();
+        if ($user->role === UserRole::Coach) {
+            $delegationIds = $user->approvedCoachDelegationIds();
+            $eventIds = $user->approvedCoachEventIds();
+            $athletes->whereIn('delegation_id', $delegationIds)
+                ->ownedBy($user)
+                ->where(fn ($ownedAthletes) => $ownedAthletes
+                    ->whereDoesntHave('entries')
+                    ->orWhereHas('entries', fn ($ownedEntries) => $ownedEntries->whereIn('event_id', $eventIds)));
+            $entries->whereIn('delegation_id', $delegationIds)->whereIn('event_id', $eventIds);
+        } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer)
+            && $user->hasPermission(Permission::AthleteEligibilityReview, $currentMeet)) {
+            $athletes->whereHas('delegation', fn ($query) => $query->where('meet_id', $currentMeet->id));
+            $entries->whereHas('delegation', fn ($query) => $query->where('meet_id', $currentMeet->id));
+        } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer)
+            && $user->tournamentEventIds($currentMeet->id)->isNotEmpty()) {
+            $eventIds = $user->tournamentEventIds($currentMeet->id);
+            $athletes->whereHas('entries', fn ($query) => $query->whereIn('event_id', $eventIds));
+            $entries->whereIn('event_id', $eventIds);
+        }
 
         return Inertia::render('dashboard', [
             'currentMeet' => [
@@ -49,50 +75,19 @@ class DashboardController extends Controller
             ],
             'operations' => $this->operations($request, $tally),
             'coachAccreditation' => $this->coachAccreditation($request, $currentMeet),
+            'coachDashboard' => $this->coachDashboard($request, $currentMeet),
             'stats' => [
-                [
-                    'key' => 'schools',
-                    'label' => 'Schools',
-                    'value' => School::query()->count(),
-                ],
-                [
-                    'key' => 'delegations',
-                    'label' => 'Delegations',
-                    'value' => Delegation::query()->count(),
-                ],
                 [
                     'key' => 'athletes',
                     'label' => 'Athletes',
-                    'value' => Athlete::query()->count(),
+                    'value' => $athletes->count(),
                 ],
                 [
                     'key' => 'entries',
                     'label' => 'Entries',
-                    'value' => Entry::query()->count(),
-                ],
-                [
-                    'key' => 'users',
-                    'label' => 'Users',
-                    'value' => User::query()->count(),
-                ],
-                [
-                    'key' => 'activity_today',
-                    'label' => "Today's Activity",
-                    'value' => AuditLog::query()->whereDate('created_at', today())->count(),
+                    'value' => $entries->count(),
                 ],
             ],
-            'recentActivity' => AuditLog::query()
-                ->with('user')
-                ->latest('created_at')
-                ->limit(10)
-                ->get()
-                ->map(fn (AuditLog $log): array => [
-                    'id' => $log->id,
-                    'action' => $log->action,
-                    'user' => $log->user?->name,
-                    'created_at_human' => $log->created_at?->diffForHumans(),
-                ])
-                ->values(),
             'announcements' => Announcement::query()
                 ->published()
                 ->with('meet:id,name')
@@ -165,6 +160,63 @@ class DashboardController extends Controller
         ];
     }
 
+    /** @return array<string, mixed>|null */
+    private function coachDashboard(Request $request, Meet $meet): ?array
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        if ($user->role !== UserRole::Coach) {
+            return null;
+        }
+
+        $eventIds = $user->approvedCoachEventIds();
+        $delegationIds = $user->approvedCoachDelegationIds();
+
+        return [
+            'eligibility_reviews' => EligibilityReview::query()
+                ->where('meet_id', $meet->id)
+                ->whereHas('athlete', fn ($athlete) => $athlete
+                    ->whereIn('delegation_id', $delegationIds)
+                    ->ownedBy($user))
+                ->with(['athlete:id,school_id,first_name,last_name', 'athlete.school:id,name'])
+                ->latest('id')
+                ->limit(5)
+                ->get()
+                ->map(fn (EligibilityReview $review): array => [
+                    'id' => $review->id,
+                    'athlete' => $review->athlete->fullName(),
+                    'school' => $review->athlete->school->name,
+                    'status' => $review->status->value,
+                    'status_label' => $review->status->label(),
+                ])
+                ->values(),
+            'submitted_entries' => Entry::query()
+                ->whereIn('event_id', $eventIds)
+                ->whereIn('delegation_id', $delegationIds)
+                ->where('status', EntryStatus::Submitted->value)
+                ->whereHas('delegation', fn ($delegation) => $delegation->where('meet_id', $meet->id))
+                ->with([
+                    'athlete:id,first_name,last_name',
+                    'event:id,sport_id,name',
+                    'event.sport:id,name',
+                    'delegation.school:id,name',
+                    'delegation.district:id,name',
+                ])
+                ->latest('id')
+                ->limit(5)
+                ->get()
+                ->map(fn (Entry $entry): array => [
+                    'id' => $entry->id,
+                    'athlete' => $entry->athlete->fullName(),
+                    'event' => "{$entry->event->sport->name} — {$entry->event->name}",
+                    'delegation' => $entry->delegation->registrantName(),
+                    'own_team' => $delegationIds->contains($entry->delegation_id),
+                ])
+                ->values(),
+        ];
+    }
+
     /**
      * Meet-day operations widgets for the active meet (read-side only).
      * Managers get the operational queues, officers their own delegation's
@@ -184,11 +236,15 @@ class DashboardController extends Controller
         $user = $request->user();
 
         $canManage = Gate::allows('manage-meet-data');
+        $scopedEventIds = $user->tournamentEventIds($meet->id);
+        $isTournamentScoped = ! $user->hasRole(UserRole::Admin, UserRole::Organizer)
+            && $scopedEventIds->isNotEmpty();
 
         return [
             'meet' => ['id' => $meet->id, 'name' => $meet->name],
             'todaySlots' => EventSchedule::query()
                 ->where('meet_id', $meet->id)
+                ->when($isTournamentScoped, fn ($query) => $query->whereIn('event_id', $scopedEventIds))
                 ->whereDate('scheduled_date', today())
                 ->with(['venue:id,name', 'event.sport:id,name'])
                 ->orderBy('starts_at')
@@ -208,8 +264,8 @@ class DashboardController extends Controller
                 ])
                 ->values()
                 ->all(),
-            'tallyTop' => array_slice($tally->standings($meet->id)['districts'], 0, 5),
-            'eventsOverview' => $this->eventsOverview($meet),
+            'tallyTop' => $isTournamentScoped ? [] : array_slice($tally->standings($meet->id)['districts'], 0, 5),
+            'eventsOverview' => $this->eventsOverview($meet, $isTournamentScoped ? $scopedEventIds : null),
             'queues' => $canManage ? [
                 'pending_results' => EventResult::query()
                     ->where('meet_id', $meet->id)
@@ -268,18 +324,20 @@ class DashboardController extends Controller
      *
      * @return array{completed: int, ongoing: int, upcoming: int, total: int}
      */
-    private function eventsOverview(Meet $meet): array
+    private function eventsOverview(Meet $meet, ?Collection $eventIds = null): array
     {
-        $total = $meet->events()->count();
+        $total = $meet->events()->when($eventIds !== null, fn ($query) => $query->whereKey($eventIds))->count();
 
         $completedEventIds = EventResult::query()
             ->where('meet_id', $meet->id)
+            ->when($eventIds !== null, fn ($query) => $query->whereIn('event_id', $eventIds))
             ->where('status', ResultStatus::Validated->value)
             ->pluck('event_id')
             ->unique();
 
         $ongoing = EventSchedule::query()
             ->where('meet_id', $meet->id)
+            ->when($eventIds !== null, fn ($query) => $query->whereIn('event_id', $eventIds))
             ->whereDate('scheduled_date', today())
             ->where('starts_at', '<=', now()->format('H:i:s'))
             ->where('ends_at', '>=', now()->format('H:i:s'))

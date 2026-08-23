@@ -1,14 +1,29 @@
 <?php
 
+use App\Enums\PersonnelRole;
 use App\Enums\ProtestStatus;
 use App\Enums\ResultStatus;
 use App\Models\AuditLog;
 use App\Models\Delegation;
 use App\Models\EventMatch;
 use App\Models\EventResult;
+use App\Models\Personnel;
 use App\Models\Protest;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
+
+function delegationManagerFor(Delegation $delegation): User
+{
+    $user = User::factory()->delegationOfficer()->create();
+    Personnel::factory()->create([
+        'delegation_id' => $delegation->id,
+        'user_id' => $user->id,
+        'role' => PersonnelRole::DelegationManager,
+    ]);
+    $delegation->officers()->attach($user);
+
+    return $user;
+}
 
 test('guests are redirected and viewers are forbidden from protests', function () {
     $this->get('/protests')->assertRedirect('/login');
@@ -22,8 +37,7 @@ test('officers see only their own delegation\'s protests; managers all', functio
     $mine = Protest::factory()->create();
     Protest::factory()->create();
 
-    $officer = User::factory()->delegationOfficer()->create();
-    $mine->delegation->officers()->attach($officer);
+    $officer = delegationManagerFor($mine->delegation);
 
     $this->actingAs($officer)
         ->get('/protests')
@@ -45,8 +59,7 @@ test('officers can file for their own delegation only; managers for any', functi
     $delegation = Delegation::factory()->approved()->create();
     $result = EventResult::factory()->validated()->create(['meet_id' => $delegation->meet_id]);
 
-    $officer = User::factory()->delegationOfficer()->create();
-    $delegation->officers()->attach($officer);
+    $officer = delegationManagerFor($delegation);
 
     $this->actingAs($officer)
         ->post('/protests', [
@@ -70,7 +83,7 @@ test('officers can file for their own delegation only; managers for any', functi
         ])
         ->assertForbidden();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(delegationManagerFor($delegation))
         ->post('/protests', [
             'delegation_id' => $delegation->id,
             'event_result_id' => $result->id,
@@ -86,7 +99,7 @@ test('a protest targets exactly one result or match of its own meet', function (
     $result = EventResult::factory()->validated()->create(['meet_id' => $delegation->meet_id]);
     $match = EventMatch::factory()->create(['meet_id' => $delegation->meet_id]);
 
-    $admin = User::factory()->admin()->create();
+    $admin = delegationManagerFor($delegation);
 
     $this->actingAs($admin)
         ->post('/protests', [

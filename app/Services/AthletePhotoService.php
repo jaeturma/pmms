@@ -25,7 +25,11 @@ class AthletePhotoService
             $settings = config("pmms.athlete_photos.{$type}");
             $target = $this->coverCrop($source, (int) $settings['width'], (int) $settings['height']);
             imagedestroy($source);
-            $encoded = $this->encodeWithinLimit($target);
+            $encoded = $this->encodeWithinLimit(
+                $target,
+                (int) config('pmms.athlete_photos.max_stored_kb') * 1024,
+                $field,
+            );
             imagedestroy($target);
 
             $temporary = tempnam(sys_get_temp_dir(), 'pmms-photo-');
@@ -60,6 +64,36 @@ class AthletePhotoService
             Storage::disk($upload->disk)->delete($this->variantPath($upload, $variant));
         }
         $this->uploads->delete($upload);
+    }
+
+    public function storeDocument(UploadedFile $file, User $user, string $field): FileUpload
+    {
+        try {
+            $source = $this->orient($this->decode($file), $file);
+            $target = $this->fitWithin($source, 1600, 2000);
+            imagedestroy($source);
+            $encoded = $this->encodeWithinLimit($target, 1000 * 1024, $field);
+            imagedestroy($target);
+
+            $temporary = tempnam(sys_get_temp_dir(), 'pmms-document-');
+            if ($temporary === false || file_put_contents($temporary, $encoded) === false) {
+                throw new RuntimeException('Unable to create optimized document.');
+            }
+
+            try {
+                $optimized = new UploadedFile($temporary, bin2hex(random_bytes(16)).'.jpg', 'image/jpeg', null, true);
+
+                return $this->uploads->store($optimized, $user, $field);
+            } finally {
+                @unlink($temporary);
+            }
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (Throwable) {
+            throw ValidationException::withMessages([
+                $field => __('We could not process this document. Please use a valid JPG or PNG image.'),
+            ]);
+        }
     }
 
     public function variantPath(FileUpload $upload, string $variant): string
@@ -118,9 +152,23 @@ class AthletePhotoService
         return $target;
     }
 
-    private function encodeWithinLimit(GdImage $image): string
+    private function fitWithin(GdImage $source, int $maxWidth, int $maxHeight): GdImage
     {
-        $limit = (int) config('pmms.athlete_photos.max_stored_kb') * 1024;
+        $sourceWidth = imagesx($source);
+        $sourceHeight = imagesy($source);
+        abort_if($sourceWidth * $sourceHeight > 60_000_000, 422, 'Document dimensions are too large to process safely.');
+        $scale = min(1, $maxWidth / $sourceWidth, $maxHeight / $sourceHeight);
+        $width = max(1, (int) round($sourceWidth * $scale));
+        $height = max(1, (int) round($sourceHeight * $scale));
+        $target = imagecreatetruecolor($width, $height);
+        imagefill($target, 0, 0, imagecolorallocate($target, 255, 255, 255));
+        imagecopyresampled($target, $source, 0, 0, 0, 0, $width, $height, $sourceWidth, $sourceHeight);
+
+        return $target;
+    }
+
+    private function encodeWithinLimit(GdImage $image, int $limit, string $field): string
+    {
         foreach ([86, 80, 74, 68, 60, 52, 44] as $quality) {
             ob_start();
             imagejpeg($image, null, $quality);
@@ -129,7 +177,7 @@ class AthletePhotoService
                 return $contents;
             }
         }
-        throw ValidationException::withMessages(['photo' => __('The optimized photo could not be reduced below 500 KB.')]);
+        throw ValidationException::withMessages([$field => __('The image could not be reduced to a safe storage size.')]);
     }
 
     private function writeDerivatives(FileUpload $upload, string $encoded): void

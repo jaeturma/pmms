@@ -3,6 +3,7 @@
 use App\Models\AuditLog;
 use App\Models\Setting;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Inertia\Testing\AssertableInertia;
 
 test('guests are redirected from system settings', function () {
@@ -75,6 +76,44 @@ test('admins can save settings, and audit trail records it', function () {
         ->and($settings->recaptcha_secret_key)->toBe('secret-key')
         ->and($settings->smtp_password)->toBe('mailer-secret')
         ->and(AuditLog::query()->where('action', 'system_settings.updated')->exists())->toBeTrue();
+});
+
+test('admins can configure the application title and logo', function () {
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/system-settings', [
+            '_method' => 'put',
+            'app_title' => 'DdOPAA Provincial Meet 2026',
+            'app_logo' => UploadedFile::fake()->image('app-logo.png'),
+            'recaptcha_enabled' => false,
+            'email_verification_enabled' => false,
+        ])->assertSessionHasNoErrors();
+
+    expect(Setting::current()->app_title)->toBe('DdOPAA Provincial Meet 2026')
+        ->and(Setting::current()->app_logo_upload_id)->not->toBeNull();
+    $this->get('/branding/logo')->assertOk();
+});
+
+test('admins can configure the landing page Facebook Live video', function () {
+    $this->actingAs(User::factory()->admin()->create())
+        ->put('/system-settings', [
+            'facebook_live_enabled' => true,
+            'facebook_live_url' => 'https://www.facebook.com/example/videos/123456789',
+            'recaptcha_enabled' => false,
+            'email_verification_enabled' => false,
+        ])->assertSessionHasNoErrors();
+
+    expect(Setting::current()->facebook_live_enabled)->toBeTrue()
+        ->and(Setting::current()->facebook_live_url)->toBe('https://www.facebook.com/example/videos/123456789');
+});
+
+test('Facebook Live requires a Facebook video URL when enabled', function () {
+    $this->actingAs(User::factory()->admin()->create())
+        ->put('/system-settings', [
+            'facebook_live_enabled' => true,
+            'facebook_live_url' => 'https://example.com/live',
+            'recaptcha_enabled' => false,
+            'email_verification_enabled' => false,
+        ])->assertSessionHasErrors('facebook_live_url');
 });
 
 test('a blank secret on save leaves the previously stored secret unchanged', function () {

@@ -1,4 +1,4 @@
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { Award, FileUp, Plus, Printer, Send, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
@@ -163,9 +163,15 @@ function EncodeDialog({
         })),
     }));
 
-    const competition = competitionOptions.find((option) => String(option.id) === data.match_id);
+    const competition = competitionOptions.find(
+        (option) => String(option.id) === data.match_id,
+    );
     const availableEntries = result
-        ? entryOptions.filter((option) => String(option.meet_id) === data.meet_id && String(option.event_id) === data.event_id)
+        ? entryOptions.filter(
+              (option) =>
+                  String(option.meet_id) === data.meet_id &&
+                  String(option.event_id) === data.event_id,
+          )
         : (competition?.entries ?? []);
 
     const setRow = (i: number, patch: Partial<PlacementRow>) => {
@@ -232,12 +238,21 @@ function EncodeDialog({
                     {!result && (
                         <div className="space-y-2">
                             <div className="space-y-2">
-                                <Label htmlFor="result-match">Scheduled competition</Label>
+                                <Label htmlFor="result-match">
+                                    Scheduled competition
+                                </Label>
                                 <Select
                                     value={data.match_id}
                                     onValueChange={(value) => {
                                         setData('match_id', value);
-                                        setData('placements', [{ entry_id: '', rank: '1', mark: '', is_tie: false }]);
+                                        setData('placements', [
+                                            {
+                                                entry_id: '',
+                                                rank: '1',
+                                                mark: '',
+                                                is_tie: false,
+                                            },
+                                        ]);
                                     }}
                                 >
                                     <SelectTrigger id="result-match">
@@ -255,7 +270,11 @@ function EncodeDialog({
                                     </SelectContent>
                                 </Select>
                                 <InputError message={errors.match_id} />
-                                {competition && <p className="text-sm text-muted-foreground">{competition.context}</p>}
+                                {competition && (
+                                    <p className="text-sm text-muted-foreground">
+                                        {competition.context}
+                                    </p>
+                                )}
                             </div>
                         </div>
                     )}
@@ -435,6 +454,8 @@ export default function Results({
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<Result | null>(null);
     const [correcting, setCorrecting] = useState<Result | null>(null);
+    const isTournamentScoped =
+        usePage().props.auth.user?.is_tournament_scoped ?? false;
 
     const openCreate = () => {
         setEditing(null);
@@ -513,32 +534,34 @@ export default function Results({
                     }
                 />
 
-                <div className="flex flex-wrap gap-2">
-                    <Select
-                        value={String(filters.event_id ?? 'all')}
-                        onValueChange={(value) =>
-                            applyFilters({ event_id: value })
-                        }
-                    >
-                        <SelectTrigger
-                            className="w-72"
-                            aria-label="Filter by event"
+                {!isTournamentScoped && (
+                    <div className="flex flex-wrap gap-2">
+                        <Select
+                            value={String(filters.event_id ?? 'all')}
+                            onValueChange={(value) =>
+                                applyFilters({ event_id: value })
+                            }
                         >
-                            <SelectValue placeholder="All events" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All events</SelectItem>
-                            {eventFilterOptions.map((option) => (
-                                <SelectItem
-                                    key={`${option.meet_id}-${option.id}`}
-                                    value={String(option.id)}
-                                >
-                                    {option.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
+                            <SelectTrigger
+                                className="w-72"
+                                aria-label="Filter by event"
+                            >
+                                <SelectValue placeholder="All events" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All events</SelectItem>
+                                {eventFilterOptions.map((option) => (
+                                    <SelectItem
+                                        key={`${option.meet_id}-${option.id}`}
+                                        value={String(option.id)}
+                                    >
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                )}
 
                 {results.data.length === 0 ? (
                     <EmptyState
@@ -587,26 +610,34 @@ export default function Results({
                                             {result.status_label}
                                         </Badge>
                                         {result.tm_confirmed ? (
-                                            <Badge variant="secondary">TM confirmed</Badge>
+                                            <Badge variant="secondary">
+                                                TM confirmed
+                                            </Badge>
                                         ) : result.match_id ? (
-                                            <Badge variant="outline">Awaiting TM confirmation</Badge>
+                                            <Badge variant="outline">
+                                                Awaiting TM confirmation
+                                            </Badge>
                                         ) : null}
-                                        {result.can_tm_confirm && !result.tm_confirmed && (
-                                            <Button
-                                                size="sm"
-                                                onClick={() =>
-                                                    router.post(
-                                                        `/results/${result.id}/tm-confirmation`,
-                                                        {},
-                                                        { preserveScroll: true },
-                                                    )
-                                                }
-                                            >
-                                                Confirm result
-                                            </Button>
-                                        )}
+                                        {result.can_tm_confirm &&
+                                            !result.tm_confirmed && (
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        router.post(
+                                                            `/results/${result.id}/tm-confirmation`,
+                                                            {},
+                                                            {
+                                                                preserveScroll: true,
+                                                            },
+                                                        )
+                                                    }
+                                                >
+                                                    Confirm result
+                                                </Button>
+                                            )}
                                         {result.can_form &&
-                                            (result.match_id === null || result.tm_confirmed) &&
+                                            (result.match_id === null ||
+                                                result.tm_confirmed) &&
                                             !['official'].includes(
                                                 result.status,
                                             ) && (
@@ -632,7 +663,9 @@ export default function Results({
                                                             className="sr-only"
                                                             type="file"
                                                             accept=".pdf,.jpg,.jpeg,.png"
-                                                            onChange={(event) => {
+                                                            onChange={(
+                                                                event,
+                                                            ) => {
                                                                 const file =
                                                                     event.target
                                                                         .files?.[0];

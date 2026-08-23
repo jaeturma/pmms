@@ -3,9 +3,12 @@
 namespace App\Policies;
 
 use App\Enums\EntryStatus;
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\UserRole;
 use App\Models\Delegation;
 use App\Models\Entry;
+use App\Models\Event;
 use App\Models\User;
 
 class EntryPolicy
@@ -18,7 +21,13 @@ class EntryPolicy
      */
     public function viewAny(User $user): bool
     {
-        return $user->hasRole(UserRole::Admin, UserRole::Organizer, UserRole::DelegationOfficer, UserRole::Coach);
+        return $user->hasRole(
+            UserRole::Admin,
+            UserRole::Organizer,
+            UserRole::DelegationOfficer,
+            UserRole::Coach,
+            UserRole::TournamentManager,
+        ) || $user->tournamentEventIds()->isNotEmpty();
     }
 
     /**
@@ -27,9 +36,9 @@ class EntryPolicy
      * roster edits, entries do not require the delegation to still be a
      * draft.
      */
-    public function create(User $user, Delegation $delegation, ?\App\Models\Event $event = null): bool
+    public function create(User $user, Delegation $delegation, ?Event $event = null): bool
     {
-        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+        if ($user->isAdmin()) {
             return true;
         }
 
@@ -42,7 +51,21 @@ class EntryPolicy
      */
     public function confirm(User $user, Entry $entry): bool
     {
-        return $user->hasRole(UserRole::Admin, UserRole::Organizer);
+        if ($user->isAdmin()) {
+            return true;
+        }
+
+        return $user->meetSportAssignments()
+            ->where('status', MeetSportAssignmentStatus::Active->value)
+            ->whereIn('role', [
+                MeetSportAssignmentRole::TournamentManager->value,
+                MeetSportAssignmentRole::AssistantTournamentManager->value,
+                MeetSportAssignmentRole::TournamentSecretary->value,
+            ])
+            ->whereHas('meetSport', fn ($meetSport) => $meetSport
+                ->where('meet_id', $entry->delegation->meet_id)
+                ->where('sport_id', $entry->event->sport_id))
+            ->exists();
     }
 
     /**
@@ -51,7 +74,7 @@ class EntryPolicy
      */
     public function withdraw(User $user, Entry $entry): bool
     {
-        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+        if ($user->isAdmin()) {
             return true;
         }
 
@@ -69,7 +92,7 @@ class EntryPolicy
             return false;
         }
 
-        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+        if ($user->isAdmin()) {
             return true;
         }
 

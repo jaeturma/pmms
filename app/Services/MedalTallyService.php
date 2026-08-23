@@ -7,6 +7,7 @@ use App\Enums\DelegationStatus;
 use App\Enums\ResultStatus;
 use App\Models\Delegation;
 use App\Models\ResultPlacement;
+use App\Models\School;
 use App\Models\SchoolDistrict;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -44,8 +45,9 @@ class MedalTallyService
     public function standings(?int $meetId = null, ?int $sportId = null, ?string $ageDivision = null): array
     {
         $placements = $this->basePlacements($meetId, $sportId, $ageDivision)
-            ->with('entry.athlete.school.district', 'entry.athlete.school.schoolDistrict')
+            ->with('result.event', 'entry.delegation', 'entry.athlete.school.district', 'entry.athlete.school.schoolDistrict')
             ->get();
+        $tallyPlacements = $this->medalUnits($placements);
 
         // Start with every approved delegation in the meet, rather than only
         // the delegations that already own a medal. This keeps the tally and
@@ -65,7 +67,7 @@ class MedalTallyService
 
         // Placements remain authoritative and are included defensively for
         // historical data whose delegation may predate approval enforcement.
-        $placementSchools = $placements->pluck('entry.athlete.school')->keyBy('id');
+        $placementSchools = $tallyPlacements->pluck('entry.athlete.school')->keyBy('id');
         // Once medals exist, retain the established medal-winner-only rows.
         // The approved-delegation fallback is specifically for the otherwise
         // blank pre-results state requested by the tally views.
@@ -76,7 +78,7 @@ class MedalTallyService
         // — so a municipal delegation's medals split correctly across the
         // several schools it pools, and the district/municipality rollup
         // below (unchanged) sums them back up automatically.
-        $medalsBySchool = $placements
+        $medalsBySchool = $tallyPlacements
             ->groupBy(fn (ResultPlacement $placement): int => $placement->entry->athlete->school_id)
             ->map(fn (Collection $group): array => $this->medals($group));
 
@@ -96,12 +98,14 @@ class MedalTallyService
                     // The grouping key for the municipality-level rollup
                     // below — always the municipality name, never the
                     // finer-grained school district.
-                    'municipality' => $school->district->name,
+                    'municipality' => $school->district?->name ?? __('Not assigned'),
                     // Carried through so the rollup below can attach each
                     // municipality's real crest (`District::logoUrl()`)
                     // without a second name-matched lookup.
                     'municipality_id' => $school->district_id,
-                    'district' => $showSchoolDistrict ? $school->schoolDistrict->name : $school->district->name,
+                    'district' => $showSchoolDistrict
+                        ? $school->schoolDistrict->name
+                        : ($school->district?->name ?? __('Not assigned')),
                     ...$medals,
                     'points' => $this->points($medals['gold'], $medals['silver'], $medals['bronze']),
                 ];
@@ -233,8 +237,10 @@ class MedalTallyService
                         ->sort()
                         ->implode(', '),
                     'school' => $school->name,
-                    'municipality' => $school->district->name,
-                    'district' => $showSchoolDistrict ? $school->schoolDistrict->name : $school->district->name,
+                    'municipality' => $school->district?->name ?? __('Not assigned'),
+                    'district' => $showSchoolDistrict
+                        ? $school->schoolDistrict->name
+                        : ($school->district?->name ?? __('Not assigned')),
                     ...$this->medals($group),
                 ];
             })
@@ -387,7 +393,7 @@ class MedalTallyService
                     'participant_type' => $isTeam ? 'team' : 'athlete',
                     'athlete_name' => $isTeam ? null : $first->entry->athlete->fullName(),
                     'team_name' => $isTeam
-                        ? sprintf('%s %s Team', $school->district->name, $event->sport->name)
+                        ? sprintf('%s %s Team', $school->district?->name ?? $school->name, $event->sport->name)
                         : null,
                     'roster' => $isTeam
                         ? $group->map(fn (ResultPlacement $p): string => $p->entry->athlete->fullName())->values()->all()
@@ -429,7 +435,7 @@ class MedalTallyService
     }
 
     /**
-     * @param  Collection<int, \App\Models\School>  $schools
+     * @param  Collection<int, School>  $schools
      * @return Collection<int, int>
      */
     private function multiDistrictMunicipalityIdsForSchools(Collection $schools): Collection
@@ -461,6 +467,7 @@ class MedalTallyService
      */
     private function medals(Collection $placements): array
     {
+        $placements = $this->medalUnits($placements);
         $byRank = fn (int $rank): int => $placements
             ->filter(fn (ResultPlacement $placement): bool => $placement->rank === $rank)
             ->count();
@@ -475,6 +482,31 @@ class MedalTallyService
             'bronze' => $bronze,
             'total' => $gold + $silver + $bronze,
         ];
+    }
+
+    /**
+     * A team event awards one medal result to a delegation, not one medal
+     * per physical member. Legacy team results contain one tied placement
+     * per athlete, so collapse those rows into the same logical medal unit.
+     * Individual placements remain one-for-one.
+     *
+     * @param  Collection<int, ResultPlacement>  $placements
+     * @return Collection<int, ResultPlacement>
+     */
+    private function medalUnits(Collection $placements): Collection
+    {
+        return $placements->unique(function (ResultPlacement $placement): string {
+            if (! $placement->result->event->is_team_event) {
+                return 'individual:'.$placement->id;
+            }
+
+            return implode(':', [
+                'team',
+                $placement->event_result_id,
+                $placement->rank,
+                $placement->team_entry_id ?? $placement->entry->delegation_id,
+            ]);
+        })->values();
     }
 
     /**

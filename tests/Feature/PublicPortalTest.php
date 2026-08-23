@@ -7,6 +7,7 @@ use App\Models\District;
 use App\Models\EventMatch;
 use App\Models\Meet;
 use App\Models\ScoringSession;
+use App\Models\Setting;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 
@@ -29,6 +30,24 @@ test('only the one published and active meet appears on the portal home', functi
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('meet.name', $featured->name)
             ->where('meet.status_label', 'Active'));
+});
+
+test('the landing page only exposes Facebook Live when an admin enables it', function () {
+    Meet::factory()->active()->published()->featured()->create();
+
+    $this->get('/')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('facebookLive', null));
+
+    Setting::current()->forceFill([
+        'facebook_live_enabled' => true,
+        'facebook_live_url' => 'https://www.facebook.com/example/videos/123456789',
+    ])->save();
+
+    $this->get('/')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('facebookLive.url', 'https://www.facebook.com/example/videos/123456789')
+            ->where('facebookLive.embed_url', fn (string $url): bool => str_starts_with($url, 'https://www.facebook.com/plugins/video.php?')));
 });
 
 test('portal meet props carry public-safe fields only', function () {
@@ -69,7 +88,7 @@ test('the portal home lists the active meet\'s competing municipalities, dedupli
 test('managers can publish a non-draft meet, audited', function () {
     $meet = Meet::factory()->registrationClosed()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->patch("/meets/{$meet->id}/publish")
         ->assertRedirect();
 

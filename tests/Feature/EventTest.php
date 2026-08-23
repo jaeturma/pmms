@@ -42,7 +42,7 @@ test('the events catalog renders with events and sport options', function () {
 test('organizers can create events', function () {
     $sport = Sport::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/events', validEventPayload($sport))
         ->assertRedirect();
 

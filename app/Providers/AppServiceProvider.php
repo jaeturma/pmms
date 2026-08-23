@@ -42,8 +42,10 @@ class AppServiceProvider extends ServiceProvider
     protected function configureAuthorization(): void
     {
         Gate::define('administer', fn (User $user): bool => $user->role === UserRole::Admin);
+        Gate::define('view-system-logs', fn (User $user): bool => $user->isAdmin() || $user->canManageProductionAccounts());
 
-        Gate::define('manage-meet-data', fn (User $user): bool => $user->hasRole(UserRole::Admin, UserRole::Organizer));
+        Gate::define('manage-meet-data', fn (User $user): bool => $user->isAdmin());
+        Gate::define('view-management-reports', fn (User $user): bool => $user->canViewManagementReports());
     }
 
     /**

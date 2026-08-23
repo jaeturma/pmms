@@ -2,10 +2,12 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\EntryStatus;
 use App\Enums\Sex;
 use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\Delegation;
+use App\Models\Entry;
 use App\Models\Event;
 use App\Models\School;
 use Illuminate\Foundation\Http\FormRequest;
@@ -38,6 +40,11 @@ class AthleteRequest extends FormRequest
             ->where('status', 'approved')
             ->where('delegation_id', $this->integer('delegation_id'))
             ->value('event_id');
+
+        $eventId ??= $this->user()->coachOnboardingRequest()
+            ->where('status', 'approved')
+            ->with('events:id')
+            ->first()?->events->first()?->id;
 
         if ($eventId !== null) {
             $this->merge(['event_id' => $eventId]);
@@ -77,13 +84,13 @@ class AthleteRequest extends FormRequest
             'grade_level' => ['required', 'integer', 'min:1', 'max:12'],
             'photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.config('pmms.athlete_photos.max_upload_kb')],
             'sports_photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.config('pmms.athlete_photos.max_upload_kb')],
-            'athlete_history' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
-            'form_10' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
-            'school_id_document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
-            'birth_certificate' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
-            'report_card' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
-            'parental_consent' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
-            'medical_certificate' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
+            'athlete_history' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
+            'form_10' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
+            'school_id_document' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
+            'birth_certificate' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
+            'report_card' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
+            'parental_consent' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
+            'medical_certificate' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
         ];
 
         if ($athlete === null) {
@@ -139,11 +146,14 @@ class AthleteRequest extends FormRequest
                 $validator->errors()->add('event_id', __('The athlete\'s grade level does not match this event\'s age division.'));
             }
 
-            if ($delegation->school_id !== null && $delegation->school_id !== $school->id) {
-                $validator->errors()->add('school_id', __('The school must be the delegation\'s own school.'));
-            } elseif ($delegation->district_id !== null && $delegation->district_id !== $school->district_id) {
-                $validator->errors()->add('school_id', __('The school must belong to the delegation\'s municipality.'));
+            if ($event !== null && Entry::query()
+                ->where('delegation_id', $delegation->id)
+                ->where('event_id', $event->id)
+                ->where('status', '!=', EntryStatus::Withdrawn->value)
+                ->count() >= $event->max_entries_per_delegation) {
+                $validator->errors()->add('event_id', __('The delegation has reached the entry limit for the coach\'s assigned event.'));
             }
+
         });
     }
 }

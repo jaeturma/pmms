@@ -32,7 +32,7 @@ class AccountProvisionController extends Controller
             ->when($search !== '', fn ($query) => $query->whereHas('person', fn ($person) => $person->where('full_name', 'like', "%{$search}%")))
             ->orderByRaw("FIELD(status, 'pending', 'invited', 'activated')")
             ->orderBy('id')
-            ->paginate(25)
+            ->paginate(10)
             ->withQueryString()
             ->through(fn (AccountProvision $provision): array => [
                 'id' => $provision->id,

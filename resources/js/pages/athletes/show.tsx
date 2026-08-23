@@ -1,8 +1,32 @@
 import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft, CheckCircle2, TriangleAlert } from 'lucide-react';
+import {
+    ArrowLeft,
+    CheckCircle2,
+    Eye,
+    Maximize2,
+    Minus,
+    Plus,
+    TriangleAlert,
+} from 'lucide-react';
+import { useState } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
 import { index } from '@/routes/athletes';
 
 type Athlete = {
@@ -21,13 +45,45 @@ type Athlete = {
     sports: string;
     accreditation_status: string;
     can_update: boolean;
+    documents: Array<{
+        id: number;
+        document: string;
+        file_name: string;
+        view_url: string;
+        status: string;
+        status_label: string;
+    }>;
+    achievements: Array<{
+        medal: string;
+        sport: string;
+        event: string;
+        team: boolean;
+    }>;
+};
+
+const documentStatusClass: Record<string, string> = {
+    submitted:
+        'border-orange-200 bg-orange-100 text-orange-800 dark:border-orange-800 dark:bg-orange-950 dark:text-orange-200',
+    missing:
+        'border-orange-200 bg-orange-100 text-orange-800 dark:border-orange-800 dark:bg-orange-950 dark:text-orange-200',
+    under_review:
+        'border-sky-200 bg-sky-100 text-sky-800 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200',
+    verified:
+        'border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
+    rejected:
+        'border-red-200 bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200',
 };
 
 type Props = {
     athlete: Athlete;
 };
 
+type AthleteDocument = Athlete['documents'][number];
+
 export default function AthleteShow({ athlete }: Props) {
+    const [selectedDocument, setSelectedDocument] =
+        useState<AthleteDocument | null>(null);
+    const [documentZoom, setDocumentZoom] = useState(1);
     const fullName = `${athlete.first_name} ${athlete.last_name}`;
 
     const fields: Array<[string, string]> = [
@@ -76,6 +132,107 @@ export default function AthleteShow({ athlete }: Props) {
                                     </div>
                                 ))}
                             </dl>
+
+                            <div className="mt-6 overflow-hidden rounded-lg border">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Document</TableHead>
+                                            <TableHead>View</TableHead>
+                                            <TableHead>Status</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {athlete.documents.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell
+                                                    colSpan={3}
+                                                    className="text-center text-muted-foreground"
+                                                >
+                                                    No documents uploaded.
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : (
+                                            athlete.documents.map(
+                                                (document) => (
+                                                    <TableRow key={document.id}>
+                                                        <TableCell className="font-medium">
+                                                            {document.document}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Button
+                                                                variant="outline"
+                                                                onClick={() => {
+                                                                    setDocumentZoom(
+                                                                        1,
+                                                                    );
+                                                                    setSelectedDocument(
+                                                                        document,
+                                                                    );
+                                                                }}
+                                                            >
+                                                                <Eye className="size-4" />
+                                                                View
+                                                            </Button>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Badge
+                                                                variant="outline"
+                                                                className={
+                                                                    documentStatusClass[
+                                                                        document
+                                                                            .status
+                                                                    ]
+                                                                }
+                                                            >
+                                                                {
+                                                                    document.status_label
+                                                                }
+                                                            </Badge>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ),
+                                            )
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                            <div className="mt-6">
+                                <h3 className="mb-3 font-semibold">
+                                    Medals / Achievements
+                                </h3>
+                                {athlete.achievements.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        No official medal achievements yet.
+                                    </p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {athlete.achievements.map(
+                                            (achievement, index) => (
+                                                <div
+                                                    key={`${achievement.sport}-${achievement.event}-${index}`}
+                                                    className="flex items-center justify-between rounded-md border px-3 py-2"
+                                                >
+                                                    <div>
+                                                        <p className="font-medium">
+                                                            {achievement.sport}{' '}
+                                                            — {achievement.event}
+                                                        </p>
+                                                        {achievement.team && (
+                                                            <p className="text-xs text-muted-foreground">
+                                                                Team competition
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <Badge variant="outline">
+                                                        {achievement.medal}
+                                                    </Badge>
+                                                </div>
+                                            ),
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </CardContent>
                     </Card>
 
@@ -147,6 +304,90 @@ export default function AthleteShow({ athlete }: Props) {
                         </Card>
                     </div>
                 </div>
+
+                <Dialog
+                    open={selectedDocument !== null}
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            setSelectedDocument(null);
+                            setDocumentZoom(1);
+                        }
+                    }}
+                >
+                    <DialogContent className="flex h-[95vh] w-[80vw] max-w-none flex-col gap-3 p-4 sm:max-w-none">
+                        <DialogHeader className="shrink-0 pr-10">
+                            <DialogTitle>
+                                {selectedDocument?.document ?? 'Document'}
+                            </DialogTitle>
+                        </DialogHeader>
+                        {selectedDocument && (
+                            <>
+                                <div className="flex shrink-0 items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2">
+                                    <p className="min-w-0 truncate text-sm text-muted-foreground">
+                                        {selectedDocument.file_name}
+                                    </p>
+                                    <div className="flex shrink-0 items-center gap-1">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="icon"
+                                            aria-label="Zoom out"
+                                            disabled={documentZoom <= 0.5}
+                                            onClick={() =>
+                                                setDocumentZoom((zoom) =>
+                                                    Math.max(0.5, zoom - 0.25),
+                                                )
+                                            }
+                                        >
+                                            <Minus className="size-4" />
+                                        </Button>
+                                        <span className="w-14 text-center text-sm tabular-nums">
+                                            {Math.round(documentZoom * 100)}%
+                                        </span>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="icon"
+                                            aria-label="Zoom in"
+                                            disabled={documentZoom >= 3}
+                                            onClick={() =>
+                                                setDocumentZoom((zoom) =>
+                                                    Math.min(3, zoom + 0.25),
+                                                )
+                                            }
+                                        >
+                                            <Plus className="size-4" />
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="icon"
+                                            aria-label="Fit document to window"
+                                            onClick={() => setDocumentZoom(1)}
+                                        >
+                                            <Maximize2 className="size-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                                <div className="min-h-0 flex-1 overflow-auto rounded-md border bg-black/5">
+                                    <div
+                                        className="relative min-h-full min-w-full"
+                                        style={{
+                                            width: `${documentZoom * 100}%`,
+                                            height: `${documentZoom * 100}%`,
+                                        }}
+                                    >
+                                        <img
+                                            src={selectedDocument.view_url}
+                                            alt={`${selectedDocument.document}: ${selectedDocument.file_name}`}
+                                            className="absolute inset-0 size-full object-contain"
+                                        />
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </DialogContent>
+                </Dialog>
             </div>
         </>
     );

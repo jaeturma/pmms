@@ -106,7 +106,7 @@ class ProductionAccountReport
             'Event Secretariat Accounts' => $teamCount(['EVENT_SECRETARIAT']),
             'Medical Accounts' => $teamCount(['MEDICAL']),
             'DSAC Accounts' => $teamCount(['DSAC']),
-            'ICT Accounts' => $teamCount(['CENTRAL_ICT', 'ICT', 'INFORMATION']),
+            'ICT Accounts' => $teamCount(['CENTRAL_ICT', 'ICT']),
             'Superadmin Accounts' => User::query()->whereNotNull('username')->where('role', 'admin')->count(),
             'Unresolved Provisioning Records' => $provisions->whereIn('status', ['pending', 'failed'])->count(),
             'Duplicate Candidates' => Person::query()->select('normalized_name')

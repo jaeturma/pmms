@@ -1,8 +1,8 @@
 <?php
 
-use App\Enums\SchoolLevel;
 use App\Enums\ManagementTeamMemberStatus;
 use App\Enums\ManagementTeamType;
+use App\Enums\SchoolLevel;
 use App\Models\AuditLog;
 use App\Models\District;
 use App\Models\ManagementTeam;
@@ -82,7 +82,7 @@ test('the school registry can be searched by name, code, and district', function
             ->where('schools.data.0.name', 'Mabini Elementary School'));
 });
 
-test('the school registry paginates fifteen rows per page', function () {
+test('the school registry paginates ten rows per page', function () {
     School::factory()->count(20)->create();
 
     $viewer = User::factory()->create();
@@ -90,7 +90,7 @@ test('the school registry paginates fifteen rows per page', function () {
     $this->actingAs($viewer)
         ->get('/schools')
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('schools.data', 15)
+            ->has('schools.data', 10)
             ->where('schools.total', 20)
             ->where('schools.current_page', 1)
             ->where('schools.last_page', 2));
@@ -98,7 +98,7 @@ test('the school registry paginates fifteen rows per page', function () {
     $this->actingAs($viewer)
         ->get('/schools?page=2')
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('schools.data', 5)
+            ->has('schools.data', 10)
             ->where('schools.current_page', 2));
 });
 

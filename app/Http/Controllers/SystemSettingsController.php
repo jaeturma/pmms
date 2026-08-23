@@ -6,9 +6,12 @@ use App\Http\Requests\SystemSettingsRequest;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\FileUploadService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 /**
  * System-wide settings (reCAPTCHA, outgoing mail, email verification) —
@@ -19,7 +22,7 @@ use Inertia\Response;
  */
 class SystemSettingsController extends Controller
 {
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(private readonly AuditLogger $audit, private readonly FileUploadService $uploads) {}
 
     /**
      * Secrets (`recaptcha_secret_key`/`smtp_password`) are never sent back
@@ -33,6 +36,10 @@ class SystemSettingsController extends Controller
 
         return Inertia::render('system-settings/edit', [
             'settings' => [
+                'app_title' => $settings->app_title ?? config('app.name'),
+                'app_logo_url' => $settings->app_logo_upload_id === null ? null : route('branding.logo'),
+                'facebook_live_enabled' => $settings->facebook_live_enabled,
+                'facebook_live_url' => $settings->facebook_live_url,
                 'recaptcha_enabled' => $settings->recaptcha_enabled,
                 'recaptcha_site_key' => $settings->recaptcha_site_key,
                 'has_recaptcha_secret_key' => filled($settings->recaptcha_secret_key),
@@ -61,6 +68,9 @@ class SystemSettingsController extends Controller
         $wasEmailVerificationActive = $settings->emailVerificationActive();
 
         $settings->forceFill([
+            'app_title' => $validated['app_title'] ?? $settings->app_title ?? config('app.name'),
+            'facebook_live_enabled' => $validated['facebook_live_enabled'] ?? $settings->facebook_live_enabled,
+            'facebook_live_url' => $validated['facebook_live_url'] ?? null,
             'recaptcha_enabled' => $validated['recaptcha_enabled'],
             'recaptcha_site_key' => $validated['recaptcha_site_key'] ?? null,
             'smtp_host' => $validated['smtp_host'] ?? null,
@@ -71,6 +81,15 @@ class SystemSettingsController extends Controller
             'smtp_from_name' => $validated['smtp_from_name'] ?? null,
             'email_verification_enabled' => $validated['email_verification_enabled'],
         ]);
+
+        if ($request->hasFile('app_logo')) {
+            $oldLogo = $settings->appLogo;
+            $settings->app_logo_upload_id = $this->uploads->store($request->file('app_logo'), $request->user(), 'app_logo')->id;
+            $settings->save();
+            if ($oldLogo !== null) {
+                $this->uploads->delete($oldLogo);
+            }
+        }
 
         // A blank submitted secret means "leave the stored one unchanged,"
         // never "clear it" — see edit()'s note on why the real value is
@@ -100,6 +119,7 @@ class SystemSettingsController extends Controller
 
         $this->audit->record('system_settings.updated', $settings, [
             'recaptcha_enabled' => $settings->recaptcha_enabled,
+            'facebook_live_enabled' => $settings->facebook_live_enabled,
             'recaptcha_ready' => $settings->recaptchaReady(),
             'email_verification_enabled' => $settings->email_verification_enabled,
             'email_verification_active' => $settings->emailVerificationActive(),
@@ -108,5 +128,13 @@ class SystemSettingsController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('System settings updated.')]);
 
         return back();
+    }
+
+    public function logo(): HttpResponse
+    {
+        $upload = Setting::current()->appLogo;
+        abort_if($upload === null, 404);
+
+        return Storage::disk($upload->disk)->response($upload->path, $upload->original_name);
     }
 }

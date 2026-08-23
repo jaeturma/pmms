@@ -13,6 +13,7 @@ use App\Models\ResultPlacement;
 use App\Models\School;
 use App\Models\Sport;
 use App\Models\User;
+use App\Services\MedalTallyService;
 use Inertia\Testing\AssertableInertia;
 
 /**
@@ -89,6 +90,23 @@ test('approved delegations appear with zero medals and points before results are
             ->where('schools.0.total', 0)
             ->where('schools.0.points', 0)
             ->where('totals.total', 0));
+});
+
+test('standings support an athlete school without a municipality or district', function () {
+    $result = EventResult::factory()->validated()->create();
+    $school = School::factory()->create([
+        'name' => 'Unassigned School',
+        'district_id' => null,
+        'school_district_id' => null,
+    ]);
+    placeSchool($result, $school, 1);
+
+    $standings = app(MedalTallyService::class)->standings($result->meet_id);
+
+    expect($standings['schools'])->toHaveCount(1)
+        ->and($standings['schools'][0]['school'])->toBe('Unassigned School')
+        ->and($standings['schools'][0]['municipality'])->toBe('Not assigned')
+        ->and($standings['schools'][0]['district'])->toBe('Not assigned');
 });
 
 test('only validated results feed the tally, ranks above three are ignored', function () {

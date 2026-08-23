@@ -16,11 +16,13 @@ export function AthletePhotoInput({
     label,
     guidance,
     onChange,
+    accept = 'image/jpeg,image/png,image/webp',
 }: {
     id: string;
     label: string;
     guidance: string;
     onChange: (file: File | null) => void;
+    accept?: string;
 }) {
     const [source, setSource] = useState<string | null>(null);
     const [preview, setPreview] = useState<string | null>(null);
@@ -98,7 +100,7 @@ export function AthletePhotoInput({
             <Input
                 id={id}
                 type="file"
-                accept="image/jpeg,image/png,image/webp"
+                accept={accept}
                 onChange={(event) => select(event.target.files?.[0])}
             />
             <div className="flex items-center gap-3">

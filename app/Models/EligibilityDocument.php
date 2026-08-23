@@ -57,6 +57,13 @@ class EligibilityDocument extends Model
         return $this->belongsTo(FileUpload::class);
     }
 
-    public function school(): BelongsTo { return $this->belongsTo(School::class); }
-    public function verifier(): BelongsTo { return $this->belongsTo(User::class, 'verified_by'); }
+    public function school(): BelongsTo
+    {
+        return $this->belongsTo(School::class);
+    }
+
+    public function verifier(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'verified_by');
+    }
 }

@@ -7,7 +7,15 @@ export type User = {
     team_types?: string[];
     can_review_coaches?: boolean;
     can_manage_accounts?: boolean;
+    can_manage_announcements?: boolean;
+    can_manage_personnel?: boolean;
+    can_file_protest?: boolean;
+    can_view_management_reports?: boolean;
     can_view_tournament_athletes?: boolean;
+    assigned_sports?: string[];
+    is_tournament_scoped?: boolean;
+    can_view_system_logs?: boolean;
+    can_request_coach_enrollment?: boolean;
     can_manage_school_master_data?: boolean;
     can_request_coach_enrollment?: boolean;
     avatar?: string;

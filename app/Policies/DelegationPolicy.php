@@ -34,7 +34,7 @@ class DelegationPolicy
      */
     public function update(User $user, Delegation $delegation): bool
     {
-        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+        if ($user->isAdmin()) {
             return true;
         }
 
@@ -48,7 +48,7 @@ class DelegationPolicy
      */
     public function submit(User $user, Delegation $delegation): bool
     {
-        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+        if ($user->isAdmin()) {
             return true;
         }
 
@@ -61,7 +61,7 @@ class DelegationPolicy
      */
     public function approve(User $user, Delegation $delegation): bool
     {
-        return $user->hasRole(UserRole::Admin, UserRole::Organizer);
+        return $user->isAdmin();
     }
 
     /**
@@ -69,7 +69,7 @@ class DelegationPolicy
      */
     public function delete(User $user, Delegation $delegation): bool
     {
-        return $user->hasRole(UserRole::Admin, UserRole::Organizer)
+        return $user->isAdmin()
             && $delegation->status === DelegationStatus::Draft;
     }
 
@@ -78,6 +78,6 @@ class DelegationPolicy
      */
     public function assignOfficers(User $user, Delegation $delegation): bool
     {
-        return $user->hasRole(UserRole::Admin, UserRole::Organizer);
+        return $user->isAdmin();
     }
 }

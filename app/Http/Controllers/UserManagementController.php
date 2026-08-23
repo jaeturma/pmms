@@ -24,13 +24,28 @@ class UserManagementController extends Controller
         $search = trim($request->string('search')->toString());
 
         $users = User::query()
+            ->with([
+                'person:id,user_id,full_name',
+                'meetSportAssignments.meetSport.meet:id,name',
+                'meetSportAssignments.meetSport.sport:id,name',
+                'meetSportAssignments.sportCategory:id,display_name',
+                'managementTeamMemberships.managementTeam:id,meet_id,name',
+                'athleteOversightAssignments.meet:id,name',
+                'athleteOversightAssignments.district:id,name',
+                'athleteOversightAssignments.schoolDistrict:id,name',
+                'coachAssignmentRequests.meetSport.meet:id,name',
+                'coachAssignmentRequests.meetSport.sport:id,name',
+                'coachAssignmentRequests.event:id,name',
+                'coachAssignmentRequests.delegation.school:id,name',
+                'coachAssignmentRequests.delegation.district:id,name',
+            ])
             ->when($search !== '', fn ($query) => $query->where(function ($scope) use ($search) {
                 $scope->where('name', 'like', "%{$search}%")
                     ->orWhere('username', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%");
             }))
             ->orderBy('name')
-            ->paginate(25)
+            ->paginate(10)
             ->withQueryString()
             ->through(fn (User $user): array => [
                 'id' => $user->id,
@@ -39,6 +54,12 @@ class UserManagementController extends Controller
                 'email' => $user->email,
                 'role' => $user->role->value,
                 'role_label' => $user->role->label(),
+                'person' => $user->person?->full_name,
+                'roles' => collect([$user->role->label()])
+                    ->merge($user->meetSportAssignments->map(fn ($assignment) => $assignment->role->label()))
+                    ->merge($user->managementTeamMemberships->map(fn ($membership) => $membership->managementTeam->name))
+                    ->unique()->values(),
+                'assignments' => $this->assignments($user),
                 'disabled' => $user->disabled_at !== null,
                 'approval_status' => $user->approval_status,
                 'last_updated' => $user->updated_at?->format('M j, Y g:i A'),
@@ -163,12 +184,49 @@ class UserManagementController extends Controller
     {
         return match ($role) {
             UserRole::Admin => ['Full system administration', 'Manage users, roles and settings', 'Manage all meet data'],
-            UserRole::Organizer => ['Manage meet setup and operations', 'Manage registrations and competition data'],
+            UserRole::Organizer => ['View meet setup, registration, competition, and meet operations', 'Mutations require an explicit functional assignment'],
             UserRole::DelegationOfficer => ['Manage assigned delegation registration'],
             UserRole::TechnicalOfficial => ['Operate assigned sport scoring'],
             UserRole::TournamentManager => ['Manage assigned sport schedule, matches and results'],
             UserRole::Coach => ['Manage approved team athletes and entries'],
             UserRole::Viewer => ['View published schedules, results and medal tally'],
         };
+    }
+
+    /** @return list<array{type: string, scope: string, status: string}> */
+    private function assignments(User $user): array
+    {
+        return collect()
+            ->concat($user->meetSportAssignments->map(fn ($assignment): array => [
+                'type' => $assignment->role->label(),
+                'scope' => $assignment->meetSport->meet->name.' · '.$assignment->meetSport->sport->name
+                    .($assignment->sportCategory ? ' — '.$assignment->sportCategory->display_name : ''),
+                'status' => $assignment->status->label(),
+            ]))
+            ->concat($user->managementTeamMemberships->map(fn ($membership): array => [
+                'type' => $membership->managementTeam->name,
+                'scope' => $membership->managementTeam->meet?->name ?? __('Organization-wide'),
+                'status' => $membership->status->label(),
+            ]))
+            ->concat($user->athleteOversightAssignments->map(fn ($assignment): array => [
+                'type' => $assignment->authority_type->label(),
+                'scope' => collect([
+                    $assignment->meet?->name,
+                    $assignment->district?->name,
+                    $assignment->schoolDistrict?->name,
+                ])->filter()->join(' · '),
+                'status' => $assignment->active ? __('Active') : __('Inactive'),
+            ]))
+            ->concat($user->coachAssignmentRequests->map(fn ($assignment): array => [
+                'type' => __('Coach'),
+                'scope' => collect([
+                    $assignment->meetSport?->meet?->name,
+                    $assignment->delegation?->registrantName(),
+                    $assignment->meetSport?->sport?->name,
+                    $assignment->event?->name,
+                ])->filter()->join(' · '),
+                'status' => str($assignment->status)->headline()->toString(),
+            ]))
+            ->values()->all();
     }
 }

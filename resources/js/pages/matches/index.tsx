@@ -1,4 +1,4 @@
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { Plus, Radio, Swords } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
@@ -242,13 +242,41 @@ function MatchFormDialog({
                         <InputError message={errors.event_schedule_id} />
                     </div>
                     <div className="space-y-2">
-                        <Label htmlFor="competition-area">Competition area</Label>
-                        <Input id="competition-area" value={data.competition_area} onChange={(e) => setData('competition_area', e.target.value)} placeholder="Court, lane, mat, or ring" />
+                        <Label htmlFor="competition-area">
+                            Competition area
+                        </Label>
+                        <Input
+                            id="competition-area"
+                            value={data.competition_area}
+                            onChange={(e) =>
+                                setData('competition_area', e.target.value)
+                            }
+                            placeholder="Court, lane, mat, or ring"
+                        />
                         <InputError message={errors.competition_area} />
                     </div>
                     <div className="flex flex-wrap gap-6">
-                        <label className="flex items-center gap-2 text-sm"><Checkbox checked={data.live_scoring_enabled} onCheckedChange={(checked) => setData('live_scoring_enabled', checked === true)} />Live scoreboard</label>
-                        <label className="flex items-center gap-2 text-sm"><Checkbox checked={data.awards_medals} onCheckedChange={(checked) => setData('awards_medals', checked === true)} />Awards medals</label>
+                        <label className="flex items-center gap-2 text-sm">
+                            <Checkbox
+                                checked={data.live_scoring_enabled}
+                                onCheckedChange={(checked) =>
+                                    setData(
+                                        'live_scoring_enabled',
+                                        checked === true,
+                                    )
+                                }
+                            />
+                            Live scoreboard
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                            <Checkbox
+                                checked={data.awards_medals}
+                                onCheckedChange={(checked) =>
+                                    setData('awards_medals', checked === true)
+                                }
+                            />
+                            Awards medals
+                        </label>
                     </div>
                     <DialogFooter>
                         <Button type="submit" disabled={processing}>
@@ -357,6 +385,8 @@ export default function Matches({
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<Match | null>(null);
     const [participantsFor, setParticipantsFor] = useState<Match | null>(null);
+    const isTournamentScoped =
+        usePage().props.auth.user?.is_tournament_scoped ?? false;
 
     const openCreate = () => {
         setEditing(null);
@@ -404,32 +434,34 @@ export default function Matches({
                     }
                 />
 
-                <div className="flex flex-wrap gap-2">
-                    <Select
-                        value={String(filters.event_id ?? 'all')}
-                        onValueChange={(value) =>
-                            applyFilters({ event_id: value })
-                        }
-                    >
-                        <SelectTrigger
-                            className="w-72"
-                            aria-label="Filter by event"
+                {!isTournamentScoped && (
+                    <div className="flex flex-wrap gap-2">
+                        <Select
+                            value={String(filters.event_id ?? 'all')}
+                            onValueChange={(value) =>
+                                applyFilters({ event_id: value })
+                            }
                         >
-                            <SelectValue placeholder="All events" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All events</SelectItem>
-                            {eventOptions.map((option) => (
-                                <SelectItem
-                                    key={option.id}
-                                    value={String(option.id)}
-                                >
-                                    {option.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
+                            <SelectTrigger
+                                className="w-72"
+                                aria-label="Filter by event"
+                            >
+                                <SelectValue placeholder="All events" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All events</SelectItem>
+                                {eventOptions.map((option) => (
+                                    <SelectItem
+                                        key={option.id}
+                                        value={String(option.id)}
+                                    >
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                )}
 
                 {matches.data.length === 0 ? (
                     <EmptyState
@@ -517,7 +549,9 @@ export default function Matches({
                                                 variant="outline"
                                                 size="sm"
                                                 asChild
-                                                disabled={!match.live_scoring_enabled}
+                                                disabled={
+                                                    !match.live_scoring_enabled
+                                                }
                                             >
                                                 <Link
                                                     href={

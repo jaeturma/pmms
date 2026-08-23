@@ -20,6 +20,7 @@ use App\Models\SportCategoryCompetitionArea;
 use App\Models\User;
 use App\Models\Venue;
 use App\Services\AuditLogger;
+use App\Services\CompetitionAccessService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -47,7 +48,10 @@ class ScheduleController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $canManageAll = Gate::allows('manage-meet-data');
+        $canManageAll = Gate::allows('manage-meet-data') || $user->canManageProductionAccounts();
+        $visibleEventIds = $user->tournamentEventIds();
+        $isTournamentScoped = ! $user->hasRole(UserRole::Admin, UserRole::Organizer)
+            && $visibleEventIds->isNotEmpty();
         $managedSportIds = $user->role === UserRole::TournamentManager
             ? $this->userManagedSportIds($user)
             : collect();
@@ -59,6 +63,7 @@ class ScheduleController extends Controller
 
         $query = EventSchedule::query()
             ->with(['event.sport:id,name', 'sportCategory:id,display_name', 'venue:id,name', 'competitionArea:id,name'])
+            ->when($isTournamentScoped, fn ($schedules) => $schedules->whereIn('event_id', $visibleEventIds))
             ->orderBy('scheduled_date')
             ->orderBy('starts_at');
 
@@ -85,7 +90,7 @@ class ScheduleController extends Controller
                 $query->whereHas('meets', fn ($meets) => $meets->whereKey($meet->id))
                     ->when($meetSportIds->isNotEmpty(), fn ($events) => $events->orWhereIn('sport_id', $meetSportIds));
             })
-            ->when($isTournamentManager, fn ($query) => $query->whereIn('sport_id', $managedSportIds))
+            ->when($isTournamentScoped, fn ($query) => $query->whereKey($visibleEventIds))
             ->with('sport:id,name')
             ->orderBy('sport_id')
             ->orderBy('name')
@@ -287,7 +292,7 @@ class ScheduleController extends Controller
         $user = $request->user();
 
         $schedule->loadMissing('event');
-        abort_unless($this->canManageSlot($user, $schedule->event->sport_id), 403);
+        abort_unless($this->canManageSlot($user, $schedule->event), 403);
 
         $data = $request->slotData();
 
@@ -311,7 +316,7 @@ class ScheduleController extends Controller
         $user = $request->user();
 
         $schedule->loadMissing('event');
-        abort_unless($this->canManageSlot($user, $schedule->event->sport_id), 403);
+        abort_unless($this->canManageSlot($user, $schedule->event), 403);
 
         if (! $this->meetIsSchedulable($schedule->meet)) {
             Inertia::flash('toast', [
@@ -365,8 +370,7 @@ class ScheduleController extends Controller
             ]);
         }
 
-        $sportId = (int) $event?->sport_id;
-        abort_unless($this->canManageSlot($user, $sportId), 403);
+        abort_unless($event !== null && $this->canManageSlot($user, $event), 403);
 
         $conflict = EventSchedule::query()
             ->where('venue_id', $data['venue_id'])
@@ -404,13 +408,14 @@ class ScheduleController extends Controller
      * only a slot whose event is one they operate
      * (`ScopesToAssignedSport::userOperatesSport()`).
      */
-    private function canManageSlot(User $user, int $sportId): bool
+    private function canManageSlot(User $user, Event $event): bool
     {
-        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+        if ($user->isAdmin() || $user->canManageProductionAccounts()) {
             return true;
         }
 
-        return $user->role === UserRole::TournamentManager && $this->userOperatesSport($user, $sportId);
+        return $user->role === UserRole::TournamentManager
+            && app(CompetitionAccessService::class)->canAccessEvent($user, $event, Meet::current()->id);
     }
 
     /**

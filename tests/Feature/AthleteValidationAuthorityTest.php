@@ -20,6 +20,7 @@ use App\Models\User;
 function authorityMember(ManagementTeamType $type, int $meetId): User
 {
     $team = ManagementTeam::factory()->create(['meet_id' => $meetId, 'team_type' => $type]);
+
     return ManagementTeamMember::factory()->create(['management_team_id' => $team->id, 'status' => ManagementTeamMemberStatus::Active])->user;
 }
 

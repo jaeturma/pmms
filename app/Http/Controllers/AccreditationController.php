@@ -4,13 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Enums\DelegationStatus;
 use App\Enums\EligibilityStatus;
-use App\Enums\EntryStatus;
 use App\Enums\RequirementStatus;
 use App\Enums\UserRole;
 use App\Models\Accreditation;
 use App\Models\Athlete;
 use App\Models\Delegation;
-use App\Models\Entry;
 use App\Models\Personnel;
 use App\Models\User;
 use App\Services\AuditLogger;
@@ -160,17 +158,10 @@ class AccreditationController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($accreditation, $user, $athleteId): void {
+        DB::transaction(function () use ($accreditation, $user): void {
             $accreditation->accredited_by = $user->id;
             $accreditation->save();
             $accreditation->assignNumber();
-
-            if ($athleteId > 0) {
-                Entry::query()
-                    ->where('athlete_id', $athleteId)
-                    ->where('status', EntryStatus::Submitted->value)
-                    ->update(['status' => EntryStatus::Confirmed->value, 'updated_at' => now()]);
-            }
         });
 
         $this->audit->record('accreditation.granted', $accreditation, $this->context($accreditation));
@@ -327,7 +318,8 @@ class AccreditationController extends Controller
         }
 
         if ($accreditation->personnel !== null) {
-            return $accreditation->personnel->school->name;
+            return $accreditation->personnel->school?->name
+                ?? $accreditation->delegation->registrantName();
         }
 
         return '';

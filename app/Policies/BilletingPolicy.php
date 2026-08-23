@@ -43,7 +43,7 @@ class BilletingPolicy
      */
     public function manage(User $user, Meet $meet): bool
     {
-        return $user->hasRole(UserRole::Admin, UserRole::Organizer)
+        return $user->isAdmin()
             || $this->hasActiveMembership($user, ManagementTeamType::Billeting, $meet);
     }
 

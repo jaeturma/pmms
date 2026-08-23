@@ -67,7 +67,7 @@ test('venue details include coordinator contact and map coordinates', function (
 });
 
 test('organizers can create venues', function () {
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/venues', [
             'name' => 'Provincial Sports Complex',
             'address' => 'Capitol Compound',
@@ -85,7 +85,7 @@ test('organizers can create venues', function () {
 });
 
 test('google maps coordinates and URLs are accepted and persisted', function (string $location) {
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/venues', [
             'name' => 'Mapped Venue',
             'gps_location' => $location,
@@ -221,12 +221,12 @@ test('the venue registry can be searched by name and address', function () {
             ->where('venues.data.0.name', 'Provincial Sports Complex'));
 });
 
-test('the venue registry paginates fifteen rows per page', function () {
+test('the venue registry paginates ten rows per page', function () {
     Venue::factory()->count(20)->create();
 
     $this->actingAs(User::factory()->create())
         ->get('/venues')
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('venues.data', 15)
+            ->has('venues.data', 10)
             ->where('venues.total', 20));
 });

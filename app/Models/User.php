@@ -7,7 +7,9 @@ use App\Enums\ManagementTeamMemberStatus;
 use App\Enums\ManagementTeamType;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\Permission;
+use App\Enums\PersonnelRole;
 use App\Enums\UserRole;
+use App\Services\CompetitionAccessService;
 use Database\Factories\UserFactory;
 use Illuminate\Auth\MustVerifyEmail as VerifiesEmail;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -84,7 +86,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             ->whereHas('managementTeam', fn ($team) => $team
                 ->where('team_type', ManagementTeamType::ICT->value)
                 ->orWhereIn('source_code', [
-                    'CENTRAL_ICT', 'ICT', 'INFORMATION',
+                    'CENTRAL_ICT', 'ICT',
                 ]))
             ->exists();
     }
@@ -105,7 +107,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             ->whereHas('managementTeam', fn ($team) => $team
                 ->where('team_type', ManagementTeamType::ICT->value)
                 ->orWhereIn('source_code', [
-                    'CENTRAL_ICT', 'ICT', 'INFORMATION',
+                    'CENTRAL_ICT', 'ICT',
                 ]))
             ->exists();
     }
@@ -121,9 +123,51 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             ->whereHas('managementTeam', fn ($team) => $team
                 ->where('team_type', ManagementTeamType::ICT->value)
                 ->orWhereIn('source_code', [
-                    'CENTRAL_ICT', 'ICT', 'INFORMATION',
+                    'CENTRAL_ICT', 'ICT',
                 ]))
             ->exists();
+    }
+
+    public function canManageAnnouncements(): bool
+    {
+        return $this->isAdmin() || $this->canManageProductionAccounts()
+            || $this->managementTeamMemberships()
+                ->where('status', ManagementTeamMemberStatus::Active)
+                ->whereHas('managementTeam', fn ($team) => $team->where('source_code', 'INFORMATION'))
+                ->exists();
+    }
+
+    public function canViewAnnouncements(): bool
+    {
+        return $this->hasRole(UserRole::Organizer) || $this->canManageAnnouncements();
+    }
+
+    public function canManagePersonnel(): bool
+    {
+        return $this->isAdmin() || $this->canManageProductionAccounts();
+    }
+
+    public function canFileProtest(?Delegation $delegation = null): bool
+    {
+        return Personnel::query()
+            ->where('user_id', $this->id)
+            ->where('role', PersonnelRole::DelegationManager)
+            ->when($delegation !== null, fn ($query) => $query->where('delegation_id', $delegation->id))
+            ->exists();
+    }
+
+    public function canViewManagementReports(): bool
+    {
+        return $this->hasRole(UserRole::Admin, UserRole::Organizer)
+            || $this->canManageProductionAccounts()
+            || $this->managementTeamMemberships()
+                ->where('status', ManagementTeamMemberStatus::Active)
+                ->whereHas('managementTeam', fn ($team) => $team
+                    ->whereIn('team_type', [
+                        ManagementTeamType::TopManagement->value,
+                        ManagementTeamType::MeetManagement->value,
+                    ]))
+                ->exists();
     }
 
     /** @return Collection<int, int> */
@@ -133,6 +177,12 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             ->where('meet_sport_assignments.status', 'active')
             ->whereIn('meet_sport_assignments.role', [
                 MeetSportAssignmentRole::TournamentManager->value,
+                MeetSportAssignmentRole::AssistantTournamentManager->value,
+                MeetSportAssignmentRole::TrackTournamentManager->value,
+                MeetSportAssignmentRole::FieldTournamentManager->value,
+                MeetSportAssignmentRole::BoysTournamentManager->value,
+                MeetSportAssignmentRole::GirlsTournamentManager->value,
+                MeetSportAssignmentRole::CategoryTournamentManager->value,
                 MeetSportAssignmentRole::TechnicalOfficial->value,
                 MeetSportAssignmentRole::TournamentICT->value,
                 MeetSportAssignmentRole::TournamentSecretary->value,
@@ -140,6 +190,12 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             ->join('meet_sports', 'meet_sports.id', '=', 'meet_sport_assignments.meet_sport_id')
             ->distinct()
             ->pluck('meet_sports.sport_id');
+    }
+
+    /** @return Collection<int, int> */
+    public function tournamentEventIds(?int $meetId = null): Collection
+    {
+        return app(CompetitionAccessService::class)->eventIds($this, $meetId);
     }
 
     /**
@@ -223,13 +279,49 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
         return $this->hasOne(CoachOnboardingRequest::class);
     }
 
+    /** @return Collection<int, int> */
+    public function approvedCoachEventIds(): Collection
+    {
+        $requestEventIds = $this->coachAssignmentRequests()
+            ->where('status', 'approved')
+            ->pluck('event_id');
+        $onboardingEventIds = $this->coachOnboardingRequest()
+            ->where('status', 'approved')
+            ->with('events:id')
+            ->first()?->events->modelKeys() ?? [];
+
+        return $requestEventIds->merge($onboardingEventIds)->filter()->unique()->values();
+    }
+
+    /** @return Collection<int, int> */
+    public function approvedCoachDelegationIds(): Collection
+    {
+        return $this->coachAssignmentRequests()
+            ->where('status', 'approved')
+            ->pluck('delegation_id')
+            ->merge(Personnel::query()->where('user_id', $this->id)->pluck('delegation_id'))
+            ->filter()
+            ->unique()
+            ->values();
+    }
+
     public function hasApprovedCoachScope(Delegation $delegation, ?Event $event = null): bool
     {
-        return $this->role === UserRole::Coach
-            && $this->coachAssignmentRequests()
-                ->where('status', 'approved')
-                ->where('delegation_id', $delegation->id)
-                ->when($event !== null, fn ($query) => $query->where('event_id', $event->id))
+        if ($this->role !== UserRole::Coach) {
+            return false;
+        }
+
+        if ($this->coachAssignmentRequests()
+            ->where('status', 'approved')
+            ->where('delegation_id', $delegation->id)
+            ->when($event !== null, fn ($query) => $query->where('event_id', $event->id))
+            ->exists()) {
+            return true;
+        }
+
+        return $delegation->hasCoach($this)
+            && $this->coachOnboardingRequest()->where('status', 'approved')
+                ->when($event !== null, fn ($query) => $query->whereHas('events', fn ($events) => $events->whereKey($event->id)))
                 ->exists();
     }
 

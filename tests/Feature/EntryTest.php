@@ -1,14 +1,19 @@
 <?php
 
 use App\Enums\EntryStatus;
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\MeetStatus;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
 use App\Models\District;
+use App\Models\EligibilityReview;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\Meet;
+use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
 use App\Models\School;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
@@ -35,6 +40,10 @@ function entrySetup(array $eventOverrides = []): array
         ...$eventOverrides,
     ]);
     $meet->events()->attach($event);
+    EligibilityReview::factory()->approved()->create([
+        'athlete_id' => $athlete->id,
+        'meet_id' => $meet->id,
+    ]);
 
     return [$meet, $delegation, $athlete, $event];
 }
@@ -168,6 +177,43 @@ test('duplicate entries for the same athlete and event are rejected', function (
         ->assertSessionHasErrors('event_id');
 });
 
+test('one athlete can enter multiple individual and team events without duplicate athlete records', function () {
+    [$meet, $delegation, $athlete, $firstEvent] = entrySetup(['name' => 'Floor Exercise']);
+    $meet->forceFill(['max_events_per_athlete' => 4])->save();
+
+    $events = collect([
+        $firstEvent,
+        Event::factory()->create(['name' => 'Vault', 'gender' => 'boys', 'age_division' => 'elementary', 'is_team_event' => false]),
+        Event::factory()->create(['name' => 'Individual All-Around', 'gender' => 'boys', 'age_division' => 'elementary', 'is_team_event' => false]),
+        Event::factory()->create(['name' => 'Team Competition', 'gender' => 'boys', 'age_division' => 'elementary', 'is_team_event' => true]),
+    ]);
+    $eventIds = $events->pluck('id')->all();
+    $meet->events()->syncWithoutDetaching($eventIds);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/entries', ['athlete_id' => $athlete->id, 'event_ids' => $eventIds])
+        ->assertSessionDoesntHaveErrors();
+
+    expect(Athlete::query()->where('lrn', $athlete->lrn)->count())->toBe(1)
+        ->and($athlete->entries()->count())->toBe(4)
+        ->and($athlete->entries()->whereHas('event', fn ($query) => $query->where('is_team_event', true))->count())->toBe(1);
+});
+
+test('multi-event submission is atomic when the athlete event limit would be exceeded', function () {
+    [$meet, , $athlete, $firstEvent] = entrySetup();
+    $meet->forceFill(['max_events_per_athlete' => 1])->save();
+    $secondEvent = Event::factory()->create([
+        'gender' => 'boys', 'age_division' => 'elementary', 'max_entries_per_delegation' => 2,
+    ]);
+    $meet->events()->attach($secondEvent);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/entries', ['athlete_id' => $athlete->id, 'event_ids' => [$firstEvent->id, $secondEvent->id]])
+        ->assertSessionHasErrors('event_ids');
+
+    expect($athlete->entries()->count())->toBe(0);
+});
+
 test('the per-delegation entry cap is enforced and withdrawn entries free it', function () {
     [, $delegation, $athlete, $event] = entrySetup(['max_entries_per_delegation' => 1]);
     $admin = User::factory()->admin()->create();
@@ -202,7 +248,7 @@ test('officers cannot submit when registration is closed but managers can', func
         ->post('/entries', ['athlete_id' => $athlete->id, 'event_id' => $event->id])
         ->assertForbidden();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/entries', ['athlete_id' => $athlete->id, 'event_id' => $event->id])
         ->assertSessionDoesntHaveErrors();
 });
@@ -228,13 +274,58 @@ test('organizers can confirm submitted entries and officers cannot', function ()
         ->patch("/entries/{$entry->id}/confirm")
         ->assertForbidden();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->patch("/entries/{$entry->id}/confirm")
         ->assertRedirect();
 
     expect($entry->refresh()->status)->toBe(EntryStatus::Confirmed)
         ->and(AuditLog::query()->where('action', 'entry.confirmed')->exists())->toBeTrue();
 });
+
+test('an entry cannot be confirmed before DSAC approves athlete eligibility', function () {
+    [, $delegation, $athlete, $event] = entrySetup();
+    $athlete->eligibilityReview->forceFill(['status' => 'pending'])->save();
+    $entry = Entry::factory()->create([
+        'athlete_id' => $athlete->id,
+        'event_id' => $event->id,
+        'delegation_id' => $delegation->id,
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/entries/{$entry->id}/confirm")
+        ->assertSessionHasErrors('entry');
+
+    expect($entry->fresh()->status)->toBe(EntryStatus::Submitted);
+});
+
+test('assigned tournament leaders can confirm eligible entries for their sport', function (MeetSportAssignmentRole $role) {
+    [$meet, $delegation, $athlete, $event] = entrySetup();
+    $meetSport = MeetSport::factory()->create([
+        'meet_id' => $meet->id,
+        'sport_id' => $event->sport_id,
+    ]);
+    $user = User::factory()->create();
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $user->id,
+        'role' => $role,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+    $entry = Entry::factory()->create([
+        'athlete_id' => $athlete->id,
+        'event_id' => $event->id,
+        'delegation_id' => $delegation->id,
+    ]);
+
+    $this->actingAs($user)->patch("/entries/{$entry->id}/confirm")
+        ->assertSessionDoesntHaveErrors();
+
+    expect($entry->fresh()->status)->toBe(EntryStatus::Confirmed);
+})->with([
+    MeetSportAssignmentRole::TournamentManager,
+    MeetSportAssignmentRole::AssistantTournamentManager,
+    MeetSportAssignmentRole::TournamentSecretary,
+]);
 
 test('an officer can withdraw their own submitted entry but not a confirmed one', function () {
     [, $delegation, $athlete, $event] = entrySetup();

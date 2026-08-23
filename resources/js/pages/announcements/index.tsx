@@ -53,6 +53,7 @@ type Announcement = {
 type Props = {
     announcements: Paginated<Announcement>;
     filters: { search: string };
+    canManage: boolean;
 };
 
 function AnnouncementFormDialog({
@@ -149,6 +150,7 @@ function AnnouncementFormDialog({
 export default function Announcements({
     announcements,
     filters,
+    canManage,
 }: Props) {
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<Announcement | null>(null);
@@ -171,10 +173,12 @@ export default function Announcements({
                     title="Announcements"
                     description="Public advisories — visible on the portal once published."
                     actions={
-                        <Button onClick={openCreate}>
-                            <Plus />
-                            New announcement
-                        </Button>
+                        canManage ? (
+                            <Button onClick={openCreate}>
+                                <Plus />
+                                New announcement
+                            </Button>
+                        ) : undefined
                     }
                 />
 
@@ -190,9 +194,11 @@ export default function Announcements({
                         title="No announcements yet"
                         description="Advisories for the public portal will appear here."
                         action={
-                            <Button onClick={openCreate}>
-                                New announcement
-                            </Button>
+                            canManage ? (
+                                <Button onClick={openCreate}>
+                                    New announcement
+                                </Button>
+                            ) : undefined
                         }
                     />
                 ) : (
@@ -204,9 +210,11 @@ export default function Announcements({
                                     <TableHead>Meet</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead>Published</TableHead>
-                                    <TableHead className="text-right">
-                                        Actions
-                                    </TableHead>
+                                    {canManage && (
+                                        <TableHead className="text-right">
+                                            Actions
+                                        </TableHead>
+                                    )}
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -239,85 +247,89 @@ export default function Announcements({
                                         <TableCell className="text-muted-foreground">
                                             {announcement.published_at ?? '—'}
                                         </TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex justify-end gap-2">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        openEdit(announcement)
-                                                    }
-                                                >
-                                                    Edit
-                                                </Button>
-                                                <ConfirmDialog
-                                                    trigger={
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                        >
-                                                            {announcement.is_published
-                                                                ? 'Unpublish'
-                                                                : 'Publish'}
-                                                        </Button>
-                                                    }
-                                                    title={
-                                                        announcement.is_published
-                                                            ? 'Unpublish announcement?'
-                                                            : 'Publish announcement?'
-                                                    }
-                                                    description={
-                                                        announcement.is_published
-                                                            ? 'It disappears from the public portal immediately.'
-                                                            : 'It becomes visible on the public portal.'
-                                                    }
-                                                    confirmLabel={
-                                                        announcement.is_published
-                                                            ? 'Unpublish'
-                                                            : 'Publish'
-                                                    }
-                                                    onConfirm={() =>
-                                                        router.patch(
+                                        {canManage && (
+                                            <TableCell className="text-right">
+                                                <div className="flex justify-end gap-2">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                            openEdit(
+                                                                announcement,
+                                                            )
+                                                        }
+                                                    >
+                                                        Edit
+                                                    </Button>
+                                                    <ConfirmDialog
+                                                        trigger={
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                            >
+                                                                {announcement.is_published
+                                                                    ? 'Unpublish'
+                                                                    : 'Publish'}
+                                                            </Button>
+                                                        }
+                                                        title={
                                                             announcement.is_published
-                                                                ? unpublish(
-                                                                      announcement.id,
-                                                                  ).url
-                                                                : publish(
-                                                                      announcement.id,
-                                                                  ).url,
-                                                            {},
-                                                            {
-                                                                preserveScroll: true,
-                                                            },
-                                                        )
-                                                    }
-                                                />
-                                                <ConfirmDialog
-                                                    trigger={
-                                                        <Button
-                                                            variant="destructive"
-                                                            size="sm"
-                                                        >
-                                                            Delete
-                                                        </Button>
-                                                    }
-                                                    title="Delete announcement?"
-                                                    description="This permanently removes the announcement."
-                                                    confirmLabel="Delete"
-                                                    destructive
-                                                    onConfirm={() =>
-                                                        router.delete(
-                                                            destroy(
-                                                                announcement.id,
-                                                            ).url,
-                                                            {
-                                                                preserveScroll: true,
-                                                            },
-                                                        )
-                                                    }
-                                                />
-                                            </div>
-                                        </TableCell>
+                                                                ? 'Unpublish announcement?'
+                                                                : 'Publish announcement?'
+                                                        }
+                                                        description={
+                                                            announcement.is_published
+                                                                ? 'It disappears from the public portal immediately.'
+                                                                : 'It becomes visible on the public portal.'
+                                                        }
+                                                        confirmLabel={
+                                                            announcement.is_published
+                                                                ? 'Unpublish'
+                                                                : 'Publish'
+                                                        }
+                                                        onConfirm={() =>
+                                                            router.patch(
+                                                                announcement.is_published
+                                                                    ? unpublish(
+                                                                          announcement.id,
+                                                                      ).url
+                                                                    : publish(
+                                                                          announcement.id,
+                                                                      ).url,
+                                                                {},
+                                                                {
+                                                                    preserveScroll: true,
+                                                                },
+                                                            )
+                                                        }
+                                                    />
+                                                    <ConfirmDialog
+                                                        trigger={
+                                                            <Button
+                                                                variant="destructive"
+                                                                size="sm"
+                                                            >
+                                                                Delete
+                                                            </Button>
+                                                        }
+                                                        title="Delete announcement?"
+                                                        description="This permanently removes the announcement."
+                                                        confirmLabel="Delete"
+                                                        destructive
+                                                        onConfirm={() =>
+                                                            router.delete(
+                                                                destroy(
+                                                                    announcement.id,
+                                                                ).url,
+                                                                {
+                                                                    preserveScroll: true,
+                                                                },
+                                                            )
+                                                        }
+                                                    />
+                                                </div>
+                                            </TableCell>
+                                        )}
                                     </TableRow>
                                 ))}
                             </TableBody>
@@ -333,12 +345,14 @@ export default function Announcements({
                 />
             </div>
 
-            <AnnouncementFormDialog
-                key={editing?.id ?? 'create'}
-                announcement={editing}
-                open={formOpen}
-                onOpenChange={setFormOpen}
-            />
+            {canManage && (
+                <AnnouncementFormDialog
+                    key={editing?.id ?? 'create'}
+                    announcement={editing}
+                    open={formOpen}
+                    onOpenChange={setFormOpen}
+                />
+            )}
         </>
     );
 }

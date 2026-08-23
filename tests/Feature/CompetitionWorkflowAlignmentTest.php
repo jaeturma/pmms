@@ -27,9 +27,11 @@ function alignedCompetition(): array
     $delegation = Delegation::factory()->approved()->create(['meet_id' => $meet->id]);
     $entries = collect(range(1, 2))->map(function () use ($delegation, $event) {
         $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);
+
         return Entry::factory()->confirmed()->create(['athlete_id' => $athlete->id, 'delegation_id' => $delegation->id, 'event_id' => $event->id]);
     });
     $match->entries()->attach($entries->pluck('id'));
+
     return compact('meet', 'event', 'schedule', 'match', 'entries');
 }
 

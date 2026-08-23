@@ -19,6 +19,7 @@ use App\Models\Sport;
 use App\Models\SportCategory;
 use App\Models\TechnicalOfficialAccreditation;
 use App\Models\User;
+use App\Services\AthletePhotoService;
 use App\Services\AuditLogger;
 use App\Services\Eligibility\AthleteEligibilityChecker;
 use App\Services\Eligibility\TechnicalOfficialEligibilityChecker;
@@ -41,6 +42,7 @@ class EligibilityController extends Controller
     public function __construct(
         private readonly AuditLogger $audit,
         private readonly FileUploadService $uploads,
+        private readonly AthletePhotoService $athletePhotos,
         private readonly AthleteEligibilityChecker $athleteChecker,
         private readonly TechnicalOfficialEligibilityChecker $officialChecker,
     ) {}
@@ -123,6 +125,7 @@ class EligibilityController extends Controller
         $status = (string) $request->query('status', '');
 
         $base = EligibilityReview::query()
+            ->whereHas('athlete')
             ->with([
                 'athlete.school:id,name',
                 'athlete.delegation.meet:id,name',
@@ -141,8 +144,8 @@ class EligibilityController extends Controller
             $base->whereHas('athlete.delegation', fn ($delegation) => $delegation->whereIn(
                 'id', $user->coachAssignmentRequests()->where('status', 'approved')->select('delegation_id'),
             ));
-        } elseif ($user->tournamentAthleteSportIds()->isNotEmpty()) {
-            $base->whereHas('athlete.entries.event', fn ($event) => $event->whereIn('sport_id', $user->tournamentAthleteSportIds()));
+        } elseif ($user->tournamentEventIds()->isNotEmpty()) {
+            $base->whereHas('athlete.entries', fn ($entries) => $entries->whereIn('event_id', $user->tournamentEventIds()));
         } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer) && ! $user->hasPermission(Permission::AthleteEligibilityReview)) {
             $assignments = $user->athleteOversightAssignments()->where('active', true)->get();
             $base->whereHas('athlete.school', function ($school) use ($assignments): void {
@@ -303,7 +306,7 @@ class EligibilityController extends Controller
         $request->validate([
             'athlete_id' => ['required', 'integer', Rule::exists('athletes', 'id')],
             'document_type' => ['required', Rule::enum(EligibilityDocumentType::class)],
-            'file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
+            'file' => ['required', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
         ]);
 
         $athlete = Athlete::query()
@@ -338,13 +341,23 @@ class EligibilityController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $upload = $this->uploads->store($file, $user);
+        $previousDocuments = $athlete->eligibilityDocuments()
+            ->where('document_type', $request->string('document_type')->value())
+            ->with('fileUpload')
+            ->get();
+        $upload = $this->athletePhotos->storeDocument($file, $user, 'file');
 
         $document = EligibilityDocument::create([
             'athlete_id' => $athlete->id,
             'file_upload_id' => $upload->id,
             'document_type' => $request->string('document_type')->value(),
         ]);
+
+        foreach ($previousDocuments as $previousDocument) {
+            $previousUpload = $previousDocument->fileUpload;
+            $previousDocument->delete();
+            $this->uploads->delete($previousUpload);
+        }
 
         $this->audit->record('athlete.document.uploaded', $document, [
             'athlete' => $athlete->fullName(),

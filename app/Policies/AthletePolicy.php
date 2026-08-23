@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\MeetSportAssignmentRole;
 use App\Enums\Permission;
 use App\Enums\UserRole;
 use App\Models\Athlete;
@@ -18,9 +19,11 @@ class AthletePolicy
     public function viewAny(User $user): bool
     {
         return $user->hasRole(UserRole::Admin, UserRole::Organizer, UserRole::DelegationOfficer, UserRole::Coach)
+            || $user->canManageProductionAccounts()
+            || $user->hasPermission(Permission::AthleteEligibilityReview)
             || $user->hasPermission(Permission::DistrictAthletesView)
             || $user->hasPermission(Permission::MunicipalityAthletesView)
-            || $user->tournamentAthleteSportIds()->isNotEmpty();
+            || $user->tournamentEventIds()->isNotEmpty();
     }
 
     /**
@@ -33,7 +36,11 @@ class AthletePolicy
             return true;
         }
 
-        if ($athlete->entries()->whereHas('event', fn ($event) => $event->whereIn('sport_id', $user->tournamentAthleteSportIds()))->exists()) {
+        if ($user->hasPermission(Permission::AthleteEligibilityReview, $athlete->delegation->meet)) {
+            return true;
+        }
+
+        if ($athlete->entries()->whereIn('event_id', $user->tournamentEventIds())->exists()) {
             return true;
         }
 
@@ -45,7 +52,8 @@ class AthletePolicy
             return true;
         }
 
-        return $athlete->delegation->hasOfficer($user) || $user->hasApprovedCoachScope($athlete->delegation);
+        return $athlete->delegation->hasOfficer($user)
+            || ($user->hasApprovedCoachScope($athlete->delegation) && $athlete->isOwnedBy($user));
     }
 
     /**
@@ -54,7 +62,7 @@ class AthletePolicy
      */
     public function create(User $user, Delegation $delegation): bool
     {
-        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+        if ($user->isAdmin() || $user->canManageProductionAccounts()) {
             return true;
         }
 
@@ -62,24 +70,24 @@ class AthletePolicy
             return $user->hasApprovedCoachScope($delegation);
         }
 
-        return $delegation->hasOfficer($user) && $delegation->isEditableByOfficers();
+        return $user->meetSportAssignments()
+            ->where('status', 'active')
+            ->where('role', MeetSportAssignmentRole::TournamentICT->value)
+            ->whereHas('meetSport', fn ($meetSport) => $meetSport
+                ->where('meet_id', $delegation->meet_id))
+            ->exists();
     }
 
     public function update(User $user, Athlete $athlete): bool
     {
-        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+        if ($user->isAdmin()) {
             return true;
         }
 
         if ($user->role === UserRole::Coach) {
-            return $user->hasApprovedCoachScope($athlete->delegation)
-                && $athlete->entries()->whereIn(
-                    'event_id',
-                    $user->coachAssignmentRequests()
-                        ->where('status', 'approved')
-                        ->where('delegation_id', $athlete->delegation_id)
-                        ->select('event_id'),
-                )->exists();
+            return $athlete->isOwnedBy($user)
+                && $user->hasApprovedCoachScope($athlete->delegation)
+                && $athlete->accreditation()->doesntExist();
         }
 
         return $athlete->delegation->hasOfficer($user)

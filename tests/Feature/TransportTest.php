@@ -105,20 +105,20 @@ test('a delegation officer sees only trips/requests tied to their own delegation
 test('organizers can create, update, and remove a vehicle', function () {
     $meet = Meet::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/vehicles', ['meet_id' => $meet->id, 'plate_number' => 'ABC-1234'])
         ->assertSessionHasNoErrors();
 
     $vehicle = Vehicle::query()->where('plate_number', 'ABC-1234')->firstOrFail();
     expect(AuditLog::query()->where('action', 'vehicle.created')->exists())->toBeTrue();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->put("/vehicles/{$vehicle->id}", ['driver_name' => 'Juan Dela Cruz'])
         ->assertSessionHasNoErrors();
 
     expect($vehicle->fresh()->driver_name)->toBe('Juan Dela Cruz');
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->delete("/vehicles/{$vehicle->id}")
         ->assertSessionHasNoErrors();
 
@@ -249,7 +249,7 @@ test('dispatching against an already-fulfilled request fails with a field error'
 test('organizers can update a trip\'s status', function () {
     $trip = TransportTrip::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->patch("/transport-trips/{$trip->id}/status", ['status' => TransportTripStatus::EnRoute->value])
         ->assertSessionHasNoErrors();
 

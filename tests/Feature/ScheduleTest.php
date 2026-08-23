@@ -3,6 +3,7 @@
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\MeetStatus;
+use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\CompetitionArea;
@@ -86,7 +87,7 @@ test('the schedule renders for every role with the manage flag', function () {
     $this->actingAs(User::factory()->organizer()->create())
         ->get('/schedule')
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('canManage', true));
+            ->where('canManage', false));
 });
 
 test('the event picker includes active events from sports enabled for the current meet', function () {
@@ -187,10 +188,10 @@ test('a court or table must be selected when an event has multiple playing areas
         ->assertSessionHasErrors('competition_area_id');
 });
 
-test('managers can schedule an event of a registration-closed or active meet', function (MeetStatus $status) {
+test('admins can schedule an event of a registration-closed or active meet', function (MeetStatus $status) {
     Meet::current()->forceFill(['status' => $status])->save();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/schedule', validSlotInput())
         ->assertRedirect()
         ->assertSessionHasNoErrors();
@@ -410,7 +411,7 @@ test('a tournament manager can update and delete a slot in their managed sport b
 });
 
 test('a tournament manager gets a page-level manage flag and per-row scoping to their own sport', function () {
-    $manager = User::factory()->tournamentManager()->create();
+    $manager = User::factory()->create(['role' => UserRole::TournamentManager]);
 
     $ownSlot = EventSchedule::factory()->create();
     $ownSlot->event->update(['name' => 'Own Sport Event']);
@@ -429,10 +430,10 @@ test('a tournament manager gets a page-level manage flag and per-row scoping to 
         ->get('/schedule?search=Other+Sport+Event')
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('canManage', true)
-            ->where('schedules.data.0.can_manage', false));
+            ->has('schedules.data', 0));
 });
 
-test('an assigned tournament or assistant manager can view all schedules but only create and update their sport', function (MeetSportAssignmentRole $assignmentRole) {
+test('an assigned tournament or assistant manager can only view and manage schedules in their sport', function (MeetSportAssignmentRole $assignmentRole) {
     $meet = Meet::current();
     $manager = User::factory()->tournamentManager()->create();
     $ownEvent = Event::factory()->create();
@@ -456,7 +457,8 @@ test('an assigned tournament or assistant manager can view all schedules but onl
     $this->actingAs($manager)->get('/schedule')
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('schedules.data', 2)
+            ->has('schedules.data', 1)
+            ->where('schedules.data.0.id', $ownSlot->id)
             ->where('canManage', true));
 
     $payload = [

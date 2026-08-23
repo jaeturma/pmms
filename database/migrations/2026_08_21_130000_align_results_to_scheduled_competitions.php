@@ -22,9 +22,9 @@ return new class extends Migration
 
         if (! $indexes->contains('event_results_meet_id_index')) {
             Schema::table('event_results', function (Blueprint $table) {
-            // MySQL can reuse the meet/event unique index for meet_id's
-            // foreign key. Preserve a dedicated supporting index before
-            // replacing the event-level uniqueness with match uniqueness.
+                // MySQL can reuse the meet/event unique index for meet_id's
+                // foreign key. Preserve a dedicated supporting index before
+                // replacing the event-level uniqueness with match uniqueness.
                 $table->index('meet_id');
             });
         }

@@ -42,6 +42,7 @@ class DdOPAA2026TWGSeeder extends Seeder
         return match ($code) {
             'TOP_MANAGEMENT' => 'top_management', 'DSAC' => 'division_screening_and_accreditation',
             'MEDICAL' => 'medical', 'FOOD_MEALS', 'KITCHEN_PERSONNEL' => 'food', 'BILLETING' => 'billeting',
+            'LOGISTICS' => 'supply', 'INCIDENT_COMMAND' => 'drrm', 'EVENT_SECRETARIAT' => 'results_committee',
             default => 'meet_management',
         };
     }

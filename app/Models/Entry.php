@@ -78,4 +78,9 @@ class Entry extends Model
     {
         return $this->hasMany(ResultPlacement::class);
     }
+
+    public function teamMemberships(): HasMany
+    {
+        return $this->hasMany(TeamEntryMember::class);
+    }
 }

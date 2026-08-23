@@ -64,7 +64,8 @@ export default function Register({
                                     tabIndex={1}
                                     autoComplete="name"
                                     name="name"
-                                    placeholder="Full name"
+                                    maxLength={50}
+                                    placeholder="Joel M. Reyes, Jr."
                                     className="h-10"
                                 />
                                 <InputError
@@ -74,7 +75,7 @@ export default function Register({
                             </div>
 
                             <div className="grid gap-2">
-                                <Label htmlFor="email">Email address</Label>
+                                <Label htmlFor="email">Email</Label>
                                 <Input
                                     id="email"
                                     type="email"
@@ -82,24 +83,43 @@ export default function Register({
                                     tabIndex={2}
                                     autoComplete="email"
                                     name="email"
-                                    placeholder="email@example.com"
+                                    maxLength={50}
+                                    placeholder="Active email"
                                     className="h-10"
                                 />
                                 <InputError message={errors.email} />
                             </div>
 
                             <div className="grid gap-2">
-                                <Label htmlFor="password">Password</Label>
+                                <Label htmlFor="password">
+                                    Password (8-20 Characters)
+                                </Label>
                                 <PasswordInput
                                     id="password"
                                     required
                                     tabIndex={3}
                                     autoComplete="new-password"
                                     name="password"
+                                    maxLength={20}
                                     placeholder="Password"
                                     passwordrules={passwordRules}
+                                    aria-describedby={
+                                        errors.password
+                                            ? 'password-requirements'
+                                            : undefined
+                                    }
                                     className="h-10"
                                 />
+                                {errors.password && (
+                                    <p
+                                        id="password-requirements"
+                                        className="text-xs text-muted-foreground"
+                                    >
+                                        Include at least 1 lowercase letter, 1
+                                        capital letter, 1 number, and 1 special
+                                        character.
+                                    </p>
+                                )}
                                 <InputError message={errors.password} />
                             </div>
 
@@ -113,6 +133,7 @@ export default function Register({
                                     tabIndex={4}
                                     autoComplete="new-password"
                                     name="password_confirmation"
+                                    maxLength={20}
                                     placeholder="Confirm password"
                                     passwordrules={passwordRules}
                                     className="h-10"
@@ -200,8 +221,11 @@ export default function Register({
                             )}
 
                             <div className="grid gap-2 md:col-span-2">
-                                <div className="grid items-center gap-3 sm:grid-cols-[auto_13rem_auto_1fr]">
-                                    <Label htmlFor="code_challenge" className="whitespace-nowrap">
+                                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:grid-cols-[auto_13rem_auto_1fr]">
+                                    <Label
+                                        htmlFor="code_challenge"
+                                        className="col-span-2 whitespace-nowrap sm:col-span-1"
+                                    >
                                         Image verification code *
                                     </Label>
                                     <div className="flex h-10 items-center justify-center overflow-hidden rounded-md border bg-slate-100 p-0.5">
@@ -234,7 +258,7 @@ export default function Register({
                                         autoComplete="off"
                                         spellCheck={false}
                                         placeholder="Enter the 5-character code"
-                                        className="h-10 text-center text-base uppercase"
+                                        className="col-span-2 h-10 text-center text-base uppercase sm:col-span-1"
                                     />
                                 </div>
                                 <InputError message={errors.code_challenge} />

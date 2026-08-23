@@ -13,9 +13,11 @@ use App\Models\MeetSportAssignment;
 use App\Models\ScoringSession;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\CompetitionAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -222,7 +224,7 @@ class MatchRosterController extends Controller
      * the frontend can prompt the operator to set match participants
      * first.
      *
-     * @param  \Illuminate\Support\Collection<int, Entry>  $entries
+     * @param  Collection<int, Entry>  $entries
      * @return array{a: array<int, array{id: int, label: string}>, b: array<int, array{id: int, label: string}>}
      */
     private function eligibleAthletes(EventMatch $match, $entries): array
@@ -272,7 +274,8 @@ class MatchRosterController extends Controller
         }
 
         if ($user->role === UserRole::TechnicalOfficial) {
-            return $user->sports()->whereKey($match->event->sport_id)->exists();
+            return app(CompetitionAccessService::class)
+                ->canAccessEvent($user, $match->event, $match->meet_id);
         }
 
         if ($user->role !== UserRole::Organizer) {
@@ -286,7 +289,9 @@ class MatchRosterController extends Controller
             ->whereHas('meetSport', fn ($query) => $query
                 ->where('meet_id', $match->meet_id)
                 ->where('sport_id', $match->event->sport_id))
-            ->exists();
+            ->exists()
+            && app(CompetitionAccessService::class)
+                ->canAccessEvent($user, $match->event, $match->meet_id);
     }
 
     private function authorizeManage(Request $request, EventMatch $match): void

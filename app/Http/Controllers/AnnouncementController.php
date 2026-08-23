@@ -27,6 +27,7 @@ class AnnouncementController extends Controller
      */
     public function index(Request $request): Response
     {
+        abort_unless($request->user()->canViewAnnouncements(), 403);
         $search = $this->searchTerm($request);
 
         $query = Announcement::query()
@@ -48,6 +49,7 @@ class AnnouncementController extends Controller
                     'author' => $announcement->author?->name,
                 ]),
             'filters' => ['search' => $search],
+            'canManage' => $request->user()->canManageAnnouncements(),
         ]);
     }
 
@@ -56,6 +58,7 @@ class AnnouncementController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        abort_unless($request->user()->canManageAnnouncements(), 403);
         $announcement = new Announcement($this->validated($request));
 
         /** @var User $user */
@@ -75,6 +78,7 @@ class AnnouncementController extends Controller
      */
     public function update(Request $request, Announcement $announcement): RedirectResponse
     {
+        abort_unless($request->user()->canManageAnnouncements(), 403);
         $announcement->update($this->validated($request));
 
         $this->audit->record('announcement.updated', $announcement, $this->context($announcement));
@@ -87,8 +91,9 @@ class AnnouncementController extends Controller
     /**
      * Publish to the public portal.
      */
-    public function publish(Announcement $announcement): RedirectResponse
+    public function publish(Request $request, Announcement $announcement): RedirectResponse
     {
+        abort_unless($request->user()->canManageAnnouncements(), 403);
         if ($announcement->is_published) {
             Inertia::flash('toast', [
                 'type' => 'error',
@@ -113,8 +118,9 @@ class AnnouncementController extends Controller
     /**
      * Remove from the public portal, effective immediately.
      */
-    public function unpublish(Announcement $announcement): RedirectResponse
+    public function unpublish(Request $request, Announcement $announcement): RedirectResponse
     {
+        abort_unless($request->user()->canManageAnnouncements(), 403);
         if (! $announcement->is_published) {
             Inertia::flash('toast', [
                 'type' => 'error',
@@ -139,8 +145,9 @@ class AnnouncementController extends Controller
     /**
      * Delete an announcement.
      */
-    public function destroy(Announcement $announcement): RedirectResponse
+    public function destroy(Request $request, Announcement $announcement): RedirectResponse
     {
+        abort_unless($request->user()->canManageAnnouncements(), 403);
         $context = $this->context($announcement);
 
         $announcement->delete();

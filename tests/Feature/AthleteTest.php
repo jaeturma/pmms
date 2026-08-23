@@ -1,10 +1,17 @@
 <?php
 
+use App\Enums\EligibilityDocumentType;
+use App\Enums\ManagementTeamMemberStatus;
+use App\Enums\ManagementTeamType;
+use App\Enums\RequirementStatus;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
 use App\Models\District;
+use App\Models\EligibilityDocument;
 use App\Models\FileUpload;
+use App\Models\ManagementTeam;
+use App\Models\ManagementTeamMember;
 use App\Models\Meet;
 use App\Models\School;
 use App\Models\User;
@@ -108,17 +115,15 @@ test('the registry can be searched by name and lrn', function () {
             ->where('athletes.data.0.name', 'Ben Cruz'));
 });
 
-test('an officer can register an athlete for their open draft delegation', function () {
+test('a delegation officer cannot register an athlete', function () {
     $delegation = Delegation::factory()->create();
     $officer = athleteOfficerFor($delegation);
 
     $this->actingAs($officer)
         ->post('/athletes', validAthletePayload($delegation))
-        ->assertRedirect();
+        ->assertForbidden();
 
-    $this->assertDatabaseHas('athletes', ['lrn' => '123456789012']);
-
-    expect(AuditLog::query()->where('action', 'athlete.created')->exists())->toBeTrue();
+    $this->assertDatabaseMissing('athletes', ['lrn' => '123456789012']);
 });
 
 test('officers cannot register athletes for closed or foreign delegations', function (callable $setup) {
@@ -139,24 +144,81 @@ test('officers cannot register athletes for closed or foreign delegations', func
     ],
 ]);
 
-test('an officer can correct a submitted delegation roster before approval', function () {
+test('a delegation officer cannot add to a submitted delegation roster', function () {
     $delegation = Delegation::factory()->submitted()->create();
 
     $this->actingAs(athleteOfficerFor($delegation))
         ->post('/athletes', validAthletePayload($delegation))
-        ->assertRedirect();
+        ->assertForbidden();
 
-    $this->assertDatabaseHas('athletes', ['delegation_id' => $delegation->id]);
+    $this->assertDatabaseMissing('athletes', ['delegation_id' => $delegation->id]);
 });
 
-test('managers can register athletes regardless of the window', function () {
+test('meet organizers cannot register athletes', function () {
     $delegation = Delegation::factory()->submitted()->create(['meet_id' => Meet::factory()->create()]);
 
     $this->actingAs(User::factory()->organizer()->create())
         ->post('/athletes', validAthletePayload($delegation))
-        ->assertRedirect();
+        ->assertForbidden();
 
-    $this->assertDatabaseHas('athletes', ['delegation_id' => $delegation->id]);
+    $this->assertDatabaseMissing('athletes', ['delegation_id' => $delegation->id]);
+});
+
+test('active ICT team members can register athletes', function () {
+    $delegation = Delegation::factory()->create();
+    $ict = User::factory()->create();
+    $team = ManagementTeam::factory()->create(['team_type' => ManagementTeamType::ICT]);
+    ManagementTeamMember::factory()->create([
+        'management_team_id' => $team->id,
+        'user_id' => $ict->id,
+        'status' => ManagementTeamMemberStatus::Active,
+    ]);
+
+    $this->actingAs($ict)
+        ->post('/athletes', validAthletePayload($delegation))
+        ->assertRedirect()
+        ->assertSessionDoesntHaveErrors();
+
+    $this->assertDatabaseHas('athletes', ['lrn' => '123456789012']);
+    expect(AuditLog::query()->where('action', 'athlete.created')->exists())->toBeTrue();
+});
+
+test('athlete registration lists every active school with its school id', function () {
+    $delegation = Delegation::factory()->create();
+    $school = School::factory()->create([
+        'name' => 'Tuboran National High School',
+        'school_id_code' => '315803',
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get('/athletes')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where("schoolOptionsByDelegation.{$delegation->id}", fn ($schools) => collect($schools)->contains(fn ($option) => $option['name'] === $school->name
+                && $option['school_id_code'] === '315803')));
+});
+
+test('an athlete from a school without municipality or district can be registered and listed', function () {
+    $delegation = Delegation::factory()->create();
+    $school = School::factory()->create([
+        'district_id' => null,
+        'school_district_id' => null,
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post('/athletes', [
+            ...validAthletePayload($delegation),
+            'school_id' => $school->id,
+        ])
+        ->assertRedirect()
+        ->assertSessionDoesntHaveErrors();
+
+    $this->actingAs($admin)
+        ->get('/athletes')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('athletes.data.0.school', $school->name)
+            ->where('athletes.data.0.district', 'Not assigned'));
 });
 
 test('athlete validation rejects bad payloads', function (array $overrides, string $errorField) {
@@ -262,6 +324,67 @@ test('an athlete can be registered with a sports photo, independent of the profi
 
     Storage::disk('local')->assertExists($athlete->photo->path);
     Storage::disk('local')->assertExists($athlete->sportsPhoto->path);
+});
+
+test('athlete profile lists uploaded documents with review status labels', function () {
+    $athlete = Athlete::factory()->create();
+    $athlete->eligibilityReview()->create(['meet_id' => $athlete->delegation->meet_id]);
+
+    foreach ([
+        [EligibilityDocumentType::AthleteHistory, RequirementStatus::Submitted, 'Profile / History', 'Pending'],
+        [EligibilityDocumentType::Form10, RequirementStatus::UnderReview, 'School Form 10', 'Review'],
+        [EligibilityDocumentType::BirthCertificate, RequirementStatus::Verified, 'PSA Birth Certificate', 'Approved'],
+        [EligibilityDocumentType::MedicalCertificate, RequirementStatus::Rejected, 'Medical Certificate', 'Rejected'],
+    ] as [$type, $status]) {
+        EligibilityDocument::factory()->create([
+            'athlete_id' => $athlete->id,
+            'document_type' => $type,
+            'status' => $status,
+        ]);
+    }
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get("/athletes/{$athlete->id}")
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('athlete.documents', 4)
+            ->where('athlete.documents.0.document', 'Profile / History')
+            ->where('athlete.documents.0.status_label', 'Pending')
+            ->where('athlete.documents.1.document', 'School Form 10')
+            ->where('athlete.documents.1.status_label', 'Review')
+            ->where('athlete.documents.2.document', 'PSA Birth Certificate')
+            ->where('athlete.documents.2.status_label', 'Approved')
+            ->where('athlete.documents.3.document', 'Medical Certificate')
+            ->where('athlete.documents.3.status_label', 'Rejected'));
+});
+
+test('replacing an athlete document removes its previous record and stored file', function () {
+    Storage::fake('local');
+    $delegation = Delegation::factory()->create();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->post('/athletes', [
+        ...validAthletePayload($delegation),
+        'athlete_history' => UploadedFile::fake()->image('old-history.jpg'),
+    ]);
+
+    $athlete = Athlete::query()->sole();
+    $oldDocument = $athlete->eligibilityDocuments()->sole();
+    $oldUpload = $oldDocument->fileUpload;
+
+    $this->actingAs($admin)
+        ->put("/athletes/{$athlete->id}", [
+            ...validAthletePayload($delegation),
+            'athlete_history' => UploadedFile::fake()->image('new-history.png'),
+        ])
+        ->assertRedirect()
+        ->assertSessionDoesntHaveErrors();
+
+    expect($athlete->eligibilityDocuments()->count())->toBe(1)
+        ->and($athlete->eligibilityDocuments()->sole()->file_upload_id)->not->toBe($oldUpload->id);
+    $this->assertDatabaseMissing('eligibility_documents', ['id' => $oldDocument->id]);
+    $this->assertDatabaseMissing('file_uploads', ['id' => $oldUpload->id]);
+    Storage::disk('local')->assertMissing($oldUpload->path);
 });
 
 test('the athlete sports photo is served to authorized users only', function () {

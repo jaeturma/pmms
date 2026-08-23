@@ -60,6 +60,7 @@ use App\Http\Controllers\ScoringSessionController;
 use App\Http\Controllers\SportController;
 use App\Http\Controllers\SystemSettingsController;
 use App\Http\Controllers\TallyController;
+use App\Http\Controllers\TeamEntryController;
 use App\Http\Controllers\TechnicalOfficialAccreditationController;
 use App\Http\Controllers\TransportRequestController;
 use App\Http\Controllers\TransportTripController;
@@ -89,6 +90,7 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('sports/{sport}/photo', [SportController::class, 'photo'])->name('sports.photo');
     Route::get('division/logo', [DivisionController::class, 'logo'])->name('division.logo');
     Route::get('division/hero-icon', [DivisionController::class, 'heroIcon'])->name('division.hero-icon');
+    Route::get('branding/logo', [SystemSettingsController::class, 'logo'])->name('branding.logo');
     Route::get('meets/{meet}', [PortalController::class, 'meet'])
         ->whereNumber('meet')
         ->name('public.meet');
@@ -188,6 +190,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('coach/assignment-requests/{coachAssignmentRequest}/reset-password', [CoachAssignmentRequestController::class, 'resetPassword'])
         ->middleware('throttle:6,1')->name('coach.assignment-requests.reset-password');
     Route::patch('coach/onboarding-requests/{coachOnboardingRequest}', [CoachAssignmentRequestController::class, 'reviewOnboarding'])->name('coach.onboarding-requests.review');
+    Route::post('coach/onboarding-requests/{coachOnboardingRequest}/accredit', [CoachAssignmentRequestController::class, 'accredit'])->name('coach.onboarding-accredit');
+    Route::get('coach/onboarding-requests/{coachOnboardingRequest}/documents/{type}', [CoachAssignmentRequestController::class, 'document'])->name('coach.onboarding-documents.show');
+    Route::post('coach/onboarding-requests/{coachOnboardingRequest}/documents/{type}', [CoachAssignmentRequestController::class, 'uploadDocument'])->name('coach.onboarding-documents.store');
     Route::post('coach/onboarding-requests/{coachOnboardingRequest}/reset-password', [CoachAssignmentRequestController::class, 'resetOnboardingPassword'])
         ->middleware('throttle:6,1')->name('coach.onboarding-requests.reset-password');
 
@@ -217,7 +222,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('venues', [VenueController::class, 'index'])->name('venues.index');
     Route::get('schedule', [ScheduleController::class, 'index'])->name('schedule.index');
     Route::get('meet-sport-assignments', [MeetSportAssignmentController::class, 'index'])->name('meet-sport-assignments.index');
+    Route::post('meet-sport-assignments', [MeetSportAssignmentController::class, 'store'])->name('meet-sport-assignments.store');
+    Route::patch('meet-sport-assignments/{meetSportAssignment}/status', [MeetSportAssignmentController::class, 'updateStatus'])->name('meet-sport-assignments.status');
+    Route::delete('meet-sport-assignments/{meetSportAssignment}', [MeetSportAssignmentController::class, 'destroy'])->name('meet-sport-assignments.destroy');
     Route::get('management-teams', [ManagementTeamController::class, 'index'])->name('management-teams.index');
+    Route::post('management-team-members', [ManagementTeamMemberController::class, 'store'])->name('management-team-members.store');
+    Route::patch('management-team-members/{managementTeamMember}/status', [ManagementTeamMemberController::class, 'updateStatus'])->name('management-team-members.status');
+    Route::delete('management-team-members/{managementTeamMember}', [ManagementTeamMemberController::class, 'destroy'])->name('management-team-members.destroy');
     Route::get('equipment', [EquipmentCategoryController::class, 'index'])->name('equipment.index');
     Route::get('food', [MealScheduleController::class, 'index'])->name('food.index');
     Route::get('billeting', [BilletingVenueController::class, 'index'])->name('billeting.index');
@@ -259,6 +270,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('entries/{entry}/confirm', [EntryController::class, 'confirm'])->name('entries.confirm');
     Route::patch('entries/{entry}/withdraw', [EntryController::class, 'withdraw'])->name('entries.withdraw');
     Route::delete('entries/{entry}', [EntryController::class, 'destroy'])->name('entries.destroy');
+    Route::post('team-entries', [TeamEntryController::class, 'store'])->name('team-entries.store');
+    Route::patch('team-entries/{teamEntry}/confirm', [TeamEntryController::class, 'confirm'])->name('team-entries.confirm');
 
     Route::get('matches', [MatchController::class, 'index'])->name('matches.index');
     Route::get('matches/{match}/scoring-session', [ScoringSessionController::class, 'show'])->name('scoring.show');
@@ -398,18 +411,24 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('reports/schedule/download', [ReportController::class, 'downloadScheduleSheet'])->name('reports.schedule.download');
 
     Route::get('audit-logs', [AuditLogController::class, 'index'])
-        ->middleware('can:administer')
         ->name('audit-logs.index');
 
     Route::get('management', [ManagementDashboardController::class, 'index'])
-        ->middleware('can:manage-meet-data')
+        ->middleware('can:view-management-reports')
         ->name('management.index');
     Route::get('reports/management', [ManagementDashboardController::class, 'report'])
-        ->middleware('can:manage-meet-data')
+        ->middleware('can:view-management-reports')
         ->name('reports.management');
     Route::get('reports/management/download', [ManagementDashboardController::class, 'downloadReport'])
-        ->middleware('can:manage-meet-data')
+        ->middleware('can:view-management-reports')
         ->name('reports.management.download');
+
+    Route::get('announcements', [AnnouncementController::class, 'index'])->name('announcements.index');
+    Route::post('announcements', [AnnouncementController::class, 'store'])->name('announcements.store');
+    Route::put('announcements/{announcement}', [AnnouncementController::class, 'update'])->name('announcements.update');
+    Route::patch('announcements/{announcement}/publish', [AnnouncementController::class, 'publish'])->name('announcements.publish');
+    Route::patch('announcements/{announcement}/unpublish', [AnnouncementController::class, 'unpublish'])->name('announcements.unpublish');
+    Route::delete('announcements/{announcement}', [AnnouncementController::class, 'destroy'])->name('announcements.destroy');
 
     Route::get('division', [DivisionController::class, 'edit'])
         ->middleware('can:administer')
@@ -425,10 +444,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('can:administer')
         ->name('system-settings.update');
 
-    Route::middleware('role:admin,organizer')->group(function () {
-        Route::get('account-provisions', [AccountProvisionController::class, 'index'])->name('account-provisions.index');
-        Route::post('account-provisions/{accountProvision}/invite', [AccountProvisionController::class, 'invite'])->name('account-provisions.invite');
-        Route::post('account-provisions/{accountProvision}/reset-password', [AccountProvisionController::class, 'resetPassword'])->name('account-provisions.reset-password');
+    Route::get('account-provisions', [AccountProvisionController::class, 'index'])->name('account-provisions.index');
+    Route::post('account-provisions/{accountProvision}/invite', [AccountProvisionController::class, 'invite'])->name('account-provisions.invite');
+    Route::post('account-provisions/{accountProvision}/reset-password', [AccountProvisionController::class, 'resetPassword'])->name('account-provisions.reset-password');
+
+    Route::middleware('role:admin')->group(function () {
         Route::post('districts', [DistrictController::class, 'store'])->name('districts.store');
         Route::put('districts/{district}', [DistrictController::class, 'update'])->name('districts.update');
         Route::patch('districts/{district}/archive', [DistrictController::class, 'archive'])->name('districts.archive');
@@ -461,17 +481,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('venues/{venue}/restore', [VenueController::class, 'restore'])->name('venues.restore');
         Route::delete('venues/{venue}', [VenueController::class, 'destroy'])->name('venues.destroy');
 
-        Route::post('meet-sport-assignments', [MeetSportAssignmentController::class, 'store'])->name('meet-sport-assignments.store');
-        Route::patch('meet-sport-assignments/{meetSportAssignment}/status', [MeetSportAssignmentController::class, 'updateStatus'])->name('meet-sport-assignments.status');
-        Route::delete('meet-sport-assignments/{meetSportAssignment}', [MeetSportAssignmentController::class, 'destroy'])->name('meet-sport-assignments.destroy');
-
         Route::post('management-teams', [ManagementTeamController::class, 'store'])->name('management-teams.store');
         Route::put('management-teams/{managementTeam}', [ManagementTeamController::class, 'update'])->name('management-teams.update');
         Route::delete('management-teams/{managementTeam}', [ManagementTeamController::class, 'destroy'])->name('management-teams.destroy');
-
-        Route::post('management-team-members', [ManagementTeamMemberController::class, 'store'])->name('management-team-members.store');
-        Route::patch('management-team-members/{managementTeamMember}/status', [ManagementTeamMemberController::class, 'updateStatus'])->name('management-team-members.status');
-        Route::delete('management-team-members/{managementTeamMember}', [ManagementTeamMemberController::class, 'destroy'])->name('management-team-members.destroy');
 
         Route::put('meets/{meet}', [MeetController::class, 'update'])->name('meets.update');
         Route::patch('meets/{meet}/status', [MeetController::class, 'updateStatus'])->name('meets.status');
@@ -488,13 +500,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::patch('protests/{protest}/review', [ProtestController::class, 'review'])->name('protests.review');
         Route::patch('protests/{protest}/decide', [ProtestController::class, 'decide'])->name('protests.decide');
-
-        Route::get('announcements', [AnnouncementController::class, 'index'])->name('announcements.index');
-        Route::post('announcements', [AnnouncementController::class, 'store'])->name('announcements.store');
-        Route::put('announcements/{announcement}', [AnnouncementController::class, 'update'])->name('announcements.update');
-        Route::patch('announcements/{announcement}/publish', [AnnouncementController::class, 'publish'])->name('announcements.publish');
-        Route::patch('announcements/{announcement}/unpublish', [AnnouncementController::class, 'unpublish'])->name('announcements.unpublish');
-        Route::delete('announcements/{announcement}', [AnnouncementController::class, 'destroy'])->name('announcements.destroy');
 
         Route::get('incidents', [IncidentController::class, 'index'])->name('incidents.index');
         Route::post('incidents', [IncidentController::class, 'store'])->name('incidents.store');

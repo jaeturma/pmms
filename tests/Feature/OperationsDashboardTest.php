@@ -76,7 +76,7 @@ test('managers see the operational queues with correct counts', function () {
 
     $accreditation = Accreditation::factory()->create(['delegation_id' => $delegation->id]);
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->get(route('dashboard'))
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('operations.queues.pending_results', 1)

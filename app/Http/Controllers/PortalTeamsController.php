@@ -190,13 +190,32 @@ class PortalTeamsController extends Controller
     {
         return Entry::query()
             ->whereHas('delegation', fn ($query) => $query->where('meet_id', $meet->id))
-            ->with(['athlete:id,school_id', 'athlete.school:id,district_id', 'event:id,sport_id'])
+            ->with([
+                'athlete:id,school_id',
+                'athlete.school:id,district_id',
+                'delegation:id,district_id',
+                'event:id,sport_id',
+            ])
             ->get()
-            ->groupBy(fn (Entry $entry): int => $entry->athlete->school->district_id)
+            ->filter(fn (Entry $entry): bool => $this->entryMunicipalityId($entry) !== null)
+            ->groupBy(fn (Entry $entry): int => $this->entryMunicipalityId($entry))
             ->map(fn (Collection $entries): array => [
                 'athlete_count' => $entries->pluck('athlete.id')->unique()->count(),
                 'sport_count' => $entries->pluck('event.sport_id')->unique()->count(),
             ]);
+    }
+
+    /**
+     * Prefer the athlete's actual school municipality. Historical imports
+     * may have a school without a municipality, so fall back to the
+     * delegation municipality and exclude the entry only when neither is
+     * available.
+     */
+    private function entryMunicipalityId(Entry $entry): ?int
+    {
+        return $entry->athlete?->school?->district_id
+            ?? $entry->delegation?->district_id
+            ?? $entry->delegation?->school?->district_id;
     }
 
     /**
@@ -217,7 +236,6 @@ class PortalTeamsController extends Controller
     {
         $entries = Entry::query()
             ->whereHas('delegation', fn ($query) => $query->where('meet_id', $meet->id))
-            ->whereHas('athlete.school', fn ($query) => $query->where('district_id', $district->id))
             ->where('status', '!=', EntryStatus::Withdrawn->value)
             ->where(function ($query) use ($meet): void {
                 $query->where('status', EntryStatus::Confirmed->value)
@@ -228,38 +246,53 @@ class PortalTeamsController extends Controller
             ->with([
                 'athlete:id,first_name,last_name,school_id',
                 'athlete.school:id,name',
+                'delegation:id,district_id,school_id',
+                'delegation.school:id,district_id,name',
                 'event:id,sport_id,name,gender,age_division',
                 'event.sport:id,name',
             ])
-            ->get();
+            ->get()
+            ->filter(fn (Entry $entry): bool => $this->entryMunicipalityId($entry) === $district->id);
 
         $athletesBySport = $entries->groupBy('event.sport.name');
 
         $personnel = Personnel::query()
-            ->whereHas('school', fn ($query) => $query->where('district_id', $district->id))
+            ->whereHas('delegation', fn ($query) => $query->where('meet_id', $meet->id))
             ->whereIn('role', [PersonnelRole::Coach->value, PersonnelRole::AssistantCoach->value])
-            ->with(['school:id,name', 'sports:id,name'])
-            ->get();
+            ->with([
+                'school:id,district_id,name',
+                'delegation:id,district_id,school_id',
+                'delegation.school:id,district_id,name',
+                'sports:id,name',
+            ])
+            ->get()
+            ->filter(fn (Personnel $coach): bool => $this->personnelMunicipalityId($coach) === $district->id);
 
         $personnelCoaches = $personnel
             ->flatMap(fn (Personnel $coach) => $coach->sports->map(fn (Sport $sport): array => [
                 'sport' => $sport->name,
                 'name' => $coach->fullName(),
                 'role' => $coach->role->label(),
-                'school' => $coach->school->name,
+                'school' => $coach->school?->name ?? $coach->delegation->registrantName(),
             ]));
 
         $approvedAccountCoaches = CoachAssignmentRequest::query()
             ->where('status', 'approved')
             ->whereHas('meetSport', fn ($query) => $query->where('meet_id', $meet->id))
-            ->whereHas('school', fn ($query) => $query->where('district_id', $district->id))
-            ->with(['user:id,name', 'meetSport.sport:id,name', 'school:id,name'])
+            ->with([
+                'user:id,name',
+                'meetSport.sport:id,name',
+                'school:id,district_id,name',
+                'delegation:id,district_id,school_id',
+                'delegation.school:id,district_id,name',
+            ])
             ->get()
+            ->filter(fn (CoachAssignmentRequest $request): bool => $this->coachMunicipalityId($request) === $district->id)
             ->map(fn (CoachAssignmentRequest $request): array => [
                 'sport' => $request->meetSport->sport->name,
-                'name' => $request->user->name,
+                'name' => $request->user?->name ?? __('Unknown coach'),
                 'role' => 'Coach',
-                'school' => $request->school->name,
+                'school' => $request->school?->name ?? $request->delegation->registrantName(),
             ]);
 
         $coachesBySport = $personnelCoaches
@@ -307,6 +340,20 @@ class PortalTeamsController extends Controller
             ])
             ->values()
             ->all();
+    }
+
+    private function personnelMunicipalityId(Personnel $coach): ?int
+    {
+        return $coach->school?->district_id
+            ?? $coach->delegation?->district_id
+            ?? $coach->delegation?->school?->district_id;
+    }
+
+    private function coachMunicipalityId(CoachAssignmentRequest $request): ?int
+    {
+        return $request->school?->district_id
+            ?? $request->delegation?->district_id
+            ?? $request->delegation?->school?->district_id;
     }
 
     /**

@@ -1,5 +1,5 @@
-import { Head, Link, router, useForm } from '@inertiajs/react';
-import { ListChecks, Plus, Printer } from 'lucide-react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
+import { ListChecks, Plus, Printer, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -11,6 +11,7 @@ import type { Paginated } from '@/components/pagination-controls';
 import { SearchBar } from '@/components/search-bar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogContent,
@@ -48,6 +49,7 @@ type EntryRow = {
     athlete: string;
     event: string;
     school: string;
+    delegation: string;
     meet: string;
     status: string;
     status_label: string;
@@ -65,12 +67,15 @@ type FilterOption = {
 type AthleteOption = {
     id: number;
     meet_id: number;
+    delegation_id: number;
     label: string;
 };
 
 type EventOption = {
     id: number;
     meet_id: number;
+    sport: string;
+    is_team_event: boolean;
     label: string;
 };
 
@@ -85,6 +90,18 @@ type Props = {
     delegationFilterOptions: FilterOption[];
     athleteOptions: AthleteOption[];
     eventOptionsByMeet: EventOption[];
+    teamEntries: Array<{
+        id: number;
+        event: string;
+        delegation: string;
+        member_count: number;
+        minimum: number | null;
+        maximum: number | null;
+        complete: boolean;
+        locked: boolean;
+        status: string;
+        members: Array<{ id: number; name: string }>;
+    }>;
 };
 
 const statusVariants: Record<string, 'default' | 'secondary' | 'outline'> = {
@@ -106,7 +123,7 @@ function SubmitEntryDialog({
 }) {
     const { data, setData, post, processing, errors, reset } = useForm({
         athlete_id: '',
-        event_id: '',
+        event_ids: [] as number[],
     });
 
     const selectedAthlete = athleteOptions.find(
@@ -115,7 +132,9 @@ function SubmitEntryDialog({
 
     const availableEvents = selectedAthlete
         ? eventOptionsByMeet.filter(
-              (event) => event.meet_id === selectedAthlete.meet_id,
+              (event) =>
+                  event.meet_id === selectedAthlete.meet_id &&
+                  !event.is_team_event,
           )
         : [];
 
@@ -149,7 +168,7 @@ function SubmitEntryDialog({
                                 value={data.athlete_id}
                                 onValueChange={(value) => {
                                     setData('athlete_id', value);
-                                    setData('event_id', '');
+                                    setData('event_ids', []);
                                 }}
                             >
                                 <SelectTrigger id="entry-athlete">
@@ -169,43 +188,198 @@ function SubmitEntryDialog({
                             <InputError message={errors.athlete_id} />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="entry-event">Event</Label>
-                            <Select
-                                value={data.event_id}
-                                onValueChange={(value) =>
-                                    setData('event_id', value)
-                                }
-                                disabled={!selectedAthlete}
-                            >
-                                <SelectTrigger id="entry-event">
-                                    <SelectValue
-                                        placeholder={
-                                            selectedAthlete
-                                                ? 'Select an event'
-                                                : 'Select an athlete first'
-                                        }
-                                    />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {availableEvents.map((event) => (
-                                        <SelectItem
-                                            key={event.id}
-                                            value={String(event.id)}
+                            <Label>Events</Label>
+                            <p className="text-xs text-muted-foreground">
+                                Select every event this athlete will compete in,
+                                An athlete may be entered in multiple individual
+                                events. Use Team entry for team events.
+                            </p>
+                            <div className="max-h-72 space-y-2 overflow-y-auto rounded-md border p-3">
+                                {!selectedAthlete ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        Select an athlete first.
+                                    </p>
+                                ) : availableEvents.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        No eligible meet events are available.
+                                    </p>
+                                ) : (
+                                    availableEvents.map((event) => (
+                                        <label
+                                            key={`${event.meet_id}-${event.id}`}
+                                            className="flex cursor-pointer items-start gap-3 rounded p-2 hover:bg-muted/50"
                                         >
-                                            {event.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <InputError message={errors.event_id} />
+                                            <Checkbox
+                                                checked={data.event_ids.includes(
+                                                    event.id,
+                                                )}
+                                                onCheckedChange={(checked) =>
+                                                    setData(
+                                                        'event_ids',
+                                                        checked === true
+                                                            ? [
+                                                                  ...data.event_ids,
+                                                                  event.id,
+                                                              ]
+                                                            : data.event_ids.filter(
+                                                                  (id) =>
+                                                                      id !==
+                                                                      event.id,
+                                                              ),
+                                                    )
+                                                }
+                                            />
+                                            <span className="text-sm">
+                                                {event.label}
+                                                <span className="ml-2 text-xs text-muted-foreground">
+                                                    {event.is_team_event
+                                                        ? 'Team'
+                                                        : 'Individual'}
+                                                </span>
+                                            </span>
+                                        </label>
+                                    ))
+                                )}
+                            </div>
+                            <InputError message={errors.event_ids} />
                         </div>
                         <DialogFooter>
-                            <Button type="submit" disabled={processing}>
-                                Submit entry
+                            <Button
+                                type="submit"
+                                disabled={
+                                    processing || data.event_ids.length === 0
+                                }
+                            >
+                                Submit {data.event_ids.length || ''}{' '}
+                                {data.event_ids.length === 1
+                                    ? 'entry'
+                                    : 'entries'}
                             </Button>
                         </DialogFooter>
                     </form>
                 )}
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function TeamEntryDialog({
+    athleteOptions,
+    eventOptionsByMeet,
+    open,
+    onOpenChange,
+}: {
+    athleteOptions: AthleteOption[];
+    eventOptionsByMeet: EventOption[];
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+}) {
+    const { data, setData, post, processing, errors, reset } = useForm({
+        event_id: '',
+        athlete_ids: [] as number[],
+    });
+    const teamEvents = eventOptionsByMeet.filter(
+        (event) => event.is_team_event,
+    );
+    const selectedEvent = teamEvents.find(
+        (event) => String(event.id) === data.event_id,
+    );
+    const athletes = selectedEvent
+        ? athleteOptions.filter(
+              (athlete) => athlete.meet_id === selectedEvent.meet_id,
+          )
+        : [];
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-xl">
+                <DialogHeader>
+                    <DialogTitle>Team entry</DialogTitle>
+                </DialogHeader>
+                <form
+                    className="space-y-4"
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        post('/team-entries', {
+                            preserveScroll: true,
+                            onSuccess: () => {
+                                reset();
+                                onOpenChange(false);
+                            },
+                        });
+                    }}
+                >
+                    <div className="space-y-2">
+                        <Label>Team event</Label>
+                        <Select
+                            value={data.event_id}
+                            onValueChange={(value) => {
+                                setData('event_id', value);
+                                setData('athlete_ids', []);
+                            }}
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select a team event" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {teamEvents.map((event) => (
+                                    <SelectItem
+                                        key={`${event.meet_id}-${event.id}`}
+                                        value={String(event.id)}
+                                    >
+                                        {event.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <InputError message={errors.event_id} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Official team members</Label>
+                        <div className="max-h-72 space-y-1 overflow-y-auto rounded-md border p-3">
+                            {athletes.map((athlete) => (
+                                <label
+                                    key={athlete.id}
+                                    className="flex cursor-pointer items-center gap-3 rounded p-2 hover:bg-muted/50"
+                                >
+                                    <Checkbox
+                                        checked={data.athlete_ids.includes(
+                                            athlete.id,
+                                        )}
+                                        onCheckedChange={(checked) =>
+                                            setData(
+                                                'athlete_ids',
+                                                checked === true
+                                                    ? [
+                                                          ...data.athlete_ids,
+                                                          athlete.id,
+                                                      ]
+                                                    : data.athlete_ids.filter(
+                                                          (id) =>
+                                                              id !== athlete.id,
+                                                      ),
+                                            )
+                                        }
+                                    />
+                                    <span className="text-sm">
+                                        {athlete.label}
+                                    </span>
+                                </label>
+                            ))}
+                        </div>
+                        <InputError message={errors.athlete_ids} />
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            type="submit"
+                            disabled={
+                                processing || data.athlete_ids.length === 0
+                            }
+                        >
+                            Save team ({data.athlete_ids.length})
+                        </Button>
+                    </DialogFooter>
+                </form>
             </DialogContent>
         </Dialog>
     );
@@ -218,8 +392,12 @@ export default function Entries({
     delegationFilterOptions,
     athleteOptions,
     eventOptionsByMeet,
+    teamEntries,
 }: Props) {
     const [submitOpen, setSubmitOpen] = useState(false);
+    const [teamOpen, setTeamOpen] = useState(false);
+    const isTournamentScoped =
+        usePage().props.auth.user?.is_tournament_scoped ?? false;
 
     const applyFilters = (overrides: {
         event_id?: string;
@@ -279,14 +457,93 @@ export default function Entries({
                                 </Button>
                             )}
                             {athleteOptions.length > 0 && (
-                                <Button onClick={() => setSubmitOpen(true)}>
-                                    <Plus />
-                                    Submit entry
-                                </Button>
+                                <>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setTeamOpen(true)}
+                                    >
+                                        <UsersRound />
+                                        Team entry
+                                    </Button>
+                                    <Button onClick={() => setSubmitOpen(true)}>
+                                        <Plus />
+                                        Individual entry
+                                    </Button>
+                                </>
                             )}
                         </>
                     }
                 />
+
+                {teamEntries.length > 0 && (
+                    <div className="overflow-x-auto rounded-xl border">
+                        <div className="border-b bg-muted/30 px-4 py-3">
+                            <h2 className="font-semibold">Team entries</h2>
+                        </div>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Event</TableHead>
+                                    <TableHead>Delegation</TableHead>
+                                    <TableHead>Members</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead className="text-right">
+                                        Action
+                                    </TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {teamEntries.map((team) => (
+                                    <TableRow key={team.id}>
+                                        <TableCell className="font-medium">
+                                            {team.event}
+                                        </TableCell>
+                                        <TableCell>{team.delegation}</TableCell>
+                                        <TableCell>
+                                            <div>
+                                                {team.member_count} members
+                                            </div>
+                                            <div className="text-xs text-muted-foreground">
+                                                {team.members
+                                                    .map(
+                                                        (member) => member.name,
+                                                    )
+                                                    .join(', ')}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge
+                                                variant={
+                                                    team.complete
+                                                        ? 'secondary'
+                                                        : 'outline'
+                                                }
+                                            >
+                                                {team.complete
+                                                    ? team.status
+                                                    : `Below minimum (${team.minimum})`}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            {!team.locked && team.complete && (
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        router.patch(
+                                                            `/team-entries/${team.id}/confirm`,
+                                                        )
+                                                    }
+                                                >
+                                                    Finalize
+                                                </Button>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                )}
 
                 <div className="flex flex-wrap gap-2">
                     <SearchBar
@@ -295,30 +552,32 @@ export default function Entries({
                         url={index().url}
                         extraParams={selectParams}
                     />
-                    <Select
-                        value={String(filters.event_id ?? 'all')}
-                        onValueChange={(value) =>
-                            applyFilters({ event_id: value })
-                        }
-                    >
-                        <SelectTrigger
-                            className="w-72"
-                            aria-label="Filter by event"
+                    {!isTournamentScoped && (
+                        <Select
+                            value={String(filters.event_id ?? 'all')}
+                            onValueChange={(value) =>
+                                applyFilters({ event_id: value })
+                            }
                         >
-                            <SelectValue placeholder="All events" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All events</SelectItem>
-                            {eventFilterOptions.map((option) => (
-                                <SelectItem
-                                    key={option.id}
-                                    value={String(option.id)}
-                                >
-                                    {option.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                            <SelectTrigger
+                                className="w-72"
+                                aria-label="Filter by event"
+                            >
+                                <SelectValue placeholder="All events" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All events</SelectItem>
+                                {eventFilterOptions.map((option) => (
+                                    <SelectItem
+                                        key={option.id}
+                                        value={String(option.id)}
+                                    >
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
                     <Select
                         value={String(filters.delegation_id ?? 'all')}
                         onValueChange={(value) =>
@@ -360,6 +619,7 @@ export default function Entries({
                                         <TableHead>Athlete</TableHead>
                                         <TableHead>Event</TableHead>
                                         <TableHead>School</TableHead>
+                                        <TableHead>Team / Delegation</TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead className="text-right">
                                             Actions
@@ -382,6 +642,9 @@ export default function Entries({
                                             <TableCell>{entry.event}</TableCell>
                                             <TableCell>
                                                 {entry.school}
+                                            </TableCell>
+                                            <TableCell>
+                                                {entry.delegation}
                                             </TableCell>
                                             <TableCell>
                                                 <Badge
@@ -494,6 +757,12 @@ export default function Entries({
                 eventOptionsByMeet={eventOptionsByMeet}
                 open={submitOpen}
                 onOpenChange={setSubmitOpen}
+            />
+            <TeamEntryDialog
+                athleteOptions={athleteOptions}
+                eventOptionsByMeet={eventOptionsByMeet}
+                open={teamOpen}
+                onOpenChange={setTeamOpen}
             />
         </>
     );

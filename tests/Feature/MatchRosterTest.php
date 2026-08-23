@@ -4,6 +4,7 @@ use App\Enums\MatchStatus;
 use App\Models\Athlete;
 use App\Models\Delegation;
 use App\Models\Entry;
+use App\Models\Event;
 use App\Models\EventMatch;
 use App\Models\MatchRosterPlayer;
 use App\Models\ScoringSession;
@@ -50,7 +51,7 @@ function rosterTeammateEntry(EventMatch $match, Entry $representative): Entry
 function basketballMatchWithSides(): array
 {
     $sport = Sport::factory()->create(['name' => 'Basketball']);
-    $event = \App\Models\Event::factory()->create(['sport_id' => $sport->id, 'is_team_event' => true]);
+    $event = Event::factory()->create(['sport_id' => $sport->id, 'is_team_event' => true]);
     $match = EventMatch::factory()->create(['event_id' => $event->id, 'status' => MatchStatus::Scheduled]);
 
     $entryA = rosterConfirmedEntry($match);

@@ -3,7 +3,6 @@
 namespace App\Policies;
 
 use App\Enums\ManagementTeamType;
-use App\Enums\UserRole;
 use App\Models\Meet;
 use App\Models\User;
 use App\Policies\Concerns\ChecksManagementTeamMembership;
@@ -23,13 +22,13 @@ class FoodPolicy
 
     public function viewAny(User $user): bool
     {
-        return $user->hasRole(UserRole::Admin, UserRole::Organizer)
+        return $user->isAdmin()
             || $this->hasActiveMembership($user, ManagementTeamType::Food);
     }
 
     public function manage(User $user, Meet $meet): bool
     {
-        return $user->hasRole(UserRole::Admin, UserRole::Organizer)
+        return $user->isAdmin()
             || $this->hasActiveMembership($user, ManagementTeamType::Food, $meet);
     }
 }

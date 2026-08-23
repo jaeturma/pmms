@@ -44,7 +44,7 @@ class ManagementTeamController extends Controller
             ->orderBy('team_type');
 
         return Inertia::render('management-teams/index', [
-            'teams' => $query->get()->map(fn (ManagementTeam $team): array => $this->teamRow($team)),
+            'teams' => $query->paginate(10)->withQueryString()->through(fn (ManagementTeam $team): array => $this->teamRow($team)),
             'teamTypeOptions' => array_map(
                 fn (ManagementTeamType $type): array => ['value' => $type->value, 'label' => $type->label()],
                 ManagementTeamType::cases(),

@@ -28,7 +28,7 @@ test('the district registry renders with the manage flag per role', function () 
 });
 
 test('organizers can create districts', function () {
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/districts', ['name' => 'District I'])
         ->assertRedirect();
 

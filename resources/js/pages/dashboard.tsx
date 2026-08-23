@@ -14,7 +14,6 @@ import {
     School,
     TriangleAlert,
     UserCog,
-    Users,
     UsersRound,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -42,6 +41,8 @@ import { index as athletesIndex } from '@/routes/athletes';
 import { index as delegationsIndex } from '@/routes/delegations';
 import { index as eventsIndex } from '@/routes/events';
 import { index as incidentsIndex } from '@/routes/incidents';
+import { index as eligibilityIndex } from '@/routes/eligibility';
+import { index as entriesIndex } from '@/routes/entries';
 import { index as personnelIndex } from '@/routes/personnel';
 import { index as protestsIndex } from '@/routes/protests';
 import { schedule as scheduleSheet } from '@/routes/reports';
@@ -130,8 +131,8 @@ type Props = {
     currentMeet: CurrentMeet | null;
     operations: Operations | null;
     coachAccreditation: CoachAccreditation | null;
+    coachDashboard: CoachDashboard | null;
     stats: Stat[];
-    recentActivity: ActivityEntry[];
     announcements: Announcement[];
 };
 
@@ -147,22 +148,31 @@ type CoachAccreditation = {
     review_notes: string | null;
 };
 
+type CoachDashboard = {
+    eligibility_reviews: Array<{
+        id: number;
+        athlete: string;
+        school: string;
+        status: string;
+        status_label: string;
+    }>;
+    submitted_entries: Array<{
+        id: number;
+        athlete: string;
+        event: string;
+        delegation: string;
+        own_team: boolean;
+    }>;
+};
+
 const statIcons: Record<string, LucideIcon> = {
-    schools: School,
-    delegations: UsersRound,
     athletes: Contact,
     entries: ListChecks,
-    users: Users,
-    activity_today: Activity,
 };
 
 const statTones: Record<string, StatCardTone> = {
-    schools: 'primary',
-    delegations: 'success',
     athletes: 'gold',
     entries: 'warning',
-    users: 'primary',
-    activity_today: 'success',
 };
 
 /**
@@ -188,25 +198,53 @@ const quickActions: Array<{
     label: string;
     href: string;
     icon: LucideIcon;
+    roles: string[];
 }> = [
     {
         label: 'Register delegation',
         href: delegationsIndex().url,
         icon: UsersRound,
+        roles: ['admin', 'organizer', 'delegation_officer'],
     },
-    { label: 'Register athlete', href: athletesIndex().url, icon: Contact },
-    { label: 'Add official', href: personnelIndex().url, icon: UserCog },
-    { label: 'Manage events', href: eventsIndex().url, icon: Medal },
-    { label: 'Encode results', href: resultsIndex().url, icon: Award },
-    { label: 'Medal tally', href: tallyIndex().url, icon: Crown },
+    { label: 'Register athlete', href: athletesIndex().url, icon: Contact, roles: ['admin', 'coach'] },
+    { label: 'Add official', href: personnelIndex().url, icon: UserCog, roles: ['admin', 'organizer', 'delegation_officer'] },
+    { label: 'Manage events', href: eventsIndex().url, icon: Medal, roles: ['admin', 'organizer'] },
+    { label: 'Encode results', href: resultsIndex().url, icon: Award, roles: ['admin', 'organizer', 'tournament_manager'] },
+    { label: 'Medal tally', href: tallyIndex().url, icon: Crown, roles: ['admin', 'organizer', 'tournament_manager', 'technical_official', 'delegation_officer', 'coach', 'viewer'] },
 ];
 
-function QuickActions() {
+function QuickActions({ compact = false }: { compact?: boolean }) {
+    const role = usePage().props.auth.user?.role;
+    const permittedActions = quickActions.filter((action) => role && action.roles.includes(role));
+
+    if (permittedActions.length === 0) return null;
+
+    if (compact) {
+        return (
+            <div className="flex flex-wrap justify-end gap-2">
+                {permittedActions.map((action) => (
+                    <Button
+                        key={action.label}
+                        variant="outline"
+                        size="sm"
+                        className="bg-background/80 shadow-sm"
+                        asChild
+                    >
+                        <Link href={action.href}>
+                            <action.icon className="size-4 text-primary" />
+                            {action.label}
+                        </Link>
+                    </Button>
+                ))}
+            </div>
+        );
+    }
+
     return (
         <section className="flex flex-col gap-3">
             <h2 className="text-base font-semibold">Quick actions</h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-6">
-                {quickActions.map((action) => (
+                {permittedActions.map((action) => (
                     <Button
                         key={action.label}
                         variant="outline"
@@ -591,12 +629,133 @@ function MeetOperations({ operations }: { operations: Operations }) {
     );
 }
 
+function CoachDashboardCards({ data }: { data: CoachDashboard }) {
+    const reviewVariant = (
+        status: string,
+    ): 'success' | 'destructive' | 'outline' =>
+        status === 'approved'
+            ? 'success'
+            : status === 'rejected'
+              ? 'destructive'
+              : 'outline';
+
+    return (
+        <div className="grid gap-4 lg:grid-cols-2">
+            <Card data-tone="cyan">
+                <CardHeader className="flex flex-row items-center justify-between gap-3">
+                    <div>
+                        <CardTitle>Eligibility Review</CardTitle>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                            Review status of athletes in your delegation.
+                        </p>
+                    </div>
+                    <Button variant="outline" size="sm" asChild>
+                        <Link href={eligibilityIndex()}>Open eligibility</Link>
+                    </Button>
+                </CardHeader>
+                <CardContent>
+                    {data.eligibility_reviews.length === 0 ? (
+                        <EmptyState
+                            icon={FileCheck}
+                            title="No eligibility reviews yet"
+                        />
+                    ) : (
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Athlete</TableHead>
+                                    <TableHead>Status</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {data.eligibility_reviews.map((review) => (
+                                    <TableRow key={review.id}>
+                                        <TableCell>
+                                            <p className="font-medium">
+                                                {review.athlete}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {review.school}
+                                            </p>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge
+                                                variant={reviewVariant(
+                                                    review.status,
+                                                )}
+                                            >
+                                                {review.status_label}
+                                            </Badge>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
+                </CardContent>
+            </Card>
+
+            <Card data-tone="violet">
+                <CardHeader className="flex flex-row items-center justify-between gap-3">
+                    <div>
+                        <CardTitle>Submitted Entries</CardTitle>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                            Entries submitted in your assigned events.
+                        </p>
+                    </div>
+                    <Button variant="outline" size="sm" asChild>
+                        <Link href={entriesIndex()}>View entries</Link>
+                    </Button>
+                </CardHeader>
+                <CardContent>
+                    {data.submitted_entries.length === 0 ? (
+                        <EmptyState
+                            icon={ListChecks}
+                            title="No submitted entries yet"
+                        />
+                    ) : (
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Athlete</TableHead>
+                                    <TableHead>Event</TableHead>
+                                    <TableHead>Team</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {data.submitted_entries.map((entry) => (
+                                    <TableRow key={entry.id}>
+                                        <TableCell className="font-medium">
+                                            {entry.athlete}
+                                        </TableCell>
+                                        <TableCell>{entry.event}</TableCell>
+                                        <TableCell>
+                                            <span className="flex items-center gap-2">
+                                                {entry.delegation}
+                                                {entry.own_team && (
+                                                    <Badge variant="outline">
+                                                        Your team
+                                                    </Badge>
+                                                )}
+                                            </span>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
+                </CardContent>
+            </Card>
+        </div>
+    );
+}
+
 export default function Dashboard({
     currentMeet,
     operations,
     coachAccreditation,
+    coachDashboard,
     stats,
-    recentActivity,
     announcements,
 }: Props) {
     return (
@@ -604,17 +763,40 @@ export default function Dashboard({
             <Head title="Dashboard" />
             <div
                 data-dashboard="true"
-                className="flex h-full flex-1 flex-col gap-6 p-4"
+                className="flex h-full flex-1 flex-col gap-4 p-4"
             >
                 <PageHeader
-                    title="Dashboard"
-                    description="Overview of activity across the system."
+                    title={coachDashboard ? 'Coach Dashboard' : 'Dashboard'}
+                    description={
+                        coachDashboard
+                            ? 'Your athletes, eligibility reviews, and event entries.'
+                            : 'Overview of activity across the system.'
+                    }
+                    actions={
+                        coachDashboard ? <QuickActions compact /> : undefined
+                    }
                 />
 
-                {currentMeet && (
-                    <Card data-tone="primary">
+                <div
+                    className={cn(
+                        coachDashboard &&
+                            'grid gap-4 lg:grid-cols-[minmax(16rem,0.7fr)_minmax(0,1.8fr)]',
+                    )}
+                >
+                    {currentMeet && (
+                        <Card
+                            data-tone="primary"
+                            className="overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background"
+                        >
                         <CardHeader className="flex flex-row items-center justify-between gap-2">
-                            <CardTitle>{currentMeet.name}</CardTitle>
+                            <div>
+                                <p className="text-xs font-medium tracking-wide text-primary uppercase">
+                                    Current Meet
+                                </p>
+                                <CardTitle className="mt-1">
+                                    {currentMeet.name}
+                                </CardTitle>
+                            </div>
                             <Badge>{currentMeet.status_label}</Badge>
                         </CardHeader>
                         <CardContent className="text-sm text-muted-foreground">
@@ -627,11 +809,14 @@ export default function Dashboard({
                                 {currentMeet.events_count === 1 ? '' : 's'}
                             </p>
                         </CardContent>
-                    </Card>
-                )}
+                        </Card>
+                    )}
 
-                {coachAccreditation && (
-                    <Card data-tone="success">
+                    {coachAccreditation && (
+                        <Card
+                            data-tone="success"
+                            className="border-success/20 bg-gradient-to-br from-success/10 via-background to-background"
+                        >
                         <CardHeader className="flex flex-row items-center justify-between gap-3">
                             <div className="flex items-center gap-3">
                                 <span className="flex size-9 items-center justify-center rounded-[5px] bg-primary/10 text-primary">
@@ -676,63 +861,49 @@ export default function Dashboard({
                                 </p>
                             )}
                         </CardContent>
-                    </Card>
-                )}
-
-                <QuickActions />
-
-                {operations && <MeetOperations operations={operations} />}
-
-                <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-                    {stats.map((stat) => (
-                        <StatCard
-                            key={stat.key}
-                            label={stat.label}
-                            value={stat.value}
-                            icon={statIcons[stat.key]}
-                            tone={statTones[stat.key]}
-                        />
-                    ))}
+                        </Card>
+                    )}
                 </div>
 
-                <div className="grid gap-6 md:grid-cols-2">
-                    <section className="flex flex-col gap-3">
-                        <h2 className="text-base font-semibold">
-                            Recent Activity
-                        </h2>
-                        {recentActivity.length === 0 ? (
-                            <EmptyState
-                                icon={Activity}
-                                title="No activity yet"
-                                description="Actions performed in the system will appear here."
+                {coachDashboard && (
+                    <div className="grid auto-rows-min gap-3 sm:grid-cols-2">
+                        {stats.map((stat) => (
+                            <StatCard
+                                key={stat.key}
+                                label={stat.label}
+                                value={stat.value}
+                                icon={statIcons[stat.key]}
+                                tone={statTones[stat.key]}
                             />
-                        ) : (
-                            <ul className="flex flex-col gap-1 rounded-xl border p-2">
-                                {recentActivity.map((entry) => (
-                                    <li
-                                        key={entry.id}
-                                        className="flex items-center gap-3 rounded-lg px-2 py-2"
-                                    >
-                                        <ActivityIcon action={entry.action} />
-                                        <div className="min-w-0 flex-1">
-                                            <p className="truncate text-sm font-medium">
-                                                {formatActionLabel(
-                                                    entry.action,
-                                                )}
-                                            </p>
-                                            <p className="truncate text-xs text-muted-foreground">
-                                                {entry.user ?? 'System'}
-                                            </p>
-                                        </div>
-                                        <span className="shrink-0 text-xs text-muted-foreground">
-                                            {entry.created_at_human}
-                                        </span>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </section>
+                        ))}
+                    </div>
+                )}
 
+                {coachDashboard && (
+                    <CoachDashboardCards data={coachDashboard} />
+                )}
+
+                {!coachDashboard && <QuickActions />}
+
+                {operations && !coachDashboard && (
+                    <MeetOperations operations={operations} />
+                )}
+
+                {!coachDashboard && (
+                    <div className="grid auto-rows-min gap-3 sm:grid-cols-2">
+                        {stats.map((stat) => (
+                            <StatCard
+                                key={stat.key}
+                                label={stat.label}
+                                value={stat.value}
+                                icon={statIcons[stat.key]}
+                                tone={statTones[stat.key]}
+                            />
+                        ))}
+                    </div>
+                )}
+
+                <div>
                     <PublicAnnouncements announcements={announcements} />
                 </div>
             </div>

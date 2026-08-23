@@ -150,19 +150,19 @@ test('the assignments page is viewable by any authenticated role, including view
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('meet-sport-assignments/index')
-            ->has('assignments', 1)
+            ->has('assignments', 13)
             ->where('canManage', false));
 
     $this->actingAs(User::factory()->organizer()->create())
         ->get('/meet-sport-assignments')
-        ->assertInertia(fn (AssertableInertia $page) => $page->where('canManage', true));
+        ->assertInertia(fn (AssertableInertia $page) => $page->where('canManage', false));
 });
 
 test('organizers can create an assignment', function () {
     $meetSport = MeetSport::factory()->create();
     $official = User::factory()->technicalOfficial()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/meet-sport-assignments', [
             'meet_sport_id' => $meetSport->id,
             'user_id' => $official->id,
@@ -233,7 +233,7 @@ test('the same person cannot be assigned the same role twice for the same meet s
 test('organizers can update an assignment\'s status', function () {
     $assignment = MeetSportAssignment::factory()->create(['status' => MeetSportAssignmentStatus::Pending]);
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->patch("/meet-sport-assignments/{$assignment->id}/status", ['status' => MeetSportAssignmentStatus::Active->value])
         ->assertSessionHasNoErrors();
 
@@ -255,7 +255,7 @@ test('non-managers cannot update an assignment\'s status', function (User $user)
 test('organizers can remove an assignment', function () {
     $assignment = MeetSportAssignment::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->delete("/meet-sport-assignments/{$assignment->id}")
         ->assertSessionHasNoErrors();
 
@@ -282,7 +282,7 @@ test('syncing a meet\'s events keeps meet_sports current for newly attached spor
 
     expect(MeetSport::query()->where('meet_id', $meet->id)->where('sport_id', $event->sport_id)->exists())->toBeFalse();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->put("/meets/{$meet->id}/events", ['event_ids' => [$event->id]])
         ->assertSessionHasNoErrors();
 
@@ -294,7 +294,7 @@ test('syncing a meet\'s events does not duplicate an already-existing meet_sport
     $event = Event::factory()->create();
     MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $event->sport_id]);
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->put("/meets/{$meet->id}/events", ['event_ids' => [$event->id]])
         ->assertSessionHasNoErrors();
 

@@ -1,56 +1,50 @@
-# PMMS Production Role-Permission Matrix
+# Production role and permission matrix
 
-Roles define capability; assignments and active team memberships define scope. A role alone never expands a user beyond the meet, sport, category, municipality, district, school, venue, or team recorded by an active assignment.
+## Authorization model
 
-| Role / capability set | Purpose and allowed actions | Required scope | Prohibited / sensitive boundary |
-|---|---|---|---|
-| Super Administrator | Users, roles, permissions, meets, configuration, provisioning, activation, password reset, reference data, assignments, maintenance | Approved production administrator account | All privileged actions audited; no generic/demo account; medical detail still accessed only for an authorized purpose |
-| Central ICT Team | Provision/link/activate/deactivate accounts, reset passwords, maintain approved assignment mappings, technical settings and support | Active ICT team membership; meet scope where applicable | No implicit DSAC approval, medical clearance, or official-result authority |
-| Top Management | Executive dashboard, readiness, progress, official results, medal tally, major incidents/issues and reports | Active Top Management membership | No implicit user/system administration or result editing; sensitive case detail restricted |
-| Meet Manager | Meet operations, personnel assignment/replacement, venue/schedule monitoring and issue coordination | Active Meet Manager assignment for the meet | No implicit global authentication administration, DSAC, medical, or final-result authority |
-| QA / Monitoring & Evaluation | View operations/compliance, record findings and evaluation reports, monitor resolution | Active QA/M&E membership | No result editing or confidential medical detail |
-| Learners Rights & Protection | Safeguarding incident/referral handling | Active team membership and case authorization | Strict case privacy; no unrelated athlete/medical/result authority |
-| Sports Line-Up & Placement | View sports/categories/placements and coordinate sequencing/deployment | Active team membership | No official-result finalization |
-| Central Secretariat | Central documents, communications, minutes and records routing | Active Secretariat membership | Distinct from Tournament Secretary and Event Secretariat |
-| Grievance | Controlled intake, routing, status and resolution | Active Grievance membership and assigned cases | Sensitive details restricted; no unrelated operational authority |
-| Playing Venue | Venues, competition areas, readiness, conflicts, coordinators and venue issues | Active Playing Venue membership; assigned venues where configured | No official-result authority |
-| Peace & Security | Security readiness, access/crowd incidents, liaison records | Active team membership; assigned venue/incident | Restricted security notes only to authorized members |
-| Logistics | Equipment, supplies, movement, staging and requests | Active Logistics membership | No user, eligibility, medical, or result authority |
-| Water, Light & Sanitation | Facility readiness/issues and resolution tracking | Active team membership; assigned venues | No user, eligibility, medical, or result authority |
-| Information | Approved advisories, announcements, publications and portal information | Active Information membership | No system administration or confidential case access |
-| Event Secretariat | Review submitted results, return with reason, validate, make official; highly restricted reopen | Active `EVENT_SECRETARIAT` membership for the meet | Cannot silently overwrite; every return/correction/reopen/finalization audited; no DSAC/medical authority |
-| Medical Team | Evaluate and clear configured athletes and personnel; view protected clinical fields | Active Medical membership for the meet | Non-medical users see status only; diagnosis, notes and attachments remain restricted |
-| Food / Meals | Meal schedule/distribution information and simple operational coordination | Active Food membership | No unrelated sensitive or approval authority |
-| DSAC | Athlete profile/document review and eligibility approval | Active DSAC membership for the meet | No medical clearance or result authority |
-| Municipal / Team Manager | Municipality/delegation readiness monitoring | Active municipality oversight assignment | Cannot approve DSAC, medical, or results |
-| District Sports Coordinator | District school/coach/athlete/readiness monitoring | Active meet + school-district assignment | Cannot approve DSAC, medical, or results |
-| Tournament Manager | Sport operations, schedules/venues, participant view, result submission/endorsement | Active MeetSport assignment; optional category/venue | No other sport and no direct official medals/finalization |
-| Assistant Tournament Manager | Explicitly delegated sport operations | Active Assistant TM MeetSport assignment | No undelegated actions and no finalization |
-| Tournament Secretary | Sport records, documentation, result preparation/submission support | Active MeetSport assignment; optional category/venue | No unrelated sport or official finalization |
-| Tournament ICT | Sport-side scoring/device/network/display support and authorized encoding | Active MeetSport assignment; optional category/venue | Distinct from Central ICT; no account administration or finalization |
-| Technical Official | Officiating, assigned technical records/encoding/attestation | Active MeetSport assignment; optional category/venue; verified accreditation where required | No unrelated sport, Results Committee power, DSAC, or medical authority |
-| Game Coordinator | Assigned venue/game coordination | Active meet/sport/venue assignment | No official-result finalization unless separately authorized |
-| Coach | Self-register, manage own profile, assigned team/athletes/documents, submit/correct returned records | Approved meet + municipality + school + sport/category scope | Cannot enroll outside approved scope or approve eligibility/medical/results |
+PMMS uses one user account per person. `UserRole` is the broad account capability; active meet-sport assignments, athlete-oversight assignments, coach assignments, and management-team memberships determine scope. A person may therefore hold several duties without duplicate user records. Backend policies, gates, and scoped queries are authoritative; navigation is only a convenience layer.
 
-## Critical enforcement rules
+Legend: **Scoped** means current meet plus the assigned sport/category, delegation, district, or management unit. **R/O** means read-only.
 
-- Only `OFFICIAL` results may feed official standings, rankings, awards, and medal tally.
-- Event Secretariat authority comes from active membership in source team `EVENT_SECRETARIAT`, not from generic `meet_management` membership.
-- Medical and learner-protection clinical/case detail must not be serialized to unauthorized users; status-only views are the default.
-- Assignment replacement ends the old row and creates a new row. Users and people are not deleted when an assignment ends.
-- Password reset permission is explicit. The configured default is never displayed, persisted as plain text, or copied into audit metadata.
-- Legacy `sports.tournament_manager_id` and `sport_user` are compatibility data, not the production scope model.
+| Role / production unit | Purpose | Data scope | Visible modules | View | Create / update | Approve / validate | Submit | User management | Restrictions |
+|---|---|---|---|---|---|---|---|---|---|
+| Superadmin / Administrator | System ownership | Organization-wide | All | Yes | Yes | Yes | Yes | Full | Sensitive actions audited |
+| Meet Organizer (baseline) | Meet-wide coordination and monitoring | Current meet | Meet setup, registration, competition, and meet operations | R/O | No | No | No | No | An explicit active functional assignment is required for every mutation |
+| Central ICT | Account and technical support | Organization-wide; assignments retain meet scope | Users, provisions, schools, assignments, schedules, monitoring | Yes | Accounts, school master data, assignments, schedule support | Coach registration support | No competition decisions | Provision, invite, reset, assign | No eligibility, medical, result, or grievance decision authority |
+| Top Management | Executive monitoring | Current meet | Management reports and published operational data | R/O | No | No | No | No | Monitoring only |
+| Information | Public information | Current meet announcements | Announcements and published information | Yes | Announcements | Publish/unpublish announcements | No | No | Not Central ICT; no accounts or competition mutations |
+| DSAC | Athlete eligibility | Current meet athletes | Athletes, eligibility | Yes | Review remarks | Eligibility only | No | No | No entries/results/medical approvals |
+| Supply / LOGISTICS | Equipment custody | Current meet supply records | Equipment/inventory | Yes | Supply records | Supply workflow only | Yes | No | No athlete medical or results data |
+| Food / FOOD_MEALS / kitchen personnel | Meals operations | Current meet food records | Food | Yes | Meal records | Food workflow only | Yes | No | No unrelated modules |
+| Billeting | Accommodation | Current meet billeting records | Billeting | Yes | Billeting records | Billeting workflow only | Yes | No | No unrelated modules |
+| Medical | Medical clearance | Current meet medical records | Medical | Yes, including protected clinical detail | Medical records | Medical clearance only | Yes | No | Clinical detail restricted to medical authority |
+| DRRM / INCIDENT_COMMAND | Incident response | Current meet incidents and plans | DRRM | Yes | Incidents/plans | DRRM workflow only | Yes | No | No medical/eligibility/result authority |
+| Tournament Manager | Competition administration | Assigned sport/category, all delegations | Athletes, entries, schedule, matches, results, coaches | Yes | Scoped competition records | Confirm scoped entries | Scoped | No | Cannot access other sports/categories |
+| Assistant Tournament Manager | Tournament support | Assigned sport/category, all delegations | Same scoped competition modules | Yes | Scoped support | Confirm scoped entries | Scoped | No | Cannot access other sports/categories |
+| Tournament Secretary | Tournament records | Assigned sport/category, all delegations | Same scoped competition modules | Yes | Scoped records | Confirm scoped entries | Scoped | No | Cannot access other sports/categories |
+| Tournament ICT | Tournament technical support | Assigned sport/category, all delegations | Same scoped competition modules | Yes | Scoped technical records | Confirm scoped entries | Scoped | No | Not Central ICT; cannot manage global accounts |
+| Technical Official | Officiating and scoring | Assigned sport/category, all delegations | Schedule, matches, scoring, results | Yes | Scores/results in scope | Official result workflow in scope | Scoped | No | Cannot access another assignment |
+| Event Secretariat | Result consolidation | Current meet; result workflow | Entries, schedules, matches, results | Yes | Result records as policy permits | Result workflow only | Scoped | No | No eligibility or medical decisions |
+| Coach / Assistant Coach | Manage team competitors | Assigned delegation and sport/event | Owned athletes, entries, schedule/results relevant to assignment | Yes | Owned athletes and eligible entries | No | Entries in scope | No | Cannot see private athletes outside ownership; confirmed entries require approved eligibility |
+| District Sports Coordinator | District oversight | Assigned district/current meet | District athletes and delegation information | Yes | As policy permits | No | Scoped | No | District only |
+| Municipality / Team Manager | Delegation oversight | Assigned municipality/delegation/current meet | Delegation athletes and entries | Yes | Delegation records as policy permits | No | Scoped | No | Delegation only |
+| Quality Assurance Monitoring Evaluation | Compliance monitoring | Current meet | Published/operational monitoring | R/O | No | No | No | No | No competition mutations |
+| Learners Rights and Protection Desk Committee | Learner protection | Current meet authorized cases | Assigned protection workflow | Scoped | Case workflow only | As policy permits | Scoped | No | No broad medical/results access |
+| Sports Lines Up and Placement | Sports coordination | Current meet operational data | Sports lineup and published competition information | R/O unless assigned another role | No | No | No | No | Assignment required for mutations |
+| Secretariat | Meet records support | Current meet | Published/management monitoring | R/O | No | No | No | No | Assignment required for mutations |
+| Grievance | Protest resolution | Current meet grievance records | Protests/grievances | Yes | Grievance workflow | Grievance decisions only | Yes | No | No eligibility/medical authority |
+| Playing Venue | Venue coordination | Current meet venues/schedules | Venues and schedules | R/O | No | No | No | No | Assignment required for schedule mutation |
+| Peace and Security | Safety monitoring | Current meet operational data | Published/management monitoring | R/O | No | No | No | No | No incident mutation unless DRRM assignment |
+| Water Light Sanitation | Facility monitoring | Current meet operational data | Published/management monitoring | R/O | No | No | No | No | No unrelated mutation |
+| Finance | Financial support | Current meet authorized records | Management monitoring | R/O | No | No | No | No | No competition mutation |
+| Opening/Closing Program, Decoration, Usherettes, Clean Green, Announcers, Support Staff | Meet operations | Current meet | Published/management monitoring | R/O | No | No | No | No | Default monitoring access only |
 
-## Result Form and official submission permissions
+## Non-negotiable separation of duties
 
-| Capability | TM | Assistant TM | Tournament Secretary | Tournament ICT | Technical Official | Event Secretariat | Super Administrator |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Generate/print assigned Result Form | Yes | Yes | Yes | Yes | No, unless separately assigned | Review only | Yes |
-| Upload current-version signed form | Yes | Yes | Yes | Yes | No, unless separately assigned | View/download | Yes |
-| Submit assigned result | Yes | Yes | Yes | Yes | No, unless separately assigned | Review | Yes |
-| Return with reason | No | No | No | No | No | Yes | Yes |
-| Validate | No | No | No | No | No | Yes | Yes |
-| Make official | No | No | No | No | No | Yes | Yes |
-| Reopen official result | No | No | No | No | No | Separately controlled | Yes |
-
-Every sport-personnel capability above requires an active assignment matching both `meet_id` and `sport_id`. Supporting documents remain authenticated/internal and are not implied by public official-result visibility.
+- Information is not Central ICT.
+- The Organizer base role is read-only. Organizer accounts gain write authority only from an active Information, ICT, equipment/supply, incident/DRRM, medical, DSAC, tournament-manager, tournament-secretary, tournament-ICT, technical-official, or other explicitly modeled functional assignment.
+- Tournament ICT is scoped to its assigned sport/category and is not Central ICT.
+- DSAC alone decides eligibility; Medical alone decides medical clearance.
+- A confirmed entry requires approved athlete eligibility.
+- Result/scoring authority comes from an active sport/category assignment, never merely from a visible menu.
+- Missing, inactive, declined, ended, or mismatched assignments grant no scoped authority.

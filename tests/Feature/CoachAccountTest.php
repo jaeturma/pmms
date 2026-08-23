@@ -3,8 +3,10 @@
 use App\Enums\DelegationStatus;
 use App\Enums\EligibilityStatus;
 use App\Enums\EntryStatus;
+use App\Models\Accreditation;
 use App\Models\Athlete;
 use App\Models\CoachAssignmentRequest;
+use App\Models\CoachOnboardingRequest;
 use App\Models\Delegation;
 use App\Models\EligibilityReview;
 use App\Models\Entry;
@@ -80,6 +82,45 @@ test('a coach can view and register athletes for their own delegation', function
         ->and($athlete->eligibilityDocuments()->count())->toBe(0);
 });
 
+test('a coach can edit an assigned athlete until accreditation is approved', function () {
+    $delegation = Delegation::factory()->create(['status' => DelegationStatus::Draft]);
+    $coach = coachFor($delegation);
+    $athlete = Athlete::factory()->create([
+        'delegation_id' => $delegation->id,
+        'registered_by' => $coach->id,
+    ]);
+
+    $this->actingAs($coach)
+        ->put("/athletes/{$athlete->id}", [
+            'first_name' => 'Before',
+            'last_name' => 'Approval',
+            'sex' => $athlete->sex->value,
+            'birthdate' => $athlete->birthdate->toDateString(),
+            'lrn' => $athlete->lrn,
+            'grade_level' => $athlete->grade_level,
+        ])
+        ->assertRedirect()
+        ->assertSessionDoesntHaveErrors();
+
+    Accreditation::factory()->create([
+        'athlete_id' => $athlete->id,
+        'delegation_id' => $delegation->id,
+    ]);
+
+    $this->actingAs($coach)
+        ->put("/athletes/{$athlete->id}", [
+            'first_name' => 'After',
+            'last_name' => 'Approval',
+            'sex' => $athlete->sex->value,
+            'birthdate' => $athlete->birthdate->toDateString(),
+            'lrn' => $athlete->lrn,
+            'grade_level' => $athlete->grade_level,
+        ])
+        ->assertForbidden();
+
+    expect($athlete->fresh()->first_name)->toBe('Before');
+});
+
 test('a coach registers an athlete only in an assigned event with photos and accreditation documents', function () {
     $delegation = Delegation::factory()->create(['status' => DelegationStatus::Draft]);
     $coach = coachFor($delegation);
@@ -98,11 +139,11 @@ test('a coach registers an athlete only in an assigned event with photos and acc
         'grade_level' => 9,
         'photo' => UploadedFile::fake()->image('profile.jpg'),
         'sports_photo' => UploadedFile::fake()->image('sports.jpg'),
-        'athlete_history' => UploadedFile::fake()->create('athlete-history.pdf', 100, 'application/pdf'),
-        'form_10' => UploadedFile::fake()->create('form-10.pdf', 100, 'application/pdf'),
-        'birth_certificate' => UploadedFile::fake()->create('birth-cert.pdf', 100, 'application/pdf'),
-        'parental_consent' => UploadedFile::fake()->create('parents-consent.pdf', 100, 'application/pdf'),
-        'medical_certificate' => UploadedFile::fake()->create('medical-certificate.pdf', 100, 'application/pdf'),
+        'athlete_history' => UploadedFile::fake()->image('athlete-history.jpg'),
+        'form_10' => UploadedFile::fake()->image('form-10.png'),
+        'birth_certificate' => UploadedFile::fake()->image('birth-cert.jpg'),
+        'parental_consent' => UploadedFile::fake()->image('parents-consent.png'),
+        'medical_certificate' => UploadedFile::fake()->image('medical-certificate.jpg'),
     ])->assertSessionHasNoErrors();
 
     $athlete = Athlete::query()->where('lrn', '321654987012')->firstOrFail();
@@ -163,6 +204,82 @@ test('a coach cannot view or register athletes for another delegation', function
         ->assertForbidden();
 });
 
+test('a coach sees only owned athletes within the assigned event scope', function () {
+    $delegation = Delegation::factory()->create(['status' => DelegationStatus::Draft]);
+    $coach = coachFor($delegation);
+    $owned = Athlete::factory()->create([
+        'delegation_id' => $delegation->id,
+        'registered_by' => $coach->id,
+    ]);
+    $unowned = Athlete::factory()->create(['delegation_id' => $delegation->id]);
+    $outsideEvent = Event::factory()->create();
+    $delegation->meet->events()->attach($outsideEvent);
+    $outsideScope = Athlete::factory()->create([
+        'delegation_id' => $delegation->id,
+        'registered_by' => $coach->id,
+    ]);
+    Entry::factory()->create([
+        'athlete_id' => $outsideScope->id,
+        'delegation_id' => $delegation->id,
+        'event_id' => $outsideEvent->id,
+    ]);
+
+    $this->actingAs($coach)
+        ->get('/athletes')
+        ->assertInertia(fn ($page) => $page
+            ->has('athletes.data', 1)
+            ->where('athletes.data.0.id', $owned->id));
+
+    $this->actingAs($coach)
+        ->get("/athletes/{$unowned->id}")
+        ->assertForbidden();
+});
+
+test('approved onboarding events provide athlete and entry scope without assignment requests', function () {
+    $meet = Meet::factory()->registrationOpen()->create();
+    $delegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $coach = User::factory()->coach()->create();
+    Personnel::factory()->coach()->create([
+        'delegation_id' => $delegation->id,
+        'user_id' => $coach->id,
+    ]);
+    $event = Event::factory()->create(['gender' => 'boys', 'age_division' => 'secondary']);
+    $meet->events()->attach($event);
+    $onboarding = CoachOnboardingRequest::query()->create([
+        'user_id' => $coach->id,
+        'district_id' => $delegation->district_id,
+        'event_id' => $event->id,
+        'status' => 'approved',
+    ]);
+    $onboarding->events()->attach($event);
+    $athlete = Athlete::factory()->create([
+        'delegation_id' => $delegation->id,
+        'registered_by' => $coach->id,
+        'sex' => 'male',
+        'grade_level' => 9,
+    ]);
+    EligibilityReview::factory()->approved()->create([
+        'athlete_id' => $athlete->id,
+        'meet_id' => $meet->id,
+    ]);
+
+    expect($coach->coachAssignmentRequests()->count())->toBe(0);
+
+    $this->actingAs($coach)
+        ->get('/athletes')
+        ->assertInertia(fn ($page) => $page
+            ->has('athletes.data', 1)
+            ->where('athletes.data.0.id', $athlete->id));
+
+    $this->actingAs($coach)
+        ->get('/entries')
+        ->assertInertia(fn ($page) => $page
+            ->has('athleteOptions', 1)
+            ->where('athleteOptions.0.id', $athlete->id)
+            ->has('eventOptionsByMeet', 1)
+            ->where('eventOptionsByMeet.0.id', $event->id));
+});
+
 test('a coach can upload an eligibility document and it goes to pending', function () {
     $delegation = Delegation::factory()->create(['status' => DelegationStatus::Draft]);
     $coach = coachFor($delegation);
@@ -172,7 +289,7 @@ test('a coach can upload an eligibility document and it goes to pending', functi
         ->post('/eligibility/documents', [
             'athlete_id' => $athlete->id,
             'document_type' => 'birth_certificate',
-            'file' => UploadedFile::fake()->create('birth-cert.pdf', 100, 'application/pdf'),
+            'file' => UploadedFile::fake()->image('birth-cert.jpg'),
         ])
         ->assertSessionHasNoErrors();
 
@@ -191,6 +308,10 @@ test('a coach can submit and withdraw an entry but cannot confirm it', function 
     ]);
     $event = Event::factory()->create(['gender' => 'boys', 'age_division' => 'secondary']);
     $meet->events()->attach($event);
+    EligibilityReview::factory()->approved()->create([
+        'athlete_id' => $athlete->id,
+        'meet_id' => $meet->id,
+    ]);
     CoachAssignmentRequest::query()->create([
         'user_id' => $coach->id,
         'meet_sport_id' => MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $event->sport_id])->id,
@@ -211,6 +332,100 @@ test('a coach can submit and withdraw an entry but cannot confirm it', function 
 
     $this->actingAs($coach)->patch("/entries/{$entry->id}/withdraw")->assertSessionHasNoErrors();
     expect($entry->fresh()->status)->toBe(EntryStatus::Withdrawn);
+});
+
+test('a coach sees approved own athletes and assigned events but not submitted competitors', function () {
+    $meet = Meet::factory()->registrationOpen()->create();
+    $ownDelegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $coach = coachFor($ownDelegation);
+    $assignment = $coach->coachAssignmentRequests()->where('status', 'approved')->firstOrFail();
+    $ownAthlete = Athlete::factory()->create([
+        'delegation_id' => $ownDelegation->id,
+        'registered_by' => $coach->id,
+    ]);
+    EligibilityReview::factory()->approved()->create([
+        'athlete_id' => $ownAthlete->id,
+        'meet_id' => $meet->id,
+    ]);
+    $pendingAthlete = Athlete::factory()->create(['delegation_id' => $ownDelegation->id]);
+    EligibilityReview::factory()->create([
+        'athlete_id' => $pendingAthlete->id,
+        'meet_id' => $meet->id,
+    ]);
+
+    $otherDelegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $otherAthlete = Athlete::factory()->create(['delegation_id' => $otherDelegation->id]);
+    Entry::factory()->create([
+        'delegation_id' => $otherDelegation->id,
+        'athlete_id' => $otherAthlete->id,
+        'event_id' => $assignment->event_id,
+        'status' => EntryStatus::Submitted,
+    ]);
+
+    $this->actingAs($coach)
+        ->get('/entries')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('entries.data', 0)
+            ->has('athleteOptions', 1)
+            ->where('athleteOptions.0.id', $ownAthlete->id)
+            ->has('eventOptionsByMeet', 1)
+            ->where('eventOptionsByMeet.0.id', $assignment->event_id)
+            ->has('eventFilterOptions', 1)
+            ->where('eventFilterOptions.0.id', $assignment->event_id));
+});
+
+test('coach dashboard hides another delegation submitted entries', function () {
+    $meet = Meet::current();
+    $ownDelegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $coach = coachFor($ownDelegation);
+    $assignment = $coach->coachAssignmentRequests()->where('status', 'approved')->firstOrFail();
+    $ownAthlete = Athlete::factory()->create([
+        'delegation_id' => $ownDelegation->id,
+        'registered_by' => $coach->id,
+    ]);
+    $review = EligibilityReview::factory()->approved()->create([
+        'athlete_id' => $ownAthlete->id,
+        'meet_id' => $meet->id,
+    ]);
+    $otherDelegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $otherAthlete = Athlete::factory()->create(['delegation_id' => $otherDelegation->id]);
+    Entry::factory()->create([
+        'delegation_id' => $otherDelegation->id,
+        'athlete_id' => $otherAthlete->id,
+        'event_id' => $assignment->event_id,
+        'status' => EntryStatus::Submitted,
+    ]);
+
+    $this->actingAs($coach)
+        ->get('/dashboard')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('coachDashboard.eligibility_reviews', 1)
+            ->where('coachDashboard.eligibility_reviews.0.id', $review->id)
+            ->where('coachDashboard.eligibility_reviews.0.athlete', $ownAthlete->fullName())
+            ->has('coachDashboard.submitted_entries', 0));
+});
+
+test('a coach cannot submit an athlete whose eligibility is not approved', function () {
+    $meet = Meet::factory()->registrationOpen()->create();
+    $delegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $coach = coachFor($delegation);
+    $assignment = $coach->coachAssignmentRequests()->where('status', 'approved')->firstOrFail();
+    $athlete = Athlete::factory()->create([
+        'delegation_id' => $delegation->id,
+        'sex' => 'male',
+        'grade_level' => 9,
+    ]);
+
+    $this->actingAs($coach)
+        ->post('/entries', [
+            'athlete_id' => $athlete->id,
+            'event_id' => $assignment->event_id,
+        ])
+        ->assertSessionHasErrors('athlete_id');
+
+    expect($athlete->entries()->count())->toBe(0);
 });
 
 test('a coach cannot decide an eligibility review', function () {

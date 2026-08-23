@@ -92,7 +92,7 @@ test('admins, organizers, and active drrm team members can view the plans page',
 test('organizers can create a drrm plan', function () {
     $meet = Meet::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/drrm-plans', [
             'meet_id' => $meet->id,
             'category' => DrrmCategory::Weather->value,
@@ -122,7 +122,7 @@ test('organizers can add a venue emergency plan and an evacuation route', functi
     $meet = Meet::factory()->create();
     $venue = Venue::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/venue-emergency-plans', [
             'meet_id' => $meet->id,
             'venue_id' => $venue->id,
@@ -132,7 +132,7 @@ test('organizers can add a venue emergency plan and an evacuation route', functi
 
     $this->assertDatabaseHas('venue_emergency_plans', ['venue_id' => $venue->id, 'meet_id' => $meet->id]);
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/evacuation-routes', [
             'meet_id' => $meet->id,
             'venue_id' => $venue->id,
@@ -147,7 +147,7 @@ test('organizers can add a venue emergency plan and an evacuation route', functi
 test('organizers can add an emergency contact and drrm equipment', function () {
     $meet = Meet::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/emergency-contacts', [
             'meet_id' => $meet->id,
             'name' => 'Barangay Health Center',
@@ -158,7 +158,7 @@ test('organizers can add an emergency contact and drrm equipment', function () {
 
     $this->assertDatabaseHas('emergency_contacts', ['meet_id' => $meet->id, 'name' => 'Barangay Health Center']);
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/drrm-equipment', [
             'meet_id' => $meet->id,
             'name' => 'First Aid Kit',
@@ -172,7 +172,7 @@ test('organizers can add an emergency contact and drrm equipment', function () {
 test('organizers can add a readiness checklist item and toggle it complete', function () {
     $meet = Meet::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/readiness-checklists', [
             'meet_id' => $meet->id,
             'category' => DrrmCategory::Weather->value,
@@ -183,7 +183,7 @@ test('organizers can add a readiness checklist item and toggle it complete', fun
     $checklist = ReadinessChecklist::query()->where('meet_id', $meet->id)->firstOrFail();
     expect($checklist->is_complete)->toBeFalse();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->patch("/readiness-checklists/{$checklist->id}/status", ['is_complete' => true])
         ->assertSessionHasNoErrors();
 
@@ -197,7 +197,7 @@ test('organizers can add a readiness checklist item and toggle it complete', fun
 test('organizers can report an incident and it defaults to reported status', function () {
     $meet = Meet::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/emergency-incidents', [
             'meet_id' => $meet->id,
             'category' => DrrmCategory::Security->value,
@@ -212,7 +212,7 @@ test('organizers can report an incident and it defaults to reported status', fun
 test('resolving an incident sets resolved_at', function () {
     $incident = EmergencyIncident::factory()->create(['status' => EmergencyIncidentStatus::Responding]);
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->patch("/emergency-incidents/{$incident->id}/status", ['status' => EmergencyIncidentStatus::Resolved->value])
         ->assertSessionHasNoErrors();
 
@@ -224,7 +224,7 @@ test('resolving an incident sets resolved_at', function () {
 test('a message can be appended to an incident\'s communication log', function () {
     $incident = EmergencyIncident::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/emergency-communication-logs', [
             'emergency_incident_id' => $incident->id,
             'message' => 'Evacuated Gym per Plan A.',

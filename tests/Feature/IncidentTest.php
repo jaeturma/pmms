@@ -21,7 +21,7 @@ test('the incident log is manager-only', function () {
 
     Incident::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->get('/incidents')
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
@@ -33,7 +33,7 @@ test('managers can log an incident with a venue and medical referral flag', func
     $meet = Meet::factory()->active()->create();
     $venue = Venue::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/incidents', [
             'meet_id' => $meet->id,
             'venue_id' => $venue->id,

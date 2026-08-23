@@ -18,7 +18,7 @@ enum EligibilityDocumentType: string
     {
         return match ($this) {
             self::AthleteHistory => 'Athlete History',
-            self::Form10 => 'Form 10',
+            self::Form10 => 'School Form 10',
             self::SchoolId => 'School ID',
             self::BirthCertificate => 'PSA Birth Certificate',
             self::MedicalCertificate => 'Medical Certificate',

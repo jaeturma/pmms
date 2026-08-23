@@ -6,6 +6,7 @@ use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
 use App\Models\CoachOnboardingRequest;
 use App\Models\User;
+use App\Services\FileUploadService;
 use App\Services\RecaptchaVerifier;
 use App\Services\RegistrationCodeChallenge;
 use Illuminate\Http\Request;
@@ -24,6 +25,7 @@ class CreateNewUser implements CreatesNewUsers
         RecaptchaVerifier $recaptcha,
         private readonly RegistrationCodeChallenge $codeChallenge,
         private readonly Request $request,
+        private readonly FileUploadService $uploads,
     ) {
         $this->recaptcha = $recaptcha;
     }
@@ -46,6 +48,8 @@ class CreateNewUser implements CreatesNewUsers
             ],
             'event_ids' => [Rule::requiredIf(($input['account_type'] ?? 'viewer') === 'coach'), 'nullable', 'array', 'min:1'],
             'event_ids.*' => ['integer', 'distinct', Rule::exists('events', 'id')->where('active', true)],
+            'coach_profile' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'coach_certification' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
             'code_challenge' => ['required', 'string', 'size:5'],
         ])->validate();
 
@@ -78,6 +82,12 @@ class CreateNewUser implements CreatesNewUsers
                 'user_id' => $user->id,
                 'district_id' => $input['district_id'],
                 'event_id' => $input['event_ids'][0],
+                'profile_upload_id' => isset($input['coach_profile'])
+                    ? $this->uploads->store($input['coach_profile'], $user, 'coach_profile')->id
+                    : null,
+                'certification_upload_id' => isset($input['coach_certification'])
+                    ? $this->uploads->store($input['coach_certification'], $user, 'coach_certification')->id
+                    : null,
             ]);
             $onboardingRequest->events()->sync($input['event_ids']);
         }

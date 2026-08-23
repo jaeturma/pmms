@@ -302,6 +302,11 @@ const tournamentManagerNavItems: NavItem[] = [
         icon: LayoutGrid,
     },
     {
+        title: 'Entries',
+        href: entriesIndex(),
+        icon: ListChecks,
+    },
+    {
         title: 'Schedule',
         href: scheduleIndex(),
         icon: CalendarDays,
@@ -324,9 +329,17 @@ export function AppSidebar() {
     const role = auth.user?.role;
     const teamTypes: string[] = auth.user?.team_types ?? [];
     const canManageAccounts = auth.user?.can_manage_accounts ?? false;
+    const canManageAnnouncements = auth.user?.can_manage_announcements ?? false;
+    const canManagePersonnel = auth.user?.can_manage_personnel ?? false;
+    const canFileProtest = auth.user?.can_file_protest ?? false;
+    const canViewManagementReports =
+        auth.user?.can_view_management_reports ?? false;
     const canReviewCoaches = auth.user?.can_review_coaches ?? false;
+    const canRequestCoachEnrollment =
+        auth.user?.can_request_coach_enrollment ?? false;
     const canViewTournamentAthletes =
         auth.user?.can_view_tournament_athletes ?? false;
+    const canViewSystemLogs = auth.user?.can_view_system_logs ?? false;
 
     // A Technical Official only runs live scoring for their assigned
     // sport(s) — the full admin registry (Districts/Schools/Delegations/
@@ -361,7 +374,6 @@ export function AppSidebar() {
                             'Medal tally',
                             'Athletes',
                             'Entries',
-                            'Eligibility',
                         ].includes(item.title),
                     )
                   : role === 'viewer'
@@ -385,10 +397,10 @@ export function AppSidebar() {
             .map((title) => pool.find((item) => item.title === title))
             .filter((item): item is NavItem => item !== undefined);
 
-    const navItems = byTitle(['Dashboard']);
+    const navItems: NavItem[] = byTitle(['Dashboard']);
     const navSections: NavSection[] = [];
 
-    if (role === 'admin' || role === 'organizer') {
+    if (role === 'admin') {
         navSections.push(
             {
                 title: 'Meet setup',
@@ -443,12 +455,72 @@ export function AppSidebar() {
                 ),
             },
         );
-        if (role === 'admin')
-            navSections.push({
-                title: 'System',
+        navSections.push({
+            title: 'System',
+            icon: Settings,
+            items: adminNavItems,
+        });
+    } else if (role === 'organizer') {
+        navSections.push(
+            {
+                title: 'Meet setup',
                 icon: Settings,
-                items: adminNavItems,
+                items: byTitle(['Events', 'Venues']),
+            },
+            {
+                title: 'Competition',
+                icon: Trophy,
+                items: byTitle([
+                    'Schedule',
+                    'Matches',
+                    'Results',
+                    'Medal tally',
+                    ...(canViewTournamentAthletes ? ['Entries'] : []),
+                ]),
+            },
+            {
+                title: 'Registration',
+                icon: UsersRound,
+                items: byTitle([
+                    'Delegations',
+                    'Athletes',
+                    ...(canManagePersonnel ? ['Personnel'] : []),
+                ]),
+            },
+            {
+                title: 'Meet operations',
+                icon: LifeBuoy,
+                items: managerNavItems.filter(
+                    (item) =>
+                        ['Announcements', 'Billeting', 'Transport'].includes(
+                            item.title,
+                        ) ||
+                        (item.title === 'Equipment' &&
+                            teamTypes.includes('supply')) ||
+                        (item.title === 'Medical' &&
+                            teamTypes.includes('medical')) ||
+                        (['DRRM Plans', 'Emergency Incidents'].includes(
+                            item.title,
+                        ) &&
+                            teamTypes.includes('drrm')),
+                ),
+            },
+        );
+
+        if (canManageAccounts) {
+            navSections[0].items.push(
+                ...byTitle(['Schools', 'Tournament Assignments']),
+            );
+            navSections[1].items.push(...byTitle(['Protests']));
+        }
+
+        if (teamTypes.includes('division_screening_and_accreditation')) {
+            navSections.push({
+                title: 'DSAC',
+                icon: FileCheck,
+                items: byTitle(['Eligibility']),
             });
+        }
     } else if (role === 'technical_official' || role === 'tournament_manager') {
         navSections.push({
             title: 'Competition',
@@ -471,7 +543,12 @@ export function AppSidebar() {
             {
                 title: 'Competition',
                 icon: Trophy,
-                items: byTitle(['Schedule', 'Results', 'Medal tally']),
+                items: byTitle([
+                    'Schedule',
+                    'Results',
+                    'Medal tally',
+                    ...(canFileProtest ? ['Protests'] : []),
+                ]),
             },
         );
     } else if (role === 'coach') {
@@ -479,7 +556,7 @@ export function AppSidebar() {
             {
                 title: 'Team',
                 icon: UsersRound,
-                items: byTitle(['Athletes', 'Entries', 'Eligibility']),
+                items: byTitle(['Athletes', 'Entries']),
             },
             {
                 title: 'Competition',
@@ -531,13 +608,38 @@ export function AppSidebar() {
         navSections.push({
             title: 'System',
             icon: Settings,
-            items: adminNavItems.filter(
-                (item) => item.title === 'Users and Roles',
+            items: adminNavItems.filter((item) =>
+                [
+                    'Users and Roles',
+                    ...(canViewSystemLogs ? ['Audit log'] : []),
+                ].includes(item.title),
             ),
+        });
+    } else if (canViewSystemLogs && role !== 'admin') {
+        navSections.push({
+            title: 'System',
+            icon: Settings,
+            items: adminNavItems.filter((item) => item.title === 'Audit log'),
         });
     }
 
-    if (canReviewCoaches) {
+    if (canViewManagementReports && role !== 'admin' && role !== 'organizer') {
+        navSections.push({
+            title: 'Monitoring',
+            icon: BarChart3,
+            items: byTitle(['Management'], managerNavItems),
+        });
+    }
+
+    if (canManageAnnouncements && role !== 'admin' && role !== 'organizer') {
+        navSections.push({
+            title: 'Information',
+            icon: Megaphone,
+            items: byTitle(['Announcements'], managerNavItems),
+        });
+    }
+
+    if (canReviewCoaches || canRequestCoachEnrollment) {
         const registration = navSections.find(
             (section) => section.title === 'Registration',
         );
@@ -546,12 +648,22 @@ export function AppSidebar() {
             href: '/coach/assignment-requests',
             icon: UserCog,
         };
-        if (registration) registration.items.push(coachItem);
-        else
+        const recentActivityItem: NavItem = {
+            title: 'Recent Activity',
+            href: auditLogsIndex(),
+            icon: ScrollText,
+        };
+        if (registration) {
+            registration.items.push(coachItem);
+            if (role === 'coach') registration.items.push(recentActivityItem);
+        } else
             navSections.push({
                 title: 'Registration',
                 icon: UsersRound,
-                items: [coachItem],
+                items:
+                    role === 'coach'
+                        ? [coachItem, recentActivityItem]
+                        : [coachItem],
             });
     }
 

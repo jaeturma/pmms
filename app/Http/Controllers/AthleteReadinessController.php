@@ -47,6 +47,7 @@ class AthleteReadinessController extends Controller
             $documentsComplete = collect($required)->every(fn ($type) => $athlete->eligibilityDocuments->contains(fn ($document) => $document->document_type === $type && $document->status === RequirementStatus::Verified));
             $dsacApproved = $athlete->eligibilityReview?->status === EligibilityStatus::Approved;
             $medicalCleared = $athlete->medicalClearance?->status === MedicalClearanceStatus::Cleared;
+
             return ['id' => $athlete->id, 'name' => $athlete->fullName(), 'school' => $athlete->school->name,
                 'school_district' => $athlete->school->schoolDistrict?->name ?? 'Unassigned School District',
                 'documents_complete' => $documentsComplete, 'dsac_approved' => $dsacApproved,

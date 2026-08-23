@@ -145,20 +145,20 @@ test('a technical official cannot view the billeting page', function () {
 test('organizers can create, update, and remove a venue', function () {
     $meet = Meet::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/billeting-venues', ['meet_id' => $meet->id, 'name' => 'South Lodge', 'capacity' => 50])
         ->assertSessionHasNoErrors();
 
     $venue = BilletingVenue::query()->where('name', 'South Lodge')->firstOrFail();
     expect(AuditLog::query()->where('action', 'billeting_venue.created')->exists())->toBeTrue();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->put("/billeting-venues/{$venue->id}", ['name' => 'South Lodge', 'capacity' => 75])
         ->assertSessionHasNoErrors();
 
     expect($venue->fresh()->capacity)->toBe(75);
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->delete("/billeting-venues/{$venue->id}")
         ->assertSessionHasNoErrors();
 
@@ -189,7 +189,7 @@ test('organizers can assign a delegation and update its status', function () {
     $venue = BilletingVenue::factory()->create(['meet_id' => $meet->id]);
     $delegation = Delegation::factory()->create(['meet_id' => $meet->id]);
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/billeting-assignments', [
             'billeting_venue_id' => $venue->id,
             'delegation_id' => $delegation->id,
@@ -200,7 +200,7 @@ test('organizers can assign a delegation and update its status', function () {
     $assignment = BilletingAssignment::query()->where('delegation_id', $delegation->id)->firstOrFail();
     expect($assignment->status)->toBe(BilletingAssignmentStatus::Assigned);
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->patch("/billeting-assignments/{$assignment->id}/status", ['status' => BilletingAssignmentStatus::CheckedIn->value])
         ->assertSessionHasNoErrors();
 

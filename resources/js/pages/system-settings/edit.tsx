@@ -20,6 +20,10 @@ import { edit, update } from '@/routes/system-settings';
 
 type Props = {
     settings: {
+        app_title: string;
+        app_logo_url: string | null;
+        facebook_live_enabled: boolean;
+        facebook_live_url: string | null;
         recaptcha_enabled: boolean;
         recaptcha_site_key: string | null;
         has_recaptcha_secret_key: boolean;
@@ -40,7 +44,12 @@ type Props = {
 };
 
 export default function SystemSettingsEdit({ settings }: Props) {
-    const { data, setData, put, processing, errors } = useForm({
+    const { data, setData, post, processing, errors } = useForm({
+        _method: 'put',
+        app_title: settings.app_title,
+        app_logo: null as File | null,
+        facebook_live_enabled: settings.facebook_live_enabled,
+        facebook_live_url: settings.facebook_live_url ?? '',
         recaptcha_enabled: settings.recaptcha_enabled,
         recaptcha_site_key: settings.recaptcha_site_key ?? '',
         recaptcha_secret_key: '',
@@ -56,7 +65,7 @@ export default function SystemSettingsEdit({ settings }: Props) {
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        put(update().url, { preserveScroll: true });
+        post(update().url, { preserveScroll: true, forceFormData: true });
     };
 
     return (
@@ -69,6 +78,91 @@ export default function SystemSettingsEdit({ settings }: Props) {
                 />
 
                 <form onSubmit={submit} className="max-w-2xl space-y-10">
+                    <section className="space-y-4">
+                        <Heading
+                            variant="small"
+                            title="Application branding"
+                            description="The title and logo shown throughout the PMMS application."
+                        />
+                        <div className="space-y-2">
+                            <Label htmlFor="app_title">Application title</Label>
+                            <Input
+                                id="app_title"
+                                value={data.app_title}
+                                onChange={(e) =>
+                                    setData('app_title', e.target.value)
+                                }
+                                required
+                            />
+                            <InputError message={errors.app_title} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="app_logo">Application logo</Label>
+                            {settings.app_logo_url && (
+                                <img
+                                    src={settings.app_logo_url}
+                                    alt="Current application logo"
+                                    className="size-20 rounded-lg border object-contain"
+                                />
+                            )}
+                            <Input
+                                id="app_logo"
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                onChange={(e) =>
+                                    setData(
+                                        'app_logo',
+                                        e.target.files?.[0] ?? null,
+                                    )
+                                }
+                            />
+                            <InputError message={errors.app_logo} />
+                        </div>
+                    </section>
+                    <section className="space-y-4">
+                        <Heading
+                            variant="small"
+                            title="Landing page live video"
+                            description="Embed a public Facebook Live video in the Live Now section of the public landing page. The section stays hidden while disabled."
+                        />
+                        <div className="flex items-center space-x-3">
+                            <Checkbox
+                                id="facebook_live_enabled"
+                                checked={data.facebook_live_enabled}
+                                onCheckedChange={(checked) =>
+                                    setData(
+                                        'facebook_live_enabled',
+                                        checked === true,
+                                    )
+                                }
+                            />
+                            <Label htmlFor="facebook_live_enabled">
+                                Show Facebook Live on the landing page
+                            </Label>
+                        </div>
+                        <InputError message={errors.facebook_live_enabled} />
+                        <div className="space-y-2">
+                            <Label htmlFor="facebook_live_url">
+                                Facebook Live video URL
+                            </Label>
+                            <Input
+                                id="facebook_live_url"
+                                type="url"
+                                placeholder="https://www.facebook.com/.../videos/..."
+                                value={data.facebook_live_url}
+                                onChange={(event) =>
+                                    setData(
+                                        'facebook_live_url',
+                                        event.target.value,
+                                    )
+                                }
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Use the public Facebook video or live post URL.
+                            </p>
+                            <InputError message={errors.facebook_live_url} />
+                        </div>
+                    </section>
                     <section className="space-y-4">
                         <Heading
                             variant="small"

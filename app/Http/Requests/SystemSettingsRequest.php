@@ -22,6 +22,16 @@ class SystemSettingsRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'app_title' => ['nullable', 'string', 'max:120'],
+            'app_logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'facebook_live_enabled' => ['sometimes', 'boolean'],
+            'facebook_live_url' => [
+                'nullable',
+                'required_if:facebook_live_enabled,true',
+                'url:http,https',
+                'max:2000',
+                'regex:/^https?:\/\/(?:www\.|m\.|web\.)?(?:facebook\.com|fb\.watch)\//i',
+            ],
             'recaptcha_enabled' => ['required', 'boolean'],
             'recaptcha_site_key' => ['nullable', 'string', 'max:255'],
             'recaptcha_secret_key' => ['nullable', 'string', 'max:255'],

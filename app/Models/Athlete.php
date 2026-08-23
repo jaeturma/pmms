@@ -6,18 +6,20 @@ use App\Enums\AgeDivision;
 use App\Enums\Sex;
 use Database\Factories\AthleteFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
  * @property int $delegation_id
  * @property int $school_id
+ * @property int|null $registered_by
  * @property string $first_name
  * @property string $last_name
  * @property Sex $sex
@@ -68,6 +70,39 @@ class Athlete extends Model
     public function school(): BelongsTo
     {
         return $this->belongsTo(School::class);
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function registrar(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'registered_by');
+    }
+
+    public function isOwnedBy(User $user): bool
+    {
+        if ($this->registered_by !== null) {
+            return $this->registered_by === $user->id;
+        }
+
+        return AuditLog::query()
+            ->where('user_id', $user->id)
+            ->where('action', 'athlete.created')
+            ->where('auditable_type', $this->getMorphClass())
+            ->where('auditable_id', $this->id)
+            ->exists();
+    }
+
+    public function scopeOwnedBy(Builder $query, User $user): Builder
+    {
+        return $query->where(fn (Builder $athletes) => $athletes
+            ->where('registered_by', $user->id)
+            ->orWhereExists(fn ($logs) => $logs
+                ->selectRaw('1')
+                ->from('audit_logs')
+                ->whereColumn('audit_logs.auditable_id', 'athletes.id')
+                ->where('audit_logs.auditable_type', $this->getMorphClass())
+                ->where('audit_logs.action', 'athlete.created')
+                ->where('audit_logs.user_id', $user->id)));
     }
 
     /**
@@ -138,6 +173,11 @@ class Athlete extends Model
     public function eligibilityDocuments(): HasMany
     {
         return $this->hasMany(EligibilityDocument::class);
+    }
+
+    public function teamMemberships(): HasMany
+    {
+        return $this->hasMany(TeamEntryMember::class);
     }
 
     /**

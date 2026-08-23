@@ -53,6 +53,7 @@ type AthleteRow = {
     school: string;
     district: string;
     delegation: string;
+    photo_url: string | null;
     sports: string;
     accreditation_status: string;
     can_update: boolean;
@@ -67,6 +68,7 @@ type DelegationOption = {
 type SchoolOption = {
     id: number;
     name: string;
+    school_id_code: string;
     district: string;
     school_district_id: number | null;
     school_district: string;
@@ -93,82 +95,55 @@ function AthleteFormDialog({
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
-    const { data, setData, post, processing, errors, reset } = useForm<{
-        delegation_id: string;
-        school_id: string;
-        first_name: string;
-        middle_name: string;
-        last_name: string;
-        name_extension: string;
-        sex: string;
-        birthdate: string;
-        lrn: string;
-        grade_level: string;
-        photo: File | null;
-        sports_photo: File | null;
-        athlete_history: File | null;
-        form_10: File | null;
-        school_id_document: File | null;
-        birth_certificate: File | null;
-        report_card: File | null;
-        parental_consent: File | null;
-        medical_certificate: File | null;
-    }>({
-        delegation_id:
-            fixedDelegationId === null ? '' : String(fixedDelegationId),
-        school_id: '',
-        first_name: '',
-        middle_name: '',
-        last_name: '',
-        name_extension: '',
-        sex: '',
-        birthdate: '',
-        lrn: '',
-        grade_level: '',
-        photo: null,
-        sports_photo: null,
-        athlete_history: null,
-        form_10: null,
-        school_id_document: null,
-        birth_certificate: null,
-        report_card: null,
-        parental_consent: null,
-        medical_certificate: null,
-    });
-    const [selectedDistrict, setSelectedDistrict] = useState('');
-
+    const { data, setData, post, processing, errors, hasErrors, reset } =
+        useForm<{
+            delegation_id: string;
+            school_id: string;
+            first_name: string;
+            middle_name: string;
+            last_name: string;
+            name_extension: string;
+            sex: string;
+            birthdate: string;
+            lrn: string;
+            grade_level: string;
+            photo: File | null;
+            sports_photo: File | null;
+            athlete_history: File | null;
+            form_10: File | null;
+            school_id_document: File | null;
+            birth_certificate: File | null;
+            report_card: File | null;
+            parental_consent: File | null;
+            medical_certificate: File | null;
+        }>({
+            delegation_id:
+                fixedDelegationId === null ? '' : String(fixedDelegationId),
+            school_id: '',
+            first_name: '',
+            middle_name: '',
+            last_name: '',
+            name_extension: '',
+            sex: '',
+            birthdate: '',
+            lrn: '',
+            grade_level: '',
+            photo: null,
+            sports_photo: null,
+            athlete_history: null,
+            form_10: null,
+            school_id_document: null,
+            birth_certificate: null,
+            report_card: null,
+            parental_consent: null,
+            medical_certificate: null,
+        });
     const allSchoolOptions = data.delegation_id
         ? (schoolOptionsByDelegation[Number(data.delegation_id)] ?? [])
-        : [];
-    const districtOptions = Array.from(
-        new Map(
-            allSchoolOptions.map((school) => [
-                school.school_district_id === null
-                    ? `municipality:${school.district}`
-                    : String(school.school_district_id),
-                school.school_district,
-            ]),
-        ),
-    );
-    const schoolOptions = selectedDistrict
-        ? allSchoolOptions.filter((school) =>
-              selectedDistrict.startsWith('municipality:')
-                  ? school.school_district_id === null
-                  : String(school.school_district_id) === selectedDistrict,
-          )
         : [];
 
     const selectDelegation = (value: string) => {
         const options = schoolOptionsByDelegation[Number(value)] ?? [];
-        const districts = new Set(
-            options.map((school) =>
-                school.school_district_id === null
-                    ? `municipality:${school.district}`
-                    : String(school.school_district_id),
-            ),
-        );
-        const district = districts.size === 1 ? [...districts][0] : '';
-        setSelectedDistrict(district);
         setData((current) => ({
             ...current,
             delegation_id: value,
@@ -182,7 +157,6 @@ function AthleteFormDialog({
             preserveScroll: true,
             onSuccess: () => {
                 reset();
-                setSelectedDistrict('');
                 onOpenChange(false);
             },
         });
@@ -204,6 +178,23 @@ function AthleteFormDialog({
                         onSubmit={submit}
                         className="grid gap-4 lg:grid-cols-3"
                     >
+                        {hasErrors && (
+                            <div
+                                role="alert"
+                                className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive lg:col-span-3"
+                            >
+                                <p className="font-medium">
+                                    Athlete registration could not be submitted.
+                                </p>
+                                <ul className="mt-1 list-disc space-y-1 pl-5">
+                                    {[...new Set(Object.values(errors))].map(
+                                        (message) => (
+                                            <li key={message}>{message}</li>
+                                        ),
+                                    )}
+                                </ul>
+                            </div>
+                        )}
                         {fixedDelegationId === null && (
                             <div className="space-y-2">
                                 <Label htmlFor="athlete-delegation">
@@ -230,71 +221,6 @@ function AthleteFormDialog({
                                 <InputError message={errors.delegation_id} />
                             </div>
                         )}
-                        {data.delegation_id && (
-                            <div className="space-y-2 lg:col-start-1">
-                                <Label htmlFor="athlete-district">
-                                    District
-                                </Label>
-                                <Select
-                                    value={selectedDistrict}
-                                    onValueChange={(value) => {
-                                        setSelectedDistrict(value);
-                                        setData('school_id', '');
-                                    }}
-                                >
-                                    <SelectTrigger id="athlete-district">
-                                        <SelectValue placeholder="Select a district" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {districtOptions.map(
-                                            ([value, label]) => (
-                                                <SelectItem
-                                                    key={value}
-                                                    value={value}
-                                                >
-                                                    {label}
-                                                </SelectItem>
-                                            ),
-                                        )}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        )}
-                        {data.delegation_id && (
-                            <div className="space-y-2">
-                                <Label htmlFor="athlete-school">
-                                    Home school
-                                </Label>
-                                <Select
-                                    value={data.school_id}
-                                    onValueChange={(value) =>
-                                        setData('school_id', value)
-                                    }
-                                    disabled={!selectedDistrict}
-                                >
-                                    <SelectTrigger id="athlete-school">
-                                        <SelectValue
-                                            placeholder={
-                                                selectedDistrict
-                                                    ? 'Select a school'
-                                                    : 'Select a district first'
-                                            }
-                                        />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {schoolOptions.map((school) => (
-                                            <SelectItem
-                                                key={school.id}
-                                                value={String(school.id)}
-                                            >
-                                                {school.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <InputError message={errors.school_id} />
-                            </div>
-                        )}
                         <div className="space-y-2">
                             <Label htmlFor="athlete-lrn">LRN (12 digits)</Label>
                             <Input
@@ -306,6 +232,33 @@ function AthleteFormDialog({
                             />
                             <InputError message={errors.lrn} />
                         </div>
+                        {data.delegation_id && (
+                            <div className="space-y-2 lg:col-span-2">
+                                <Label htmlFor="athlete-school">School *</Label>
+                                <Select
+                                    value={data.school_id}
+                                    onValueChange={(value) =>
+                                        setData('school_id', value)
+                                    }
+                                >
+                                    <SelectTrigger id="athlete-school">
+                                        <SelectValue placeholder="Select a school" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {allSchoolOptions.map((school) => (
+                                            <SelectItem
+                                                key={school.id}
+                                                value={String(school.id)}
+                                            >
+                                                {school.name} -{' '}
+                                                {school.school_id_code}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <InputError message={errors.school_id} />
+                            </div>
+                        )}
                         <div className="grid gap-4 lg:col-span-3 lg:grid-cols-3">
                             <div className="space-y-2">
                                 <Label htmlFor="athlete-last">Last name</Label>
@@ -386,16 +339,15 @@ function AthleteFormDialog({
                                     Accreditation documents
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                    Attach PDF, JPG, or PNG files (up to 10 MB
-                                    each). They will be submitted for
-                                    eligibility review.
+                                    Attach JPG or PNG files only. They will be
+                                    submitted for eligibility review.
                                 </p>
                             </div>
                             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                                 {(
                                     [
                                         ['athlete_history', 'Athlete History'],
-                                        ['form_10', 'Form 10'],
+                                        ['form_10', 'School Form 10'],
                                         [
                                             'birth_certificate',
                                             'PSA / Birth Certificate',
@@ -408,18 +360,13 @@ function AthleteFormDialog({
                                     ] as const
                                 ).map(([field, label]) => (
                                     <div key={field} className="space-y-2">
-                                        <Label htmlFor={`athlete-${field}`}>
-                                            {label}
-                                        </Label>
-                                        <Input
+                                        <AthletePhotoInput
                                             id={`athlete-${field}`}
-                                            type="file"
-                                            accept=".pdf,image/jpeg,image/png"
-                                            onChange={(e) =>
-                                                setData(
-                                                    field,
-                                                    e.target.files?.[0] ?? null,
-                                                )
+                                            label={label}
+                                            guidance="Crop or rotate the image before upload. It will be reduced automatically."
+                                            accept="image/jpeg,image/png"
+                                            onChange={(file) =>
+                                                setData(field, file)
                                             }
                                         />
                                         <InputError message={errors[field]} />
@@ -512,7 +459,6 @@ function AthleteFormDialog({
                                 variant="secondary"
                                 onClick={() => {
                                     reset();
-                                    setSelectedDistrict('');
                                 }}
                                 disabled={processing}
                             >
@@ -737,7 +683,7 @@ function EditAthleteDialog({
                             {(
                                 [
                                     ['athlete_history', 'Athlete History'],
-                                    ['form_10', 'Form 10'],
+                                    ['form_10', 'School Form 10'],
                                     [
                                         'birth_certificate',
                                         'PSA / Birth Certificate',
@@ -750,18 +696,13 @@ function EditAthleteDialog({
                                 ] as const
                             ).map(([field, label]) => (
                                 <div key={field} className="space-y-2">
-                                    <Label htmlFor={`edit-athlete-${field}`}>
-                                        {label}
-                                    </Label>
-                                    <Input
+                                    <AthletePhotoInput
                                         id={`edit-athlete-${field}`}
-                                        type="file"
-                                        accept=".pdf,image/jpeg,image/png"
-                                        onChange={(e) =>
-                                            setData(
-                                                field,
-                                                e.target.files?.[0] ?? null,
-                                            )
+                                        label={label}
+                                        guidance="Crop or rotate the image before upload. It will be reduced automatically."
+                                        accept="image/jpeg,image/png"
+                                        onChange={(file) =>
+                                            setData(field, file)
                                         }
                                     />
                                     <InputError message={errors[field]} />
@@ -864,10 +805,10 @@ export default function Athletes({
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Name</TableHead>
+                                        <TableHead>Team / Delegation</TableHead>
                                         <TableHead>Sex</TableHead>
                                         <TableHead>Age</TableHead>
                                         <TableHead>Grade</TableHead>
-                                        <TableHead>School</TableHead>
                                         <TableHead>Sport</TableHead>
                                         <TableHead>Accreditation</TableHead>
                                         <TableHead className="text-right">
@@ -879,7 +820,28 @@ export default function Athletes({
                                     {athletes.data.map((athlete) => (
                                         <TableRow key={athlete.id}>
                                             <TableCell className="font-medium">
-                                                {athlete.name}
+                                                <div className="flex items-center gap-2">
+                                                    {athlete.photo_url ? (
+                                                        <img
+                                                            src={
+                                                                athlete.photo_url
+                                                            }
+                                                            alt=""
+                                                            className="size-[25px] shrink-0 rounded-full border object-cover"
+                                                            loading="lazy"
+                                                        />
+                                                    ) : (
+                                                        <span className="flex size-[25px] shrink-0 items-center justify-center rounded-full border bg-muted text-[10px] text-muted-foreground">
+                                                            {athlete.name.charAt(
+                                                                0,
+                                                            )}
+                                                        </span>
+                                                    )}
+                                                    <span>{athlete.name}</span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                {athlete.delegation}
                                             </TableCell>
                                             <TableCell>
                                                 {athlete.sex_label}
@@ -887,9 +849,6 @@ export default function Athletes({
                                             <TableCell>{athlete.age}</TableCell>
                                             <TableCell>
                                                 {athlete.grade_level}
-                                            </TableCell>
-                                            <TableCell>
-                                                {athlete.school}
                                             </TableCell>
                                             <TableCell>
                                                 {athlete.sports || '—'}

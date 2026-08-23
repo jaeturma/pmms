@@ -22,7 +22,7 @@ class EligibilityReviewPolicy
             || $user->hasPermission(Permission::AthleteEligibilityReview)
             || $user->hasPermission(Permission::DistrictAthletesView)
             || $user->hasPermission(Permission::MunicipalityAthletesView)
-            || $user->tournamentAthleteSportIds()->isNotEmpty();
+            || $user->tournamentEventIds()->isNotEmpty();
     }
 
     /**
@@ -39,7 +39,7 @@ class EligibilityReviewPolicy
             return true;
         }
 
-        if ($review->athlete->entries()->whereHas('event', fn ($event) => $event->whereIn('sport_id', $user->tournamentAthleteSportIds()))->exists()) {
+        if ($review->athlete->entries()->whereIn('event_id', $user->tournamentEventIds())->exists()) {
             return true;
         }
 
@@ -62,7 +62,7 @@ class EligibilityReviewPolicy
      */
     public function upload(User $user, Delegation $delegation): bool
     {
-        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+        if ($user->isAdmin()) {
             return true;
         }
 

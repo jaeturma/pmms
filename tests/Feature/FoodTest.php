@@ -81,7 +81,7 @@ test('admins, organizers, and active food team members can view the food page', 
 test('organizers can add a meal schedule entry', function () {
     $meet = Meet::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/meal-schedules', [
             'meet_id' => $meet->id,
             'meal_type' => MealType::Lunch->value,
@@ -140,13 +140,13 @@ test('duplicate schedule entries fail with a field error', function () {
 test('organizers can update and remove a schedule entry', function () {
     $schedule = MealSchedule::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->put("/meal-schedules/{$schedule->id}", ['notes' => 'Served buffet-style.'])
         ->assertSessionHasNoErrors();
 
     expect($schedule->fresh()->notes)->toBe('Served buffet-style.');
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->delete("/meal-schedules/{$schedule->id}")
         ->assertSessionHasNoErrors();
 
@@ -158,7 +158,7 @@ test('organizers can update and remove a schedule entry', function () {
 test('organizers can post an announcement, distinct from the public Announcement model', function () {
     $meet = Meet::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/meal-announcements', [
             'meet_id' => $meet->id,
             'title' => 'Lunch delayed',

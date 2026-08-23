@@ -27,6 +27,7 @@ class PersonnelRequest extends FormRequest
             'phone' => ['nullable', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:160'],
             'photo' => ['nullable', 'image', 'max:5120'],
+            'user_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
         ];
 
         if ($this->route('personnel') === null) {

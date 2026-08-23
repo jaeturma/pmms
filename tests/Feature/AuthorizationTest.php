@@ -40,7 +40,7 @@ test('gates authorize the expected roles', function (string $ability, UserRole $
     ['administer', UserRole::DelegationOfficer, false],
     ['administer', UserRole::Viewer, false],
     ['manage-meet-data', UserRole::Admin, true],
-    ['manage-meet-data', UserRole::Organizer, true],
+    ['manage-meet-data', UserRole::Organizer, false],
     ['manage-meet-data', UserRole::DelegationOfficer, false],
     ['manage-meet-data', UserRole::Viewer, false],
 ]);

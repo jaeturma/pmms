@@ -203,7 +203,7 @@ test('managers can create a match for an event in the meet', function () {
     $event = Event::factory()->create();
     $meet->events()->attach($event);
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/matches', [
             'meet_id' => $meet->id,
             'event_id' => $event->id,

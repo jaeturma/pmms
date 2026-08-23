@@ -17,8 +17,23 @@ class GameCoordinatorAssignment extends Model
         return ['is_lead' => 'boolean', 'start_date' => 'date', 'end_date' => 'date'];
     }
 
-    public function meetSport(): BelongsTo { return $this->belongsTo(MeetSport::class); }
-    public function venue(): BelongsTo { return $this->belongsTo(Venue::class); }
-    public function competitionArea(): BelongsTo { return $this->belongsTo(CompetitionArea::class); }
-    public function person(): BelongsTo { return $this->belongsTo(Person::class); }
+    public function meetSport(): BelongsTo
+    {
+        return $this->belongsTo(MeetSport::class);
+    }
+
+    public function venue(): BelongsTo
+    {
+        return $this->belongsTo(Venue::class);
+    }
+
+    public function competitionArea(): BelongsTo
+    {
+        return $this->belongsTo(CompetitionArea::class);
+    }
+
+    public function person(): BelongsTo
+    {
+        return $this->belongsTo(Person::class);
+    }
 }

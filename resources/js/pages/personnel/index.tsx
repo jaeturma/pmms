@@ -54,6 +54,8 @@ type PersonnelRow = {
     coaches: boolean;
     phone: string | null;
     email: string | null;
+    user_id: number | null;
+    account: string | null;
     sports: string[];
     sport_ids: number[];
     school: string;
@@ -74,24 +76,34 @@ type Props = {
     delegationOptions: Array<{ id: number; label: string }>;
     sportOptions: Array<{ id: number; name: string }>;
     schoolOptionsByDelegation: Record<number, SchoolOption[]>;
+    userOptions: Array<{ id: number; label: string }>;
 };
 
 const roleOptions: Array<{ value: string; label: string }> = [
     { value: 'coach', label: 'Coach' },
     { value: 'assistant_coach', label: 'Assistant Coach' },
     { value: 'chaperone', label: 'Chaperone' },
+    { value: 'team_delegation_officer', label: 'Team / Delegation Officer' },
+    {
+        value: 'district_sports_coordinator',
+        label: 'District Sports Coordinator',
+    },
+    { value: 'delegation_manager', label: 'Delegation Manager' },
+    { value: 'municipal_mayor', label: 'Municipal Mayor' },
 ];
 
 function PersonnelFormDialog({
     person,
     delegationOptions,
     schoolOptionsByDelegation,
+    userOptions,
     open,
     onOpenChange,
 }: {
     person: PersonnelRow | null;
     delegationOptions: Array<{ id: number; label: string }>;
     schoolOptionsByDelegation: Record<number, SchoolOption[]>;
+    userOptions: Array<{ id: number; label: string }>;
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
@@ -105,6 +117,7 @@ function PersonnelFormDialog({
         phone: string;
         email: string;
         photo: File | null;
+        user_id: string;
     }>({
         ...(person ? { _method: 'put' } : {}),
         delegation_id: '',
@@ -115,6 +128,7 @@ function PersonnelFormDialog({
         phone: person?.phone ?? '',
         email: person?.email ?? '',
         photo: null,
+        user_id: person?.user_id ? String(person.user_id) : '',
     });
 
     const schoolOptions = data.delegation_id
@@ -269,6 +283,38 @@ function PersonnelFormDialog({
                             </Select>
                             <InputError message={errors.role} />
                         </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="personnel-account">
+                                Linked login account (optional)
+                            </Label>
+                            <Select
+                                value={data.user_id || 'none'}
+                                onValueChange={(value) =>
+                                    setData(
+                                        'user_id',
+                                        value === 'none' ? '' : value,
+                                    )
+                                }
+                            >
+                                <SelectTrigger id="personnel-account">
+                                    <SelectValue placeholder="No linked account" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">
+                                        No linked account
+                                    </SelectItem>
+                                    {userOptions.map((account) => (
+                                        <SelectItem
+                                            key={account.id}
+                                            value={String(account.id)}
+                                        >
+                                            {account.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <InputError message={errors.user_id} />
+                        </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="personnel-phone">
@@ -402,6 +448,7 @@ export default function PersonnelPage({
     delegationOptions,
     sportOptions,
     schoolOptionsByDelegation,
+    userOptions,
 }: Props) {
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<PersonnelRow | null>(null);
@@ -568,6 +615,7 @@ export default function PersonnelPage({
                 person={editing}
                 delegationOptions={delegationOptions}
                 schoolOptionsByDelegation={schoolOptionsByDelegation}
+                userOptions={userOptions}
                 open={formOpen}
                 onOpenChange={setFormOpen}
             />

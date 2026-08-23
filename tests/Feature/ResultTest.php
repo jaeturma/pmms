@@ -1,7 +1,8 @@
 <?php
 
-use App\Enums\ResultStatus;
 use App\Enums\MatchStatus;
+use App\Enums\ResultStatus;
+use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
@@ -117,7 +118,7 @@ test('unvalidated results are visible to managers only', function () {
     }
 });
 
-test('a technical official sees encoded results for their own sport only, plus all validated results', function () {
+test('a technical official only sees results for their assigned sport', function () {
     $ownSport = Sport::factory()->create();
     $otherSport = Sport::factory()->create();
     $ownEvent = Event::factory()->create(['sport_id' => $ownSport->id]);
@@ -126,7 +127,7 @@ test('a technical official sees encoded results for their own sport only, plus a
 
     $ownEncoded = EventResult::factory()->create(['meet_id' => $meet->id, 'event_id' => $ownEvent->id]);
     EventResult::factory()->create(['meet_id' => $meet->id, 'event_id' => $otherEvent->id]);
-    $validated = EventResult::factory()->validated()->create(['meet_id' => $meet->id]);
+    EventResult::factory()->validated()->create(['meet_id' => $meet->id]);
 
     $official = User::factory()->technicalOfficial()->create();
     $official->sports()->attach($ownSport->id);
@@ -135,9 +136,8 @@ test('a technical official sees encoded results for their own sport only, plus a
         ->get('/results')
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('results.data', 2)
-            ->where('results.data.0.id', $validated->id)
-            ->where('results.data.1.id', $ownEncoded->id)
+            ->has('results.data', 1)
+            ->where('results.data.0.id', $ownEncoded->id)
             ->where('canManage', false)
             ->where('canEncode', true)
             ->where('encodedEventKeys', ["{$ownEncoded->meet_id}-{$ownEncoded->event_id}"]));
@@ -146,7 +146,7 @@ test('a technical official sees encoded results for their own sport only, plus a
 test('managers can encode a result for an active meet', function () {
     ['meet' => $meet, 'event' => $event, 'match' => $match, 'entries' => $entries] = resultFixture();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/results', [
             'meet_id' => $meet->id,
             'event_id' => $event->id,
@@ -170,7 +170,7 @@ test('managers can encode a result for an active meet', function () {
 test('a match can be finalized with a result and no live scoring session was ever started (Phase 7)', function () {
     ['meet' => $meet, 'event' => $event, 'match' => $match, 'entries' => $entries] = resultFixture();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/results', [
             'meet_id' => $meet->id,
             'event_id' => $event->id,
@@ -498,7 +498,7 @@ test('a technical official cannot encode a result for a sport they are not assig
     expect(EventResult::query()->count())->toBe(0);
 });
 
-test('a tournament manager sees their own sport\'s encoded results plus all validated results, and cannot encode', function () {
+test('a tournament manager only sees their own sport results and cannot encode', function () {
     $ownSport = Sport::factory()->create();
     $otherSport = Sport::factory()->create();
     $ownEvent = Event::factory()->create(['sport_id' => $ownSport->id]);
@@ -507,20 +507,18 @@ test('a tournament manager sees their own sport\'s encoded results plus all vali
 
     $ownEncoded = EventResult::factory()->create(['meet_id' => $meet->id, 'event_id' => $ownEvent->id]);
     EventResult::factory()->create(['meet_id' => $meet->id, 'event_id' => $otherEvent->id]);
-    $validated = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $otherEvent->id]);
+    EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $otherEvent->id]);
 
-    $manager = User::factory()->tournamentManager()->create();
+    $manager = User::factory()->create(['role' => UserRole::TournamentManager]);
     $ownSport->forceFill(['tournament_manager_id' => $manager->id])->save();
 
     $this->actingAs($manager)
         ->get('/results')
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('results.data', 2)
-            ->where('results.data.0.id', $validated->id)
-            ->where('results.data.0.can_manage', false)
-            ->where('results.data.1.id', $ownEncoded->id)
-            ->where('results.data.1.can_manage', true)
+            ->has('results.data', 1)
+            ->where('results.data.0.id', $ownEncoded->id)
+            ->where('results.data.0.can_manage', true)
             ->where('canManage', false)
             ->where('canEncode', false));
 

@@ -13,6 +13,10 @@ declare module '@inertiajs/core' {
             name: string;
             auth: Auth;
             sidebarOpen: boolean;
+            branding: {
+                title: string;
+                logoUrl: string | null;
+            };
             division: {
                 type: 'city' | 'province';
                 name: string;

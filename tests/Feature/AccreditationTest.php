@@ -43,7 +43,7 @@ test('managers and assigned officers can view accreditation; others cannot', fun
     $officer = User::factory()->delegationOfficer()->create();
     $delegation->officers()->attach($officer);
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->get("/delegations/{$delegation->id}/accreditation")
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page

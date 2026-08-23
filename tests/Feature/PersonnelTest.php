@@ -72,28 +72,28 @@ test('the registry can be searched by name', function () {
             ->where('personnel.data.0.name', 'Pedro Santos'));
 });
 
-test('an officer can register personnel for their open draft delegation', function () {
+test('an officer cannot register personnel for their open draft delegation', function () {
     $delegation = Delegation::factory()->create();
     $officer = personnelOfficerFor($delegation);
 
     $this->actingAs($officer)
         ->post('/personnel', validPersonnelPayload($delegation))
-        ->assertRedirect();
+        ->assertForbidden();
 
-    $this->assertDatabaseHas('personnel', ['last_name' => 'Santos']);
+    $this->assertDatabaseMissing('personnel', ['last_name' => 'Santos']);
 
-    expect(AuditLog::query()->where('action', 'personnel.created')->exists())->toBeTrue();
+    expect(AuditLog::query()->where('action', 'personnel.created')->exists())->toBeFalse();
 });
 
-test('an officer can update officials and coaches in a submitted active-meet delegation', function () {
+test('an officer cannot register personnel in a submitted active-meet delegation', function () {
     $delegation = Delegation::factory()->submitted()->create(['meet_id' => Meet::factory()->active()->create()]);
     $officer = personnelOfficerFor($delegation);
 
     $this->actingAs($officer)
         ->post('/personnel', validPersonnelPayload($delegation))
-        ->assertRedirect();
+        ->assertForbidden();
 
-    $this->assertDatabaseHas('personnel', [
+    $this->assertDatabaseMissing('personnel', [
         'delegation_id' => $delegation->id,
         'last_name' => 'Santos',
     ]);

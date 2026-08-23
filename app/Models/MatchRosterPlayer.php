@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Database\Factories\MatchRosterPlayerFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -102,7 +103,7 @@ class MatchRosterPlayer extends Model
     }
 
     /**
-     * @param  \Illuminate\Database\Eloquent\Collection<int, self>  $players
+     * @param  Collection<int, self>  $players
      * @return array{a: array<int, array{id: int, name: string, jersey_number: string|null, is_starter: bool, photo_url: string|null}>, b: array<int, array{id: int, name: string, jersey_number: string|null, is_starter: bool, photo_url: string|null}>}
      */
     private static function groupBySide($players): array

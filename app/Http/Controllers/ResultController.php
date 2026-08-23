@@ -13,13 +13,14 @@ use App\Http\Controllers\Concerns\ScopesToAssignedSport;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Models\Entry;
 use App\Models\Event;
-use App\Models\EventResult;
 use App\Models\EventMatch;
+use App\Models\EventResult;
 use App\Models\Meet;
 use App\Models\ResultAttachment;
 use App\Models\ResultPlacement;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\CompetitionAccessService;
 use App\Services\CompetitionResultService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -54,9 +55,12 @@ class ResultController extends Controller
 
         $canManage = Gate::allows('manage-meet-data');
         $isScopedTechnicalOfficial = $user->role === UserRole::TechnicalOfficial;
-        $assignedSportIds = $isScopedTechnicalOfficial ? $user->sports()->pluck('sports.id') : collect();
-        $isTournamentManager = $user->role === UserRole::TournamentManager && $user->managedSport !== null;
-        $managedSportId = $isTournamentManager ? $user->managedSport->id : null;
+        $assignedEventIds = $user->tournamentEventIds();
+        $isTournamentScoped = ! $user->hasRole(UserRole::Admin, UserRole::Organizer)
+            && $assignedEventIds->isNotEmpty();
+        $managedSportIds = $this->userManagedSportIds($user);
+        $isTournamentManager = $managedSportIds->isNotEmpty();
+        $managedSportId = $managedSportIds->first();
 
         // `canEncode` is a strict superset of `canManage`: it governs
         // "sees encoded results and the encode form at all" (Admin/
@@ -85,7 +89,7 @@ class ResultController extends Controller
             ->orderByDesc('id');
 
         if (! $canManage) {
-            $query->where(function ($visible) use ($user, $isScopedTechnicalOfficial, $assignedSportIds, $managedSportId) {
+            $query->where(function ($visible) use ($user, $isScopedTechnicalOfficial, $assignedEventIds, $managedSportId) {
                 $visible->where('status', ResultStatus::Official->value)
                     ->orWhere(function ($secretariatResults) use ($user) {
                         $secretariatResults->whereIn('status', [
@@ -113,10 +117,10 @@ class ResultController extends Controller
 
                 // Transitional compatibility for installations that have
                 // not yet backfilled meet-scoped assignments.
-                if ($isScopedTechnicalOfficial && $assignedSportIds->isNotEmpty()) {
+                if ($isScopedTechnicalOfficial && $assignedEventIds->isNotEmpty()) {
                     $visible->orWhere(fn ($legacy) => $legacy
                         ->where('status', ResultStatus::Encoded->value)
-                        ->whereHas('event', fn ($event) => $event->whereIn('sport_id', $assignedSportIds)));
+                        ->whereIn('event_id', $assignedEventIds));
                 }
 
                 if ($managedSportId !== null) {
@@ -131,13 +135,17 @@ class ResultController extends Controller
             $query->where('meet_id', $meetId);
         }
 
+        if ($isTournamentScoped) {
+            $query->whereIn('event_id', $assignedEventIds);
+        }
+
         if ($eventId > 0) {
             $query->where('event_id', $eventId);
         }
 
         return Inertia::render('results/index', [
             'results' => $query->paginate($this->registryPageSize)->withQueryString()
-                ->through(function (EventResult $result) use ($user, $canManage, $isTournamentManager, $managedSportId): array {
+                ->through(function (EventResult $result) use ($user, $canManage, $isTournamentManager, $managedSportIds): array {
                     $canForm = $user->isAdmin() || $user->meetSportAssignments()
                         ->where('status', MeetSportAssignmentStatus::Active)
                         ->whereIn('role', [
@@ -195,7 +203,7 @@ class ResultController extends Controller
                         // validate/correct/delete their own sport's — a global
                         // boolean can't express that, so it's computed per row.
                         'can_manage' => $canManage
-                            || ($isTournamentManager && $result->event->sport_id === $managedSportId),
+                            || ($isTournamentManager && $managedSportIds->contains($result->event->sport_id)),
                         'placements' => $result->placements
                             ->sortBy([['rank', 'asc']])
                             ->map(fn (ResultPlacement $placement): array => [
@@ -218,6 +226,7 @@ class ResultController extends Controller
                 ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]),
             'eventOptionsByMeet' => Event::query()
                 ->whereHas('meets')
+                ->when($isTournamentScoped, fn ($events) => $events->whereKey($assignedEventIds))
                 ->with(['sport:id,name', 'meets:id'])
                 ->get(['id', 'sport_id', 'name', 'gender', 'age_division'])
                 ->flatMap(fn (Event $event) => $event->meets->map(fn (Meet $meet): array => [
@@ -235,7 +244,7 @@ class ResultController extends Controller
                 ? EventResult::query()
                     ->when(
                         ! $canManage,
-                        fn ($query) => $query->whereHas('event', fn ($event) => $event->whereIn('sport_id', $assignedSportIds)),
+                        fn ($query) => $query->whereIn('event_id', $assignedEventIds),
                     )
                     ->get(['meet_id', 'event_id'])
                     ->map(fn (EventResult $result): string => "{$result->meet_id}-{$result->event_id}")
@@ -246,7 +255,7 @@ class ResultController extends Controller
                     ->where('status', EntryStatus::Confirmed->value)
                     ->when(
                         ! $canManage,
-                        fn ($query) => $query->whereHas('event', fn ($event) => $event->whereIn('sport_id', $assignedSportIds)),
+                        fn ($query) => $query->whereIn('event_id', $assignedEventIds),
                     )
                     ->with([
                         'athlete:id,first_name,last_name,school_id',
@@ -268,7 +277,7 @@ class ResultController extends Controller
                     ->whereNotNull('event_schedule_id')
                     ->whereIn('status', ['completed', 'walkover'])
                     ->whereDoesntHave('result')
-                    ->when(! $canManage, fn ($query) => $query->whereHas('event', fn ($event) => $event->whereIn('sport_id', $assignedSportIds)))
+                    ->when(! $canManage, fn ($query) => $query->whereIn('event_id', $assignedEventIds))
                     ->with(['event.sport:id,name', 'schedule.venue:id,name', 'entries.athlete.school:id,name'])
                     ->get()
                     ->map(fn (EventMatch $match): array => [
@@ -505,14 +514,21 @@ class ResultController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+        if ($user->isAdmin()) {
             return;
         }
 
-        $sportId = Event::query()->whereKey($eventId)->value('sport_id');
+        $event = Event::query()->findOrFail($eventId);
+        $hasTechnicalAssignment = $user->meetSportAssignments()
+            ->where('status', MeetSportAssignmentStatus::Active)
+            ->where('role', MeetSportAssignmentRole::TechnicalOfficial)
+            ->exists();
+        $hasLegacyAssignment = $user->sports()->whereKey($event->sport_id)->exists();
 
         abort_unless(
-            $user->role === UserRole::TechnicalOfficial && $user->sports()->whereKey($sportId)->exists(),
+            $user->role === UserRole::TechnicalOfficial
+                && ($hasTechnicalAssignment || $hasLegacyAssignment)
+                && app(CompetitionAccessService::class)->canAccessEvent($user, $event),
             403,
         );
     }
@@ -530,14 +546,15 @@ class ResultController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+        if ($user->isAdmin()) {
             return;
         }
 
         $result->loadMissing('event');
 
         abort_unless(
-            $user->role === UserRole::TournamentManager && $this->userOperatesSport($user, $result->event->sport_id),
+            $user->role === UserRole::TournamentManager
+                && app(CompetitionAccessService::class)->canAccessEvent($user, $result->event, $result->meet_id),
             403,
         );
     }
@@ -568,11 +585,13 @@ class ResultController extends Controller
      */
     private function assertPlacementsValid(array $placements, int $meetId, int $eventId, ?EventMatch $match = null): void
     {
+        $event = Event::query()->findOrFail($eventId);
         $entries = Entry::query()
             ->with(['athlete:id,first_name,last_name', 'delegation:id,meet_id'])
             ->whereIn('id', array_column($placements, 'entry_id'))
             ->get()
             ->keyBy('id');
+        $placedTeamIds = [];
 
         foreach ($placements as $placement) {
             /** @var Entry|null $entry */
@@ -593,6 +612,23 @@ class ResultController extends Controller
                         'status' => $entry->status->label(),
                     ]),
                 ]);
+            }
+
+            if ($event->is_team_event) {
+                $teamEntryId = $entry->teamMemberships()
+                    ->whereHas('teamEntry', fn ($team) => $team->where('status', EntryStatus::Confirmed->value))
+                    ->value('team_entry_id');
+                if ($teamEntryId === null) {
+                    throw ValidationException::withMessages([
+                        'placements' => __('Team-event placements require a finalized team roster.'),
+                    ]);
+                }
+                if (in_array($teamEntryId, $placedTeamIds, true)) {
+                    throw ValidationException::withMessages([
+                        'placements' => __('Select each team only once in the result.'),
+                    ]);
+                }
+                $placedTeamIds[] = $teamEntryId;
             }
 
             if ($match !== null && ! $match->entries->contains('id', $entry->id)) {
@@ -623,6 +659,9 @@ class ResultController extends Controller
         foreach ($placements as $placement) {
             $result->placements()->create([
                 'entry_id' => $placement['entry_id'],
+                'team_entry_id' => Entry::query()->find($placement['entry_id'])?->teamMemberships()
+                    ->whereHas('teamEntry', fn ($team) => $team->where('status', EntryStatus::Confirmed->value))
+                    ->value('team_entry_id'),
                 'rank' => $placement['rank'],
                 'mark' => $placement['mark'] ?? null,
                 'is_tie' => $placement['is_tie'] ?? false,

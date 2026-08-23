@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
  */
 trait SearchesAndPaginates
 {
-    protected int $registryPageSize = 15;
+    protected int $registryPageSize = 10;
 
     protected function searchTerm(Request $request): string
     {

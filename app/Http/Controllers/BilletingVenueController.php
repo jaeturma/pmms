@@ -49,7 +49,8 @@ class BilletingVenueController extends Controller
         abort_unless($this->policy->viewAny($user), 403);
 
         $accessibleMeetIds = $this->accessibleMeetIds($user, ManagementTeamType::Billeting);
-        $canManage = $accessibleMeetIds === null || $accessibleMeetIds->isNotEmpty();
+        $canManage = $user->isAdmin()
+            || ($accessibleMeetIds !== null && $accessibleMeetIds->isNotEmpty());
 
         $query = BilletingVenue::query()
             ->with([

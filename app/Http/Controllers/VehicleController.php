@@ -48,7 +48,8 @@ class VehicleController extends Controller
         abort_unless($this->policy->viewAny($user), 403);
 
         $accessibleMeetIds = $this->accessibleMeetIds($user, ManagementTeamType::Transport);
-        $canManage = $accessibleMeetIds === null || $accessibleMeetIds->isNotEmpty();
+        $canManage = $user->isAdmin()
+            || ($accessibleMeetIds !== null && $accessibleMeetIds->isNotEmpty());
 
         $vehicleQuery = Vehicle::query()
             ->with([

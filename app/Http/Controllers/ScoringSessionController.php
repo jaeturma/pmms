@@ -19,10 +19,12 @@ use App\Models\ScoreEvent;
 use App\Models\ScoringSession;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\CompetitionAccessService;
 use App\Services\CompetitionResultService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -2396,7 +2398,7 @@ class ScoringSessionController extends Controller
                 continue;
             }
 
-            $elapsed = (int) floor(max(0, \Illuminate\Support\Carbon::parse($state[$anchorKey])->diffInSeconds(now())));
+            $elapsed = (int) floor(max(0, Carbon::parse($state[$anchorKey])->diffInSeconds(now())));
             $state[$secondsKey] = max(0, (int) $state[$secondsKey] - $elapsed);
             $state[$anchorKey] = null;
         }
@@ -2473,7 +2475,8 @@ class ScoringSessionController extends Controller
         // columns it was loaded with. A plain access either reuses an
         // already-fully-loaded `event` or lazy-loads the full row once.
         if ($user->hasRole(UserRole::TechnicalOfficial, UserRole::TournamentManager)) {
-            return $this->userOperatesSport($user, $match->event->sport_id);
+            return app(CompetitionAccessService::class)
+                ->canAccessEvent($user, $match->event, $match->meet_id);
         }
 
         if ($user->role !== UserRole::Organizer) {
@@ -2487,7 +2490,9 @@ class ScoringSessionController extends Controller
             ->whereHas('meetSport', fn ($query) => $query
                 ->where('meet_id', $match->meet_id)
                 ->where('sport_id', $match->event->sport_id))
-            ->exists();
+            ->exists()
+            && app(CompetitionAccessService::class)
+                ->canAccessEvent($user, $match->event, $match->meet_id);
     }
 
     /**

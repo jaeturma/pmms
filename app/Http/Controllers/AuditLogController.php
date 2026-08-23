@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Models\AuditLog;
 use Illuminate\Http\Request;
@@ -18,11 +19,15 @@ class AuditLogController extends Controller
      */
     public function index(Request $request): Response
     {
+        $ownedOnly = $request->user()?->role === UserRole::Coach;
+        abort_unless($ownedOnly || $request->user()?->can('view-system-logs'), 403);
+
         $search = $this->searchTerm($request);
         $action = trim((string) $request->query('action', ''));
 
         $query = AuditLog::query()
             ->with('user:id,name')
+            ->when($ownedOnly, fn ($logs) => $logs->where('user_id', $request->user()->id))
             ->latest('id');
 
         if ($action !== '') {
@@ -48,7 +53,9 @@ class AuditLogController extends Controller
                 'search' => $search,
                 'action' => $action === '' ? null : $action,
             ],
+            'ownedOnly' => $ownedOnly,
             'actionOptions' => AuditLog::query()
+                ->when($ownedOnly, fn ($logs) => $logs->where('user_id', $request->user()->id))
                 ->select('action')
                 ->distinct()
                 ->orderBy('action')

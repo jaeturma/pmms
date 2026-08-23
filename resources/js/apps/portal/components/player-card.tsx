@@ -7,12 +7,6 @@ export function PortalPlayerCard({ athlete }: { athlete: PortalTeamAthlete }) {
     return (
         <li className="rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-3">
             <p className="font-semibold">{athlete.name}</p>
-            <p className="text-sm text-[var(--portal-muted-foreground)]">
-                {athlete.category} · {athlete.event}
-            </p>
-            <p className="text-sm text-[var(--portal-muted-foreground)]">
-                {athlete.school}
-            </p>
         </li>
     );
 }

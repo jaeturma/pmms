@@ -85,6 +85,7 @@ class ReportController extends Controller
     public function eventEntries(Request $request, Event $event): Response
     {
         Gate::authorize('viewAny', Entry::class);
+        $this->authorizeEventScope($request, $event);
 
         return Inertia::render('reports/event-entries', [
             'event' => $this->eventSummary($event),
@@ -99,6 +100,7 @@ class ReportController extends Controller
     public function downloadEventEntries(Request $request, Event $event): StreamedResponse
     {
         Gate::authorize('viewAny', Entry::class);
+        $this->authorizeEventScope($request, $event);
 
         $entries = $this->eventEntryRows($request, $event);
 
@@ -156,9 +158,10 @@ class ReportController extends Controller
      * Official result sheet for one validated event result — validated
      * results are official meet outcomes, readable by all roles.
      */
-    public function resultSheet(EventResult $result): Response
+    public function resultSheet(Request $request, EventResult $result): Response
     {
         abort_unless($result->isValidated(), 404);
+        $this->authorizeEventScope($request, $result->event);
 
         return Inertia::render('reports/result-sheet', [
             ...$this->resultSheetData($result),
@@ -169,9 +172,10 @@ class ReportController extends Controller
     /**
      * CSV of the official result sheet, audited.
      */
-    public function downloadResultSheet(EventResult $result): StreamedResponse
+    public function downloadResultSheet(Request $request, EventResult $result): StreamedResponse
     {
         abort_unless($result->isValidated(), 404);
+        $this->authorizeEventScope($request, $result->event);
 
         $data = $this->resultSheetData($result);
 
@@ -261,7 +265,7 @@ class ReportController extends Controller
 
         return Inertia::render('reports/schedule-sheet', [
             'date' => $date,
-            'venues' => $this->scheduleSheetVenues($date),
+            'venues' => $this->scheduleSheetVenues($date, $request->user()),
             'generatedAt' => now()->toDayDateTimeString(),
         ]);
     }
@@ -272,7 +276,7 @@ class ReportController extends Controller
     public function downloadScheduleSheet(Request $request): StreamedResponse
     {
         $date = $this->sheetDate($request);
-        $venues = $this->scheduleSheetVenues($date);
+        $venues = $this->scheduleSheetVenues($date, $request->user());
 
         $this->audit->record('report.schedule_exported', null, [
             'date' => $date,
@@ -349,10 +353,12 @@ class ReportController extends Controller
     /**
      * @return array<int, array{venue: string, slots: array<int, array<string, mixed>>}>
      */
-    private function scheduleSheetVenues(string $date): array
+    private function scheduleSheetVenues(string $date, User $user): array
     {
         return EventSchedule::query()
             ->whereDate('scheduled_date', $date)
+            ->when($user->tournamentEventIds()->isNotEmpty(), fn ($query) => $query
+                ->whereIn('event_id', $user->tournamentEventIds()))
             ->with(['venue:id,name', 'meet:id,name', 'event.sport:id,name'])
             ->orderBy('starts_at')
             ->get()
@@ -380,6 +386,20 @@ class ReportController extends Controller
             ])
             ->values()
             ->all();
+    }
+
+    private function authorizeEventScope(Request $request, Event $event): void
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        if ($user->tournamentEventIds()->isNotEmpty()) {
+            abort_unless($user->tournamentEventIds()->contains($event->id), 403);
+        }
+
+        if ($user->role === UserRole::Coach) {
+            abort_unless($user->approvedCoachEventIds()->contains($event->id), 403);
+        }
     }
 
     /**

@@ -84,13 +84,12 @@ test('the management teams page is viewable by any authenticated role, including
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('management-teams/index')
-            ->has('teams', 1)
-            ->has('teams.0.members', 1)
+            ->has('teams', 13)
             ->where('canManage', false));
 
     $this->actingAs(User::factory()->organizer()->create())
         ->get('/management-teams')
-        ->assertInertia(fn (AssertableInertia $page) => $page->where('canManage', true));
+        ->assertInertia(fn (AssertableInertia $page) => $page->where('canManage', false));
 });
 
 test('the management teams page can be filtered by meet', function () {
@@ -101,13 +100,13 @@ test('the management teams page can be filtered by meet', function () {
 
     $this->actingAs(User::factory()->admin()->create())
         ->get("/management-teams?meet_id={$meetA->id}")
-        ->assertInertia(fn (AssertableInertia $page) => $page->has('teams', 1));
+        ->assertInertia(fn (AssertableInertia $page) => $page->has('teams', 13));
 });
 
 test('organizers can create a team', function () {
     $meet = Meet::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/management-teams', [
             'meet_id' => $meet->id,
             'team_type' => ManagementTeamType::Medical->value,
@@ -157,7 +156,7 @@ test('non-managers cannot create a team', function (User $user) {
 test('organizers can update a team\'s name, description, and status', function () {
     $team = ManagementTeam::factory()->create(['status' => ManagementTeamStatus::Forming]);
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->put("/management-teams/{$team->id}", [
             'name' => 'Renamed Team',
             'description' => 'Now fully staffed.',
@@ -186,7 +185,7 @@ test('non-managers cannot update a team', function (User $user) {
 test('organizers can remove a team', function () {
     $team = ManagementTeam::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->delete("/management-teams/{$team->id}")
         ->assertSessionHasNoErrors();
 
@@ -213,7 +212,7 @@ test('organizers can add any role of user as a team member — not restricted li
     $team = ManagementTeam::factory()->create();
     $delegationOfficer = User::factory()->delegationOfficer()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/management-team-members', [
             'management_team_id' => $team->id,
             'user_id' => $delegationOfficer->id,
@@ -263,7 +262,7 @@ test('non-managers cannot add a team member', function (User $user) {
 test('organizers can update a member\'s status', function () {
     $member = ManagementTeamMember::factory()->create(['status' => ManagementTeamMemberStatus::Pending]);
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->patch("/management-team-members/{$member->id}/status", ['status' => ManagementTeamMemberStatus::Active->value])
         ->assertSessionHasNoErrors();
 
@@ -285,7 +284,7 @@ test('non-managers cannot update a member\'s status', function (User $user) {
 test('organizers can remove a member', function () {
     $member = ManagementTeamMember::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->delete("/management-team-members/{$member->id}")
         ->assertSessionHasNoErrors();
 

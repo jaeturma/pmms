@@ -36,7 +36,7 @@ function uploadDocumentFor(Athlete $athlete, User $actor): void
     test()->actingAs($actor)->post('/eligibility/documents', [
         'athlete_id' => $athlete->id,
         'document_type' => 'birth_certificate',
-        'file' => UploadedFile::fake()->create('birth-cert.pdf', 200, 'application/pdf'),
+        'file' => UploadedFile::fake()->image('birth-cert.jpg'),
     ]);
 }
 
@@ -71,7 +71,7 @@ test('an officer upload creates a document and a pending review', function () {
         ->post('/eligibility/documents', [
             'athlete_id' => $athlete->id,
             'document_type' => 'birth_certificate',
-            'file' => UploadedFile::fake()->create('birth-cert.pdf', 200, 'application/pdf'),
+            'file' => UploadedFile::fake()->image('birth-cert.jpg'),
         ])
         ->assertRedirect()
         ->assertSessionDoesntHaveErrors();
@@ -104,7 +104,7 @@ test('officers cannot upload for foreign athletes or when registration is closed
         ->post('/eligibility/documents', [
             'athlete_id' => $foreign->id,
             'document_type' => 'birth_certificate',
-            'file' => UploadedFile::fake()->create('cert.pdf', 100, 'application/pdf'),
+            'file' => UploadedFile::fake()->image('cert.jpg'),
         ])
         ->assertForbidden();
 
@@ -116,7 +116,7 @@ test('officers cannot upload for foreign athletes or when registration is closed
         ->post('/eligibility/documents', [
             'athlete_id' => $athlete->id,
             'document_type' => 'birth_certificate',
-            'file' => UploadedFile::fake()->create('cert.pdf', 100, 'application/pdf'),
+            'file' => UploadedFile::fake()->image('cert.jpg'),
         ])
         ->assertForbidden();
 });
@@ -137,7 +137,7 @@ test('disallowed file types and bad document types are rejected', function () {
         ->post('/eligibility/documents', [
             'athlete_id' => $athlete->id,
             'document_type' => 'diploma',
-            'file' => UploadedFile::fake()->create('cert.pdf', 100, 'application/pdf'),
+            'file' => UploadedFile::fake()->image('cert.jpg'),
         ])
         ->assertSessionHasErrors('document_type');
 });
@@ -341,7 +341,7 @@ test('a rejected review is terminal — unlike a returned one, a fresh upload do
         ->post('/eligibility/documents', [
             'athlete_id' => $athlete->id,
             'document_type' => 'report_card',
-            'file' => UploadedFile::fake()->create('card.pdf', 100, 'application/pdf'),
+            'file' => UploadedFile::fake()->image('card.jpg'),
         ])
         ->assertSessionHasErrors('athlete_id');
 
@@ -389,7 +389,7 @@ test('uploads are blocked once the review is approved', function () {
         ->post('/eligibility/documents', [
             'athlete_id' => $athlete->id,
             'document_type' => 'report_card',
-            'file' => UploadedFile::fake()->create('card.pdf', 100, 'application/pdf'),
+            'file' => UploadedFile::fake()->image('card.jpg'),
         ])
         ->assertSessionHasErrors('athlete_id');
 });

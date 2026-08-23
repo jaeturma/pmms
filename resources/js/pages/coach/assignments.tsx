@@ -1,11 +1,18 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { KeyRound, UserCheck } from 'lucide-react';
+import { Eye, KeyRound, Maximize2, Minus, Plus, UserCheck } from 'lucide-react';
+import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import {
     Select,
@@ -43,6 +50,14 @@ type RegistrationRow = {
     events: string;
     status: string;
     review_notes: string | null;
+    profile_url: string | null;
+    profile_mime_type: string | null;
+    certification_url: string | null;
+    certification_mime_type: string | null;
+    can_update_attachments: boolean;
+    can_accredit: boolean;
+    accreditation_number: string | null;
+    documents_complete: boolean;
 };
 type Option = {
     meet_sport_id: number;
@@ -59,6 +74,45 @@ type Props = {
     canReview: boolean;
 };
 
+function CoachDocumentUpload({
+    registrationId,
+    type,
+}: {
+    registrationId: number;
+    type: 'profile' | 'certification';
+}) {
+    return (
+        <label className="inline-flex cursor-pointer items-center rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-muted">
+            Upload {type === 'profile' ? 'profile' : 'certification'}
+            <input
+                type="file"
+                className="sr-only"
+                accept={
+                    type === 'profile'
+                        ? 'image/jpeg,image/png,image/webp'
+                        : '.pdf,image/jpeg,image/png'
+                }
+                onChange={(event) => {
+                    const document = event.target.files?.[0];
+                    if (!document) return;
+                    router.post(
+                        `/coach/onboarding-requests/${registrationId}/documents/${type}`,
+                        { document },
+                        { forceFormData: true, preserveScroll: true },
+                    );
+                    event.target.value = '';
+                }}
+            />
+        </label>
+    );
+}
+
+type ViewedDocument = {
+    title: string;
+    url: string;
+    mimeType: string | null;
+};
+
 export default function CoachAssignments({
     registrations,
     requests,
@@ -66,6 +120,11 @@ export default function CoachAssignments({
     canRequest,
     canReview,
 }: Props) {
+    const canAccredit = registrations.some((item) => item.can_accredit);
+    const [viewedDocument, setViewedDocument] = useState<ViewedDocument | null>(
+        null,
+    );
+    const [documentZoom, setDocumentZoom] = useState(1);
     const form = useForm({
         option: '',
         meet_sport_id: '',
@@ -114,7 +173,8 @@ export default function CoachAssignments({
                                             Requested sports/events
                                         </TableHead>
                                         <TableHead>Status</TableHead>
-                                        {canReview && (
+                                        <TableHead>Documents</TableHead>
+                                        {(canReview || canAccredit) && (
                                             <TableHead className="text-right">
                                                 Actions
                                             </TableHead>
@@ -125,11 +185,69 @@ export default function CoachAssignments({
                                     {registrations.map((item) => (
                                         <TableRow key={item.id}>
                                             <TableCell>
-                                                <div className="font-medium">
-                                                    {item.coach}
-                                                </div>
-                                                <div className="text-xs text-muted-foreground">
-                                                    {item.email}
+                                                <div className="flex items-center gap-3">
+                                                    <button
+                                                        type="button"
+                                                        className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-muted text-sm font-semibold"
+                                                        aria-label={
+                                                            item.profile_url
+                                                                ? `View ${item.coach}'s profile photo`
+                                                                : `${item.coach} has no profile photo`
+                                                        }
+                                                        disabled={
+                                                            !item.profile_url
+                                                        }
+                                                        onClick={() => {
+                                                            if (
+                                                                !item.profile_url
+                                                            )
+                                                                return;
+                                                            setDocumentZoom(1);
+                                                            setViewedDocument({
+                                                                title: `${item.coach} — Profile photo`,
+                                                                url: item.profile_url,
+                                                                mimeType:
+                                                                    item.profile_mime_type,
+                                                            });
+                                                        }}
+                                                    >
+                                                        {item.profile_url ? (
+                                                            <img
+                                                                src={
+                                                                    item.profile_url
+                                                                }
+                                                                alt=""
+                                                                className="size-full object-cover"
+                                                            />
+                                                        ) : (
+                                                            item.coach
+                                                                .split(' ')
+                                                                .map(
+                                                                    (name) =>
+                                                                        name[0],
+                                                                )
+                                                                .slice(0, 2)
+                                                                .join('')
+                                                        )}
+                                                    </button>
+                                                    <div className="min-w-0">
+                                                        <div className="font-medium">
+                                                            {item.coach}
+                                                        </div>
+                                                        <div className="text-xs text-muted-foreground">
+                                                            {item.email}
+                                                        </div>
+                                                        {item.can_update_attachments && (
+                                                            <div className="mt-1">
+                                                                <CoachDocumentUpload
+                                                                    registrationId={
+                                                                        item.id
+                                                                    }
+                                                                    type="profile"
+                                                                />
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </TableCell>
                                             <TableCell>
@@ -149,63 +267,131 @@ export default function CoachAssignments({
                                                 >
                                                     {item.status}
                                                 </Badge>
+                                                {item.accreditation_number && (
+                                                    <div className="mt-1 text-xs font-medium">
+                                                        {
+                                                            item.accreditation_number
+                                                        }
+                                                    </div>
+                                                )}
                                             </TableCell>
-                                            {canReview && (
-                                                <TableCell className="space-x-2 text-right whitespace-nowrap">
-                                                    <Button
-                                                        size="sm"
-                                                        onClick={() =>
-                                                            router.patch(
-                                                                `/coach/onboarding-requests/${item.id}`,
-                                                                {
-                                                                    status: 'approved',
-                                                                },
-                                                                {
-                                                                    preserveScroll: true,
-                                                                },
-                                                            )
-                                                        }
-                                                    >
-                                                        Approve
-                                                    </Button>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="destructive"
-                                                        onClick={() =>
-                                                            router.patch(
-                                                                `/coach/onboarding-requests/${item.id}`,
-                                                                {
-                                                                    status: 'rejected',
-                                                                },
-                                                                {
-                                                                    preserveScroll: true,
-                                                                },
-                                                            )
-                                                        }
-                                                    >
-                                                        Reject
-                                                    </Button>
+                                            <TableCell className="space-x-2 whitespace-nowrap">
+                                                {!item.certification_url && (
+                                                    <span className="mr-2 text-xs text-destructive">
+                                                        Certification required
+                                                    </span>
+                                                )}
+                                                {item.certification_url && (
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
                                                         onClick={() => {
-                                                            if (
-                                                                window.confirm(
-                                                                    `Reset ${item.coach}'s password to DdOPaa2026!?`,
-                                                                )
-                                                            )
-                                                                router.post(
-                                                                    `/coach/onboarding-requests/${item.id}/reset-password`,
-                                                                    {},
-                                                                    {
-                                                                        preserveScroll: true,
-                                                                    },
-                                                                );
+                                                            setDocumentZoom(1);
+                                                            setViewedDocument({
+                                                                title: `${item.coach} — Coaching certification`,
+                                                                url: item.certification_url!,
+                                                                mimeType:
+                                                                    item.certification_mime_type,
+                                                            });
                                                         }}
                                                     >
-                                                        <KeyRound className="size-4" />
-                                                        Reset password
+                                                        <Eye className="size-4" />
+                                                        Certification
                                                     </Button>
+                                                )}
+                                                {item.can_update_attachments && (
+                                                    <CoachDocumentUpload
+                                                        registrationId={item.id}
+                                                        type="certification"
+                                                    />
+                                                )}
+                                            </TableCell>
+                                            {(canReview ||
+                                                item.can_accredit) && (
+                                                <TableCell className="space-x-2 text-right whitespace-nowrap">
+                                                    {canReview &&
+                                                        !(
+                                                            item.status ===
+                                                                'approved' &&
+                                                            item.accreditation_number
+                                                        ) && (
+                                                            <>
+                                                                <Button
+                                                                    size="sm"
+                                                                    onClick={() =>
+                                                                        router.patch(
+                                                                            `/coach/onboarding-requests/${item.id}`,
+                                                                            {
+                                                                                status: 'approved',
+                                                                            },
+                                                                            {
+                                                                                preserveScroll: true,
+                                                                            },
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    Approve
+                                                                </Button>
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="destructive"
+                                                                    onClick={() =>
+                                                                        router.patch(
+                                                                            `/coach/onboarding-requests/${item.id}`,
+                                                                            {
+                                                                                status: 'rejected',
+                                                                            },
+                                                                            {
+                                                                                preserveScroll: true,
+                                                                            },
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    Reject
+                                                                </Button>
+                                                            </>
+                                                        )}
+                                                    {canReview && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => {
+                                                                if (
+                                                                    window.confirm(
+                                                                        `Reset ${item.coach}'s password to DdOPaa2026!?`,
+                                                                    )
+                                                                )
+                                                                    router.post(
+                                                                        `/coach/onboarding-requests/${item.id}/reset-password`,
+                                                                        {},
+                                                                        {
+                                                                            preserveScroll: true,
+                                                                        },
+                                                                    );
+                                                            }}
+                                                        >
+                                                            <KeyRound className="size-4" />
+                                                            Reset password
+                                                        </Button>
+                                                    )}
+                                                    {item.can_accredit &&
+                                                        !item.accreditation_number && (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="secondary"
+                                                                onClick={() =>
+                                                                    router.post(
+                                                                        `/coach/onboarding-requests/${item.id}/accredit`,
+                                                                        {},
+                                                                        {
+                                                                            preserveScroll: true,
+                                                                        },
+                                                                    )
+                                                                }
+                                                            >
+                                                                Accredit coach
+                                                            </Button>
+                                                        )}
                                                 </TableCell>
                                             )}
                                         </TableRow>
@@ -371,6 +557,91 @@ export default function CoachAssignments({
                         </Table>
                     </div>
                 )}
+                <Dialog
+                    open={viewedDocument !== null}
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            setViewedDocument(null);
+                            setDocumentZoom(1);
+                        }
+                    }}
+                >
+                    <DialogContent className="flex h-[95vh] w-[80vw] max-w-none flex-col gap-3 p-4 sm:max-w-none">
+                        <DialogHeader className="shrink-0 pr-10">
+                            <DialogTitle>
+                                {viewedDocument?.title ?? 'Coach attachment'}
+                            </DialogTitle>
+                        </DialogHeader>
+                        {viewedDocument &&
+                            (viewedDocument.mimeType === 'application/pdf' ? (
+                                <iframe
+                                    src={viewedDocument.url}
+                                    title={viewedDocument.title}
+                                    className="min-h-0 flex-1 rounded-md border bg-white"
+                                />
+                            ) : (
+                                <>
+                                    <div className="flex shrink-0 justify-end gap-1 rounded-md border bg-muted/40 px-3 py-2">
+                                        <Button
+                                            type="button"
+                                            size="icon"
+                                            variant="outline"
+                                            aria-label="Zoom out"
+                                            disabled={documentZoom <= 0.5}
+                                            onClick={() =>
+                                                setDocumentZoom((zoom) =>
+                                                    Math.max(0.5, zoom - 0.25),
+                                                )
+                                            }
+                                        >
+                                            <Minus className="size-4" />
+                                        </Button>
+                                        <span className="w-14 self-center text-center text-sm tabular-nums">
+                                            {Math.round(documentZoom * 100)}%
+                                        </span>
+                                        <Button
+                                            type="button"
+                                            size="icon"
+                                            variant="outline"
+                                            aria-label="Zoom in"
+                                            disabled={documentZoom >= 3}
+                                            onClick={() =>
+                                                setDocumentZoom((zoom) =>
+                                                    Math.min(3, zoom + 0.25),
+                                                )
+                                            }
+                                        >
+                                            <Plus className="size-4" />
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            size="icon"
+                                            variant="outline"
+                                            aria-label="Fit attachment to window"
+                                            onClick={() => setDocumentZoom(1)}
+                                        >
+                                            <Maximize2 className="size-4" />
+                                        </Button>
+                                    </div>
+                                    <div className="min-h-0 flex-1 overflow-auto rounded-md border bg-black/5">
+                                        <div
+                                            className="relative min-h-full min-w-full"
+                                            style={{
+                                                width: `${documentZoom * 100}%`,
+                                                height: `${documentZoom * 100}%`,
+                                            }}
+                                        >
+                                            <img
+                                                src={viewedDocument.url}
+                                                alt={viewedDocument.title}
+                                                className="absolute inset-0 size-full object-contain"
+                                            />
+                                        </div>
+                                    </div>
+                                </>
+                            ))}
+                    </DialogContent>
+                </Dialog>
             </div>
         </>
     );

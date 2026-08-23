@@ -75,8 +75,8 @@ test('requesting coach onboarding does not self grant coach authority', function
     $user = $action->create([
         'name' => 'Pending Coach',
         'email' => 'pending-coach@example.test',
-        'password' => 'Secure-password-2026!',
-        'password_confirmation' => 'Secure-password-2026!',
+        'password' => 'Secure#Pass2026',
+        'password_confirmation' => 'Secure#Pass2026',
         'account_type' => 'coach',
         'district_id' => $municipality->id,
         'event_ids' => [$event->id],

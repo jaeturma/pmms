@@ -37,6 +37,7 @@ type Props = {
     logs: Paginated<AuditLogRow>;
     filters: { search: string; action: string | null };
     actionOptions: string[];
+    ownedOnly: boolean;
 };
 
 function contextSummary(context: Record<string, unknown> | null): string {
@@ -49,7 +50,7 @@ function contextSummary(context: Record<string, unknown> | null): string {
         .join(', ');
 }
 
-export default function AuditLogs({ logs, filters, actionOptions }: Props) {
+export default function AuditLogs({ logs, filters, actionOptions, ownedOnly }: Props) {
     const searchParams: Record<string, string> = filters.search
         ? { search: filters.search }
         : {};
@@ -70,11 +71,15 @@ export default function AuditLogs({ logs, filters, actionOptions }: Props) {
 
     return (
         <>
-            <Head title="Audit log" />
+            <Head title={ownedOnly ? 'Recent Activity' : 'Audit log'} />
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
-                    title="Audit log"
-                    description="Who did what, when, and from where."
+                    title={ownedOnly ? 'Recent Activity' : 'Audit log'}
+                    description={
+                        ownedOnly
+                            ? 'Your recent actions in PMMS.'
+                            : 'Who did what, when, and from where.'
+                    }
                 />
 
                 <div className="flex flex-wrap gap-2">
@@ -168,7 +173,7 @@ export default function AuditLogs({ logs, filters, actionOptions }: Props) {
 AuditLogs.layout = {
     breadcrumbs: [
         {
-            title: 'Audit log',
+            title: 'Recent Activity',
             href: index(),
         },
     ],

@@ -15,6 +15,7 @@ use App\Models\EventSchedule;
 use App\Models\Meet;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\CompetitionAccessService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -48,6 +49,9 @@ class MatchController extends Controller
         }
 
         $canManageAll = Gate::allows('manage-meet-data');
+        $visibleEventIds = $user->tournamentEventIds();
+        $isTournamentScoped = ! $user->hasRole(UserRole::Admin, UserRole::Organizer)
+            && $visibleEventIds->isNotEmpty();
         $managedSportIds = $user->role === UserRole::TournamentManager
             ? $this->userManagedSportIds($user)
             : collect();
@@ -73,12 +77,8 @@ class MatchController extends Controller
             );
         }
 
-        if ($user->hasRole(UserRole::TechnicalOfficial, UserRole::TournamentManager)) {
-            $sportIds = $user->role === UserRole::TechnicalOfficial
-                ? $user->sports()->pluck('sports.id')
-                : $managedSportIds;
-
-            $query->whereHas('event', fn ($events) => $events->whereIn('sport_id', $sportIds));
+        if ($isTournamentScoped) {
+            $query->whereIn('event_id', $visibleEventIds);
         }
 
         if ($eventId > 0) {
@@ -129,7 +129,7 @@ class MatchController extends Controller
             ],
             'eventOptions' => Event::query()
                 ->whereHas('meets', fn ($meets) => $meets->whereKey(Meet::current()->id))
-                ->when($isTournamentManager, fn ($query) => $query->whereIn('sport_id', $managedSportIds))
+                ->when($isTournamentScoped, fn ($query) => $query->whereKey($visibleEventIds))
                 ->with('sport:id,name')
                 ->get(['id', 'sport_id', 'name', 'gender', 'age_division'])
                 ->map(fn (Event $event): array => [
@@ -139,8 +139,8 @@ class MatchController extends Controller
                 ->values(),
             'scheduleOptions' => EventSchedule::query()
                 ->when(
-                    $isTournamentManager,
-                    fn ($query) => $query->whereHas('event', fn ($event) => $event->whereIn('sport_id', $managedSportIds)),
+                    $isTournamentScoped,
+                    fn ($query) => $query->whereIn('event_id', $visibleEventIds),
                 )
                 ->with('venue:id,name')
                 ->get()
@@ -159,8 +159,8 @@ class MatchController extends Controller
             'entryOptions' => Entry::query()
                 ->where('status', EntryStatus::Confirmed->value)
                 ->when(
-                    $isTournamentManager,
-                    fn ($query) => $query->whereHas('event', fn ($event) => $event->whereIn('sport_id', $managedSportIds)),
+                    $isTournamentScoped,
+                    fn ($query) => $query->whereIn('event_id', $visibleEventIds),
                 )
                 ->with([
                     'athlete:id,first_name,last_name,school_id',
@@ -185,7 +185,7 @@ class MatchController extends Controller
     {
         $data = $request->validated();
 
-        $this->authorizeManage($request, (int) Event::query()->whereKey($data['event_id'])->value('sport_id'));
+        $this->authorizeManage($request, (int) $data['event_id']);
         $this->assertMatchIsValid($data);
 
         $match = EventMatch::create($data);
@@ -207,8 +207,8 @@ class MatchController extends Controller
         $match->loadMissing('event');
         $this->authorizeManage(
             $request,
-            $match->event->sport_id,
-            (int) Event::query()->whereKey($data['event_id'])->value('sport_id'),
+            $match->event_id,
+            (int) $data['event_id'],
         );
         $this->assertMatchIsValid($data);
 
@@ -227,7 +227,7 @@ class MatchController extends Controller
     public function syncParticipants(Request $request, EventMatch $match): RedirectResponse
     {
         $match->loadMissing('event');
-        $this->authorizeManage($request, $match->event->sport_id);
+        $this->authorizeManage($request, $match->event_id);
 
         $validated = $request->validate([
             'entry_ids' => ['array'],
@@ -304,7 +304,7 @@ class MatchController extends Controller
     public function updateStatus(Request $request, EventMatch $match): RedirectResponse
     {
         $match->loadMissing('event');
-        $this->authorizeManage($request, $match->event->sport_id);
+        $this->authorizeManage($request, $match->event_id);
 
         $validated = $request->validate([
             'status' => ['required', Rule::enum(MatchStatus::class)],
@@ -341,7 +341,7 @@ class MatchController extends Controller
     public function destroy(Request $request, EventMatch $match): RedirectResponse
     {
         $match->loadMissing('event');
-        $this->authorizeManage($request, $match->event->sport_id);
+        $this->authorizeManage($request, $match->event_id);
 
         $context = $this->context($match);
 
@@ -363,18 +363,22 @@ class MatchController extends Controller
      * existing match's live scoring, not creating/editing/deleting the
      * match record itself.
      */
-    private function authorizeManage(Request $request, int ...$sportIds): void
+    private function authorizeManage(Request $request, int ...$eventIds): void
     {
         /** @var User $user */
         $user = $request->user();
 
-        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+        if ($user->isAdmin()) {
             return;
         }
 
         abort_unless(
             $user->role === UserRole::TournamentManager
-                && collect($sportIds)->every(fn (int $sportId): bool => $this->userOperatesSport($user, $sportId)),
+                && Event::query()->whereKey($eventIds)->get()->count() === count(array_unique($eventIds))
+                && Event::query()->whereKey($eventIds)->get()->every(
+                    fn (Event $event): bool => app(CompetitionAccessService::class)
+                        ->canAccessEvent($user, $event, Meet::current()->id),
+                ),
             403,
         );
     }

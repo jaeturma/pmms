@@ -4,10 +4,12 @@ namespace App\Http\Middleware;
 
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\ScoringSessionStatus;
+use App\Enums\UserRole;
 use App\Models\Division;
 use App\Models\Meet;
 use App\Models\ScoringSession;
 use App\Models\Setting;
+use App\Services\CompetitionAccessService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -43,10 +45,24 @@ class HandleInertiaRequests extends Middleware
     {
         $division = Division::current();
         $user = $request->user();
+        $settings = Setting::current();
+        $assignedSports = collect();
+        if ($user !== null) {
+            $assignedSports = app(CompetitionAccessService::class)->labels($user);
+            if ($assignedSports->isEmpty() && $user->role === UserRole::TechnicalOfficial) {
+                $assignedSports = $user->sports()->orderBy('name')->pluck('name');
+            } elseif ($assignedSports->isEmpty() && $user->role === UserRole::TournamentManager && $user->managedSport !== null) {
+                $assignedSports = collect([$user->managedSport->name]);
+            }
+        }
 
         return [
             ...parent::share($request),
-            'name' => config('app.name'),
+            'name' => $settings->app_title ?: config('app.name'),
+            'branding' => [
+                'title' => $settings->app_title ?: config('app.name'),
+                'logoUrl' => $settings->app_logo_upload_id === null ? null : route('branding.logo'),
+            ],
             'auth' => [
                 'user' => $user === null ? null : [
                     ...$user->toArray(),
@@ -67,7 +83,15 @@ class HandleInertiaRequests extends Middleware
                         || $user->coachOnboardingRequest()->whereIn('status', ['pending', 'rejected'])->exists(),
                     'can_manage_school_master_data' => $user->canManageSchoolMasterData(),
                     'can_manage_accounts' => $user->canManageProductionAccounts(),
+                    'can_manage_announcements' => $user->canManageAnnouncements(),
+                    'can_manage_personnel' => $user->canManagePersonnel(),
+                    'can_file_protest' => $user->canFileProtest(),
+                    'can_view_management_reports' => $user->canViewManagementReports(),
+                    'can_view_system_logs' => $user->can('view-system-logs'),
                     'can_view_tournament_athletes' => $user->tournamentAthleteSportIds()->isNotEmpty(),
+                    'assigned_sports' => $assignedSports->values(),
+                    'is_tournament_scoped' => $assignedSports->isNotEmpty()
+                        && ! $user->hasRole(UserRole::Admin, UserRole::Organizer),
                 ],
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',

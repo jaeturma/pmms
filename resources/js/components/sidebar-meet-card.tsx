@@ -12,7 +12,8 @@ import { Badge } from '@/components/ui/badge';
  * `group-data-[collapsible=icon]:hidden` convention).
  */
 export function SidebarMeetCard() {
-    const { currentMeet } = usePage().props;
+    const { auth, currentMeet } = usePage().props;
+    const assignedSports = auth.user?.assigned_sports ?? [];
 
     if (currentMeet === null) {
         return null;
@@ -42,6 +43,24 @@ export function SidebarMeetCard() {
                         </>
                     )}
                 </p>
+                {assignedSports.length > 0 && (
+                    <div className="border-t border-sidebar-border pt-2">
+                        <p className="mb-1 text-[10px] font-semibold tracking-wide uppercase opacity-70">
+                            Assigned sport{assignedSports.length > 1 ? 's' : ''}
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                            {assignedSports.map((sport) => (
+                                <Badge
+                                    key={sport}
+                                    variant="outline"
+                                    className="text-[10px]"
+                                >
+                                    {sport}
+                                </Badge>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

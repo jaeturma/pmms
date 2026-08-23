@@ -1,7 +1,11 @@
 <?php
 
+use App\Enums\ManagementTeamMemberStatus;
+use App\Enums\ManagementTeamType;
 use App\Models\AuditLog;
 use App\Models\EventResult;
+use App\Models\ManagementTeam;
+use App\Models\ManagementTeamMember;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 
@@ -29,10 +33,38 @@ test('admins see the paginated audit trail newest first', function () {
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('audit/index')
-            ->has('logs.data', 15)
+            ->has('logs.data', 10)
             ->where('logs.total', 21)
             ->where('logs.data.0.id', $latest->id)
             ->has('actionOptions', 2));
+});
+
+test('active ICT members can view system logs', function () {
+    $ict = User::factory()->create();
+    $team = ManagementTeam::factory()->create(['team_type' => ManagementTeamType::ICT]);
+    ManagementTeamMember::factory()->create([
+        'management_team_id' => $team->id,
+        'user_id' => $ict->id,
+        'status' => ManagementTeamMemberStatus::Active,
+    ]);
+
+    $this->actingAs($ict)->get('/audit-logs')->assertOk();
+});
+
+test('coaches see only their own recent activity', function () {
+    $coach = User::factory()->coach()->create();
+    $own = AuditLog::factory()->for($coach)->create(['action' => 'athlete.created']);
+    AuditLog::factory()->for(User::factory()->create())->create(['action' => 'athlete.updated']);
+
+    $this->actingAs($coach)
+        ->get('/audit-logs')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('ownedOnly', true)
+            ->has('logs.data', 1)
+            ->where('logs.data.0.id', $own->id)
+            ->has('actionOptions', 1)
+            ->where('actionOptions.0', 'athlete.created'));
 });
 
 test('the audit log can be searched by action and user name', function () {

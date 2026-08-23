@@ -6,6 +6,8 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
+import { PaginationControls } from '@/components/pagination-controls';
+import type { Paginated } from '@/components/pagination-controls';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -55,12 +57,14 @@ type Assignment = {
     status_label: string;
 };
 
-type MeetSportOption = { id: number; label: string };
+type MeetSportOption = { id: number; sport_id: number; label: string };
+type SportCategoryOption = { id: number; sport_id: number; label: string };
 type ValueLabel = { value: string; label: string };
 
 type Props = {
-    assignments: Assignment[];
+    assignments: Paginated<Assignment>;
     meetSportOptions: MeetSportOption[];
+    sportCategoryOptions: SportCategoryOption[];
     roleOptions: ValueLabel[];
     statusOptions: ValueLabel[];
     userOptions: Array<{ id: number; label: string }>;
@@ -78,17 +82,20 @@ function CreateDialog({
     open,
     onOpenChange,
     meetSportOptions,
+    sportCategoryOptions,
     roleOptions,
     userOptions,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     meetSportOptions: MeetSportOption[];
+    sportCategoryOptions: SportCategoryOption[];
     roleOptions: ValueLabel[];
     userOptions: Array<{ id: number; label: string }>;
 }) {
     const { data, setData, post, processing, errors, reset } = useForm<{
         meet_sport_id: string;
+        sport_category_id: string;
         user_id: string;
         role: string;
         is_lead: boolean;
@@ -96,12 +103,19 @@ function CreateDialog({
         end_date: string;
     }>({
         meet_sport_id: '',
+        sport_category_id: '',
         user_id: '',
         role: '',
         is_lead: false,
         start_date: '',
         end_date: '',
     });
+    const selectedSport = meetSportOptions.find(
+        (option) => String(option.id) === data.meet_sport_id,
+    );
+    const availableCategories = sportCategoryOptions.filter(
+        (option) => option.sport_id === selectedSport?.sport_id,
+    );
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -135,7 +149,11 @@ function CreateDialog({
                         <Select
                             value={data.meet_sport_id}
                             onValueChange={(value) =>
-                                setData('meet_sport_id', value)
+                                setData((current) => ({
+                                    ...current,
+                                    meet_sport_id: value,
+                                    sport_category_id: '',
+                                }))
                             }
                         >
                             <SelectTrigger id="assignment-sport">
@@ -161,12 +179,43 @@ function CreateDialog({
                         <InputError message={errors.meet_sport_id} />
                     </div>
                     <div className="space-y-2">
+                        <Label htmlFor="assignment-category">
+                            Category / event scope (optional)
+                        </Label>
+                        <Select
+                            value={data.sport_category_id || 'all'}
+                            onValueChange={(value) =>
+                                setData(
+                                    'sport_category_id',
+                                    value === 'all' ? '' : value,
+                                )
+                            }
+                            disabled={!selectedSport}
+                        >
+                            <SelectTrigger id="assignment-category">
+                                <SelectValue placeholder="All categories" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">
+                                    All categories / events
+                                </SelectItem>
+                                {availableCategories.map((option) => (
+                                    <SelectItem
+                                        key={option.id}
+                                        value={String(option.id)}
+                                    >
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <InputError message={errors.sport_category_id} />
+                    </div>
+                    <div className="space-y-2">
                         <Label htmlFor="assignment-user">Person</Label>
                         <Select
                             value={data.user_id}
-                            onValueChange={(value) =>
-                                setData('user_id', value)
-                            }
+                            onValueChange={(value) => setData('user_id', value)}
                         >
                             <SelectTrigger id="assignment-user">
                                 <SelectValue placeholder="Select a person" />
@@ -188,9 +237,7 @@ function CreateDialog({
                         <Label htmlFor="assignment-role">Role</Label>
                         <Select
                             value={data.role}
-                            onValueChange={(value) =>
-                                setData('role', value)
-                            }
+                            onValueChange={(value) => setData('role', value)}
                         >
                             <SelectTrigger id="assignment-role">
                                 <SelectValue placeholder="Select a role" />
@@ -245,7 +292,10 @@ function CreateDialog({
                                 setData('is_lead', checked === true)
                             }
                         />
-                        <Label htmlFor="assignment-lead" className="font-normal">
+                        <Label
+                            htmlFor="assignment-lead"
+                            className="font-normal"
+                        >
                             This is the lead for the role
                         </Label>
                     </div>
@@ -263,6 +313,7 @@ function CreateDialog({
 export default function MeetSportAssignments({
     assignments,
     meetSportOptions,
+    sportCategoryOptions,
     roleOptions,
     statusOptions,
     userOptions,
@@ -287,7 +338,7 @@ export default function MeetSportAssignments({
                     }
                 />
 
-                {assignments.length === 0 ? (
+                {assignments.data.length === 0 ? (
                     <EmptyState
                         icon={ClipboardList}
                         title="No assignments yet"
@@ -310,7 +361,7 @@ export default function MeetSportAssignments({
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {assignments.map((assignment) => (
+                                {assignments.data.map((assignment) => (
                                     <TableRow key={assignment.id}>
                                         <TableCell className="font-medium">
                                             {assignment.sport}
@@ -425,12 +476,18 @@ export default function MeetSportAssignments({
                         </Table>
                     </div>
                 )}
+                <PaginationControls
+                    page={assignments}
+                    url={index().url}
+                    label="assignments"
+                />
             </div>
 
             <CreateDialog
                 open={createOpen}
                 onOpenChange={setCreateOpen}
                 meetSportOptions={meetSportOptions}
+                sportCategoryOptions={sportCategoryOptions}
                 roleOptions={roleOptions}
                 userOptions={userOptions}
             />

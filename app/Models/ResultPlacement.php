@@ -21,7 +21,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['event_result_id', 'entry_id', 'rank', 'mark', 'is_tie'])]
+#[Fillable(['event_result_id', 'entry_id', 'team_entry_id', 'rank', 'mark', 'is_tie'])]
 class ResultPlacement extends Model
 {
     /** @use HasFactory<ResultPlacementFactory> */
@@ -54,5 +54,10 @@ class ResultPlacement extends Model
     public function entry(): BelongsTo
     {
         return $this->belongsTo(Entry::class);
+    }
+
+    public function teamEntry(): BelongsTo
+    {
+        return $this->belongsTo(TeamEntry::class);
     }
 }

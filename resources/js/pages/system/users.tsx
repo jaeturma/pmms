@@ -1,5 +1,13 @@
-import { Head, router, useForm } from '@inertiajs/react';
-import { KeyRound, Pencil, Search, ShieldCheck, UserPlus } from 'lucide-react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
+import {
+    KeyRound,
+    Network,
+    Pencil,
+    Search,
+    ShieldCheck,
+    UserPlus,
+    UsersRound,
+} from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import InputError from '@/components/input-error';
@@ -41,6 +49,9 @@ type UserRow = {
     email: string | null;
     role: string;
     role_label: string;
+    person: string | null;
+    roles: string[];
+    assignments: Array<{ type: string; scope: string; status: string }>;
     disabled: boolean;
     approval_status: string;
     last_updated: string | null;
@@ -298,6 +309,22 @@ export default function Users({
                 <PageHeader
                     title="Users, roles & permissions"
                     description="Manage sign-in accounts, assign system roles, review included permissions, and reset passwords."
+                    actions={
+                        <div className="flex flex-wrap gap-2">
+                            <Button asChild variant="outline">
+                                <Link href="/meet-sport-assignments">
+                                    <Network className="size-4" />
+                                    Sport assignments
+                                </Link>
+                            </Button>
+                            <Button asChild variant="outline">
+                                <Link href="/management-teams">
+                                    <UsersRound className="size-4" />
+                                    Management teams
+                                </Link>
+                            </Button>
+                        </div>
+                    }
                 />
                 <div className="flex flex-wrap justify-between gap-3">
                     <form
@@ -325,6 +352,7 @@ export default function Users({
                             <TableRow>
                                 <TableHead>User</TableHead>
                                 <TableHead>Role</TableHead>
+                                <TableHead>Assignments</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Updated</TableHead>
                                 <TableHead className="text-right">
@@ -344,12 +372,56 @@ export default function Users({
                                                 user.email ??
                                                 'No sign-in identifier'}
                                         </p>
+                                        {user.person &&
+                                            user.person !== user.name && (
+                                                <p className="text-xs text-muted-foreground">
+                                                    Person: {user.person}
+                                                </p>
+                                            )}
                                     </TableCell>
                                     <TableCell>
-                                        <Badge variant="secondary">
-                                            <ShieldCheck className="mr-1 size-3" />
-                                            {user.role_label}
-                                        </Badge>
+                                        <div className="flex max-w-56 flex-wrap gap-1">
+                                            {user.roles.map((role) => (
+                                                <Badge
+                                                    key={role}
+                                                    variant="secondary"
+                                                >
+                                                    <ShieldCheck className="mr-1 size-3" />
+                                                    {role}
+                                                </Badge>
+                                            ))}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="min-w-56 space-y-2">
+                                            {user.assignments.length === 0 ? (
+                                                <span className="text-xs text-muted-foreground">
+                                                    No scoped assignment
+                                                </span>
+                                            ) : (
+                                                user.assignments.map(
+                                                    (assignment, index) => (
+                                                        <div
+                                                            key={`${assignment.type}-${assignment.scope}-${index}`}
+                                                        >
+                                                            <p className="text-xs font-medium">
+                                                                {
+                                                                    assignment.type
+                                                                }{' '}
+                                                                ·{' '}
+                                                                {
+                                                                    assignment.status
+                                                                }
+                                                            </p>
+                                                            <p className="text-xs text-muted-foreground">
+                                                                {assignment.scope ||
+                                                                    'Organization-wide'}
+                                                            </p>
+                                                        </div>
+                                                    ),
+                                                )
+                                            )}
+                                        </div>
                                     </TableCell>
                                     <TableCell>
                                         <Badge

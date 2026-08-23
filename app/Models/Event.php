@@ -98,6 +98,11 @@ class Event extends Model
         return $this->hasMany(Entry::class);
     }
 
+    public function teamEntries(): HasMany
+    {
+        return $this->hasMany(TeamEntry::class);
+    }
+
     /**
      * @return BelongsToMany<Meet, $this>
      */

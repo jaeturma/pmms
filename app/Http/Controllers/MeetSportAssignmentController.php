@@ -8,6 +8,7 @@ use App\Enums\UserRole;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
+use App\Models\SportCategory;
 use App\Models\User;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
@@ -36,14 +37,14 @@ class MeetSportAssignmentController extends Controller
      * authenticated role, same as the Districts/Schools/Sports/Events
      * "view lists" precedent — assignment rosters aren't minors data.
      */
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $query = MeetSportAssignment::query()
             ->with(['meetSport.sport:id,name', 'sportCategory:id,display_name', 'user:id,name,email', 'person:id,full_name'])
             ->orderByDesc('id');
 
         return Inertia::render('meet-sport-assignments/index', [
-            'assignments' => $query->get()->map(fn (MeetSportAssignment $assignment): array => [
+            'assignments' => $query->paginate(10)->withQueryString()->through(fn (MeetSportAssignment $assignment): array => [
                 'id' => $assignment->id,
                 'sport' => $assignment->meetSport->sport->name,
                 'category' => $assignment->sportCategory?->display_name,
@@ -63,7 +64,16 @@ class MeetSportAssignmentController extends Controller
                 ->get(['id', 'sport_id'])
                 ->map(fn (MeetSport $meetSport): array => [
                     'id' => $meetSport->id,
+                    'sport_id' => $meetSport->sport_id,
                     'label' => $meetSport->sport->name,
+                ]),
+            'sportCategoryOptions' => SportCategory::query()
+                ->orderBy('display_name')
+                ->get(['id', 'sport_id', 'display_name'])
+                ->map(fn (SportCategory $category): array => [
+                    'id' => $category->id,
+                    'sport_id' => $category->sport_id,
+                    'label' => $category->display_name,
                 ]),
             'roleOptions' => array_map(
                 fn (MeetSportAssignmentRole $role): array => ['value' => $role->value, 'label' => $role->label()],
@@ -74,11 +84,11 @@ class MeetSportAssignmentController extends Controller
                 MeetSportAssignmentStatus::cases(),
             ),
             'userOptions' => User::query()
-                ->whereIn('role', [UserRole::Admin->value, UserRole::Organizer->value, UserRole::TechnicalOfficial->value])
+                ->whereIn('role', [UserRole::Admin->value, UserRole::Organizer->value, UserRole::TournamentManager->value, UserRole::TechnicalOfficial->value])
                 ->orderBy('name')
                 ->get(['id', 'name', 'email'])
                 ->map(fn (User $user): array => ['id' => $user->id, 'label' => "{$user->name} ({$user->email})"]),
-            'canManage' => Gate::allows('manage-meet-data'),
+            'canManage' => Gate::allows('manage-meet-data') || $request->user()->canManageProductionAccounts(),
         ]);
     }
 
@@ -87,19 +97,36 @@ class MeetSportAssignmentController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        $this->authorizeManage($request);
+
         $validated = $request->validate([
             'meet_sport_id' => ['required', 'integer', Rule::exists('meet_sports', 'id')],
             'user_id' => [
                 'required', 'integer',
                 Rule::exists('users', 'id')->whereIn('role', [
-                    UserRole::Admin->value, UserRole::Organizer->value, UserRole::TechnicalOfficial->value,
+                    UserRole::Admin->value, UserRole::Organizer->value, UserRole::TournamentManager->value, UserRole::TechnicalOfficial->value,
                 ]),
             ],
+            'sport_category_id' => ['nullable', 'integer', Rule::exists('sport_categories', 'id')],
             'role' => ['required', Rule::enum(MeetSportAssignmentRole::class)],
             'is_lead' => ['boolean'],
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
         ]);
+
+        if (isset($validated['sport_category_id'])) {
+            $meetSport = MeetSport::query()->findOrFail($validated['meet_sport_id']);
+            $categoryMatchesSport = SportCategory::query()
+                ->whereKey($validated['sport_category_id'])
+                ->where('sport_id', $meetSport->sport_id)
+                ->exists();
+
+            if (! $categoryMatchesSport) {
+                throw ValidationException::withMessages([
+                    'sport_category_id' => __('The selected category does not belong to the selected sport.'),
+                ]);
+            }
+        }
 
         // The (meet_sport_id, user_id, role) unique index (migration
         // 2026_08_02_090926) is the real guarantee; this check exists
@@ -118,6 +145,7 @@ class MeetSportAssignmentController extends Controller
         $assignment = MeetSportAssignment::create([
             'meet_sport_id' => $validated['meet_sport_id'],
             'user_id' => $validated['user_id'],
+            'sport_category_id' => $validated['sport_category_id'] ?? null,
             'role' => $validated['role'],
             'is_lead' => $request->boolean('is_lead'),
             'start_date' => $validated['start_date'] ?? null,
@@ -145,6 +173,8 @@ class MeetSportAssignmentController extends Controller
      */
     public function updateStatus(Request $request, MeetSportAssignment $meetSportAssignment): RedirectResponse
     {
+        $this->authorizeManage($request);
+
         $validated = $request->validate([
             'status' => ['required', Rule::enum(MeetSportAssignmentStatus::class)],
         ]);
@@ -170,8 +200,10 @@ class MeetSportAssignmentController extends Controller
      * for correcting a mistaken assignment, not recording a normal
      * lifecycle transition).
      */
-    public function destroy(MeetSportAssignment $meetSportAssignment): RedirectResponse
+    public function destroy(Request $request, MeetSportAssignment $meetSportAssignment): RedirectResponse
     {
+        $this->authorizeManage($request);
+
         $meetSportAssignment->load(['meetSport.meet:id,name', 'meetSport.sport:id,name', 'user:id,name', 'person:id,full_name']);
 
         $context = [
@@ -193,5 +225,10 @@ class MeetSportAssignmentController extends Controller
     private function assignmentName(MeetSportAssignment $assignment): string
     {
         return $assignment->user?->name ?? $assignment->person?->full_name ?? __('Unknown person');
+    }
+
+    private function authorizeManage(Request $request): void
+    {
+        abort_unless(Gate::allows('manage-meet-data') || $request->user()->canManageProductionAccounts(), 403);
     }
 }

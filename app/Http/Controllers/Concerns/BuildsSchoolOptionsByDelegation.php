@@ -21,24 +21,20 @@ trait BuildsSchoolOptionsByDelegation
      */
     protected function schoolOptionsByDelegation(Collection $delegations): array
     {
-        $schoolsByDistrict = School::query()
+        $schools = School::query()
             ->where('active', true)
             ->orderBy('name')
             ->with(['district:id,name', 'schoolDistrict:id,name'])
-            ->get(['id', 'name', 'district_id', 'school_district_id'])
-            ->groupBy('district_id');
+            ->get(['id', 'name', 'school_id_code', 'district_id', 'school_district_id']);
 
         return $delegations
-            ->mapWithKeys(function (Delegation $delegation) use ($schoolsByDistrict): array {
-                $options = $delegation->school_id !== null
-                    ? collect([$delegation->school])->filter()
-                    : ($schoolsByDistrict->get($delegation->district_id) ?? collect());
-
+            ->mapWithKeys(function (Delegation $delegation) use ($schools): array {
                 return [
-                    $delegation->id => $options
+                    $delegation->id => $schools
                         ->map(fn (School $school): array => [
                             'id' => $school->id,
                             'name' => $school->name,
+                            'school_id_code' => $school->school_id_code,
                             'district' => $school->district?->name ?? '',
                             'school_district_id' => $school->school_district_id,
                             'school_district' => $school->schoolDistrict?->name ?? $school->district?->name ?? '',

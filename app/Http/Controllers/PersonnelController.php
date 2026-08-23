@@ -44,7 +44,7 @@ class PersonnelController extends Controller
         $search = $this->searchTerm($request);
 
         $query = Personnel::query()
-            ->with(['school:id,name', 'delegation.meet:id,name', 'sports:id,name'])
+            ->with(['school:id,name', 'delegation.meet:id,name', 'sports:id,name', 'user:id,name,email'])
             ->orderBy('last_name')
             ->orderBy('first_name');
 
@@ -78,9 +78,11 @@ class PersonnelController extends Controller
                     'coaches' => $person->role->coaches(),
                     'phone' => $person->phone,
                     'email' => $person->email,
+                    'user_id' => $person->user_id,
+                    'account' => $person->user?->name,
                     'sports' => $person->sports->pluck('name')->all(),
                     'sport_ids' => $person->sports->pluck('id')->all(),
-                    'school' => $person->school->name,
+                    'school' => $person->school?->name ?? $person->delegation->registrantName(),
                     'meet' => $person->delegation->meet->name,
                     'photo_url' => $person->photo_upload_id === null
                         ? null
@@ -100,6 +102,13 @@ class PersonnelController extends Controller
                 ->where('active', true)
                 ->orderBy('name')
                 ->get(['id', 'name']),
+            'userOptions' => $user->canManagePersonnel()
+                ? User::query()->orderBy('name')->get(['id', 'name', 'email'])
+                    ->map(fn (User $account): array => [
+                        'id' => $account->id,
+                        'label' => $account->name.' — '.($account->email ?? __('No email')),
+                    ])
+                : [],
             'schoolOptionsByDelegation' => $this->schoolOptionsByDelegation($delegations->get()),
         ]);
     }
@@ -127,7 +136,8 @@ class PersonnelController extends Controller
 
         Gate::authorize('create', [Personnel::class, $delegation]);
 
-        $person = new Personnel($request->safe()->except(['photo']));
+        $person = new Personnel($request->safe()->except(['photo', 'user_id']));
+        $person->user_id = $request->integer('user_id') ?: null;
 
         if ($request->hasFile('photo')) {
             /** @var User $user */
@@ -140,7 +150,7 @@ class PersonnelController extends Controller
         $this->audit->record('personnel.created', $person, [
             'name' => $person->fullName(),
             'role' => $person->role->value,
-            'school' => $person->school->name,
+            'school' => $person->school?->name ?? $delegation->registrantName(),
             'registrant' => $delegation->registrantName(),
         ]);
 
@@ -157,7 +167,8 @@ class PersonnelController extends Controller
     {
         Gate::authorize('update', $personnel);
 
-        $personnel->fill($request->safe()->except(['photo', 'delegation_id']));
+        $personnel->fill($request->safe()->except(['photo', 'delegation_id', 'user_id']));
+        $personnel->user_id = $request->integer('user_id') ?: null;
 
         $oldPhoto = null;
 

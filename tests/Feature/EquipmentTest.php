@@ -139,7 +139,7 @@ test('a supply team member from a different meet cannot manage this meet\'s equi
 test('organizers can create a category', function () {
     $meet = Meet::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/equipment-categories', [
             'meet_id' => $meet->id,
             'name' => 'Basketballs',
@@ -184,7 +184,7 @@ test('creating a second category with the same name for the same meet fails with
 test('organizers can update and remove a category', function () {
     $category = EquipmentCategory::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->put("/equipment-categories/{$category->id}", [
             'name' => 'Renamed',
             'is_consumable' => true,
@@ -193,7 +193,7 @@ test('organizers can update and remove a category', function () {
 
     expect($category->fresh())->name->toBe('Renamed')->is_consumable->toBeTrue();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->delete("/equipment-categories/{$category->id}")
         ->assertSessionHasNoErrors();
 
@@ -206,7 +206,7 @@ test('organizers can add an item to a category', function () {
     $category = EquipmentCategory::factory()->create();
     $venue = Venue::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/equipment-items', [
             'equipment_category_id' => $category->id,
             'venue_id' => $venue->id,

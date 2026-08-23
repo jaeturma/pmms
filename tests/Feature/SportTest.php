@@ -26,7 +26,7 @@ test('the sports catalog renders with the manage flag per role', function () {
             ->has('sports.data', 1)
             ->where('canManage', false));
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->get('/sports')
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('canManage', true));
@@ -52,7 +52,7 @@ test('sports show the tournament manager from the active meet assignment', funct
 });
 
 test('organizers can create sports', function () {
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/sports', ['name' => 'Athletics'])
         ->assertRedirect();
 
@@ -134,7 +134,7 @@ test('the sports catalog lists technical official options and current assignment
     $official = User::factory()->technicalOfficial()->create();
     $sport->technicalOfficials()->attach($official);
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->get('/sports')
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('sports.data.0.technical_officials.0.id', $official->id)
@@ -145,7 +145,7 @@ test('organizers can assign technical officials to a sport', function () {
     $sport = Sport::factory()->create();
     $official = User::factory()->technicalOfficial()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->put("/sports/{$sport->id}/technical-officials", ['user_ids' => [$official->id]])
         ->assertRedirect();
 
@@ -180,7 +180,7 @@ test('the sports catalog lists tournament manager options and the current assign
     $manager = User::factory()->tournamentManager()->create();
     $sport->forceFill(['tournament_manager_id' => $manager->id])->save();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->get('/sports')
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('sports.data.0.tournament_manager.id', $manager->id)
@@ -191,7 +191,7 @@ test('organizers can assign a tournament manager to a sport', function () {
     $sport = Sport::factory()->create();
     $manager = User::factory()->tournamentManager()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->put("/sports/{$sport->id}/tournament-manager", ['user_id' => $manager->id])
         ->assertRedirect();
 
@@ -204,7 +204,7 @@ test('organizers can clear a sport\'s tournament manager', function () {
     $sport = Sport::factory()->create();
     $sport->forceFill(['tournament_manager_id' => $manager->id])->save();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->put("/sports/{$sport->id}/tournament-manager", ['user_id' => null])
         ->assertRedirect();
 

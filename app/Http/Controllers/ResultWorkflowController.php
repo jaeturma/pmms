@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ManagementTeamMemberStatus;
+use App\Enums\MatchStatus;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\ResultStatus;
@@ -10,6 +11,7 @@ use App\Models\EventResult;
 use App\Models\ResultAttachment;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\CompetitionAccessService;
 use App\Services\FileUploadService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -171,7 +173,7 @@ class ResultWorkflowController extends Controller
     private function competitionIsCompleted(EventResult $result): void
     {
         $result->loadMissing('match');
-        abort_unless(in_array($result->match?->status, [\App\Enums\MatchStatus::Completed, \App\Enums\MatchStatus::Walkover], true), 422, 'The competition must be completed before submission.');
+        abort_unless(in_array($result->match?->status, [MatchStatus::Completed, MatchStatus::Walkover], true), 422, 'The competition must be completed before submission.');
     }
 
     public function returnResult(Request $request, EventResult $result): RedirectResponse
@@ -254,7 +256,7 @@ class ResultWorkflowController extends Controller
             return true;
         }
 
-        return $user->meetSportAssignments()
+        $hasRole = $user->meetSportAssignments()
             ->where('status', MeetSportAssignmentStatus::Active)
             ->whereIn('role', [
                 MeetSportAssignmentRole::TournamentManager,
@@ -262,10 +264,10 @@ class ResultWorkflowController extends Controller
                 MeetSportAssignmentRole::TournamentSecretary,
                 MeetSportAssignmentRole::TournamentICT,
             ])
-            ->whereHas('meetSport', fn ($query) => $query
-                ->where('meet_id', $result->meet_id)
-                ->where('sport_id', $result->event()->value('sport_id')))
             ->exists();
+
+        return $hasRole && app(CompetitionAccessService::class)
+            ->canAccessEvent($user, $result->event, $result->meet_id);
     }
 
     private function authorizeEventSecretariat(User $user, EventResult $result): void
@@ -279,7 +281,7 @@ class ResultWorkflowController extends Controller
             return true;
         }
 
-        return $user->meetSportAssignments()
+        $hasRole = $user->meetSportAssignments()
             ->where('status', MeetSportAssignmentStatus::Active)
             ->whereIn('role', [
                 MeetSportAssignmentRole::TournamentManager,
@@ -290,10 +292,10 @@ class ResultWorkflowController extends Controller
                 MeetSportAssignmentRole::GirlsTournamentManager,
                 MeetSportAssignmentRole::CategoryTournamentManager,
             ])
-            ->whereHas('meetSport', fn ($query) => $query
-                ->where('meet_id', $result->meet_id)
-                ->where('sport_id', $result->event()->value('sport_id')))
             ->exists();
+
+        return $hasRole && app(CompetitionAccessService::class)
+            ->canAccessEvent($user, $result->event, $result->meet_id);
     }
 
     private function isEventSecretariat(User $user, EventResult $result): bool

@@ -1,7 +1,9 @@
 <?php
 
+use App\Models\CoachOnboardingRequest;
 use App\Models\District;
 use App\Models\Event;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\RateLimiter;
 use Laravel\Fortify\Features;
 
@@ -20,8 +22,8 @@ test('new users register pending approval and are not logged in', function () {
     $response = $this->post(route('register.store'), [
         'name' => 'Test User',
         'email' => 'test@example.com',
-        'password' => 'password',
-        'password_confirmation' => 'password',
+        'password' => 'Password1!',
+        'password_confirmation' => 'Password1!',
         'code_challenge' => 'ABC12',
     ]);
 
@@ -29,6 +31,39 @@ test('new users register pending approval and are not logged in', function () {
     $response->assertRedirect(route('login'));
     $this->assertDatabaseHas('users', ['email' => 'test@example.com', 'approval_status' => 'pending']);
 });
+
+test('registration enforces account field character limits', function () {
+    $this->get(route('register'));
+
+    $this->post(route('register.store'), [
+        'name' => str_repeat('N', 51),
+        'email' => str_repeat('e', 40).'@example.com',
+        'password' => str_repeat('p', 21),
+        'password_confirmation' => str_repeat('p', 21),
+        'code_challenge' => 'ABC12',
+    ])->assertSessionHasErrors(['name', 'email', 'password']);
+
+    $this->assertGuest();
+});
+
+test('registration requires a strong password', function (string $password) {
+    $this->get(route('register'));
+
+    $this->post(route('register.store'), [
+        'name' => 'Password Test',
+        'email' => 'password-test@example.com',
+        'password' => $password,
+        'password_confirmation' => $password,
+        'code_challenge' => 'ABC12',
+    ])->assertSessionHasErrors('password');
+
+    $this->assertGuest();
+})->with([
+    'missing lowercase letter' => 'PASSWORD1!',
+    'missing capital letter' => 'password1!',
+    'missing number' => 'Password!',
+    'missing special character' => 'Password1',
+]);
 
 test('coach registration requires and stores a municipality team', function () {
     $municipality = District::factory()->create();
@@ -38,8 +73,8 @@ test('coach registration requires and stores a municipality team', function () {
     $this->post(route('register.store'), [
         'name' => 'Coach User',
         'email' => 'coach@example.com',
-        'password' => 'password',
-        'password_confirmation' => 'password',
+        'password' => 'Password1!',
+        'password_confirmation' => 'Password1!',
         'account_type' => 'coach',
         'code_challenge' => 'ABC12',
     ])->assertSessionHasErrors('district_id');
@@ -48,11 +83,13 @@ test('coach registration requires and stores a municipality team', function () {
     $this->post(route('register.store'), [
         'name' => 'Coach User',
         'email' => 'coach@example.com',
-        'password' => 'password',
-        'password_confirmation' => 'password',
+        'password' => 'Password1!',
+        'password_confirmation' => 'Password1!',
         'account_type' => 'coach',
         'district_id' => $municipality->id,
         'event_ids' => $events->modelKeys(),
+        'coach_profile' => UploadedFile::fake()->image('coach.jpg'),
+        'coach_certification' => UploadedFile::fake()->create('certificate.pdf', 100, 'application/pdf'),
         'code_challenge' => 'ABC12',
     ])->assertSessionHasNoErrors();
 
@@ -60,6 +97,8 @@ test('coach registration requires and stores a municipality team', function () {
         'district_id' => $municipality->id,
         'event_id' => $events->first()->id,
     ]);
+    expect(CoachOnboardingRequest::query()->sole()->profile_upload_id)->not->toBeNull()
+        ->and(CoachOnboardingRequest::query()->sole()->certification_upload_id)->not->toBeNull();
     foreach ($events as $event) {
         $this->assertDatabaseHas('coach_onboarding_request_event', ['event_id' => $event->id]);
     }
@@ -68,6 +107,23 @@ test('coach registration requires and stores a municipality team', function () {
         'email' => 'coach@example.com',
         'approval_status' => 'pending',
     ]);
+
+    $this->get(route('register'));
+    $this->post(route('register.store'), [
+        'name' => 'Coach Without Documents',
+        'email' => 'coach-no-documents@example.com',
+        'password' => 'Password1!',
+        'password_confirmation' => 'Password1!',
+        'account_type' => 'coach',
+        'district_id' => $municipality->id,
+        'event_ids' => [$events->first()->id],
+        'code_challenge' => 'ABC12',
+    ])->assertSessionHasNoErrors();
+
+    $withoutDocuments = CoachOnboardingRequest::query()->whereHas('user', fn ($query) => $query
+        ->where('email', 'coach-no-documents@example.com'))->sole();
+    expect($withoutDocuments->profile_upload_id)->toBeNull()
+        ->and($withoutDocuments->certification_upload_id)->toBeNull();
 });
 
 test('registration rejects an incorrect image verification code', function () {
@@ -76,8 +132,8 @@ test('registration rejects an incorrect image verification code', function () {
     $this->post(route('register.store'), [
         'name' => 'Test User',
         'email' => 'wrong-code@example.com',
-        'password' => 'password',
-        'password_confirmation' => 'password',
+        'password' => 'Password1!',
+        'password_confirmation' => 'Password1!',
         'code_challenge' => 'WRONG',
     ])->assertSessionHasErrors('code_challenge');
 

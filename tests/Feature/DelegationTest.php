@@ -72,7 +72,7 @@ test('organizers can register a delegation for an open meet (City: by school)', 
     $meet = Meet::factory()->registrationOpen()->create();
     $school = School::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/delegations', [
             'meet_id' => $meet->id,
             'school_id' => $school->id,
@@ -97,7 +97,7 @@ test('organizers can register a delegation for an open meet (Province: by munici
     $meet = Meet::factory()->registrationOpen()->create();
     $district = District::factory()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->post('/delegations', [
             'meet_id' => $meet->id,
             'district_id' => $district->id,
@@ -208,7 +208,7 @@ test('managers can assign officers with the delegation officer role', function (
     $delegation = Delegation::factory()->create();
     $officer = User::factory()->delegationOfficer()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->put("/delegations/{$delegation->id}/officers", ['user_ids' => [$officer->id]])
         ->assertRedirect();
 
@@ -304,7 +304,7 @@ test('viewers cannot submit delegations', function () {
 test('organizers can approve submitted delegations', function () {
     $delegation = Delegation::factory()->submitted()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->patch("/delegations/{$delegation->id}/approve")
         ->assertRedirect();
 
@@ -334,7 +334,7 @@ test('officers cannot approve their own delegation', function () {
 test('organizers can return submitted delegations to draft', function () {
     $delegation = Delegation::factory()->submitted()->create();
 
-    $this->actingAs(User::factory()->organizer()->create())
+    $this->actingAs(User::factory()->admin()->create())
         ->patch("/delegations/{$delegation->id}/return")
         ->assertRedirect();
 

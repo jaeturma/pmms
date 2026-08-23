@@ -6,6 +6,8 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
+import { PaginationControls } from '@/components/pagination-controls';
+import type { Paginated } from '@/components/pagination-controls';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -65,7 +67,7 @@ type Option = { id: number; label: string };
 type ValueLabel = { value: string; label: string };
 
 type Props = {
-    teams: Team[];
+    teams: Paginated<Team>;
     teamTypeOptions: ValueLabel[];
     teamStatusOptions: ValueLabel[];
     memberStatusOptions: ValueLabel[];
@@ -254,9 +256,7 @@ function EditTeamDialog({
                         <Label htmlFor="edit-team-status">Status</Label>
                         <Select
                             value={data.status}
-                            onValueChange={(value) =>
-                                setData('status', value)
-                            }
+                            onValueChange={(value) => setData('status', value)}
                         >
                             <SelectTrigger id="edit-team-status">
                                 <SelectValue />
@@ -340,9 +340,7 @@ function AddMemberDialog({
                         <Label htmlFor="member-user">Person</Label>
                         <Select
                             value={data.user_id}
-                            onValueChange={(value) =>
-                                setData('user_id', value)
-                            }
+                            onValueChange={(value) => setData('user_id', value)}
                         >
                             <SelectTrigger id="member-user">
                                 <SelectValue placeholder="Select a person" />
@@ -530,9 +528,7 @@ function TeamCard({
                                                     (status) => (
                                                         <SelectItem
                                                             key={status.value}
-                                                            value={
-                                                                status.value
-                                                            }
+                                                            value={status.value}
                                                         >
                                                             {status.label}
                                                         </SelectItem>
@@ -640,7 +636,7 @@ export default function ManagementTeams({
                     }
                 />
 
-                {teams.length === 0 ? (
+                {teams.data.length === 0 ? (
                     <EmptyState
                         icon={ClipboardList}
                         title="No teams yet"
@@ -648,7 +644,7 @@ export default function ManagementTeams({
                     />
                 ) : (
                     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                        {teams.map((team) => (
+                        {teams.data.map((team) => (
                             <TeamCard
                                 key={team.id}
                                 team={team}
@@ -660,6 +656,11 @@ export default function ManagementTeams({
                         ))}
                     </div>
                 )}
+                <PaginationControls
+                    page={teams}
+                    url={index().url}
+                    label="management teams"
+                />
             </div>
 
             <CreateTeamDialog

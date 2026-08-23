@@ -167,6 +167,8 @@ export type PortalDay = {
 
 export type PortalScheduleSlot = {
     id: number;
+    sport_id: number;
+    sport: string;
     starts_at: string;
     ends_at: string;
     event: string;

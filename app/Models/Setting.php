@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
@@ -24,6 +25,9 @@ use Illuminate\Support\Carbon;
  */
 #[Fillable([
     'recaptcha_enabled',
+    'app_title',
+    'facebook_live_enabled',
+    'facebook_live_url',
     'recaptcha_site_key',
     'recaptcha_secret_key',
     'smtp_host',
@@ -48,6 +52,7 @@ class Setting extends Model
     {
         return [
             'recaptcha_enabled' => 'boolean',
+            'facebook_live_enabled' => 'boolean',
             // Laravel's 'encrypted' cast transparently encrypts on save
             // and decrypts on read using APP_KEY — these two are the only
             // real secrets this app stores in the database anywhere.
@@ -65,6 +70,11 @@ class Setting extends Model
     public static function current(): self
     {
         return static::query()->firstOrCreate([], []);
+    }
+
+    public function appLogo(): BelongsTo
+    {
+        return $this->belongsTo(FileUpload::class, 'app_logo_upload_id');
     }
 
     /**

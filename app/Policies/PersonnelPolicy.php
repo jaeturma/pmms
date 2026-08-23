@@ -15,12 +15,13 @@ class PersonnelPolicy
      */
     public function viewAny(User $user): bool
     {
-        return $user->hasRole(UserRole::Admin, UserRole::Organizer, UserRole::DelegationOfficer, UserRole::Coach);
+        return $user->canManagePersonnel()
+            || $user->hasRole(UserRole::Organizer, UserRole::DelegationOfficer, UserRole::Coach);
     }
 
     public function view(User $user, Personnel $personnel): bool
     {
-        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+        if ($user->canManagePersonnel() || $user->hasRole(UserRole::Organizer)) {
             return true;
         }
 
@@ -29,22 +30,12 @@ class PersonnelPolicy
 
     public function create(User $user, Delegation $delegation): bool
     {
-        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
-            return true;
-        }
-
-        return ($delegation->hasOfficer($user) || $delegation->hasCoach($user)) && $delegation->isEditableByOfficers();
+        return $user->canManagePersonnel();
     }
 
     public function update(User $user, Personnel $personnel): bool
     {
-        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
-            return true;
-        }
-
-        $delegation = $personnel->delegation;
-
-        return ($delegation->hasOfficer($user) || $delegation->hasCoach($user)) && $delegation->isEditableByOfficers();
+        return $user->canManagePersonnel();
     }
 
     public function delete(User $user, Personnel $personnel): bool

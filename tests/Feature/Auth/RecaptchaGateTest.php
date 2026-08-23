@@ -44,8 +44,8 @@ test('registration is blocked without a reCAPTCHA response once enabled and conf
     $this->post(route('register.store'), [
         'name' => 'Test User',
         'email' => 'test@example.com',
-        'password' => 'password',
-        'password_confirmation' => 'password',
+        'password' => 'Valid#Pass1',
+        'password_confirmation' => 'Valid#Pass1',
         'code_challenge' => 'ABC12',
     ])->assertSessionHasErrors('recaptcha');
 
@@ -61,8 +61,8 @@ test('registration succeeds once the reCAPTCHA token verifies', function () {
     $this->post(route('register.store'), [
         'name' => 'Test User',
         'email' => 'test@example.com',
-        'password' => 'password',
-        'password_confirmation' => 'password',
+        'password' => 'Valid#Pass1',
+        'password_confirmation' => 'Valid#Pass1',
         'g-recaptcha-response' => 'a-token',
         'code_challenge' => 'ABC12',
     ])->assertRedirect(route('login', absolute: false));

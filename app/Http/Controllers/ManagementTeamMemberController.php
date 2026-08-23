@@ -7,6 +7,7 @@ use App\Models\ManagementTeamMember;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -27,6 +28,8 @@ class ManagementTeamMemberController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        $this->authorizeManage($request);
+
         $validated = $request->validate([
             'management_team_id' => ['required', 'integer', Rule::exists('management_teams', 'id')],
             'user_id' => ['required', 'integer', Rule::exists('users', 'id')],
@@ -71,6 +74,8 @@ class ManagementTeamMemberController extends Controller
      */
     public function updateStatus(Request $request, ManagementTeamMember $managementTeamMember): RedirectResponse
     {
+        $this->authorizeManage($request);
+
         $validated = $request->validate([
             'status' => ['required', Rule::enum(ManagementTeamMemberStatus::class)],
         ]);
@@ -93,8 +98,10 @@ class ManagementTeamMemberController extends Controller
     /**
      * Remove a person from a team outright.
      */
-    public function destroy(ManagementTeamMember $managementTeamMember): RedirectResponse
+    public function destroy(Request $request, ManagementTeamMember $managementTeamMember): RedirectResponse
     {
+        $this->authorizeManage($request);
+
         $managementTeamMember->load(['managementTeam:id,name', 'user:id,name', 'person:id,full_name']);
 
         $context = [
@@ -114,5 +121,10 @@ class ManagementTeamMemberController extends Controller
     private function memberName(ManagementTeamMember $member): string
     {
         return $member->user?->name ?? $member->person?->full_name ?? __('Unknown person');
+    }
+
+    private function authorizeManage(Request $request): void
+    {
+        abort_unless(Gate::allows('manage-meet-data') || $request->user()->canManageProductionAccounts(), 403);
     }
 }

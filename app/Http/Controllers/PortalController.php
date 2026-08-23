@@ -22,6 +22,7 @@ use App\Models\MeetSportAssignment;
 use App\Models\ResultPlacement;
 use App\Models\School;
 use App\Models\ScoringSession;
+use App\Models\Setting;
 use App\Models\Sport;
 use App\Models\SportCategory;
 use App\Models\Venue;
@@ -51,6 +52,7 @@ class PortalController extends Controller
     public function home(MedalTallyService $tally): Response
     {
         $meet = Meet::query()->published()->active()->first();
+        $settings = Setting::current();
 
         // Computed once and shared by `currentLeaders()`/`closingSummary()`
         // below (WP-08.5-09) — both need the same district-points ranking;
@@ -65,7 +67,16 @@ class PortalController extends Controller
             'meet' => $meet === null ? null : $this->meetSummary($meet),
             'municipalities' => $meet === null ? [] : $this->competingMunicipalities($meet),
             'announcements' => $this->publishedAnnouncements($meet?->id),
-            'liveMatches' => $meet === null ? [] : $this->liveMatches($meet),
+            'facebookLive' => $settings->facebook_live_enabled && filled($settings->facebook_live_url)
+                ? [
+                    'url' => $settings->facebook_live_url,
+                    'embed_url' => 'https://www.facebook.com/plugins/video.php?'.http_build_query([
+                        'href' => $settings->facebook_live_url,
+                        'show_text' => 'false',
+                        'autoplay' => 'false',
+                    ]),
+                ]
+                : null,
             'currentLeaders' => $districtStandings === null ? [] : $this->currentLeaders($districtStandings),
             'upcomingEvents' => $meet === null ? [] : $this->upcomingEvents($meet),
             'latestResult' => $meet === null ? null : $this->latestResult($meet),
@@ -126,6 +137,15 @@ class PortalController extends Controller
                 ])
                 ->all(),
             'selectedDay' => $selectedDay,
+            'sportOptions' => $slots
+                ->map(fn (EventSchedule $slot): array => [
+                    'value' => (string) $slot->event->sport->id,
+                    'label' => $slot->event->sport->name,
+                ])
+                ->unique('value')
+                ->sortBy('label')
+                ->values()
+                ->all(),
             'venuesForDay' => $slots
                 ->filter(fn (EventSchedule $slot): bool => $slot->scheduled_date->toDateString() === $selectedDay)
                 ->groupBy(fn (EventSchedule $slot): string => $slot->venue->name)
@@ -135,6 +155,8 @@ class PortalController extends Controller
                     'slots' => $group
                         ->map(fn (EventSchedule $slot): array => [
                             'id' => $slot->id,
+                            'sport_id' => $slot->event->sport->id,
+                            'sport' => $slot->event->sport->name,
                             'starts_at' => substr($slot->starts_at, 0, 5),
                             'ends_at' => substr($slot->ends_at, 0, 5),
                             'event' => sprintf(
