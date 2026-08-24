@@ -81,11 +81,11 @@ class AthleteController extends Controller
                 ->where(fn ($athletes) => $athletes
                     ->whereDoesntHave('entries')
                     ->orWhereHas('entries', fn ($entries) => $entries->whereIn('event_id', $assignedEventIds)));
+        } elseif (! $user->isAdmin() && $user->tournamentEventIds()->isNotEmpty()) {
+            $query->whereHas('entries', fn ($entries) => $entries->whereIn('event_id', $user->tournamentEventIds()));
         } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer)
             && $user->hasPermission(Permission::AthleteEligibilityReview, Meet::current())) {
             $query->whereHas('delegation', fn ($delegation) => $delegation->where('meet_id', Meet::current()->id));
-        } elseif ($user->tournamentEventIds()->isNotEmpty()) {
-            $query->whereHas('entries', fn ($entries) => $entries->whereIn('event_id', $user->tournamentEventIds()));
         } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer) && ! $user->canManageProductionAccounts()) {
             $assignments = $user->athleteOversightAssignments()->where('active', true)->get();
             $query->whereHas('school', function ($school) use ($assignments): void {
@@ -336,7 +336,7 @@ class AthleteController extends Controller
                 'meet_id' => $athlete->delegation->meet_id,
             ]);
 
-            if ($user->role === UserRole::Coach) {
+            if ($user->role === UserRole::Coach && $request->filled('event_id')) {
                 Entry::query()->create([
                     'delegation_id' => $athlete->delegation_id,
                     'athlete_id' => $athlete->id,
@@ -350,7 +350,7 @@ class AthleteController extends Controller
             'school' => $athlete->school->name,
             'registrant' => $delegation->registrantName(),
         ]);
-        if ($user->role === UserRole::Coach) {
+        if ($user->role === UserRole::Coach && $request->filled('event_id')) {
             $entry = $athlete->entries()->with('event')->sole();
             $this->audit->record('entry.auto_assigned', $entry, [
                 'athlete' => $athlete->fullName(),

@@ -2,8 +2,14 @@
 
 use App\Enums\AgeDivision;
 use App\Enums\GenderCategory;
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
+use App\Enums\UserRole;
 use App\Models\AuditLog;
 use App\Models\Event;
+use App\Models\Meet;
+use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
 use App\Models\Sport;
 use App\Models\User;
 use Database\Seeders\SportsCatalogSeeder;
@@ -119,6 +125,40 @@ test('admins can update an event', function () {
         ->is_team_event->toBeTrue()
         ->and(AuditLog::query()->where('action', 'event.updated')->exists())->toBeTrue();
 });
+
+test('tournament ICT and secretaries can create and update events only for assigned sports', function (MeetSportAssignmentRole $role, UserRole $userRole) {
+    $meet = Meet::current();
+    $assignedSport = Sport::factory()->create();
+    $otherSport = Sport::factory()->create();
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $assignedSport->id]);
+    $user = User::factory()->create(['role' => $userRole]);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $user->id,
+        'role' => $role,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+    Event::factory()->create(['sport_id' => $otherSport->id]);
+
+    $this->actingAs($user)->get('/events')->assertInertia(fn (AssertableInertia $page) => $page
+        ->where('canManage', true)
+        ->where('canArchive', false)
+        ->where('sports', fn ($sports) => collect($sports)->pluck('id')->all() === [$assignedSport->id])
+        ->where('events.data', fn ($events) => collect($events)->every(fn ($event) => $event['sport_id'] === $assignedSport->id)));
+
+    $this->actingAs($user)->post('/events', validEventPayload($assignedSport))->assertSessionHasNoErrors();
+    $this->actingAs($user)->post('/events', [...validEventPayload($otherSport), 'name' => 'Forbidden Event'])->assertForbidden();
+
+    $event = Event::factory()->create(['sport_id' => $assignedSport->id]);
+    $this->actingAs($user)->put("/events/{$event->id}", [...validEventPayload($assignedSport), 'name' => 'Allowed Update'])->assertSessionHasNoErrors();
+    $this->actingAs($user)->patch("/events/{$event->id}/archive")->assertForbidden();
+    $this->actingAs($user)->delete("/events/{$event->id}")->assertForbidden();
+
+    expect($event->fresh()->name)->toBe('Allowed Update');
+})->with([
+    'Tournament ICT' => [MeetSportAssignmentRole::TournamentICT, UserRole::TournamentICT],
+    'Tournament Secretary' => [MeetSportAssignmentRole::TournamentSecretary, UserRole::TournamentSecretary],
+]);
 
 test('archiving and restoring an event toggles active', function () {
     $event = Event::factory()->create();

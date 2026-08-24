@@ -487,6 +487,8 @@ test('an assigned tournament or assistant manager can only view and manage sched
 })->with([
     'tournament manager' => MeetSportAssignmentRole::TournamentManager,
     'assistant tournament manager' => MeetSportAssignmentRole::AssistantTournamentManager,
+    'tournament secretary' => MeetSportAssignmentRole::TournamentSecretary,
+    'tournament ICT' => MeetSportAssignmentRole::TournamentICT,
 ]);
 
 test('viewers and delegation officers cannot manage the schedule', function (User $user) {

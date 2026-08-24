@@ -12,6 +12,7 @@ use App\Models\MeetSportAssignment;
 use App\Models\Sport;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\FileUploadService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -25,7 +26,10 @@ class SportController extends Controller
 {
     use SearchesAndPaginates;
 
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(
+        private readonly AuditLogger $audit,
+        private readonly FileUploadService $uploads,
+    ) {}
 
     /**
      * Searchable, paginated sports catalog.
@@ -65,6 +69,7 @@ class SportController extends Controller
                         'name' => $sport->name,
                         'active' => $sport->active,
                         'events_count' => $sport->events_count,
+                        'photo_url' => $sport->photoUrl(),
                         'technical_officials' => $sport->technicalOfficials
                             ->map(fn (User $official): array => [
                                 'id' => $official->id,
@@ -110,7 +115,13 @@ class SportController extends Controller
      */
     public function store(SportRequest $request): RedirectResponse
     {
-        $sport = Sport::create($request->validated());
+        $sport = new Sport($request->safe()->except(['photo', 'remove_photo']));
+
+        if ($request->hasFile('photo')) {
+            $sport->photo_upload_id = $this->uploads->store($request->file('photo'), $request->user(), 'photo')->id;
+        }
+
+        $sport->save();
 
         $this->audit->record('sport.created', $sport, ['name' => $sport->name]);
 
@@ -124,7 +135,22 @@ class SportController extends Controller
      */
     public function update(SportRequest $request, Sport $sport): RedirectResponse
     {
-        $sport->update($request->validated());
+        $sport->fill($request->safe()->except(['photo', 'remove_photo']));
+        $oldPhoto = null;
+
+        if ($request->hasFile('photo')) {
+            $oldPhoto = $sport->photo;
+            $sport->photo_upload_id = $this->uploads->store($request->file('photo'), $request->user(), 'photo')->id;
+        } elseif ($request->boolean('remove_photo') && $sport->photo_upload_id !== null) {
+            $oldPhoto = $sport->photo;
+            $sport->photo_upload_id = null;
+        }
+
+        $sport->save();
+
+        if ($oldPhoto !== null) {
+            $this->uploads->delete($oldPhoto);
+        }
 
         $this->audit->record('sport.updated', $sport, ['name' => $sport->name]);
 

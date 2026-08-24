@@ -3,6 +3,7 @@
 use App\Models\CoachOnboardingRequest;
 use App\Models\District;
 use App\Models\Event;
+use App\Models\Setting;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\RateLimiter;
 use Laravel\Fortify\Features;
@@ -30,6 +31,29 @@ test('new users register pending approval and are not logged in', function () {
     $this->assertGuest();
     $response->assertRedirect(route('login'));
     $this->assertDatabaseHas('users', ['email' => 'test@example.com', 'approval_status' => 'pending']);
+});
+
+test('administrators can suspend regular and coach account registrations independently', function () {
+    Setting::current()->forceFill(['user_registration_enabled' => false])->save();
+
+    $this->post(route('register.store'), [
+        'name' => 'Suspended User',
+        'email' => 'suspended@example.com',
+    ])->assertSessionHasErrors('registration');
+
+    Setting::current()->forceFill([
+        'user_registration_enabled' => true,
+        'coach_registration_enabled' => false,
+    ])->save();
+
+    $this->post(route('register.store'), [
+        'name' => 'Suspended Coach',
+        'email' => 'suspended-coach@example.com',
+        'account_type' => 'coach',
+    ])->assertSessionHasErrors('registration');
+
+    $this->assertDatabaseMissing('users', ['email' => 'suspended@example.com']);
+    $this->assertDatabaseMissing('users', ['email' => 'suspended-coach@example.com']);
 });
 
 test('registration enforces account field character limits', function () {

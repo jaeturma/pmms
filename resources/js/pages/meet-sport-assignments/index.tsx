@@ -1,5 +1,5 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { ClipboardList, Plus, Trash2 } from 'lucide-react';
+import { ClipboardList, Plus, Search, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -63,6 +63,7 @@ type ValueLabel = { value: string; label: string };
 
 type Props = {
     assignments: Paginated<Assignment>;
+    filters: { search: string };
     meetSportOptions: MeetSportOption[];
     sportCategoryOptions: SportCategoryOption[];
     roleOptions: ValueLabel[];
@@ -312,6 +313,7 @@ function CreateDialog({
 
 export default function MeetSportAssignments({
     assignments,
+    filters,
     meetSportOptions,
     sportCategoryOptions,
     roleOptions,
@@ -320,6 +322,11 @@ export default function MeetSportAssignments({
     canManage,
 }: Props) {
     const [createOpen, setCreateOpen] = useState(false);
+    const [search, setSearch] = useState(filters.search);
+    const submitSearch = (event: FormEvent) => {
+        event.preventDefault();
+        router.get(index().url, { search }, { preserveState: true });
+    };
 
     return (
         <>
@@ -337,6 +344,19 @@ export default function MeetSportAssignments({
                         )
                     }
                 />
+
+                <form onSubmit={submitSearch} className="flex max-w-xl gap-2">
+                    <Input
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                        placeholder="Search person, sport, role, category, or status"
+                        aria-label="Search tournament assignments"
+                    />
+                    <Button type="submit" variant="outline">
+                        <Search className="size-4" />
+                        Search
+                    </Button>
+                </form>
 
                 {assignments.data.length === 0 ? (
                     <EmptyState
@@ -480,6 +500,7 @@ export default function MeetSportAssignments({
                     page={assignments}
                     url={index().url}
                     label="assignments"
+                    params={{ search: filters.search }}
                 />
             </div>
 

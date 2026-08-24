@@ -277,6 +277,7 @@ export type PortalContestedSport = {
     id: number;
     name: string;
     event_count: number;
+    photo_url: string | null;
 };
 
 export type PortalSchool = {

@@ -10,6 +10,7 @@ use App\Models\Event;
 use App\Models\ManagementTeamMember;
 use App\Models\MeetSportAssignment;
 use App\Models\Person;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\DdOPAA2026Source;
 use App\Services\RegistrationCodeChallenge;
@@ -67,6 +68,7 @@ test('imported sport personnel without accounts render on the assignments page',
 });
 
 test('requesting coach onboarding does not self grant coach authority', function () {
+    Setting::current()->forceFill(['coach_registration_enabled' => true])->save();
     $municipality = District::factory()->create();
     $event = Event::factory()->create();
     request()->setLaravelSession(app('session.store'));

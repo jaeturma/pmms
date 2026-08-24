@@ -49,6 +49,7 @@ type UserRow = {
     email: string | null;
     role: string;
     role_label: string;
+    additional_roles: string[];
     person: string | null;
     roles: string[];
     assignments: Array<{ type: string; scope: string; status: string }>;
@@ -58,8 +59,61 @@ type UserRow = {
 };
 type RoleOption = { value: string; label: string; permissions: string[] };
 
+function AdditionalRoles({
+    roles,
+    primaryRole,
+    selected,
+    setSelected,
+}: {
+    roles: RoleOption[];
+    primaryRole: string;
+    selected: string[];
+    setSelected: (roles: string[]) => void;
+}) {
+    return (
+        <div className="grid gap-2">
+            <Label>Additional roles</Label>
+            <div className="grid gap-2 rounded-md border p-3 sm:grid-cols-2">
+                {roles
+                    .filter((role) => role.value !== primaryRole)
+                    .map((role) => (
+                        <label
+                            key={role.value}
+                            className="flex items-center gap-2 text-sm"
+                        >
+                            <Checkbox
+                                checked={selected.includes(role.value)}
+                                onCheckedChange={(checked) =>
+                                    setSelected(
+                                        checked
+                                            ? [...selected, role.value]
+                                            : selected.filter(
+                                                  (value) =>
+                                                      value !== role.value,
+                                              ),
+                                    )
+                                }
+                            />
+                            {role.label}
+                        </label>
+                    ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+                A user can hold multiple roles, such as Technical Official
+                and Tournament ICT.
+            </p>
+        </div>
+    );
+}
+
 function NewUser({ roles, close }: { roles: RoleOption[]; close: () => void }) {
-    const form = useForm({ name: '', username: '', email: '', role: 'viewer' });
+    const form = useForm({
+        name: '',
+        username: '',
+        email: '',
+        role: 'viewer',
+        additional_roles: [] as string[],
+    });
     const submit = (event: FormEvent) => {
         event.preventDefault();
         form.post('/system/users', { preserveScroll: true, onSuccess: close });
@@ -132,6 +186,17 @@ function NewUser({ roles, close }: { roles: RoleOption[]; close: () => void }) {
                             </SelectContent>
                         </Select>
                     </div>
+                    <AdditionalRoles
+                        roles={roles}
+                        primaryRole={form.data.role}
+                        selected={form.data.additional_roles.filter(
+                            (role) => role !== form.data.role,
+                        )}
+                        setSelected={(additionalRoles) =>
+                            form.setData('additional_roles', additionalRoles)
+                        }
+                    />
+                    <InputError message={form.errors.additional_roles} />
                     <p className="text-sm text-muted-foreground">
                         Initial password:{' '}
                         <span className="font-mono text-foreground">
@@ -170,6 +235,7 @@ function EditUser({
         username: user.username ?? '',
         email: user.email ?? '',
         role: user.role,
+        additional_roles: user.additional_roles,
         disabled: user.disabled,
     });
     const selectedRole = roles.find((role) => role.value === form.data.role);
@@ -224,6 +290,17 @@ function EditUser({
                             <InputError message={form.errors.email} />
                         </div>
                     </div>
+                    <AdditionalRoles
+                        roles={roles}
+                        primaryRole={form.data.role}
+                        selected={form.data.additional_roles.filter(
+                            (role) => role !== form.data.role,
+                        )}
+                        setSelected={(additionalRoles) =>
+                            form.setData('additional_roles', additionalRoles)
+                        }
+                    />
+                    <InputError message={form.errors.additional_roles} />
                     <div className="grid gap-2">
                         <Label>Role</Label>
                         <Select
@@ -464,7 +541,7 @@ export default function Users({
                                                         window.confirm(
                                                             `Reset ${user.name}'s password to DdOPaa2026!?`,
                                                         )
-                                                    )
+                                                    ) {
                                                         router.post(
                                                             `/system/users/${user.id}/reset-password`,
                                                             {},
@@ -472,6 +549,7 @@ export default function Users({
                                                                 preserveScroll: true,
                                                             },
                                                         );
+                                                    }
                                                 }}
                                             >
                                                 <KeyRound className="size-4" />

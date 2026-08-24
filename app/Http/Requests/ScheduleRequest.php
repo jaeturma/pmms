@@ -9,12 +9,22 @@ use App\Models\Meet;
 use App\Models\MeetSportVenue;
 use App\Models\SportCategory;
 use App\Models\SportCategoryCompetitionArea;
+use App\Services\CompetitionAccessService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class ScheduleRequest extends FormRequest
 {
+    public function authorize(): bool
+    {
+        $user = $this->user();
+        $access = app(CompetitionAccessService::class);
+
+        return $user !== null && ($user->isAdmin()
+            || $access->hasAssignmentRole($user, $access->competitionManagerRoles(), Meet::current()->id));
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *

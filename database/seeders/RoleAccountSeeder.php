@@ -43,6 +43,10 @@ class RoleAccountSeeder extends Seeder
             UserRole::DelegationOfficer->value => ['Delegation Officer', 'delegation.officer@pmms.test', $adminPassword],
             UserRole::TechnicalOfficial->value => ['Technical Official', 'technical.official@pmms.test', $adminPassword],
             UserRole::TournamentManager->value => ['Tournament Manager', 'tournament.manager@pmms.test', $adminPassword],
+            UserRole::TournamentICT->value => ['Tournament ICT', 'tournament.ict@pmms.test', $adminPassword],
+            UserRole::TournamentSecretary->value => ['Tournament Secretary', 'tournament.secretary@pmms.test', $adminPassword],
+            UserRole::TournamentICT->value => ['Tournament ICT', 'tournament.ict@pmms.test', $adminPassword],
+            UserRole::TournamentSecretary->value => ['Tournament Secretary', 'tournament.secretary@pmms.test', $adminPassword],
             UserRole::Coach->value => ['Coach', 'coach@pmms.test', $adminPassword],
             UserRole::Viewer->value => ['Viewer', 'viewer@pmms.test', $adminPassword],
         ];

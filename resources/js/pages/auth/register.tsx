@@ -1,20 +1,20 @@
 import { Form, Head, Link, router, usePage } from '@inertiajs/react';
-import { useState } from 'react';
 import { ChevronDown, LogIn, RefreshCw, UserPlus } from 'lucide-react';
+import { useState } from 'react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import RecaptchaWidget from '@/components/recaptcha-widget';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Spinner } from '@/components/ui/spinner';
 import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
     DropdownMenuContent,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
     Select,
     SelectContent,
@@ -22,14 +22,16 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { store } from '@/routes/register';
+import { Spinner } from '@/components/ui/spinner';
 import { login } from '@/routes';
+import { store } from '@/routes/register';
 
 type Props = {
     passwordRules: string;
     municipalities: Array<{ id: number; name: string }>;
     events: Array<{ id: number; label: string }>;
     codeChallengeImage: string;
+    registration: { users_enabled: boolean; coaches_enabled: boolean };
 };
 
 export default function Register({
@@ -37,9 +39,12 @@ export default function Register({
     municipalities,
     events,
     codeChallengeImage,
+    registration,
 }: Props) {
     const { recaptcha } = usePage().props;
-    const [isCoach, setIsCoach] = useState(false);
+    const [isCoach, setIsCoach] = useState(
+        !registration.users_enabled && registration.coaches_enabled,
+    );
     const [selectedEventIds, setSelectedEventIds] = useState<number[]>([]);
 
     return (
@@ -53,6 +58,26 @@ export default function Register({
             >
                 {({ processing, errors }) => (
                     <>
+                        {errors.registration && (
+                            <Alert variant="destructive">
+                                <AlertTitle>Registration suspended</AlertTitle>
+                                <AlertDescription>
+                                    {errors.registration}
+                                </AlertDescription>
+                            </Alert>
+                        )}
+                        {!registration.users_enabled &&
+                            !registration.coaches_enabled && (
+                                <Alert>
+                                    <AlertTitle>
+                                        Registration is currently suspended
+                                    </AlertTitle>
+                                    <AlertDescription>
+                                        Please contact the administrator if you
+                                        need an account.
+                                    </AlertDescription>
+                                </Alert>
+                            )}
                         <div className="grid gap-5 rounded-xl border bg-card p-5 shadow-[0_3px_10px_rgba(0,0,0,0.28)] md:grid-cols-2 md:p-6 dark:shadow-[0_3px_10px_rgba(0,0,0,0.55)]">
                             <div className="grid gap-2">
                                 <Label htmlFor="name">Name</Label>
@@ -138,23 +163,33 @@ export default function Register({
                                     passwordrules={passwordRules}
                                     className="h-10"
                                 />
-                                <InputError message={errors.password_confirmation} />
+                                <InputError
+                                    message={errors.password_confirmation}
+                                />
                             </div>
 
-                            <div className="md:col-span-2 rounded-lg border bg-muted/40 p-4">
+                            <div className="rounded-lg border bg-muted/40 p-4 md:col-span-2">
                                 <label className="flex items-start gap-3 text-sm">
                                     <Checkbox
                                         name="account_type"
                                         value="coach"
                                         checked={isCoach}
+                                        disabled={
+                                            !registration.coaches_enabled ||
+                                            !registration.users_enabled
+                                        }
                                         onCheckedChange={(checked) =>
                                             setIsCoach(checked === true)
                                         }
                                     />
                                     <span>
-                                        <span className="block font-medium">Register as a coach</span>
+                                        <span className="block font-medium">
+                                            Register as a coach
+                                        </span>
                                         <span className="text-muted-foreground">
-                                            Coach accounts require a municipality/team and sports event.
+                                            {registration.coaches_enabled
+                                                ? 'Coach accounts require a municipality/team and sports event.'
+                                                : 'Coach registration is currently suspended.'}
                                         </span>
                                     </span>
                                 </label>
@@ -164,49 +199,97 @@ export default function Register({
                             {isCoach && (
                                 <>
                                     <div className="grid gap-2">
-                                        <Label htmlFor="district_id">Municipality / Team *</Label>
+                                        <Label htmlFor="district_id">
+                                            Municipality / Team *
+                                        </Label>
                                         <Select name="district_id" required>
-                                            <SelectTrigger id="district_id" className="!h-10 w-full">
+                                            <SelectTrigger
+                                                id="district_id"
+                                                className="!h-10 w-full"
+                                            >
                                                 <SelectValue placeholder="Select municipality / team" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {municipalities.map((municipality) => (
-                                                    <SelectItem key={municipality.id} value={String(municipality.id)}>
-                                                        {municipality.name}
-                                                    </SelectItem>
-                                                ))}
+                                                {municipalities.map(
+                                                    (municipality) => (
+                                                        <SelectItem
+                                                            key={
+                                                                municipality.id
+                                                            }
+                                                            value={String(
+                                                                municipality.id,
+                                                            )}
+                                                        >
+                                                            {municipality.name}
+                                                        </SelectItem>
+                                                    ),
+                                                )}
                                             </SelectContent>
                                         </Select>
-                                        <InputError message={errors.district_id} />
+                                        <InputError
+                                            message={errors.district_id}
+                                        />
                                     </div>
 
                                     <div className="grid gap-2">
-                                        <Label htmlFor="event_ids">Specific sports events *</Label>
+                                        <Label htmlFor="event_ids">
+                                            Specific sports events *
+                                        </Label>
                                         {selectedEventIds.map((eventId) => (
-                                            <input key={eventId} type="hidden" name="event_ids[]" value={eventId} />
+                                            <input
+                                                key={eventId}
+                                                type="hidden"
+                                                name="event_ids[]"
+                                                value={eventId}
+                                            />
                                         ))}
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
-                                                <Button id="event_ids" type="button" variant="outline" className="!h-10 w-full justify-between px-3 font-normal">
+                                                <Button
+                                                    id="event_ids"
+                                                    type="button"
+                                                    variant="outline"
+                                                    className="!h-10 w-full justify-between px-3 font-normal"
+                                                >
                                                     <span className="truncate">
-                                                        {selectedEventIds.length === 0
+                                                        {selectedEventIds.length ===
+                                                        0
                                                             ? 'Select one or more sports events'
                                                             : `${selectedEventIds.length} event${selectedEventIds.length === 1 ? '' : 's'} selected`}
                                                     </span>
                                                     <ChevronDown className="size-4 opacity-60" />
                                                 </Button>
                                             </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="start" className="max-h-72 w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto">
+                                            <DropdownMenuContent
+                                                align="start"
+                                                className="max-h-72 w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto"
+                                            >
                                                 {events.map((event) => (
                                                     <DropdownMenuCheckboxItem
                                                         key={event.id}
-                                                        checked={selectedEventIds.includes(event.id)}
-                                                        onSelect={(event) => event.preventDefault()}
-                                                        onCheckedChange={(checked) =>
-                                                            setSelectedEventIds((current) =>
-                                                                checked
-                                                                    ? [...current, event.id]
-                                                                    : current.filter((id) => id !== event.id),
+                                                        checked={selectedEventIds.includes(
+                                                            event.id,
+                                                        )}
+                                                        onSelect={(event) =>
+                                                            event.preventDefault()
+                                                        }
+                                                        onCheckedChange={(
+                                                            checked,
+                                                        ) =>
+                                                            setSelectedEventIds(
+                                                                (current) =>
+                                                                    checked
+                                                                        ? [
+                                                                              ...current,
+                                                                              event.id,
+                                                                          ]
+                                                                        : current.filter(
+                                                                              (
+                                                                                  id,
+                                                                              ) =>
+                                                                                  id !==
+                                                                                  event.id,
+                                                                          ),
                                                             )
                                                         }
                                                     >
@@ -215,7 +298,9 @@ export default function Register({
                                                 ))}
                                             </DropdownMenuContent>
                                         </DropdownMenu>
-                                        <InputError message={errors.event_ids} />
+                                        <InputError
+                                            message={errors.event_ids}
+                                        />
                                     </div>
                                 </>
                             )}
@@ -285,12 +370,20 @@ export default function Register({
                                 </Button>
                                 <Button
                                     type="submit"
+                                    disabled={
+                                        processing ||
+                                        (isCoach
+                                            ? !registration.coaches_enabled
+                                            : !registration.users_enabled)
+                                    }
                                     className="h-10 w-full text-base"
                                     tabIndex={5}
                                     data-test="register-user-button"
                                 >
                                     {processing && <Spinner />}
-                                    {!processing && <UserPlus className="size-4" />}
+                                    {!processing && (
+                                        <UserPlus className="size-4" />
+                                    )}
                                     Create account
                                 </Button>
                             </div>
@@ -308,6 +401,8 @@ export default function Register({
 
 Register.layout = {
     title: 'Create your PMMS account',
-    description: 'Register securely. Coach details are reviewed before access is granted.',
+    description:
+        'Register securely. Coach details are reviewed before access is granted.',
     wide: true,
+    gradient: true,
 };

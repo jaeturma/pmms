@@ -48,6 +48,30 @@ test('an administrator can manage user roles and reset passwords', function () {
         ->and($pending->fresh()->approved_by)->toBe($admin->id);
 });
 
+test('an administrator can assign multiple roles including tournament ICT and secretary', function () {
+    $admin = User::factory()->admin()->create();
+    $user = User::factory()->create(['role' => UserRole::TechnicalOfficial]);
+
+    $this->actingAs($admin)->put("/system/users/{$user->id}", [
+        'name' => $user->name,
+        'username' => $user->username,
+        'email' => $user->email,
+        'role' => UserRole::TechnicalOfficial->value,
+        'additional_roles' => [
+            UserRole::TournamentICT->value,
+            UserRole::TournamentSecretary->value,
+        ],
+        'disabled' => false,
+    ])->assertSessionHasNoErrors();
+
+    $user->refresh();
+
+    expect($user->role)->toBe(UserRole::TechnicalOfficial)
+        ->and($user->hasRole(UserRole::TechnicalOfficial))->toBeTrue()
+        ->and($user->hasRole(UserRole::TournamentICT))->toBeTrue()
+        ->and($user->hasRole(UserRole::TournamentSecretary))->toBeTrue();
+});
+
 test('an active ICT team member can manage system users', function () {
     $ict = User::factory()->create();
     $team = ManagementTeam::factory()->create(['team_type' => ManagementTeamType::ICT]);

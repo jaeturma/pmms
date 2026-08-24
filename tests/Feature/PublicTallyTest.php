@@ -296,5 +296,6 @@ test('the public tally exposes a generated-at timestamp and every district is re
     $this->get("/meets/{$meet->id}/tally")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('districts', 10)
-            ->has('generatedAt'));
+            ->has('generatedAt')
+            ->where('medalTallyOfficial', false));
 });

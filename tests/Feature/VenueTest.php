@@ -1,9 +1,13 @@
 <?php
 
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
+use App\Enums\UserRole;
 use App\Models\AuditLog;
 use App\Models\GameCoordinatorAssignment;
 use App\Models\Meet;
 use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
 use App\Models\Person;
 use App\Models\Sport;
 use App\Models\User;
@@ -164,6 +168,43 @@ test('admins can update a venue', function () {
         ->and($venue->address)->toBe('New Street')
         ->and(AuditLog::query()->where('action', 'venue.updated')->exists())->toBeTrue();
 });
+
+test('tournament ICT and secretaries can create and update venues only for assigned sports', function (MeetSportAssignmentRole $role, UserRole $userRole) {
+    $meet = Meet::current();
+    $sport = Sport::factory()->create();
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $sport->id]);
+    $user = User::factory()->create(['role' => $userRole]);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $user->id,
+        'role' => $role,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($user)->post('/venues', [
+        'sport_id' => $sport->id,
+        'name' => 'Scoped Sports Venue',
+    ])->assertSessionHasNoErrors();
+
+    $venue = Venue::query()->where('name', 'Scoped Sports Venue')->firstOrFail();
+    $this->assertDatabaseHas('meet_sport_venues', ['meet_sport_id' => $meetSport->id, 'venue_id' => $venue->id]);
+
+    $this->actingAs($user)->get('/venues')->assertInertia(fn (AssertableInertia $page) => $page
+        ->where('canManage', true)
+        ->where('canArchive', false)
+        ->where('sportOptions', fn ($sports) => collect($sports)->pluck('id')->all() === [$sport->id])
+        ->where('venues.data', fn ($venues) => collect($venues)->pluck('id')->all() === [$venue->id]));
+
+    $this->actingAs($user)->put("/venues/{$venue->id}", ['name' => 'Updated Scoped Venue'])->assertSessionHasNoErrors();
+    $this->actingAs($user)->put('/venues/'.Venue::factory()->create()->id, ['name' => 'Forbidden Update'])->assertForbidden();
+    $this->actingAs($user)->patch("/venues/{$venue->id}/archive")->assertForbidden();
+    $this->actingAs($user)->delete("/venues/{$venue->id}")->assertForbidden();
+
+    expect($venue->fresh()->name)->toBe('Updated Scoped Venue');
+})->with([
+    'Tournament ICT' => [MeetSportAssignmentRole::TournamentICT, UserRole::TournamentICT],
+    'Tournament Secretary' => [MeetSportAssignmentRole::TournamentSecretary, UserRole::TournamentSecretary],
+]);
 
 test('archiving and restoring a venue toggles active', function () {
     $venue = Venue::factory()->create();

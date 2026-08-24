@@ -2,17 +2,20 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\MeetSportAssignmentRole;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\EventRequest;
 use App\Models\Event;
+use App\Models\Meet;
 use App\Models\Person;
 use App\Models\Sport;
+use App\Models\User;
 use App\Models\Venue;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -28,10 +31,16 @@ class EventController extends Controller
     public function index(Request $request): Response
     {
         $search = $this->searchTerm($request);
+        $sportIds = $this->manageableSportIds($request->user());
+        $canManage = $request->user()->isAdmin() || $sportIds->isNotEmpty();
 
         $query = Event::query()
             ->with(['sport:id,name', 'venueAssignments.venue:id,name', 'venueAssignments.coordinators:id,full_name'])
             ->orderBy('name');
+
+        if (! $request->user()->isAdmin() && $sportIds->isNotEmpty()) {
+            $query->whereIn('sport_id', $sportIds);
+        }
 
         $this->applySearch($query, $search, ['name', 'sport.name']);
 
@@ -59,10 +68,17 @@ class EventController extends Controller
             'filters' => ['search' => $search],
             'sports' => Sport::query()
                 ->where('active', true)
+                ->when(! $request->user()->isAdmin() && $sportIds->isNotEmpty(), fn ($sports) => $sports->whereIn('id', $sportIds))
                 ->orderBy('name')
                 ->get(['id', 'name']),
-            'canManage' => Gate::allows('manage-meet-data'),
-            'venues' => Venue::query()->where('active', true)->orderBy('name')->get(['id', 'name']),
+            'canManage' => $canManage,
+            'canArchive' => $request->user()->isAdmin(),
+            'venues' => Venue::query()->where('active', true)
+                ->when(! $request->user()->isAdmin() && $sportIds->isNotEmpty(), fn ($venues) => $venues
+                    ->whereHas('meetSportAssignments.meetSport', fn ($meetSport) => $meetSport
+                        ->where('meet_id', Meet::current()->id)
+                        ->whereIn('sport_id', $sportIds)))
+                ->orderBy('name')->get(['id', 'name']),
             'people' => Person::query()->orderBy('full_name')->get(['id', 'full_name']),
         ]);
     }
@@ -72,6 +88,9 @@ class EventController extends Controller
      */
     public function store(EventRequest $request): RedirectResponse
     {
+        $this->authorizeSport($request->user(), $request->integer('sport_id'));
+        $this->authorizeVenues($request->user(), $request->integer('sport_id'), $request->validated('venues', []));
+
         $event = DB::transaction(function () use ($request): Event {
             $event = Event::create($request->eventData());
             $this->syncVenues($event, $request->validated('venues', []));
@@ -91,6 +110,10 @@ class EventController extends Controller
      */
     public function update(EventRequest $request, Event $event): RedirectResponse
     {
+        $this->authorizeSport($request->user(), $event->sport_id);
+        $this->authorizeSport($request->user(), $request->integer('sport_id'));
+        $this->authorizeVenues($request->user(), $request->integer('sport_id'), $request->validated('venues', []));
+
         DB::transaction(function () use ($request, $event): void {
             $event->update($request->eventData());
             $this->syncVenues($event, $request->validated('venues', []));
@@ -171,5 +194,37 @@ class EventController extends Controller
         }
 
         $event->venueAssignments()->when($keep !== [], fn ($query) => $query->whereNotIn('id', $keep))->delete();
+    }
+
+    private function authorizeSport(User $user, int $sportId): void
+    {
+        abort_unless($user->isAdmin() || $this->manageableSportIds($user)->contains($sportId), 403);
+    }
+
+    private function authorizeVenues(User $user, int $sportId, array $venues): void
+    {
+        if ($user->isAdmin() || $venues === []) {
+            return;
+        }
+
+        $venueIds = collect($venues)->pluck('venue_id')->map(fn ($id): int => (int) $id)->unique();
+        $authorizedCount = Venue::query()
+            ->whereKey($venueIds)
+            ->whereHas('meetSportAssignments.meetSport', fn ($meetSport) => $meetSport
+                ->where('meet_id', Meet::current()->id)
+                ->where('sport_id', $sportId))
+            ->count();
+
+        abort_unless($authorizedCount === $venueIds->count(), 403);
+    }
+
+    private function manageableSportIds(User $user): Collection
+    {
+        return $user->meetSportAssignments()
+            ->where('status', 'active')
+            ->whereIn('role', [MeetSportAssignmentRole::TournamentICT, MeetSportAssignmentRole::TournamentSecretary])
+            ->whereHas('meetSport.meet', fn ($meet) => $meet->whereKey(Meet::current()->id))
+            ->with('meetSport:id,sport_id')
+            ->get()->pluck('meetSport.sport_id')->map(fn ($id): int => (int) $id)->unique()->values();
     }
 }

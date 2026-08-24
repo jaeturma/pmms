@@ -20,6 +20,12 @@ use Illuminate\Support\Carbon;
  * @property string|null $smtp_from_address
  * @property string|null $smtp_from_name
  * @property bool $email_verification_enabled
+ * @property bool $user_registration_enabled
+ * @property bool $coach_registration_enabled
+ * @property bool $coach_athlete_registration_enabled
+ * @property bool $medal_tally_official
+ * @property string|null $login_splash_title
+ * @property int|null $login_background_upload_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -38,6 +44,11 @@ use Illuminate\Support\Carbon;
     'smtp_from_address',
     'smtp_from_name',
     'email_verification_enabled',
+    'user_registration_enabled',
+    'coach_registration_enabled',
+    'coach_athlete_registration_enabled',
+    'medal_tally_official',
+    'login_splash_title',
 ])]
 class Setting extends Model
 {
@@ -60,6 +71,10 @@ class Setting extends Model
             'smtp_port' => 'integer',
             'smtp_password' => 'encrypted',
             'email_verification_enabled' => 'boolean',
+            'user_registration_enabled' => 'boolean',
+            'coach_registration_enabled' => 'boolean',
+            'coach_athlete_registration_enabled' => 'boolean',
+            'medal_tally_official' => 'boolean',
         ];
     }
 
@@ -75,6 +90,11 @@ class Setting extends Model
     public function appLogo(): BelongsTo
     {
         return $this->belongsTo(FileUpload::class, 'app_logo_upload_id');
+    }
+
+    public function loginBackground(): BelongsTo
+    {
+        return $this->belongsTo(FileUpload::class, 'login_background_upload_id');
     }
 
     /**
@@ -112,5 +132,10 @@ class Setting extends Model
     public function emailVerificationActive(): bool
     {
         return $this->email_verification_enabled && $this->smtpReady();
+    }
+
+    public function medalTallyIsOfficial(): bool
+    {
+        return $this->medal_tally_official === true;
     }
 }

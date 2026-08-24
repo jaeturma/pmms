@@ -19,6 +19,49 @@ use Illuminate\Support\Collection;
 class CompetitionAccessService
 {
     /** @return list<string> */
+    public function competitionManagerRoles(): array
+    {
+        return collect([
+            MeetSportAssignmentRole::TournamentManager,
+            MeetSportAssignmentRole::AssistantTournamentManager,
+            MeetSportAssignmentRole::TrackTournamentManager,
+            MeetSportAssignmentRole::FieldTournamentManager,
+            MeetSportAssignmentRole::BoysTournamentManager,
+            MeetSportAssignmentRole::GirlsTournamentManager,
+            MeetSportAssignmentRole::CategoryTournamentManager,
+            MeetSportAssignmentRole::TournamentSecretary,
+            MeetSportAssignmentRole::TournamentICT,
+        ])->map(fn (MeetSportAssignmentRole $role): string => $role->value)->all();
+    }
+
+    /** @return list<string> */
+    public function resultEncoderRoles(): array
+    {
+        return [
+            MeetSportAssignmentRole::TournamentSecretary->value,
+            MeetSportAssignmentRole::TournamentICT->value,
+        ];
+    }
+
+    /** @param list<string> $roles */
+    public function hasAssignmentRole(User $user, array $roles, ?int $meetId = null): bool
+    {
+        if ($user->role === UserRole::TournamentManager
+            && $user->managedSport !== null
+            && in_array(MeetSportAssignmentRole::TournamentManager->value, $roles, true)) {
+            return true;
+        }
+
+        return $user->meetSportAssignments()
+            ->where('status', MeetSportAssignmentStatus::Active->value)
+            ->whereIn('role', $roles)
+            ->when($meetId !== null, fn ($query) => $query->whereHas(
+                'meetSport', fn ($meetSport) => $meetSport->where('meet_id', $meetId),
+            ))
+            ->exists();
+    }
+
+    /** @return list<string> */
     public function tournamentRoles(): array
     {
         return collect([

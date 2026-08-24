@@ -2430,7 +2430,7 @@ class ScoringSessionController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        if ($user->hasRole(UserRole::TechnicalOfficial, UserRole::TournamentManager)) {
+        if ($user->hasRole(UserRole::TechnicalOfficial, UserRole::TournamentManager, UserRole::TournamentICT, UserRole::TournamentSecretary)) {
             abort_unless($this->canManage($user, $match), 403);
 
             return;
@@ -2474,7 +2474,7 @@ class ScoringSessionController extends Controller
         // is a no-op once a relation is marked loaded, regardless of which
         // columns it was loaded with. A plain access either reuses an
         // already-fully-loaded `event` or lazy-loads the full row once.
-        if ($user->hasRole(UserRole::TechnicalOfficial, UserRole::TournamentManager)) {
+        if ($user->hasRole(UserRole::TechnicalOfficial, UserRole::TournamentManager, UserRole::TournamentICT, UserRole::TournamentSecretary)) {
             return app(CompetitionAccessService::class)
                 ->canAccessEvent($user, $match->event, $match->meet_id);
         }

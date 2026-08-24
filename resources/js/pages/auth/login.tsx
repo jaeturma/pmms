@@ -31,7 +31,7 @@ export default function Login({ status, canResetPassword }: Props) {
             >
                 {({ processing, errors }) => (
                     <>
-                        <div className="grid gap-6 rounded-xl border bg-card p-6 shadow-[0_2px_8px_rgba(0,0,0,0.2)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.45)]">
+                        <div className="grid gap-5 rounded-2xl border bg-card p-6 shadow-sm sm:p-7">
                             <div className="grid gap-2">
                                 <Label htmlFor="email">Username or email</Label>
                                 <Input
@@ -91,7 +91,7 @@ export default function Login({ status, canResetPassword }: Props) {
 
                             <Button
                                 type="submit"
-                                className="mt-4 w-full"
+                                className="mt-2 h-11 w-full"
                                 tabIndex={4}
                                 disabled={processing}
                                 data-test="login-button"
@@ -121,6 +121,7 @@ export default function Login({ status, canResetPassword }: Props) {
 }
 
 Login.layout = {
-    title: 'Log in to your account',
-    description: 'Enter your username or email and password below to log in',
+    title: 'Welcome back',
+    description: 'Sign in to continue to the meet management system.',
+    split: true,
 };

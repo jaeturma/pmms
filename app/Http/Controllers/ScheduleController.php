@@ -49,13 +49,15 @@ class ScheduleController extends Controller
         $user = $request->user();
 
         $canManageAll = Gate::allows('manage-meet-data') || $user->canManageProductionAccounts();
+        $access = app(CompetitionAccessService::class);
         $visibleEventIds = $user->tournamentEventIds();
         $isTournamentScoped = ! $user->hasRole(UserRole::Admin, UserRole::Organizer)
             && $visibleEventIds->isNotEmpty();
-        $managedSportIds = $user->role === UserRole::TournamentManager
-            ? $this->userManagedSportIds($user)
-            : collect();
-        $isTournamentManager = $managedSportIds->isNotEmpty();
+        $canManageAssignedCompetition = $access->hasAssignmentRole(
+            $user,
+            $access->competitionManagerRoles(),
+            Meet::current()->id,
+        );
 
         $search = $this->searchTerm($request);
         $venueId = $request->integer('venue_id');
@@ -182,7 +184,7 @@ class ScheduleController extends Controller
 
         return Inertia::render('schedule/index', [
             'schedules' => $slots
-                ->through(function (EventSchedule $schedule) use ($matchesBySchedule, $canManageAll, $managedSportIds): array {
+                ->through(function (EventSchedule $schedule) use ($matchesBySchedule, $canManageAll, $canManageAssignedCompetition, $visibleEventIds): array {
                     $match = $matchesBySchedule->get($schedule->id);
 
                     return [
@@ -209,7 +211,7 @@ class ScheduleController extends Controller
                         'match_id' => $match?->id,
                         'is_live' => $match !== null && $match->scoringSessions->isNotEmpty(),
                         'can_manage' => $canManageAll
-                            || $managedSportIds->contains($schedule->event->sport_id),
+                            || ($canManageAssignedCompetition && $visibleEventIds->contains($schedule->event_id)),
                     ];
                 }),
             'filters' => [
@@ -258,7 +260,7 @@ class ScheduleController extends Controller
                     'sport_id' => $category->sport_id,
                     'label' => $category->display_name,
                 ]),
-            'canManage' => $canManageAll || $isTournamentManager,
+            'canManage' => $canManageAll || $canManageAssignedCompetition,
         ]);
     }
 
@@ -314,7 +316,6 @@ class ScheduleController extends Controller
     {
         /** @var User $user */
         $user = $request->user();
-
         $schedule->loadMissing('event');
         abort_unless($this->canManageSlot($user, $schedule->event), 403);
 
@@ -414,8 +415,10 @@ class ScheduleController extends Controller
             return true;
         }
 
-        return $user->role === UserRole::TournamentManager
-            && app(CompetitionAccessService::class)->canAccessEvent($user, $event, Meet::current()->id);
+        $access = app(CompetitionAccessService::class);
+
+        return $access->hasAssignmentRole($user, $access->competitionManagerRoles(), Meet::current()->id)
+            && $access->canAccessEvent($user, $event, Meet::current()->id);
     }
 
     /**

@@ -1,6 +1,8 @@
 <?php
 
 use App\Enums\MatchStatus;
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\ResultStatus;
 use App\Enums\UserRole;
 use App\Models\Athlete;
@@ -13,6 +15,8 @@ use App\Models\EventMatch;
 use App\Models\EventResult;
 use App\Models\EventSchedule;
 use App\Models\Meet;
+use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
 use App\Models\ResultPlacement;
 use App\Models\School;
 use App\Models\ScoringSession;
@@ -139,8 +143,8 @@ test('a technical official only sees results for their assigned sport', function
             ->has('results.data', 1)
             ->where('results.data.0.id', $ownEncoded->id)
             ->where('canManage', false)
-            ->where('canEncode', true)
-            ->where('encodedEventKeys', ["{$ownEncoded->meet_id}-{$ownEncoded->event_id}"]));
+            ->where('canEncode', false)
+            ->where('encodedEventKeys', []));
 });
 
 test('managers can encode a result for an active meet', function () {
@@ -436,11 +440,17 @@ test('viewers and delegation officers cannot manage results', function (User $us
     'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
 ]);
 
-test('a technical official can encode and update a result for their own sport, but not validate, correct, or delete it', function () {
+test('a tournament secretary or ICT can encode and update a result for their own sport, but not validate, correct, or delete it', function (MeetSportAssignmentRole $role, UserRole $userRole) {
     ['meet' => $meet, 'event' => $event, 'match' => $match, 'entries' => $entries] = resultFixture();
 
-    $official = User::factory()->technicalOfficial()->create();
-    $official->sports()->attach($event->sport_id);
+    $official = User::factory()->create(['role' => $userRole]);
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $event->sport_id]);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $official->id,
+        'role' => $role,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
 
     $this->actingAs($official)
         ->post('/results', [
@@ -475,7 +485,10 @@ test('a technical official can encode and update a result for their own sport, b
     $this->actingAs($official)->patch("/results/{$result->id}/validate")->assertForbidden();
     $this->actingAs($official)->patch("/results/{$result->id}/correct", ['reason' => 'needs a second look'])->assertForbidden();
     $this->actingAs($official)->delete("/results/{$result->id}")->assertForbidden();
-});
+})->with([
+    'Tournament Secretary' => [MeetSportAssignmentRole::TournamentSecretary, UserRole::TournamentSecretary],
+    'Tournament ICT' => [MeetSportAssignmentRole::TournamentICT, UserRole::TournamentICT],
+]);
 
 test('a technical official cannot encode a result for a sport they are not assigned to', function () {
     ['meet' => $meet, 'event' => $event, 'match' => $match, 'entries' => $entries] = resultFixture();
@@ -518,7 +531,7 @@ test('a tournament manager only sees their own sport results and cannot encode',
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('results.data', 1)
             ->where('results.data.0.id', $ownEncoded->id)
-            ->where('results.data.0.can_manage', true)
+            ->where('results.data.0.can_manage', false)
             ->where('canManage', false)
             ->where('canEncode', false));
 
@@ -537,7 +550,7 @@ test('a tournament manager only sees their own sport results and cannot encode',
         ->assertForbidden();
 });
 
-test('a tournament manager cannot validate but can delete a draft in their managed sport', function () {
+test('a tournament manager can confirm but cannot validate or delete a draft in their managed sport', function () {
     $sport = Sport::factory()->create();
     $event = Event::factory()->create(['sport_id' => $sport->id]);
 
@@ -554,9 +567,9 @@ test('a tournament manager cannot validate but can delete a draft in their manag
 
     $this->actingAs($manager)
         ->delete("/results/{$encoded->id}")
-        ->assertRedirect();
+        ->assertForbidden();
 
-    $this->assertDatabaseMissing('event_results', ['id' => $encoded->id]);
+    $this->assertDatabaseHas('event_results', ['id' => $encoded->id]);
 });
 
 test('a tournament manager cannot validate, correct, or delete a result outside their managed sport', function () {

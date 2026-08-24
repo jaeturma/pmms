@@ -158,6 +158,30 @@ test('the assignments page is viewable by any authenticated role, including view
         ->assertInertia(fn (AssertableInertia $page) => $page->where('canManage', false));
 });
 
+test('tournament assignments can be searched by person, sport, role, and status', function () {
+    $target = MeetSportAssignment::factory()->create([
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+    $target->user()->associate(User::factory()->create(['name' => 'Searchable ICT Officer']));
+    $target->save();
+    MeetSportAssignment::factory()->create();
+
+    $this->actingAs(User::factory()->create())
+        ->get('/meet-sport-assignments?search=Searchable%20ICT')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('filters.search', 'Searchable ICT')
+            ->has('assignments.data', 1)
+            ->where('assignments.data.0.id', $target->id));
+
+    $this->actingAs(User::factory()->create())
+        ->get('/meet-sport-assignments?search=Tournament%20ICT')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('assignments.data', 1)
+            ->where('assignments.data.0.id', $target->id));
+});
+
 test('organizers can create an assignment', function () {
     $meetSport = MeetSport::factory()->create();
     $official = User::factory()->technicalOfficial()->create();

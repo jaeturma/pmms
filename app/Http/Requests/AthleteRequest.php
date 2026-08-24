@@ -36,18 +36,17 @@ class AthleteRequest extends FormRequest
             return;
         }
 
-        $eventId = $this->user()->coachAssignmentRequests()
-            ->where('status', 'approved')
-            ->where('delegation_id', $this->integer('delegation_id'))
-            ->value('event_id');
+        $delegation = Delegation::find($this->integer('delegation_id'));
+        if ($delegation === null) {
+            return;
+        }
 
-        $eventId ??= $this->user()->coachOnboardingRequest()
-            ->where('status', 'approved')
-            ->with('events:id')
-            ->first()?->events->first()?->id;
-
-        if ($eventId !== null) {
-            $this->merge(['event_id' => $eventId]);
+        $eventIds = $this->user()->approvedCoachEventIdsForDelegation($delegation);
+        if ($eventIds->count() === 1) {
+            $event = Event::find($eventIds->first());
+            if ($event !== null && ! $event->is_team_event) {
+                $this->merge(['event_id' => $event->id]);
+            }
         }
     }
 
@@ -97,7 +96,7 @@ class AthleteRequest extends FormRequest
             $rules['delegation_id'] = ['required', 'integer', Rule::exists('delegations', 'id')];
             $rules['school_id'] = ['required', 'integer', Rule::exists('schools', 'id')->where('active', true)];
             $rules['event_id'] = $this->user()?->role === UserRole::Coach
-                ? ['required', 'integer', Rule::exists('events', 'id')]
+                ? ['nullable', 'integer', Rule::exists('events', 'id')]
                 : ['nullable', 'integer', Rule::exists('events', 'id')];
         }
 
@@ -130,6 +129,10 @@ class AthleteRequest extends FormRequest
             if ($this->user()?->role === UserRole::Coach && $event !== null
                 && ! $this->user()->hasApprovedCoachScope($delegation, $event)) {
                 $validator->errors()->add('event_id', __('You may only register athletes for your approved sport and event assignment.'));
+            }
+
+            if ($this->user()?->role === UserRole::Coach && $event?->is_team_event) {
+                $validator->errors()->add('event_id', __('Team and group events must be entered through team roster management.'));
             }
 
             if ($event !== null && ! $delegation->meet->events()->whereKey($event->id)->exists()) {

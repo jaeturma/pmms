@@ -4,12 +4,25 @@ namespace App\Http\Requests;
 
 use App\Enums\AgeDivision;
 use App\Enums\GenderCategory;
+use App\Enums\MeetSportAssignmentRole;
 use App\Models\Event;
+use App\Models\Meet;
+use App\Services\CompetitionAccessService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class EventRequest extends FormRequest
 {
+    public function authorize(): bool
+    {
+        $user = $this->user();
+
+        return $user !== null && ($user->isAdmin() || app(CompetitionAccessService::class)->hasAssignmentRole($user, [
+            MeetSportAssignmentRole::TournamentSecretary->value,
+            MeetSportAssignmentRole::TournamentICT->value,
+        ], Meet::current()->id));
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *

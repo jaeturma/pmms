@@ -2,14 +2,20 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\MeetSportAssignmentRole;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\VenueRequest;
 use App\Models\District;
+use App\Models\Meet;
+use App\Models\MeetSport;
+use App\Models\MeetSportVenue;
+use App\Models\Sport;
+use App\Models\User;
 use App\Models\Venue;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -25,6 +31,8 @@ class VenueController extends Controller
     public function index(Request $request): Response
     {
         $search = $this->searchTerm($request);
+        $sportIds = $this->manageableSportIds($request->user());
+        $canManage = $request->user()->isAdmin() || $sportIds->isNotEmpty();
 
         $query = Venue::query()
             ->with(['municipality:id,name', 'competitionAreas:id,venue_id,name',
@@ -32,6 +40,12 @@ class VenueController extends Controller
                 'gameCoordinatorAssignments.person:id,full_name',
                 'gameCoordinatorAssignments.meetSport.sport:id,name'])
             ->orderBy('name');
+
+        if (! $request->user()->isAdmin() && $sportIds->isNotEmpty()) {
+            $query->whereHas('meetSportAssignments.meetSport', fn ($meetSport) => $meetSport
+                ->where('meet_id', Meet::current()->id)
+                ->whereIn('sport_id', $sportIds));
+        }
 
         $this->applySearch($query, $search, ['name', 'address']);
 
@@ -67,7 +81,11 @@ class VenueController extends Controller
             'filters' => ['search' => $search],
             'municipalityOptions' => District::query()->where('active', true)->orderBy('name')->get(['id', 'name'])
                 ->map(fn (District $district): array => ['id' => $district->id, 'label' => $district->name]),
-            'canManage' => Gate::allows('manage-meet-data'),
+            'canManage' => $canManage,
+            'canArchive' => $request->user()->isAdmin(),
+            'sportOptions' => Sport::query()->where('active', true)
+                ->when(! $request->user()->isAdmin() && $sportIds->isNotEmpty(), fn ($sports) => $sports->whereIn('id', $sportIds))
+                ->orderBy('name')->get(['id', 'name']),
         ]);
     }
 
@@ -76,7 +94,17 @@ class VenueController extends Controller
      */
     public function store(VenueRequest $request): RedirectResponse
     {
+        $sportId = $request->integer('sport_id');
+        $this->authorizeSport($request->user(), $sportId);
         $venue = Venue::create($request->venueData());
+
+        if ($sportId > 0) {
+            $meetSport = MeetSport::query()->where('meet_id', Meet::current()->id)->where('sport_id', $sportId)->firstOrFail();
+            MeetSportVenue::query()->firstOrCreate([
+                'meet_sport_id' => $meetSport->id,
+                'venue_id' => $venue->id,
+            ], ['status' => 'active']);
+        }
 
         $this->audit->record('venue.created', $venue, ['name' => $venue->name]);
 
@@ -90,6 +118,7 @@ class VenueController extends Controller
      */
     public function update(VenueRequest $request, Venue $venue): RedirectResponse
     {
+        $this->authorizeVenue($request->user(), $venue);
         $venue->update($request->venueData());
 
         $this->audit->record('venue.updated', $venue, ['name' => $venue->name]);
@@ -148,5 +177,29 @@ class VenueController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Venue deleted.')]);
 
         return back();
+    }
+
+    private function authorizeSport(User $user, int $sportId): void
+    {
+        abort_unless($user->isAdmin() || ($sportId > 0 && $this->manageableSportIds($user)->contains($sportId)), 403);
+    }
+
+    private function authorizeVenue(User $user, Venue $venue): void
+    {
+        abort_unless($user->isAdmin() || $venue->meetSportAssignments()
+            ->whereHas('meetSport', fn ($meetSport) => $meetSport
+                ->where('meet_id', Meet::current()->id)
+                ->whereIn('sport_id', $this->manageableSportIds($user)))
+            ->exists(), 403);
+    }
+
+    private function manageableSportIds(User $user): Collection
+    {
+        return $user->meetSportAssignments()
+            ->where('status', 'active')
+            ->whereIn('role', [MeetSportAssignmentRole::TournamentICT, MeetSportAssignmentRole::TournamentSecretary])
+            ->whereHas('meetSport', fn ($meetSport) => $meetSport->where('meet_id', Meet::current()->id))
+            ->with('meetSport:id,sport_id')
+            ->get()->pluck('meetSport.sport_id')->map(fn ($id): int => (int) $id)->unique()->values();
     }
 }

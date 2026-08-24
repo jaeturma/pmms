@@ -3,11 +3,21 @@
 namespace App\Http\Requests;
 
 use App\Models\Meet;
+use App\Services\CompetitionAccessService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class MatchRequest extends FormRequest
 {
+    public function authorize(): bool
+    {
+        $user = $this->user();
+        $access = app(CompetitionAccessService::class);
+
+        return $user !== null && ($user->isAdmin()
+            || $access->hasAssignmentRole($user, $access->competitionManagerRoles(), Meet::current()->id));
+    }
+
     /**
      * A match always belongs to `Meet::current()` — this deployment runs
      * one meet, so nobody picks it.

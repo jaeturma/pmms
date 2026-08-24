@@ -47,6 +47,8 @@ import {
     update,
 } from '@/routes/sports';
 
+const MAX_SPORT_PHOTO_SIZE_BYTES = 4 * 1024 * 1024;
+
 type TechnicalOfficial = {
     id: number;
     name: string;
@@ -62,6 +64,7 @@ type Sport = {
     name: string;
     active: boolean;
     events_count: number;
+    photo_url: string | null;
     technical_officials: TechnicalOfficial[];
     tournament_manager: TournamentManager | null;
 };
@@ -95,8 +98,16 @@ function SportFormDialog({
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
-    const { data, setData, post, put, processing, errors, reset } = useForm({
+    const { data, setData, post, processing, errors, reset, setError, clearErrors } = useForm<{
+        _method?: string;
+        name: string;
+        photo: File | null;
+        remove_photo: boolean;
+    }>({
+        ...(sport ? { _method: 'put' } : {}),
         name: sport?.name ?? '',
+        photo: null,
+        remove_photo: false,
     });
 
     const submit = (e: FormEvent) => {
@@ -111,7 +122,7 @@ function SportFormDialog({
         };
 
         if (sport) {
-            put(update(sport.id).url, options);
+            post(update(sport.id).url, options);
         } else {
             post(store().url, options);
         }
@@ -135,6 +146,35 @@ function SportFormDialog({
                             autoFocus
                         />
                         <InputError message={errors.name} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="sport-photo">Card background (optional, max 4MB)</Label>
+                        <p className="text-xs text-muted-foreground">Use a wide sports photo. It appears lightly behind public sport cards.</p>
+                        {sport?.photo_url && !data.photo && !data.remove_photo && (
+                            <div className="relative overflow-hidden rounded-lg border">
+                                <img src={sport.photo_url} alt={`${sport.name} card background`} className="h-28 w-full object-cover" />
+                                <Button type="button" variant="secondary" size="sm" className="absolute right-2 bottom-2" onClick={() => setData('remove_photo', true)}>Remove</Button>
+                            </div>
+                        )}
+                        {data.remove_photo && (
+                            <p className="text-sm text-muted-foreground">The current photo will be removed on save. <button type="button" className="underline" onClick={() => setData('remove_photo', false)}>Undo</button></p>
+                        )}
+                        <Input
+                            id="sport-photo"
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                                const file = e.target.files?.[0] ?? null;
+                                if (file && file.size > MAX_SPORT_PHOTO_SIZE_BYTES) {
+                                    setError('photo', 'The photo must not be larger than 4MB.');
+                                    e.target.value = '';
+                                    return;
+                                }
+                                clearErrors('photo');
+                                setData((current) => ({ ...current, photo: file, remove_photo: false }));
+                            }}
+                        />
+                        <InputError message={errors.photo} />
                     </div>
                     <DialogFooter>
                         <Button type="submit" disabled={processing}>

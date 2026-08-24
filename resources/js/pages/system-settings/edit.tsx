@@ -22,6 +22,8 @@ type Props = {
     settings: {
         app_title: string;
         app_logo_url: string | null;
+        login_splash_title: string;
+        login_background_url: string | null;
         facebook_live_enabled: boolean;
         facebook_live_url: string | null;
         recaptcha_enabled: boolean;
@@ -40,6 +42,10 @@ type Props = {
 
         email_verification_enabled: boolean;
         email_verification_active: boolean;
+        user_registration_enabled: boolean;
+        coach_registration_enabled: boolean;
+        coach_athlete_registration_enabled: boolean;
+        medal_tally_official: boolean;
     };
 };
 
@@ -48,6 +54,9 @@ export default function SystemSettingsEdit({ settings }: Props) {
         _method: 'put',
         app_title: settings.app_title,
         app_logo: null as File | null,
+        login_splash_title: settings.login_splash_title,
+        login_background: null as File | null,
+        remove_login_background: false,
         facebook_live_enabled: settings.facebook_live_enabled,
         facebook_live_url: settings.facebook_live_url ?? '',
         recaptcha_enabled: settings.recaptcha_enabled,
@@ -61,6 +70,11 @@ export default function SystemSettingsEdit({ settings }: Props) {
         smtp_from_address: settings.smtp_from_address ?? '',
         smtp_from_name: settings.smtp_from_name ?? '',
         email_verification_enabled: settings.email_verification_enabled,
+        user_registration_enabled: settings.user_registration_enabled,
+        coach_registration_enabled: settings.coach_registration_enabled,
+        coach_athlete_registration_enabled:
+            settings.coach_athlete_registration_enabled,
+        medal_tally_official: settings.medal_tally_official,
     });
 
     const submit = (e: FormEvent) => {
@@ -78,6 +92,106 @@ export default function SystemSettingsEdit({ settings }: Props) {
                 />
 
                 <form onSubmit={submit} className="max-w-2xl space-y-10">
+                    <section className="space-y-4">
+                        <Heading
+                            variant="small"
+                            title="Public medal tally"
+                            description="Control whether the overall standings are labeled official or unofficial on the public medal tally page."
+                        />
+                        <label className="flex items-start gap-3 rounded-md border p-4">
+                            <Checkbox
+                                checked={data.medal_tally_official}
+                                onCheckedChange={(checked) =>
+                                    setData(
+                                        'medal_tally_official',
+                                        checked === true,
+                                    )
+                                }
+                            />
+                            <span className="text-sm">
+                                <span className="block font-medium">
+                                    Mark overall standings as official
+                                </span>
+                                <span className="text-muted-foreground">
+                                    Leave unchecked while results are still
+                                    provisional. The default public label is
+                                    Unofficial.
+                                </span>
+                            </span>
+                        </label>
+                        <InputError message={errors.medal_tally_official} />
+                    </section>
+                    <section className="space-y-4">
+                        <Heading
+                            variant="small"
+                            title="Registration controls"
+                            description="Suspend individual registration channels without disabling existing accounts or administrator-managed registration."
+                        />
+                        <div className="space-y-3 rounded-md border p-4">
+                            <label className="flex items-start gap-3">
+                                <Checkbox
+                                    checked={data.user_registration_enabled}
+                                    onCheckedChange={(checked) =>
+                                        setData(
+                                            'user_registration_enabled',
+                                            checked === true,
+                                        )
+                                    }
+                                />
+                                <span className="text-sm">
+                                    <span className="block font-medium">
+                                        Allow new user registration
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                        Allows public registration of regular
+                                        user accounts.
+                                    </span>
+                                </span>
+                            </label>
+                            <label className="flex items-start gap-3">
+                                <Checkbox
+                                    checked={data.coach_registration_enabled}
+                                    onCheckedChange={(checked) =>
+                                        setData(
+                                            'coach_registration_enabled',
+                                            checked === true,
+                                        )
+                                    }
+                                />
+                                <span className="text-sm">
+                                    <span className="block font-medium">
+                                        Allow coach registration
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                        Allows new coaches to request an
+                                        account.
+                                    </span>
+                                </span>
+                            </label>
+                            <label className="flex items-start gap-3">
+                                <Checkbox
+                                    checked={
+                                        data.coach_athlete_registration_enabled
+                                    }
+                                    onCheckedChange={(checked) =>
+                                        setData(
+                                            'coach_athlete_registration_enabled',
+                                            checked === true,
+                                        )
+                                    }
+                                />
+                                <span className="text-sm">
+                                    <span className="block font-medium">
+                                        Allow coaches to register athletes
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                        Administrators and authorized ICT
+                                        personnel remain unaffected.
+                                    </span>
+                                </span>
+                            </label>
+                        </div>
+                    </section>
                     <section className="space-y-4">
                         <Heading
                             variant="small"
@@ -117,6 +231,94 @@ export default function SystemSettingsEdit({ settings }: Props) {
                                 }
                             />
                             <InputError message={errors.app_logo} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="login_splash_title">
+                                Login splash headline
+                            </Label>
+                            <Input
+                                id="login_splash_title"
+                                value={data.login_splash_title}
+                                maxLength={180}
+                                onChange={(event) =>
+                                    setData(
+                                        'login_splash_title',
+                                        event.target.value,
+                                    )
+                                }
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Shown prominently on the left side of the login
+                                page.
+                            </p>
+                            <InputError message={errors.login_splash_title} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="login_background">
+                                Login splash background (max 5MB)
+                            </Label>
+                            {settings.login_background_url &&
+                                !data.login_background &&
+                                !data.remove_login_background && (
+                                    <div className="relative overflow-hidden rounded-lg border">
+                                        <img
+                                            src={settings.login_background_url}
+                                            alt="Current login background"
+                                            className="h-40 w-full object-cover"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            className="absolute right-2 bottom-2"
+                                            onClick={() =>
+                                                setData(
+                                                    'remove_login_background',
+                                                    true,
+                                                )
+                                            }
+                                        >
+                                            Remove
+                                        </Button>
+                                    </div>
+                                )}
+                            {data.remove_login_background && (
+                                <p className="text-sm text-muted-foreground">
+                                    The current background will be removed on
+                                    save.{' '}
+                                    <button
+                                        type="button"
+                                        className="underline"
+                                        onClick={() =>
+                                            setData(
+                                                'remove_login_background',
+                                                false,
+                                            )
+                                        }
+                                    >
+                                        Undo
+                                    </button>
+                                </p>
+                            )}
+                            <Input
+                                id="login_background"
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                onChange={(event) =>
+                                    setData((current) => ({
+                                        ...current,
+                                        login_background:
+                                            event.target.files?.[0] ?? null,
+                                        remove_login_background: false,
+                                    }))
+                                }
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                A wide, high-resolution image works best. A dark
+                                overlay is applied automatically for readable
+                                text.
+                            </p>
+                            <InputError message={errors.login_background} />
                         </div>
                     </section>
                     <section className="space-y-4">

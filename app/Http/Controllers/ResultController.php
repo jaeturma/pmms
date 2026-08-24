@@ -54,12 +54,17 @@ class ResultController extends Controller
         $user = $request->user();
 
         $canManage = Gate::allows('manage-meet-data');
+        $access = app(CompetitionAccessService::class);
         $isScopedTechnicalOfficial = $user->role === UserRole::TechnicalOfficial;
+        $isScopedResultEncoder = $access->hasAssignmentRole(
+            $user,
+            $access->resultEncoderRoles(),
+            Meet::current()->id,
+        );
         $assignedEventIds = $user->tournamentEventIds();
         $isTournamentScoped = ! $user->hasRole(UserRole::Admin, UserRole::Organizer)
             && $assignedEventIds->isNotEmpty();
         $managedSportIds = $this->userManagedSportIds($user);
-        $isTournamentManager = $managedSportIds->isNotEmpty();
         $managedSportId = $managedSportIds->first();
 
         // `canEncode` is a strict superset of `canManage`: it governs
@@ -71,7 +76,7 @@ class ResultController extends Controller
         // per-row below instead of this global flag, since a TM's own
         // encoded results share this list with every other sport's
         // already-visible validated results.
-        $canEncode = $canManage || $isScopedTechnicalOfficial;
+        $canEncode = $canManage || $isScopedResultEncoder;
 
         $meetId = Meet::current()->id;
         $eventId = $request->integer('event_id');
@@ -89,7 +94,7 @@ class ResultController extends Controller
             ->orderByDesc('id');
 
         if (! $canManage) {
-            $query->where(function ($visible) use ($user, $isScopedTechnicalOfficial, $assignedEventIds, $managedSportId) {
+            $query->where(function ($visible) use ($user, $isScopedResultEncoder, $isScopedTechnicalOfficial, $assignedEventIds, $managedSportId) {
                 $visible->where('status', ResultStatus::Official->value)
                     ->orWhere(function ($secretariatResults) use ($user) {
                         $secretariatResults->whereIn('status', [
@@ -117,7 +122,7 @@ class ResultController extends Controller
 
                 // Transitional compatibility for installations that have
                 // not yet backfilled meet-scoped assignments.
-                if ($isScopedTechnicalOfficial && $assignedEventIds->isNotEmpty()) {
+                if (($isScopedResultEncoder || $isScopedTechnicalOfficial) && $assignedEventIds->isNotEmpty()) {
                     $visible->orWhere(fn ($legacy) => $legacy
                         ->where('status', ResultStatus::Encoded->value)
                         ->whereIn('event_id', $assignedEventIds));
@@ -145,7 +150,7 @@ class ResultController extends Controller
 
         return Inertia::render('results/index', [
             'results' => $query->paginate($this->registryPageSize)->withQueryString()
-                ->through(function (EventResult $result) use ($user, $canManage, $isTournamentManager, $managedSportIds): array {
+                ->through(function (EventResult $result) use ($user, $canManage): array {
                     $canForm = $user->isAdmin() || $user->meetSportAssignments()
                         ->where('status', MeetSportAssignmentStatus::Active)
                         ->whereIn('role', [
@@ -202,8 +207,7 @@ class ResultController extends Controller
                         // visible on this shared list, but a TM may only
                         // validate/correct/delete their own sport's — a global
                         // boolean can't express that, so it's computed per row.
-                        'can_manage' => $canManage
-                            || ($isTournamentManager && $managedSportIds->contains($result->event->sport_id)),
+                        'can_manage' => $canManage,
                         'placements' => $result->placements
                             ->sortBy([['rank', 'asc']])
                             ->map(fn (ResultPlacement $placement): array => [
@@ -331,6 +335,8 @@ class ResultController extends Controller
         $this->authorizeEncode($request, $result->event_id);
 
         if ($result->isLocked() || in_array($result->status, [ResultStatus::Submitted, ResultStatus::Validated], true)) {
+            abort_unless($request->user()->isAdmin(), 403);
+
             Inertia::flash('toast', [
                 'type' => 'error',
                 'message' => __('Submitted, validated, and official results are locked.'),
@@ -519,16 +525,11 @@ class ResultController extends Controller
         }
 
         $event = Event::query()->findOrFail($eventId);
-        $hasTechnicalAssignment = $user->meetSportAssignments()
-            ->where('status', MeetSportAssignmentStatus::Active)
-            ->where('role', MeetSportAssignmentRole::TechnicalOfficial)
-            ->exists();
-        $hasLegacyAssignment = $user->sports()->whereKey($event->sport_id)->exists();
+        $access = app(CompetitionAccessService::class);
 
         abort_unless(
-            $user->role === UserRole::TechnicalOfficial
-                && ($hasTechnicalAssignment || $hasLegacyAssignment)
-                && app(CompetitionAccessService::class)->canAccessEvent($user, $event),
+            $access->hasAssignmentRole($user, $access->resultEncoderRoles(), Meet::current()->id)
+                && $access->canAccessEvent($user, $event, Meet::current()->id),
             403,
         );
     }
@@ -552,11 +553,7 @@ class ResultController extends Controller
 
         $result->loadMissing('event');
 
-        abort_unless(
-            $user->role === UserRole::TournamentManager
-                && app(CompetitionAccessService::class)->canAccessEvent($user, $result->event, $result->meet_id),
-            403,
-        );
+        abort_unless($user->isAdmin(), 403);
     }
 
     /**

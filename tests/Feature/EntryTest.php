@@ -177,7 +177,7 @@ test('duplicate entries for the same athlete and event are rejected', function (
         ->assertSessionHasErrors('event_id');
 });
 
-test('one athlete can enter multiple individual and team events without duplicate athlete records', function () {
+test('one athlete can enter multiple individual events without duplicate athlete records', function () {
     [$meet, $delegation, $athlete, $firstEvent] = entrySetup(['name' => 'Floor Exercise']);
     $meet->forceFill(['max_events_per_athlete' => 4])->save();
 
@@ -185,7 +185,6 @@ test('one athlete can enter multiple individual and team events without duplicat
         $firstEvent,
         Event::factory()->create(['name' => 'Vault', 'gender' => 'boys', 'age_division' => 'elementary', 'is_team_event' => false]),
         Event::factory()->create(['name' => 'Individual All-Around', 'gender' => 'boys', 'age_division' => 'elementary', 'is_team_event' => false]),
-        Event::factory()->create(['name' => 'Team Competition', 'gender' => 'boys', 'age_division' => 'elementary', 'is_team_event' => true]),
     ]);
     $eventIds = $events->pluck('id')->all();
     $meet->events()->syncWithoutDetaching($eventIds);
@@ -195,8 +194,17 @@ test('one athlete can enter multiple individual and team events without duplicat
         ->assertSessionDoesntHaveErrors();
 
     expect(Athlete::query()->where('lrn', $athlete->lrn)->count())->toBe(1)
-        ->and($athlete->entries()->count())->toBe(4)
-        ->and($athlete->entries()->whereHas('event', fn ($query) => $query->where('is_team_event', true))->count())->toBe(1);
+        ->and($athlete->entries()->count())->toBe(3);
+});
+
+test('team events cannot be submitted as individual entries', function () {
+    [, , $athlete, $event] = entrySetup(['name' => 'Gymnastics Team', 'is_team_event' => true]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/entries', ['athlete_id' => $athlete->id, 'event_id' => $event->id])
+        ->assertSessionHasErrors('event_id');
+
+    expect($athlete->entries()->count())->toBe(0);
 });
 
 test('multi-event submission is atomic when the athlete event limit would be exceeded', function () {

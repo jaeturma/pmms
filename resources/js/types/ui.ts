@@ -19,4 +19,6 @@ export type AuthLayoutProps = {
     title?: string;
     description?: string;
     wide?: boolean;
+    split?: boolean;
+    gradient?: boolean;
 };

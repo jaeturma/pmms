@@ -8,6 +8,7 @@ use App\Actions\Fortify\ResetUserPassword;
 use App\Http\Responses\PendingRegistrationResponse;
 use App\Models\District;
 use App\Models\Event;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\RegistrationCodeChallenge;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -117,7 +118,13 @@ class FortifyServiceProvider extends ServiceProvider
         ]));
 
         Fortify::registerView(function (Request $request) {
+            $settings = Setting::current();
+
             return Inertia::render('auth/register', [
+                'registration' => [
+                    'users_enabled' => $settings->user_registration_enabled,
+                    'coaches_enabled' => $settings->coach_registration_enabled,
+                ],
                 'passwordRules' => Password::defaults()->toPasswordRulesString(),
                 'municipalities' => District::query()
                     ->where('active', true)

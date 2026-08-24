@@ -9,6 +9,7 @@ type PortalHeroProps = {
     meta?: ReactNode;
     actions?: ReactNode;
     className?: string;
+    backgroundImageUrl?: string | null;
 };
 
 /**
@@ -20,7 +21,16 @@ type PortalHeroProps = {
  * padding so content still lines up with the rest of the page instead of
  * touching the true edge.
  */
-export function PortalHero({ icon, eyebrow, title, description, meta, actions, className }: PortalHeroProps) {
+export function PortalHero({
+    icon,
+    eyebrow,
+    title,
+    description,
+    meta,
+    actions,
+    className,
+    backgroundImageUrl,
+}: PortalHeroProps) {
     return (
         <section
             className={cn(
@@ -28,7 +38,22 @@ export function PortalHero({ icon, eyebrow, title, description, meta, actions, c
                 className,
             )}
         >
-            <div className={cn(icon && 'flex items-start gap-4 sm:items-center sm:gap-5')}>
+            {backgroundImageUrl && (
+                <>
+                    <img
+                        src={backgroundImageUrl}
+                        alt=""
+                        className="absolute inset-0 size-full object-cover opacity-45"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/55 to-black/25" />
+                </>
+            )}
+            <div
+                className={cn(
+                    'relative',
+                    icon && 'flex items-start gap-4 sm:items-center sm:gap-5',
+                )}
+            >
                 {icon}
                 <div className="min-w-0">
                     {eyebrow && (
@@ -36,14 +61,26 @@ export function PortalHero({ icon, eyebrow, title, description, meta, actions, c
                             {eyebrow}
                         </p>
                     )}
-                    <h1 className="mt-2 text-2xl font-bold uppercase sm:text-4xl">{title}</h1>
+                    <h1 className="mt-2 text-2xl font-bold uppercase sm:text-4xl">
+                        {title}
+                    </h1>
                     {description && (
-                        <p className="mt-3 max-w-2xl text-sm text-[var(--portal-ink-foreground)]/80 sm:text-base">{description}</p>
+                        <p className="mt-3 max-w-2xl text-sm text-[var(--portal-ink-foreground)]/80 sm:text-base">
+                            {description}
+                        </p>
                     )}
                 </div>
             </div>
-            {meta && <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[var(--portal-ink-foreground)]/80">{meta}</div>}
-            {actions && <div className="mt-6 flex flex-wrap gap-3">{actions}</div>}
+            {meta && (
+                <div className="relative mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[var(--portal-ink-foreground)]/80">
+                    {meta}
+                </div>
+            )}
+            {actions && (
+                <div className="relative mt-6 flex flex-wrap gap-3">
+                    {actions}
+                </div>
+            )}
         </section>
     );
 }

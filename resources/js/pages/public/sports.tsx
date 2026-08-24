@@ -14,6 +14,7 @@ type SportRow = {
     id: number;
     name: string;
     event_count: number;
+    photo_url: string | null;
 };
 
 type Props = {
@@ -64,8 +65,16 @@ export default function PublicSports({ meet, sports }: Props) {
                             return (
                                 <div
                                     key={sport.id}
-                                    className="flex flex-col gap-4 rounded-xl border p-5 transition-[transform,box-shadow] duration-(--duration-base) ease-premium hover:-translate-y-0.5 hover:shadow-md"
+                                    className="group relative isolate flex min-h-44 flex-col gap-4 overflow-hidden rounded-xl border bg-card p-5 transition-[transform,box-shadow] duration-(--duration-base) ease-premium hover:-translate-y-0.5 hover:shadow-md"
                                 >
+                                    {sport.photo_url && (
+                                        <img
+                                            src={sport.photo_url}
+                                            alt=""
+                                            className="absolute inset-0 -z-20 size-full object-cover opacity-35 transition-transform duration-500 group-hover:scale-105"
+                                        />
+                                    )}
+                                    <div className="absolute inset-0 -z-10 bg-gradient-to-b from-card/45 to-card/95" />
                                     <div className="flex items-center gap-3">
                                         <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                                             <Icon

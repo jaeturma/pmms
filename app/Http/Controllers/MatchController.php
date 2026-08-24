@@ -44,18 +44,20 @@ class MatchController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        if (! $user->hasRole(UserRole::TechnicalOfficial, UserRole::TournamentManager)) {
+        if ($user->tournamentEventIds()->isEmpty()) {
             Gate::authorize('viewAny', Entry::class);
         }
 
         $canManageAll = Gate::allows('manage-meet-data');
         $visibleEventIds = $user->tournamentEventIds();
-        $isTournamentScoped = ! $user->hasRole(UserRole::Admin, UserRole::Organizer)
+        $isTournamentScoped = ! $user->isAdmin()
             && $visibleEventIds->isNotEmpty();
-        $managedSportIds = $user->role === UserRole::TournamentManager
-            ? $this->userManagedSportIds($user)
-            : collect();
-        $isTournamentManager = $managedSportIds->isNotEmpty();
+        $access = app(CompetitionAccessService::class);
+        $canManageAssignedCompetition = $access->hasAssignmentRole(
+            $user,
+            $access->competitionManagerRoles(),
+            Meet::current()->id,
+        );
 
         $eventId = $request->integer('event_id');
 
@@ -174,7 +176,7 @@ class MatchController extends Controller
                 ])
                 ->sortBy('label')
                 ->values(),
-            'canManage' => $canManageAll || $isTournamentManager,
+            'canManage' => $canManageAll || $canManageAssignedCompetition,
         ]);
     }
 
@@ -373,7 +375,11 @@ class MatchController extends Controller
         }
 
         abort_unless(
-            $user->role === UserRole::TournamentManager
+            app(CompetitionAccessService::class)->hasAssignmentRole(
+                $user,
+                app(CompetitionAccessService::class)->competitionManagerRoles(),
+                Meet::current()->id,
+            )
                 && Event::query()->whereKey($eventIds)->get()->count() === count(array_unique($eventIds))
                 && Event::query()->whereKey($eventIds)->get()->every(
                     fn (Event $event): bool => app(CompetitionAccessService::class)

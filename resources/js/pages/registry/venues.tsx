@@ -20,7 +20,6 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
     Select,
     SelectContent,
@@ -36,6 +35,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
 import {
     archive,
     destroy,
@@ -77,7 +77,9 @@ type Props = {
     venues: Paginated<Venue>;
     filters: { search: string };
     canManage: boolean;
+    canArchive: boolean;
     municipalityOptions: Option[];
+    sportOptions: Array<{ id: number; name: string }>;
 };
 type Option = { id: number; label: string };
 
@@ -224,15 +226,23 @@ function VenueDetailsDialog({
 function VenueFormDialog({
     venue,
     municipalityOptions,
+    sportOptions,
+    canArchive,
     open,
     onOpenChange,
 }: {
     venue: Venue | null;
     municipalityOptions: Option[];
+    sportOptions: Array<{ id: number; name: string }>;
+    canArchive: boolean;
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
     const { data, setData, post, put, processing, errors, reset } = useForm({
+        sport_id:
+            !venue && sportOptions.length === 1
+                ? String(sportOptions[0].id)
+                : '',
         name: venue?.name ?? '',
         short_name: venue?.short_name ?? '',
         address: venue?.address ?? '',
@@ -273,6 +283,40 @@ function VenueFormDialog({
                     </DialogTitle>
                 </DialogHeader>
                 <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+                    {!venue && (
+                        <div className="space-y-2 sm:col-span-2">
+                            <Label htmlFor="venue-sport">Sport</Label>
+                            <Select
+                                value={data.sport_id || 'none'}
+                                onValueChange={(value) =>
+                                    setData(
+                                        'sport_id',
+                                        value === 'none' ? '' : value,
+                                    )
+                                }
+                            >
+                                <SelectTrigger id="venue-sport">
+                                    <SelectValue placeholder="Select a sport" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {canArchive && (
+                                        <SelectItem value="none">
+                                            No sport association
+                                        </SelectItem>
+                                    )}
+                                    {sportOptions.map((sport) => (
+                                        <SelectItem
+                                            key={sport.id}
+                                            value={String(sport.id)}
+                                        >
+                                            {sport.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <InputError message={errors.sport_id} />
+                        </div>
+                    )}
                     <div className="space-y-2">
                         <Label htmlFor="venue-name">Name</Label>
                         <Input
@@ -428,7 +472,9 @@ export default function Venues({
     venues,
     filters,
     canManage,
+    canArchive,
     municipalityOptions,
+    sportOptions,
 }: Props) {
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<Venue | null>(null);
@@ -552,7 +598,7 @@ export default function Venues({
                                                     >
                                                         Edit
                                                     </Button>
-                                                    <ConfirmDialog
+                                                    {canArchive && <ConfirmDialog
                                                         trigger={
                                                             <Button
                                                                 variant="outline"
@@ -593,8 +639,8 @@ export default function Venues({
                                                                 },
                                                             )
                                                         }
-                                                    />
-                                                    <ConfirmDialog
+                                                    />}
+                                                    {canArchive && <ConfirmDialog
                                                         trigger={
                                                             <Button
                                                                 variant="destructive"
@@ -617,7 +663,7 @@ export default function Venues({
                                                                 },
                                                             )
                                                         }
-                                                    />
+                                                    />}
                                                 </div>
                                             </TableCell>
                                         )}
@@ -653,6 +699,8 @@ export default function Venues({
                 key={editing?.id ?? 'create'}
                 venue={editing}
                 municipalityOptions={municipalityOptions}
+                sportOptions={sportOptions}
+                canArchive={canArchive}
                 open={formOpen}
                 onOpenChange={(open) => {
                     setFormOpen(open);

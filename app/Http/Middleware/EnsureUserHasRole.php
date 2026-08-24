@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\UserRole;
 use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
@@ -21,7 +22,10 @@ class EnsureUserHasRole
         $user = $request->user();
 
         abort_unless(
-            $user instanceof User && in_array($user->role->value, $roles, true),
+            $user instanceof User && $user->hasRole(...collect($roles)
+                ->map(fn (string $role): ?UserRole => UserRole::tryFrom($role))
+                ->filter()
+                ->all()),
             403,
         );
 

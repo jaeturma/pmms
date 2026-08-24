@@ -17,6 +17,7 @@ import {
     search as publicSearch,
     sports as publicSports,
     sportsDirectory as publicSportsDirectory,
+    support as publicSupport,
     tally as publicTally,
     teams as publicTeams,
 } from '@/routes/public';
@@ -56,6 +57,11 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
                 label: 'Medal Tally',
                 href: publicTally(nav.meetId).url,
                 active: activePath === publicTally(nav.meetId).url,
+            },
+            {
+                label: 'Support',
+                href: publicSupport(nav.meetId).url,
+                active: activePath === publicSupport(nav.meetId).url,
             },
         );
     }

@@ -349,7 +349,7 @@ class CoachAssignmentRequestController extends Controller
 
         return $request->events()->whereKey($user->tournamentEventIds())->exists()
             && $user->meetSportAssignments()->where('status', 'active')
-                ->whereIn('role', $this->coachAccreditorRoles())->exists();
+                ->whereIn('role', $this->coachReviewerRoles())->exists();
     }
 
     private function onboardingRegistrations(User $user): array
@@ -535,6 +535,14 @@ class CoachAssignmentRequestController extends Controller
         ];
     }
 
+    private function coachReviewerRoles(): array
+    {
+        return [
+            MeetSportAssignmentRole::TournamentSecretary->value,
+            MeetSportAssignmentRole::TournamentICT->value,
+        ];
+    }
+
     private function coachViewerRoles(): array
     {
         return [
@@ -558,7 +566,7 @@ class CoachAssignmentRequestController extends Controller
     private function reviewableMeetSportIds(User $user): Collection
     {
         return $user->meetSportAssignments()->where('status', 'active')
-            ->whereIn('role', $this->coachAccreditorRoles())
+            ->whereIn('role', $this->coachReviewerRoles())
             ->pluck('meet_sport_id');
     }
 

@@ -54,8 +54,10 @@ class UserManagementController extends Controller
                 'email' => $user->email,
                 'role' => $user->role->value,
                 'role_label' => $user->role->label(),
+                'additional_roles' => $user->additional_roles ?? [],
                 'person' => $user->person?->full_name,
                 'roles' => collect([$user->role->label()])
+                    ->merge(collect($user->additional_roles ?? [])->map(fn (string $role) => UserRole::tryFrom($role)?->label())->filter())
                     ->merge($user->meetSportAssignments->map(fn ($assignment) => $assignment->role->label()))
                     ->merge($user->managementTeamMemberships->map(fn ($membership) => $membership->managementTeam->name))
                     ->unique()->values(),
@@ -84,9 +86,12 @@ class UserManagementController extends Controller
             'username' => ['nullable', 'string', 'max:255', Rule::unique('users')->ignore($user->id)],
             'email' => ['nullable', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
             'role' => ['required', Rule::enum(UserRole::class)],
+            'additional_roles' => ['array'],
+            'additional_roles.*' => [Rule::enum(UserRole::class), 'distinct'],
             'disabled' => ['required', 'boolean'],
         ]);
-        abort_if($request->user()->is($user) && ($data['role'] !== UserRole::Admin->value || $data['disabled']), 422, 'You cannot remove or disable your own administrator access.');
+        $additionalRoles = collect($data['additional_roles'] ?? [])->reject(fn (string $role) => $role === $data['role'])->values()->all();
+        abort_if($request->user()->is($user) && (! in_array(UserRole::Admin->value, [$data['role'], ...$additionalRoles], true) || $data['disabled']), 422, 'You cannot remove or disable your own administrator access.');
 
         $before = $user->only(['name', 'username', 'email', 'role', 'disabled_at']);
         $user->forceFill([
@@ -94,6 +99,7 @@ class UserManagementController extends Controller
             'username' => $data['username'] ?: null,
             'email' => $data['email'] ?: null,
             'role' => $data['role'],
+            'additional_roles' => $additionalRoles,
             'disabled_at' => $data['disabled'] ? ($user->disabled_at ?? now()) : null,
         ])->save();
 
@@ -115,6 +121,8 @@ class UserManagementController extends Controller
             'username' => ['nullable', 'string', 'max:255', Rule::unique('users')],
             'email' => ['nullable', 'email', 'max:255', Rule::unique('users')],
             'role' => ['required', Rule::enum(UserRole::class)],
+            'additional_roles' => ['array'],
+            'additional_roles.*' => [Rule::enum(UserRole::class), 'distinct'],
         ]);
         abort_if(empty($data['username']) && empty($data['email']), 422, 'A username or email address is required.');
 
@@ -126,7 +134,11 @@ class UserManagementController extends Controller
             'email' => $data['email'] ?: null,
             'password' => $password,
         ]);
-        $user->forceFill(['role' => $data['role'], 'email_verified_at' => $data['email'] ? now() : null])->save();
+        $user->forceFill([
+            'role' => $data['role'],
+            'additional_roles' => collect($data['additional_roles'] ?? [])->reject(fn (string $role) => $role === $data['role'])->values()->all(),
+            'email_verified_at' => $data['email'] ? now() : null,
+        ])->save();
         $this->audit->record('user.created', $user, ['role' => $user->role->value]);
         Inertia::flash('toast', ['type' => 'success', 'message' => __('User created with password DdOPaa2026!.')]);
 
@@ -188,6 +200,8 @@ class UserManagementController extends Controller
             UserRole::DelegationOfficer => ['Manage assigned delegation registration'],
             UserRole::TechnicalOfficial => ['Operate assigned sport scoring'],
             UserRole::TournamentManager => ['Manage assigned sport schedule, matches and results'],
+            UserRole::TournamentICT => ['Operate live scoring for assigned sports'],
+            UserRole::TournamentSecretary => ['Record and manage results for assigned sports'],
             UserRole::Coach => ['Manage approved team athletes and entries'],
             UserRole::Viewer => ['View published schedules, results and medal tally'],
         };

@@ -7,6 +7,7 @@ use App\Enums\Permission;
 use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\Delegation;
+use App\Models\Setting;
 use App\Models\User;
 
 class AthletePolicy
@@ -67,15 +68,11 @@ class AthletePolicy
         }
 
         if ($user->role === UserRole::Coach) {
-            return $user->hasApprovedCoachScope($delegation);
+            return Setting::current()->coach_athlete_registration_enabled
+                && $user->hasApprovedCoachScope($delegation);
         }
 
-        return $user->meetSportAssignments()
-            ->where('status', 'active')
-            ->where('role', MeetSportAssignmentRole::TournamentICT->value)
-            ->whereHas('meetSport', fn ($meetSport) => $meetSport
-                ->where('meet_id', $delegation->meet_id))
-            ->exists();
+        return false;
     }
 
     public function update(User $user, Athlete $athlete): bool

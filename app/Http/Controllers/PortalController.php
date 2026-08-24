@@ -296,6 +296,7 @@ class PortalController extends Controller
                 AgeDivision::cases(),
             ),
             'generatedAt' => now()->toDayDateTimeString(),
+            'medalTallyOfficial' => Setting::current()->medalTallyIsOfficial(),
         ]);
     }
 
@@ -640,13 +641,14 @@ class PortalController extends Controller
     private function contestedSports(Meet $meet): array
     {
         return $meet->events()
-            ->with('sport:id,name')
+            ->with('sport:id,name,photo_upload_id')
             ->get()
             ->groupBy('sport_id')
             ->map(fn (Collection $events): array => [
                 'id' => $events->first()->sport->id,
                 'name' => $events->first()->sport->name,
                 'event_count' => $events->count(),
+                'photo_url' => $events->first()->sport->photoUrl(),
             ])
             ->sortBy('name')
             ->values()
@@ -762,6 +764,20 @@ class PortalController extends Controller
         $meet = Meet::query()->published()->findOrFail($meet);
 
         return Inertia::render('portal/faqs', [
+            'meet' => $this->meetSummary($meet),
+        ]);
+    }
+
+    /**
+     * Public role guide for tournament personnel and coaches. The page
+     * contains no private meet data; the meet summary only supplies the
+     * same public context used throughout the portal.
+     */
+    public function support(int $meet): Response
+    {
+        $meet = Meet::query()->published()->findOrFail($meet);
+
+        return Inertia::render('portal/support', [
             'meet' => $this->meetSummary($meet),
         ]);
     }

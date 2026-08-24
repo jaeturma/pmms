@@ -5,6 +5,7 @@ namespace App\Actions\Fortify;
 use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
 use App\Models\CoachOnboardingRequest;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\FileUploadService;
 use App\Services\RecaptchaVerifier;
@@ -37,6 +38,16 @@ class CreateNewUser implements CreatesNewUsers
      */
     public function create(array $input): User
     {
+        $settings = Setting::current();
+        $isCoach = ($input['account_type'] ?? 'viewer') === 'coach';
+
+        if (($isCoach && ! $settings->coach_registration_enabled)
+            || (! $isCoach && ! $settings->user_registration_enabled)) {
+            throw ValidationException::withMessages([
+                'registration' => [__('This type of account registration is currently suspended by the administrator.')],
+            ]);
+        }
+
         Validator::make($input, [
             ...$this->profileRules(),
             'password' => $this->passwordRules(),

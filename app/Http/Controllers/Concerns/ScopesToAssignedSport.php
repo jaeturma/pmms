@@ -21,15 +21,17 @@ trait ScopesToAssignedSport
 {
     protected function userOperatesSport(User $user, int $sportId): bool
     {
-        return match ($user->role) {
-            UserRole::TechnicalOfficial => $this->userAssignedSportIds($user, [
+        if ($user->hasRole(UserRole::TechnicalOfficial, UserRole::TournamentICT, UserRole::TournamentSecretary)
+            && ($this->userAssignedSportIds($user, [
                 MeetSportAssignmentRole::TechnicalOfficial,
                 MeetSportAssignmentRole::TournamentSecretary,
                 MeetSportAssignmentRole::TournamentICT,
-            ])->contains($sportId) || $user->sports()->whereKey($sportId)->exists(),
-            UserRole::TournamentManager => $this->userManagedSportIds($user)->contains($sportId),
-            default => false,
-        };
+            ])->contains($sportId) || $user->sports()->whereKey($sportId)->exists())) {
+            return true;
+        }
+
+        return $user->hasRole(UserRole::TournamentManager)
+            && $this->userManagedSportIds($user)->contains($sportId);
     }
 
     /**

@@ -327,6 +327,19 @@ export function AppSidebar() {
     const { auth, division } = usePage().props;
 
     const role = auth.user?.role;
+    const roles = [role, ...(auth.user?.additional_roles ?? [])].filter(
+        (value): value is string => typeof value === 'string',
+    );
+    const canManageTournamentSetup = roles.some((value) =>
+        ['tournament_ict', 'tournament_secretary'].includes(value),
+    );
+    const tournamentAssignmentRoles =
+        auth.user?.tournament_assignment_roles ?? [];
+    const hasTournamentAssignment = tournamentAssignmentRoles.length > 0;
+    const hasTournamentSetupAssignment = tournamentAssignmentRoles.some(
+        (value) =>
+            ['tournament_ict', 'tournament_secretary'].includes(value),
+    );
     const teamTypes: string[] = auth.user?.team_types ?? [];
     const canManageAccounts = auth.user?.can_manage_accounts ?? false;
     const canManageAnnouncements = auth.user?.can_manage_announcements ?? false;
@@ -460,6 +473,37 @@ export function AppSidebar() {
             icon: Settings,
             items: adminNavItems,
         });
+    } else if (hasTournamentAssignment) {
+        navSections.push(
+            {
+                title: 'Registration',
+                icon: UsersRound,
+                items: [
+                    {
+                        title: 'Coach',
+                        href: '/coach/assignment-requests',
+                        icon: UserCog,
+                    },
+                    ...byTitle(['Athletes', 'Eligibility'], mainNavItems),
+                ],
+            },
+            {
+                title: 'Competition',
+                icon: Trophy,
+                items: byTitle(
+                    ['Schedule', 'Matches', 'Results', 'Medal tally'],
+                    mainNavItems,
+                ),
+            },
+        );
+
+        if (hasTournamentSetupAssignment) {
+            navSections.push({
+                title: 'Event Setup',
+                icon: Settings,
+                items: byTitle(['Events', 'Venues'], mainNavItems),
+            });
+        }
     } else if (role === 'organizer') {
         navSections.push(
             {
@@ -521,6 +565,26 @@ export function AppSidebar() {
                 items: byTitle(['Eligibility']),
             });
         }
+    } else if (canManageTournamentSetup) {
+        navSections.push({
+            title: 'Event Setup',
+            icon: Settings,
+            items: byTitle(['Events', 'Venues'], mainNavItems),
+        });
+
+        navSections.push({
+            title: 'Competition',
+            icon: Trophy,
+            items:
+                role === 'technical_official' || role === 'tournament_manager'
+                    ? labeledItems.filter(
+                          (item) => item.title !== 'Dashboard',
+                      )
+                    : byTitle(
+                          ['Schedule', 'Matches', 'Results', 'Medal tally'],
+                          mainNavItems,
+                      ),
+        });
     } else if (role === 'technical_official' || role === 'tournament_manager') {
         navSections.push({
             title: 'Competition',
@@ -582,6 +646,7 @@ export function AppSidebar() {
             icon: Trophy,
             items: byTitle(['Schedule', 'Results', 'Medal tally']),
         });
+
         if (auth.user?.can_manage_school_master_data) {
             navSections.push({
                 title: 'Registry',
@@ -589,6 +654,7 @@ export function AppSidebar() {
                 items: byTitle(['Schools'], mainNavItems),
             });
         }
+
         if (teamTypes.includes('division_screening_and_accreditation')) {
             navSections.push({
                 title: 'DSAC',
@@ -596,12 +662,14 @@ export function AppSidebar() {
                 items: byTitle(['Athletes', 'Eligibility'], mainNavItems),
             });
         }
-        if (relevantOperations.length)
+
+        if (relevantOperations.length) {
             navSections.push({
                 title: 'Assigned operations',
                 icon: LifeBuoy,
                 items: relevantOperations,
             });
+        }
     }
 
     if (canManageAccounts && role !== 'admin') {
@@ -643,6 +711,7 @@ export function AppSidebar() {
         const registration = navSections.find(
             (section) => section.title === 'Registration',
         );
+
         const coachItem: NavItem = {
             title: 'Coach',
             href: '/coach/assignment-requests',
@@ -653,10 +722,16 @@ export function AppSidebar() {
             href: auditLogsIndex(),
             icon: ScrollText,
         };
+
         if (registration) {
-            registration.items.push(coachItem);
-            if (role === 'coach') registration.items.push(recentActivityItem);
-        } else
+            if (!registration.items.some((item) => item.title === 'Coach')) {
+                registration.items.push(coachItem);
+            }
+
+            if (role === 'coach') {
+                registration.items.push(recentActivityItem);
+            }
+        } else {
             navSections.push({
                 title: 'Registration',
                 icon: UsersRound,
@@ -665,28 +740,33 @@ export function AppSidebar() {
                         ? [coachItem, recentActivityItem]
                         : [coachItem],
             });
+        }
     }
 
     if (canViewTournamentAthletes) {
         const registration = navSections.find(
             (section) => section.title === 'Registration',
         );
+
         const athleteItems = byTitle(['Athletes', 'Eligibility'], mainNavItems);
+
         if (registration) {
             athleteItems.forEach((item) => {
                 if (
                     !registration.items.some(
                         (current) => current.title === item.title,
                     )
-                )
+                ) {
                     registration.items.push(item);
+                }
             });
-        } else
+        } else {
             navSections.push({
                 title: 'Registration',
                 icon: UsersRound,
                 items: athleteItems,
             });
+        }
     }
 
     return (

@@ -79,6 +79,7 @@ type Props = {
     venues: { id: number; name: string }[];
     people: { id: number; full_name: string }[];
     canManage: boolean;
+    canArchive: boolean;
 };
 
 const genderLabels: Record<string, string> = {
@@ -408,14 +409,17 @@ function EventFormDialog({
                                                 const ids = [
                                                     ...assignment.coordinator_ids,
                                                 ];
-                                                if (e.target.value)
+
+                                                if (e.target.value) {
                                                     ids[coordinatorIndex] =
                                                         e.target.value;
-                                                else
+                                                } else {
                                                     ids.splice(
                                                         coordinatorIndex,
                                                         1,
                                                     );
+                                                }
+
                                                 updateVenue(index, {
                                                     coordinator_ids:
                                                         ids.filter(Boolean),
@@ -469,6 +473,7 @@ export default function Events({
     venues,
     people,
     canManage,
+    canArchive,
 }: Props) {
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<MeetEvent | null>(null);
@@ -598,7 +603,7 @@ export default function Events({
                                                     >
                                                         Edit
                                                     </Button>
-                                                    <ConfirmDialog
+                                                    {canArchive && <ConfirmDialog
                                                         trigger={
                                                             <Button
                                                                 variant="outline"
@@ -639,8 +644,8 @@ export default function Events({
                                                                 },
                                                             )
                                                         }
-                                                    />
-                                                    <ConfirmDialog
+                                                    />}
+                                                    {canArchive && <ConfirmDialog
                                                         trigger={
                                                             <Button
                                                                 variant="destructive"
@@ -663,7 +668,7 @@ export default function Events({
                                                                 },
                                                             )
                                                         }
-                                                    />
+                                                    />}
                                                 </div>
                                             </TableCell>
                                         )}

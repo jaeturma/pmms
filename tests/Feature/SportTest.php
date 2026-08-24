@@ -9,6 +9,8 @@ use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
 use App\Models\Sport;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia;
 
 test('guests are redirected from the sports catalog', function () {
@@ -87,6 +89,28 @@ test('admins can update a sport', function () {
 
     expect($sport->refresh()->name)->toBe('Track and Field')
         ->and(AuditLog::query()->where('action', 'sport.updated')->exists())->toBeTrue();
+});
+
+test('admins can set and remove a public sport card photo', function () {
+    Storage::fake(config('uploads.disk'));
+    $sport = Sport::factory()->create(['name' => 'Athletics']);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/sports/{$sport->id}", [
+            '_method' => 'put',
+            'name' => 'Athletics',
+            'photo' => UploadedFile::fake()->image('athletics.jpg', 1200, 700),
+        ])
+        ->assertRedirect();
+
+    expect($sport->refresh()->photo_upload_id)->not->toBeNull();
+
+    $this->actingAs($admin)
+        ->put("/sports/{$sport->id}", ['name' => 'Athletics', 'remove_photo' => true])
+        ->assertRedirect();
+
+    expect($sport->refresh()->photo_upload_id)->toBeNull();
 });
 
 test('archiving and restoring a sport toggles active', function () {

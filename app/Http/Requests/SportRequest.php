@@ -25,6 +25,8 @@ class SportRequest extends FormRequest
                 Rule::unique('sports', 'name')
                     ->ignore($sport instanceof Sport ? $sport->id : null),
             ],
+            'photo' => ['nullable', 'image', 'max:4096'],
+            'remove_photo' => ['nullable', 'boolean'],
         ];
     }
 }

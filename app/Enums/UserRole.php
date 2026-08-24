@@ -9,6 +9,8 @@ enum UserRole: string
     case DelegationOfficer = 'delegation_officer';
     case TechnicalOfficial = 'technical_official';
     case TournamentManager = 'tournament_manager';
+    case TournamentICT = 'tournament_ict';
+    case TournamentSecretary = 'tournament_secretary';
     case Coach = 'coach';
     case Viewer = 'viewer';
 
@@ -20,6 +22,8 @@ enum UserRole: string
             self::DelegationOfficer => 'Delegation Officer',
             self::TechnicalOfficial => 'Technical Official',
             self::TournamentManager => 'Tournament Manager',
+            self::TournamentICT => 'Tournament ICT',
+            self::TournamentSecretary => 'Tournament Secretary',
             self::Coach => 'Coach',
             self::Viewer => 'Viewer',
         };

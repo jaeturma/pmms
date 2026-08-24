@@ -4,6 +4,8 @@ export type User = {
     email: string;
     role: string;
     role_label: string;
+    additional_roles?: string[];
+    tournament_assignment_roles?: string[];
     team_types?: string[];
     can_review_coaches?: boolean;
     can_manage_accounts?: boolean;
@@ -15,7 +17,6 @@ export type User = {
     assigned_sports?: string[];
     is_tournament_scoped?: boolean;
     can_view_system_logs?: boolean;
-    can_request_coach_enrollment?: boolean;
     can_manage_school_master_data?: boolean;
     can_request_coach_enrollment?: boolean;
     avatar?: string;

@@ -1,6 +1,8 @@
 <?php
 
 use App\Enums\MatchStatus;
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
@@ -10,6 +12,8 @@ use App\Models\Event;
 use App\Models\EventMatch;
 use App\Models\EventSchedule;
 use App\Models\Meet;
+use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
 use App\Models\School;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
@@ -100,6 +104,44 @@ test('a tournament manager only sees matches for their managed sport, and can ma
 
     expect($otherSportMatch->id)->not->toBe($ownSportMatch->id);
 });
+
+test('assigned tournament management staff can create and update matches for their sport', function (MeetSportAssignmentRole $role) {
+    $meet = Meet::factory()->active()->create();
+    $event = Event::factory()->create();
+    $meet->events()->attach($event);
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $event->sport_id]);
+    $user = User::factory()->tournamentManager()->create();
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $user->id,
+        'role' => $role,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($user)->post('/matches', [
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+        'event_schedule_id' => null,
+        'round_label' => 'Final',
+        'sequence' => 1,
+    ])->assertSessionHasNoErrors();
+
+    $match = EventMatch::query()->where('event_id', $event->id)->firstOrFail();
+    $this->actingAs($user)->put("/matches/{$match->id}", [
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+        'event_schedule_id' => null,
+        'round_label' => 'Semifinal',
+        'sequence' => 2,
+    ])->assertSessionHasNoErrors();
+
+    expect($match->fresh()->round_label)->toBe('Semifinal');
+})->with([
+    'Tournament Manager' => MeetSportAssignmentRole::TournamentManager,
+    'Assistant Tournament Manager' => MeetSportAssignmentRole::AssistantTournamentManager,
+    'Tournament Secretary' => MeetSportAssignmentRole::TournamentSecretary,
+    'Tournament ICT' => MeetSportAssignmentRole::TournamentICT,
+]);
 
 test('a tournament manager can create, update, participants, status, and delete a match in their managed sport', function () {
     $meet = Meet::factory()->active()->create();

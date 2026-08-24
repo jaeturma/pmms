@@ -78,6 +78,36 @@ test('admins can save settings, and audit trail records it', function () {
         ->and(AuditLog::query()->where('action', 'system_settings.updated')->exists())->toBeTrue();
 });
 
+test('admins can suspend each registration channel independently', function () {
+    $this->actingAs(User::factory()->admin()->create())
+        ->put('/system-settings', [
+            'recaptcha_enabled' => false,
+            'email_verification_enabled' => false,
+            'user_registration_enabled' => false,
+            'coach_registration_enabled' => false,
+            'coach_athlete_registration_enabled' => false,
+        ])->assertSessionHasNoErrors();
+
+    $settings = Setting::current();
+
+    expect($settings->user_registration_enabled)->toBeFalse()
+        ->and($settings->coach_registration_enabled)->toBeFalse()
+        ->and($settings->coach_athlete_registration_enabled)->toBeFalse();
+});
+
+test('medal tally is unofficial by default and admins can mark it official', function () {
+    expect(Setting::current()->medalTallyIsOfficial())->toBeFalse();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put('/system-settings', [
+            'recaptcha_enabled' => false,
+            'email_verification_enabled' => false,
+            'medal_tally_official' => true,
+        ])->assertSessionHasNoErrors();
+
+    expect(Setting::current()->medal_tally_official)->toBeTrue();
+});
+
 test('admins can configure the application title and logo', function () {
     $this->actingAs(User::factory()->admin()->create())
         ->post('/system-settings', [
@@ -91,6 +121,24 @@ test('admins can configure the application title and logo', function () {
     expect(Setting::current()->app_title)->toBe('DdOPAA Provincial Meet 2026')
         ->and(Setting::current()->app_logo_upload_id)->not->toBeNull();
     $this->get('/branding/logo')->assertOk();
+});
+
+test('admins can configure the login splash headline and background', function () {
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/system-settings', [
+            '_method' => 'put',
+            'login_splash_title' => 'Together, we make every game count.',
+            'login_background' => UploadedFile::fake()->image('login-background.jpg', 1600, 1000),
+            'recaptcha_enabled' => false,
+            'email_verification_enabled' => false,
+        ])->assertSessionHasNoErrors();
+
+    $settings = Setting::current();
+
+    expect($settings->login_splash_title)->toBe('Together, we make every game count.')
+        ->and($settings->login_background_upload_id)->not->toBeNull();
+
+    $this->get('/branding/login-background')->assertOk();
 });
 
 test('admins can configure the landing page Facebook Live video', function () {

@@ -62,11 +62,17 @@ class HandleInertiaRequests extends Middleware
             'branding' => [
                 'title' => $settings->app_title ?: config('app.name'),
                 'logoUrl' => $settings->app_logo_upload_id === null ? null : route('branding.logo'),
+                'loginSplashTitle' => $settings->login_splash_title ?: 'One secure place to manage every moment of the meet.',
+                'loginBackgroundUrl' => $settings->login_background_upload_id === null ? null : route('branding.login-background'),
             ],
             'auth' => [
                 'user' => $user === null ? null : [
                     ...$user->toArray(),
                     'role_label' => $user->role->label(),
+                    'tournament_assignment_roles' => app(CompetitionAccessService::class)
+                        ->assignments($user, Meet::current()->id)
+                        ->map(fn ($assignment): string => $assignment->role->value)
+                        ->unique()->values(),
                     'team_types' => $user->managementTeamMemberships()
                         ->where('management_team_members.status', 'active')
                         ->join('management_teams', 'management_teams.id', '=', 'management_team_members.management_team_id')

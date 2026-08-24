@@ -37,6 +37,7 @@ type Props = {
     filters: { sport_id: number | null; age_division: string | null };
     sportOptions: PortalSportOption[];
     generatedAt: string;
+    medalTallyOfficial: boolean;
 };
 
 export default function PortalTally({
@@ -48,6 +49,7 @@ export default function PortalTally({
     filters,
     sportOptions,
     generatedAt,
+    medalTallyOfficial,
 }: Props) {
     // The age-division dimension (Overall/Elementary/Secondary) is a tab,
     // not a dropdown — "Top Medalist" is a fourth tab alongside it that
@@ -125,7 +127,7 @@ export default function PortalTally({
                 ) : (
                     <>
                         <PortalSectionHeader
-                            title="Overall standings"
+                            title={`Overall Standings (${medalTallyOfficial ? 'Official' : 'Unofficial'} Result)`}
                             action={
                                 <PortalSelect
                                     value={filters.sport_id ?? ''}
@@ -159,7 +161,9 @@ export default function PortalTally({
 
                         <PortalMedalTotalsRow totals={totals} />
 
-                        <PortalSectionHeader title="School standings" />
+                        <PortalSectionHeader
+                            title={`School Standings (${medalTallyOfficial ? 'Official' : 'Unofficial'} Result)`}
+                        />
                         <PortalStandingsTable
                             nameLabel="School"
                             showCrest={false}

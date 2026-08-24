@@ -263,6 +263,12 @@ class EntryController extends Controller
             $event = $events->get($eventId);
             Gate::authorize('create', [Entry::class, $delegation, $event]);
 
+            if ($event->is_team_event) {
+                throw ValidationException::withMessages([
+                    $errorKey => __(':event is a team or group event. Build its roster using Team entries.', ['event' => $event->name]),
+                ]);
+            }
+
             if (! $delegation->meet->events()->whereKey($event->id)->exists()) {
                 throw ValidationException::withMessages([$errorKey => __(':event is not part of the athlete\'s meet.', ['event' => $event->name])]);
             }

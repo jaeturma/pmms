@@ -24,6 +24,9 @@ class SystemSettingsRequest extends FormRequest
         return [
             'app_title' => ['nullable', 'string', 'max:120'],
             'app_logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'login_splash_title' => ['nullable', 'string', 'max:180'],
+            'login_background' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'remove_login_background' => ['sometimes', 'boolean'],
             'facebook_live_enabled' => ['sometimes', 'boolean'],
             'facebook_live_url' => [
                 'nullable',
@@ -45,6 +48,10 @@ class SystemSettingsRequest extends FormRequest
             'smtp_from_name' => ['nullable', 'string', 'max:255'],
 
             'email_verification_enabled' => ['required', 'boolean'],
+            'user_registration_enabled' => ['sometimes', 'boolean'],
+            'coach_registration_enabled' => ['sometimes', 'boolean'],
+            'coach_athlete_registration_enabled' => ['sometimes', 'boolean'],
+            'medal_tally_official' => ['sometimes', 'boolean'],
         ];
     }
 }

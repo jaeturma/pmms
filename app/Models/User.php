@@ -35,6 +35,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property UserRole $role
+ * @property array<int, string> $additional_roles
  * @property string $approval_status
  * @property string|null $two_factor_secret
  * @property string|null $two_factor_recovery_codes
@@ -64,6 +65,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             'password_changed_at' => 'datetime',
             'disabled_at' => 'datetime',
             'role' => UserRole::class,
+            'additional_roles' => 'array',
             'approved_at' => 'datetime',
             'two_factor_confirmed_at' => 'datetime',
         ];
@@ -71,12 +73,18 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
 
     public function hasRole(UserRole ...$roles): bool
     {
-        return in_array($this->role, $roles, true);
+        $heldRoles = collect([$this->role])
+            ->merge(collect($this->additional_roles ?? [])->map(
+                fn (string $role): ?UserRole => UserRole::tryFrom($role),
+            ))
+            ->filter();
+
+        return $heldRoles->contains(fn (UserRole $heldRole): bool => in_array($heldRole, $roles, true));
     }
 
     public function isAdmin(): bool
     {
-        return $this->role === UserRole::Admin;
+        return $this->hasRole(UserRole::Admin);
     }
 
     public function canManageProductionAccounts(): bool
@@ -289,6 +297,23 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             ->where('status', 'approved')
             ->with('events:id')
             ->first()?->events->modelKeys() ?? [];
+
+        return $requestEventIds->merge($onboardingEventIds)->filter()->unique()->values();
+    }
+
+    /** @return Collection<int, int> */
+    public function approvedCoachEventIdsForDelegation(Delegation $delegation): Collection
+    {
+        $requestEventIds = $this->coachAssignmentRequests()
+            ->where('status', 'approved')
+            ->where('delegation_id', $delegation->id)
+            ->pluck('event_id');
+        $onboardingEventIds = $delegation->hasCoach($this)
+            ? ($this->coachOnboardingRequest()
+                ->where('status', 'approved')
+                ->with('events:id')
+                ->first()?->events->modelKeys() ?? [])
+            : [];
 
         return $requestEventIds->merge($onboardingEventIds)->filter()->unique()->values();
     }

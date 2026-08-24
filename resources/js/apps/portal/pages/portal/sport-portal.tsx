@@ -10,7 +10,6 @@ import { PortalSportCategories } from '@/apps/portal/components/sport-categories
 import { PortalSportDescription } from '@/apps/portal/components/sport-description';
 import { PortalSportEventStrip } from '@/apps/portal/components/sport-event-strip';
 import { PortalSportIcon } from '@/apps/portal/components/sport-icon';
-import { PortalSportPhoto } from '@/apps/portal/components/sport-photo';
 import { PortalStandingsTable } from '@/apps/portal/components/standings-table';
 import { PortalTechnicalOfficials } from '@/apps/portal/components/technical-officials';
 import { PortalTournamentBracket } from '@/apps/portal/components/tournament-bracket';
@@ -29,7 +28,10 @@ import type {
     PortalSport,
     PortalVenue,
 } from '@/apps/portal/types';
-import { liveSportPortal, scoreboard as publicScoreboard } from '@/routes/public';
+import {
+    liveSportPortal,
+    scoreboard as publicScoreboard,
+} from '@/routes/public';
 import { poll as pollSportPortal } from '@/routes/public/sport-portal';
 
 const BACKGROUND_REFRESH_INTERVAL_MS = 45000;
@@ -151,13 +153,17 @@ export default function PortalSportPortal({
     }, [visible, meet]);
 
     const heroIcon = (
-        <PortalSportIcon slug={sport.slug} className="size-16 shrink-0 border-2 border-[var(--portal-ink-foreground)]/20 [&>svg]:size-8 sm:size-20 sm:[&>svg]:size-10" />
+        <PortalSportIcon
+            slug={sport.slug}
+            className="size-16 shrink-0 border-2 border-[var(--portal-ink-foreground)]/20 sm:size-20 [&>svg]:size-8 sm:[&>svg]:size-10"
+        />
     );
     const heroMeta = (
         <>
             <span>{sport.is_paragames ? 'Paragames' : 'Regular Sport'}</span>
             <span>
-                {sport.categories.length} {sport.categories.length === 1 ? 'category' : 'categories'}
+                {sport.categories.length}{' '}
+                {sport.categories.length === 1 ? 'category' : 'categories'}
             </span>
         </>
     );
@@ -178,11 +184,13 @@ export default function PortalSportPortal({
                         title={sport.name}
                         description="Live scores, schedules, and standings for this sport."
                         meta={heroMeta}
+                        backgroundImageUrl={sport.photo_url}
                     />
-                    <PortalSportPhoto photoUrl={sport.photo_url} sportName={sport.name} />
                     <section className="space-y-3">
                         <PortalSectionHeader title="About" />
-                        <PortalSportDescription description={sport.description} />
+                        <PortalSportDescription
+                            description={sport.description}
+                        />
                     </section>
                     <section className="space-y-3">
                         <PortalSectionHeader title="Competition categories" />
@@ -190,7 +198,9 @@ export default function PortalSportPortal({
                     </section>
                     <section className="space-y-3">
                         <PortalSectionHeader title="Technical officials" />
-                        <PortalTechnicalOfficials officials={sport.technical_officials} />
+                        <PortalTechnicalOfficials
+                            officials={sport.technical_officials}
+                        />
                     </section>
                     <PortalEmptyState
                         icon={Trophy}
@@ -231,7 +241,24 @@ export default function PortalSportPortal({
                 />
             </Head>
             <div className="flex flex-col gap-8">
-                {showSportStrip && liveNow ? (
+                <PortalHero
+                    icon={heroIcon}
+                    title={sport.name}
+                    description={`Live scores, schedules, and standings for ${sport.name} at ${meet.name}.`}
+                    backgroundImageUrl={sport.photo_url}
+                    meta={
+                        <>
+                            {heroMeta}
+                            {liveNow !== null && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--portal-live)] px-2.5 py-1 text-xs font-bold text-[var(--portal-live-foreground)]">
+                                    LIVE NOW
+                                </span>
+                            )}
+                        </>
+                    }
+                />
+
+                {showSportStrip && liveNow && (
                     <div className="flex flex-col gap-2">
                         <PortalSportEventStrip
                             sportEmoji={
@@ -254,25 +281,7 @@ export default function PortalSportPortal({
                             </span>
                         )}
                     </div>
-                ) : (
-                    <PortalHero
-                        icon={heroIcon}
-                        title={sport.name}
-                        description={`Live scores, schedules, and standings for ${sport.name} at ${meet.name}.`}
-                        meta={
-                            <>
-                                {heroMeta}
-                                {liveNow !== null && (
-                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--portal-live)] px-2.5 py-1 text-xs font-bold text-[var(--portal-live-foreground)]">
-                                        LIVE NOW
-                                    </span>
-                                )}
-                            </>
-                        }
-                    />
                 )}
-
-                <PortalSportPhoto photoUrl={sport.photo_url} sportName={sport.name} />
 
                 <section className="space-y-3">
                     <PortalSectionHeader title="About" />
@@ -300,12 +309,16 @@ export default function PortalSportPortal({
 
                 <section className="space-y-3">
                     <PortalSectionHeader title="Tournament management" />
-                    <PortalTournamentManagement assignments={sport.tournament_management} />
+                    <PortalTournamentManagement
+                        assignments={sport.tournament_management}
+                    />
                 </section>
 
                 <section className="space-y-3">
                     <PortalSectionHeader title="Technical officials" />
-                    <PortalTechnicalOfficials officials={sport.technical_officials} />
+                    <PortalTechnicalOfficials
+                        officials={sport.technical_officials}
+                    />
                 </section>
 
                 <section className="space-y-3">

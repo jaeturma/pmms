@@ -154,9 +154,12 @@ test('meet-data management is denied to a tournament manager with no managed spo
         ->{$method}($uri)
         ->assertForbidden();
 })->with(
-    collect(forbiddenActionCases())
-        ->except(['schedule create', 'schedule update', 'match create', 'match update'])
-        ->all(),
+    array_diff_key(forbiddenActionCases(), array_flip([
+        'schedule create',
+        'schedule update',
+        'match create',
+        'match update',
+    ])),
 );
 
 test('viewers cannot reach minor-related data', function (string $uri) {

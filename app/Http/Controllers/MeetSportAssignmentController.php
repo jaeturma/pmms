@@ -39,8 +39,26 @@ class MeetSportAssignmentController extends Controller
      */
     public function index(Request $request): Response
     {
+        $search = trim($request->string('search')->toString());
         $query = MeetSportAssignment::query()
             ->with(['meetSport.sport:id,name', 'sportCategory:id,display_name', 'user:id,name,email', 'person:id,full_name'])
+            ->when($search !== '', function ($query) use ($search): void {
+                $roleSearch = str($search)->lower()->replace([' ', '-'], '_')->toString();
+
+                $query->where(function ($scope) use ($search, $roleSearch): void {
+                    $scope->where('role', 'like', "%{$roleSearch}%")
+                        ->orWhere('status', 'like', "%{$roleSearch}%")
+                        ->orWhereHas('user', fn ($user) => $user
+                            ->where('name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%"))
+                        ->orWhereHas('person', fn ($person) => $person
+                            ->where('full_name', 'like', "%{$search}%"))
+                        ->orWhereHas('meetSport.sport', fn ($sport) => $sport
+                            ->where('name', 'like', "%{$search}%"))
+                        ->orWhereHas('sportCategory', fn ($category) => $category
+                            ->where('display_name', 'like', "%{$search}%"));
+                });
+            })
             ->orderByDesc('id');
 
         return Inertia::render('meet-sport-assignments/index', [
@@ -58,6 +76,7 @@ class MeetSportAssignmentController extends Controller
                 'status' => $assignment->status->value,
                 'status_label' => $assignment->status->label(),
             ]),
+            'filters' => ['search' => $search],
             'meetSportOptions' => MeetSport::query()
                 ->where('meet_id', Meet::current()->id)
                 ->with('sport:id,name')

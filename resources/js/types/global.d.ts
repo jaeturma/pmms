@@ -16,6 +16,8 @@ declare module '@inertiajs/core' {
             branding: {
                 title: string;
                 logoUrl: string | null;
+                loginSplashTitle: string;
+                loginBackgroundUrl: string | null;
             };
             division: {
                 type: 'city' | 'province';

@@ -2,7 +2,10 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\MeetSportAssignmentRole;
+use App\Models\Meet;
 use App\Models\Venue;
+use App\Services\CompetitionAccessService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -10,6 +13,16 @@ class VenueRequest extends FormRequest
 {
     /** @var array{0: float, 1: float}|null */
     private ?array $parsedGpsCoordinates = null;
+
+    public function authorize(): bool
+    {
+        $user = $this->user();
+
+        return $user !== null && ($user->isAdmin() || app(CompetitionAccessService::class)->hasAssignmentRole($user, [
+            MeetSportAssignmentRole::TournamentSecretary->value,
+            MeetSportAssignmentRole::TournamentICT->value,
+        ], Meet::current()->id));
+    }
 
     protected function prepareForValidation(): void
     {
@@ -32,6 +45,7 @@ class VenueRequest extends FormRequest
         $venue = $this->route('venue');
 
         return [
+            'sport_id' => ['nullable', 'integer', Rule::exists('sports', 'id')->where('active', true)],
             'name' => [
                 'required',
                 'string',
@@ -69,7 +83,7 @@ class VenueRequest extends FormRequest
      */
     public function venueData(): array
     {
-        $data = $this->safe()->except('gps_location');
+        $data = $this->safe()->except(['gps_location', 'sport_id']);
 
         if ($this->has('gps_location')) {
             $data['latitude'] = $this->parsedGpsCoordinates[0] ?? null;
