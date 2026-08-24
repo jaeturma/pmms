@@ -92,7 +92,7 @@ test('approved delegations appear with zero medals and points before results are
             ->where('totals.total', 0));
 });
 
-test('standings support an athlete school without a municipality or district', function () {
+test('standings omit an athlete school without a municipality assignment', function () {
     $result = EventResult::factory()->validated()->create();
     $school = School::factory()->create([
         'name' => 'Unassigned School',
@@ -103,10 +103,9 @@ test('standings support an athlete school without a municipality or district', f
 
     $standings = app(MedalTallyService::class)->standings($result->meet_id);
 
-    expect($standings['schools'])->toHaveCount(1)
-        ->and($standings['schools'][0]['school'])->toBe('Unassigned School')
-        ->and($standings['schools'][0]['municipality'])->toBe('Not assigned')
-        ->and($standings['schools'][0]['district'])->toBe('Not assigned');
+    expect($standings['schools'])->toBeEmpty()
+        ->and($standings['districts'])->toBeEmpty()
+        ->and($result->placements()->count())->toBe(1);
 });
 
 test('only validated results feed the tally, ranks above three are ignored', function () {

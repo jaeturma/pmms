@@ -76,6 +76,7 @@ Route::middleware('throttle:10,1')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
+    Route::inertia('support', 'support')->name('support');
     Route::get('change-password', [RequiredPasswordChangeController::class, 'edit'])->name('password-change.edit');
     Route::put('change-password', [RequiredPasswordChangeController::class, 'update'])
         ->middleware('throttle:6,1')
@@ -125,9 +126,6 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('meets/{meet}/faqs', [PortalController::class, 'faqs'])
         ->whereNumber('meet')
         ->name('public.faqs');
-    Route::get('meets/{meet}/support', [PortalController::class, 'support'])
-        ->whereNumber('meet')
-        ->name('public.support');
     Route::get('meets/{meet}/search', [PortalController::class, 'search'])
         ->whereNumber('meet')
         ->name('public.search');

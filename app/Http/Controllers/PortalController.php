@@ -769,20 +769,6 @@ class PortalController extends Controller
     }
 
     /**
-     * Public role guide for tournament personnel and coaches. The page
-     * contains no private meet data; the meet summary only supplies the
-     * same public context used throughout the portal.
-     */
-    public function support(int $meet): Response
-    {
-        $meet = Meet::query()->published()->findOrFail($meet);
-
-        return Inertia::render('portal/support', [
-            'meet' => $this->meetSummary($meet),
-        ]);
-    }
-
-    /**
      * Cross-content search (WP-11-06): the exact same privacy boundary
      * every existing public route already enforces, just applied to a
      * new entry point that queries several tables at once instead of

@@ -46,7 +46,7 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { pluralizeAreaLabel } from '@/lib/utils';
-import { dashboard } from '@/routes';
+import { dashboard, support } from '@/routes';
 import { index as announcementsIndex } from '@/routes/announcements';
 import { index as athletesIndex } from '@/routes/athletes';
 import { index as auditLogsIndex } from '@/routes/audit-logs';
@@ -411,6 +411,9 @@ export function AppSidebar() {
             .filter((item): item is NavItem => item !== undefined);
 
     const navItems: NavItem[] = byTitle(['Dashboard']);
+    const trailingNavItems: NavItem[] = [
+        { title: 'Support', href: support(), icon: LifeBuoy },
+    ];
     const navSections: NavSection[] = [];
 
     if (role === 'admin') {
@@ -789,6 +792,7 @@ export function AppSidebar() {
                     sections={navSections.filter(
                         (section) => section.items.length > 0,
                     )}
+                    trailingItems={trailingNavItems}
                 />
             </SidebarContent>
 

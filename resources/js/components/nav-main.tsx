@@ -14,7 +14,15 @@ import {
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import type { NavItem, NavSection } from '@/types';
 
-export function NavMain({ items = [], sections = [] }: { items?: NavItem[]; sections?: NavSection[] }) {
+export function NavMain({
+    items = [],
+    sections = [],
+    trailingItems = [],
+}: {
+    items?: NavItem[];
+    sections?: NavSection[];
+    trailingItems?: NavItem[];
+}) {
     const { isCurrentUrl } = useCurrentUrl();
 
     return (
@@ -68,6 +76,20 @@ export function NavMain({ items = [], sections = [] }: { items?: NavItem[]; sect
                         </Collapsible>
                     );
                 })}
+                {trailingItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                        <SidebarMenuButton
+                            asChild
+                            isActive={isCurrentUrl(item.href)}
+                            tooltip={{ children: item.title }}
+                        >
+                            <Link href={item.href} prefetch>
+                                {item.icon && <item.icon />}
+                                <span>{item.title}</span>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                ))}
             </SidebarMenu>
         </SidebarGroup>
     );

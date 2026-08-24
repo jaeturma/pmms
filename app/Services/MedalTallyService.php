@@ -72,6 +72,12 @@ class MedalTallyService
         // The approved-delegation fallback is specifically for the otherwise
         // blank pre-results state requested by the tally views.
         $allSchools = $placements->isEmpty() ? $eligibleSchools : $placementSchools;
+        // An incomplete school record cannot form a legitimate public
+        // standings row. Preserve its result, but withhold it from both
+        // rollups until a municipality is assigned in the school registry.
+        $allSchools = $allSchools->filter(
+            fn (School $school): bool => $school->district_id !== null
+        );
         $multiDistrictMunicipalityIds = $this->multiDistrictMunicipalityIdsForSchools($allSchools);
 
         // Grouped by the placed athlete's own school — not the delegation's
