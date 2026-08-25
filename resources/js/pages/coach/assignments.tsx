@@ -7,6 +7,7 @@ import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogContent,
@@ -47,7 +48,10 @@ type RegistrationRow = {
     coach: string;
     email: string;
     team: string | null;
+    school: string | null;
+    sport: string;
     events: string;
+    assignment_options: Array<{ id: number; label: string }>;
     status: string;
     review_notes: string | null;
     profile_url: string | null;
@@ -113,6 +117,25 @@ type ViewedDocument = {
     mimeType: string | null;
 };
 
+function ApprovalDialog({ registration, close }: { registration: RegistrationRow; close: () => void }) {
+    const form = useForm({ status: 'approved', event_ids: [] as number[], review_notes: '' });
+    return (
+        <Dialog open onOpenChange={(open) => !open && close()}>
+            <DialogContent className="sm:max-w-xl">
+                <DialogHeader><DialogTitle>Assign scope and approve {registration.coach}</DialogTitle></DialogHeader>
+                <div className="space-y-3"><p className="text-sm text-muted-foreground">{registration.team} · {registration.school} · {registration.sport}</p>
+                    <Label>Active event assignments</Label>
+                    <div className="max-h-72 space-y-1 overflow-y-auto rounded-md border p-3">
+                        {registration.assignment_options.map((option) => <label key={option.id} className="flex items-center gap-3 rounded p-2 text-sm hover:bg-muted/50"><Checkbox checked={form.data.event_ids.includes(option.id)} onCheckedChange={(checked) => form.setData('event_ids', checked === true ? [...form.data.event_ids, option.id] : form.data.event_ids.filter((id) => id !== option.id))} />{option.label}</label>)}
+                    </div>
+                    <InputError message={form.errors.event_ids} />
+                    <Button className="w-full" disabled={form.processing || form.data.event_ids.length === 0} onClick={() => form.patch(`/coach/onboarding-requests/${registration.id}`, { preserveScroll: true, onSuccess: close })}>Approve with {form.data.event_ids.length} assignment{form.data.event_ids.length === 1 ? '' : 's'}</Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 export default function CoachAssignments({
     registrations,
     requests,
@@ -125,6 +148,7 @@ export default function CoachAssignments({
         null,
     );
     const [documentZoom, setDocumentZoom] = useState(1);
+    const [approving, setApproving] = useState<RegistrationRow | null>(null);
     const form = useForm({
         option: '',
         meet_sport_id: '',
@@ -170,7 +194,7 @@ export default function CoachAssignments({
                                         <TableHead>Coach</TableHead>
                                         <TableHead>Team</TableHead>
                                         <TableHead>
-                                            Requested sports/events
+                                            Applied sport / assignments
                                         </TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead>Documents</TableHead>
@@ -254,7 +278,8 @@ export default function CoachAssignments({
                                                 {item.team ?? '—'}
                                             </TableCell>
                                             <TableCell className="max-w-md whitespace-normal">
-                                                {item.events}
+                                                <div className="font-medium">{item.sport}</div>
+                                                <div className="text-xs text-muted-foreground">{item.school ?? 'No school'}{item.events ? ` · Assigned: ${item.events}` : ' · Assignment pending'}</div>
                                             </TableCell>
                                             <TableCell>
                                                 <Badge
@@ -310,27 +335,20 @@ export default function CoachAssignments({
                                                 item.can_accredit) && (
                                                 <TableCell className="space-x-2 text-right whitespace-nowrap">
                                                     {canReview &&
-                                                        !(
-                                                            item.status ===
-                                                                'approved' &&
-                                                            item.accreditation_number
-                                                        ) && (
+                                                        (
                                                             <>
                                                                 <Button
                                                                     size="sm"
-                                                                    onClick={() =>
-                                                                        router.patch(
-                                                                            `/coach/onboarding-requests/${item.id}`,
-                                                                            {
-                                                                                status: 'approved',
-                                                                            },
-                                                                            {
-                                                                                preserveScroll: true,
-                                                                            },
-                                                                        )
-                                                                    }
+                                                                    onClick={() => setApproving(item)}
                                                                 >
-                                                                    Approve
+                                                                    {item.status === 'approved' ? 'Manage assignments' : 'Approve'}
+                                                                </Button>
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    onClick={() => router.patch(`/coach/onboarding-requests/${item.id}`, { status: 'returned' }, { preserveScroll: true })}
+                                                                >
+                                                                    Return
                                                                 </Button>
                                                                 <Button
                                                                     size="sm"
@@ -643,6 +661,7 @@ export default function CoachAssignments({
                     </DialogContent>
                 </Dialog>
             </div>
+            {approving && <ApprovalDialog registration={approving} close={() => setApproving(null)} />}
         </>
     );
 }

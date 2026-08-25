@@ -471,6 +471,12 @@ export default function Entries({
                                     </Button>
                                 </>
                             )}
+                            <Button variant="outline" asChild>
+                                <Link href="/swimming/rosters">
+                                    <UsersRound />
+                                    Swimming rosters
+                                </Link>
+                            </Button>
                         </>
                     }
                 />

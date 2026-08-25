@@ -3,6 +3,7 @@
 use App\Models\CoachOnboardingRequest;
 use App\Models\District;
 use App\Models\Event;
+use App\Models\MeetSport;
 use App\Models\Setting;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\RateLimiter;
@@ -92,6 +93,9 @@ test('registration requires a strong password', function (string $password) {
 test('coach registration requires and stores a municipality team', function () {
     $municipality = District::factory()->create();
     $events = Event::factory()->count(2)->create();
+    $delegation = \App\Models\Delegation::factory()->create(['district_id' => $municipality->id, 'school_id' => null]);
+    $school = \App\Models\School::factory()->create(['district_id' => $municipality->id]);
+    $meetSport = MeetSport::factory()->create(['meet_id' => $delegation->meet_id, 'sport_id' => $events->first()->sport_id]);
 
     $this->get(route('register'));
     $this->post(route('register.store'), [
@@ -101,7 +105,7 @@ test('coach registration requires and stores a municipality team', function () {
         'password_confirmation' => 'Password1!',
         'account_type' => 'coach',
         'code_challenge' => 'ABC12',
-    ])->assertSessionHasErrors('district_id');
+    ])->assertSessionHasErrors('meet_sport_id');
 
     $this->get(route('register'));
     $this->post(route('register.store'), [
@@ -110,8 +114,9 @@ test('coach registration requires and stores a municipality team', function () {
         'password' => 'Password1!',
         'password_confirmation' => 'Password1!',
         'account_type' => 'coach',
-        'district_id' => $municipality->id,
-        'event_ids' => $events->modelKeys(),
+        'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $delegation->id,
+        'school_id' => $school->id,
         'coach_profile' => UploadedFile::fake()->image('coach.jpg'),
         'coach_certification' => UploadedFile::fake()->create('certificate.pdf', 100, 'application/pdf'),
         'code_challenge' => 'ABC12',
@@ -119,13 +124,13 @@ test('coach registration requires and stores a municipality team', function () {
 
     $this->assertDatabaseHas('coach_onboarding_requests', [
         'district_id' => $municipality->id,
-        'event_id' => $events->first()->id,
+        'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $delegation->id,
+        'school_id' => $school->id,
     ]);
     expect(CoachOnboardingRequest::query()->sole()->profile_upload_id)->not->toBeNull()
         ->and(CoachOnboardingRequest::query()->sole()->certification_upload_id)->not->toBeNull();
-    foreach ($events as $event) {
-        $this->assertDatabaseHas('coach_onboarding_request_event', ['event_id' => $event->id]);
-    }
+    expect(CoachOnboardingRequest::query()->sole()->events)->toBeEmpty();
     $this->assertGuest();
     $this->assertDatabaseHas('users', [
         'email' => 'coach@example.com',
@@ -139,8 +144,9 @@ test('coach registration requires and stores a municipality team', function () {
         'password' => 'Password1!',
         'password_confirmation' => 'Password1!',
         'account_type' => 'coach',
-        'district_id' => $municipality->id,
-        'event_ids' => [$events->first()->id],
+        'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $delegation->id,
+        'school_id' => $school->id,
         'code_challenge' => 'ABC12',
     ])->assertSessionHasNoErrors();
 

@@ -7,12 +7,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
-#[Fillable(['user_id', 'district_id', 'event_id', 'profile_upload_id', 'certification_upload_id', 'status', 'review_notes'])]
+#[Fillable(['user_id', 'meet_sport_id', 'delegation_id', 'school_id', 'district_id', 'event_id', 'profile_upload_id', 'certification_upload_id', 'status', 'submitted_at', 'review_notes'])]
 class CoachOnboardingRequest extends Model
 {
     protected function casts(): array
     {
-        return ['reviewed_at' => 'datetime'];
+        return ['submitted_at' => 'datetime', 'reviewed_at' => 'datetime'];
     }
 
     public function user(): BelongsTo
@@ -23,6 +23,21 @@ class CoachOnboardingRequest extends Model
     public function district(): BelongsTo
     {
         return $this->belongsTo(District::class);
+    }
+
+    public function meetSport(): BelongsTo
+    {
+        return $this->belongsTo(MeetSport::class);
+    }
+
+    public function delegation(): BelongsTo
+    {
+        return $this->belongsTo(Delegation::class);
+    }
+
+    public function school(): BelongsTo
+    {
+        return $this->belongsTo(School::class);
     }
 
     public function event(): BelongsTo

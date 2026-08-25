@@ -9,6 +9,8 @@ use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\Entry;
 use App\Models\Event;
+use App\Models\MeetSport;
+use App\Models\SportRosterMember;
 use App\Models\TeamEntry;
 use App\Models\User;
 use App\Services\AuditLogger;
@@ -32,8 +34,9 @@ class TeamEntryController extends Controller
             'athlete_ids.*' => ['required', 'integer', 'distinct', Rule::exists('athletes', 'id')],
         ]);
         $event = Event::query()->with(['sportCategory', 'meets'])->findOrFail($validated['event_id']);
-        $athletes = Athlete::query()->with(['delegation.meet', 'eligibilityReview', 'medicalClearance'])
-            ->whereKey($validated['athlete_ids'])->get();
+        $athletesById = Athlete::query()->with(['delegation.meet', 'eligibilityReview', 'medicalClearance'])
+            ->whereKey($validated['athlete_ids'])->get()->keyBy('id');
+        $athletes = collect($validated['athlete_ids'])->map(fn (int $id) => $athletesById->get($id))->filter()->values();
         $this->assertRosterValid($request->user(), $event, $athletes, count($validated['athlete_ids']), false);
         $delegation = $athletes->first()->delegation;
         Gate::authorize('create', [Entry::class, $delegation, $event]);
@@ -46,16 +49,16 @@ class TeamEntryController extends Controller
             if ($team->isRosterLocked()) {
                 throw ValidationException::withMessages(['athlete_ids' => __('This team roster is locked.')]);
             }
-            $keep = [];
-            foreach ($athletes as $athlete) {
+            $members = [];
+            foreach ($athletes as $index => $athlete) {
                 $entry = Entry::query()->firstOrCreate(
                     ['athlete_id' => $athlete->id, 'event_id' => $event->id],
                     ['delegation_id' => $delegation->id],
                 );
-                $keep[] = $entry->id;
-                $team->members()->updateOrCreate(['athlete_id' => $athlete->id], ['entry_id' => $entry->id]);
+                $members[] = ['athlete_id' => $athlete->id, 'entry_id' => $entry->id, 'member_order' => $index + 1];
             }
-            $team->members()->whereNotIn('entry_id', $keep)->delete();
+            $team->members()->delete();
+            $team->members()->createMany($members);
 
             return $team->refresh();
         });
@@ -92,6 +95,21 @@ class TeamEntryController extends Controller
         }
         if ($athletes->pluck('delegation_id')->unique()->count() !== 1) {
             throw ValidationException::withMessages(['athlete_ids' => __('All team members must belong to the same delegation.')]);
+        }
+        if ($event->event_type === 'RELAY') {
+            $required = $event->relay_legs ?? 4;
+            if ($athletes->count() !== $required) {
+                throw ValidationException::withMessages(['athlete_ids' => __('This relay requires exactly :count swimmers.', ['count' => $required])]);
+            }
+            $delegation = $athletes->first()->delegation;
+            $meetSportId = MeetSport::query()->where('meet_id', $delegation->meet_id)
+                ->where('sport_id', $event->sport_id)->value('id');
+            $rosterCount = SportRosterMember::query()->where('meet_sport_id', $meetSportId)
+                ->where('delegation_id', $delegation->id)->where('level', $event->age_division->value)
+                ->where('gender', $event->gender->value)->whereIn('athlete_id', $athletes->pluck('id'))->count();
+            if ($rosterCount !== $required) {
+                throw ValidationException::withMessages(['athlete_ids' => __('Every relay swimmer must belong to the matching delegation Swimming roster.')]);
+            }
         }
         if ($user->role === UserRole::Coach && $athletes->contains(fn (Athlete $athlete): bool => ! $athlete->isOwnedBy($user))) {
             throw ValidationException::withMessages(['athlete_ids' => __('A coach may add only athletes registered under their account.')]);

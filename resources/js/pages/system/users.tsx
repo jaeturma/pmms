@@ -55,7 +55,6 @@ type UserRow = {
     assignments: Array<{ type: string; scope: string; status: string }>;
     disabled: boolean;
     approval_status: string;
-    last_updated: string | null;
 };
 type RoleOption = { value: string; label: string; permissions: string[] };
 
@@ -431,7 +430,6 @@ export default function Users({
                                 <TableHead>Role</TableHead>
                                 <TableHead>Assignments</TableHead>
                                 <TableHead>Status</TableHead>
-                                <TableHead>Updated</TableHead>
                                 <TableHead className="text-right">
                                     Actions
                                 </TableHead>
@@ -517,9 +515,6 @@ export default function Users({
                                                   ? 'Disabled'
                                                   : 'Active'}
                                         </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground">
-                                        {user.last_updated ?? '—'}
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex justify-end gap-2">

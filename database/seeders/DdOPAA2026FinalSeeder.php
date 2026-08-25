@@ -10,6 +10,7 @@ class DdOPAA2026FinalSeeder extends Seeder
     {
         $this->call([
             DdOPAA2026MeetSeeder::class,
+            SwimmingCompetitionSeeder::class,
             DdOPAA2026DelegationSeeder::class,
             DdOPAA2026TWGSeeder::class,
             DdOPAA2026DSCSeeder::class,

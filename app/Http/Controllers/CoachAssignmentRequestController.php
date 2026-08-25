@@ -93,7 +93,7 @@ class CoachAssignmentRequestController extends Controller
         return back()->with('success', __('Coach enrollment submitted for approval.'));
     }
 
-    public function review(Request $request, CoachAssignmentRequest $coachAssignmentRequest): RedirectResponse
+    public function review(Request $request, CoachAssignmentRequest $coachAssignmentRequest, AuditLogger $audit): RedirectResponse
     {
         /** @var User $reviewer */
         $reviewer = $request->user();
@@ -101,21 +101,30 @@ class CoachAssignmentRequestController extends Controller
             $this->reviewableMeetSportIds($reviewer)->contains($coachAssignmentRequest->meet_sport_id)
             && $reviewer->tournamentEventIds()->contains($coachAssignmentRequest->event_id)
         ), 403);
-        $data = $request->validate(['status' => ['required', Rule::in(['approved', 'rejected'])], 'review_notes' => ['nullable', 'string', 'max:1000']]);
+        $data = $request->validate(['status' => ['required', Rule::in(['approved', 'rejected', 'inactive'])], 'review_notes' => ['nullable', 'string', 'max:1000']]);
 
-        DB::transaction(function () use ($coachAssignmentRequest, $reviewer, $data): void {
+        DB::transaction(function () use ($coachAssignmentRequest, $reviewer, $data, $audit): void {
             $coachAssignmentRequest->forceFill([
                 'status' => $data['status'], 'reviewed_by' => $reviewer->id,
                 'reviewed_at' => now(), 'review_notes' => $data['review_notes'] ?? null,
+                'assigned_by' => $data['status'] === 'approved' ? $reviewer->id : $coachAssignmentRequest->assigned_by,
+                'assigned_at' => $data['status'] === 'approved' ? now() : $coachAssignmentRequest->assigned_at,
+                'ended_at' => $data['status'] === 'inactive' ? now() : null,
             ])->save();
-            CoachOnboardingRequest::query()->updateOrCreate(
-                ['user_id' => $coachAssignmentRequest->user_id],
-                ['status' => $data['status'], 'reviewed_by' => $reviewer->id, 'reviewed_at' => now(), 'review_notes' => $data['review_notes'] ?? null],
-            );
+            if ($data['status'] !== 'inactive') {
+                CoachOnboardingRequest::query()->updateOrCreate(
+                    ['user_id' => $coachAssignmentRequest->user_id],
+                    ['status' => $data['status'], 'reviewed_by' => $reviewer->id, 'reviewed_at' => now(), 'review_notes' => $data['review_notes'] ?? null],
+                );
+            }
 
             if ($data['status'] === 'approved') {
                 $coachAssignmentRequest->user->forceFill(['role' => UserRole::Coach])->save();
             }
+            $audit->record($data['status'] === 'inactive' ? 'coach.assignment_removed' : 'coach.assignment_updated', $coachAssignmentRequest, [
+                'coach' => $coachAssignmentRequest->user->name, 'event_id' => $coachAssignmentRequest->event_id,
+                'delegation_id' => $coachAssignmentRequest->delegation_id, 'status' => $data['status'],
+            ], $reviewer);
         });
 
         return back()->with('success', __('Coach enrollment reviewed.'));
@@ -149,14 +158,28 @@ class CoachAssignmentRequestController extends Controller
         return back();
     }
 
-    public function reviewOnboarding(Request $request, CoachOnboardingRequest $coachOnboardingRequest): RedirectResponse
+    public function reviewOnboarding(Request $request, CoachOnboardingRequest $coachOnboardingRequest, AuditLogger $audit): RedirectResponse
     {
         /** @var User $reviewer */
         $reviewer = $request->user();
         abort_unless($this->canReviewOnboarding($reviewer, $coachOnboardingRequest), 403);
-        $data = $request->validate(['status' => ['required', Rule::in(['approved', 'rejected'])], 'review_notes' => ['nullable', 'string', 'max:1000']]);
+        $data = $request->validate([
+            'status' => ['required', Rule::in(['approved', 'returned', 'rejected'])],
+            'event_ids' => [Rule::requiredIf($request->input('status') === 'approved' && $coachOnboardingRequest->meet_sport_id !== null), 'nullable', 'array', 'min:1'],
+            'event_ids.*' => ['integer', 'distinct', Rule::exists('events', 'id')],
+            'review_notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+        $selectedEvents = collect($data['event_ids'] ?? []);
+        if ($coachOnboardingRequest->meet_sport_id !== null && $selectedEvents->isNotEmpty()) {
+            $validCount = Event::query()->whereKey($selectedEvents)
+                ->where('sport_id', $coachOnboardingRequest->meetSport->sport_id)
+                ->whereHas('meets', fn ($meets) => $meets->whereKey($coachOnboardingRequest->meetSport->meet_id))->count();
+            if ($validCount !== $selectedEvents->count()) {
+                throw ValidationException::withMessages(['event_ids' => __('Every assignment must belong to the applied sport and meet.')]);
+            }
+        }
 
-        DB::transaction(function () use ($coachOnboardingRequest, $reviewer, $data): void {
+        DB::transaction(function () use ($coachOnboardingRequest, $reviewer, $data, $selectedEvents, $audit): void {
             $coachOnboardingRequest->forceFill([
                 'status' => $data['status'],
                 'reviewed_by' => $reviewer->id,
@@ -171,21 +194,24 @@ class CoachAssignmentRequestController extends Controller
             ])->save();
 
             if ($data['status'] === 'approved') {
-                $coachOnboardingRequest->loadMissing('events');
+                $coachOnboardingRequest->loadMissing(['events', 'meetSport', 'delegation', 'school']);
+                $events = $coachOnboardingRequest->meet_sport_id !== null
+                    ? Event::query()->whereKey($selectedEvents)->get()
+                    : $coachOnboardingRequest->events;
                 $personnelByDelegation = [];
-                foreach ($coachOnboardingRequest->events as $event) {
-                    $meetSport = MeetSport::query()
+                foreach ($events as $event) {
+                    $meetSport = $coachOnboardingRequest->meetSport ?? MeetSport::query()
                         ->where('sport_id', $event->sport_id)
                         ->whereHas('meet.events', fn ($events) => $events->whereKey($event->id))
                         ->whereHas('meet.delegations', fn ($delegations) => $delegations
                             ->where('district_id', $coachOnboardingRequest->district_id)
                             ->orWhereHas('school', fn ($school) => $school->where('district_id', $coachOnboardingRequest->district_id)))
                         ->latest('id')->first();
-                    $delegation = $meetSport?->meet->delegations()
+                    $delegation = $coachOnboardingRequest->delegation ?? $meetSport?->meet->delegations()
                         ->where(fn ($query) => $query->where('district_id', $coachOnboardingRequest->district_id)
                             ->orWhereHas('school', fn ($school) => $school->where('district_id', $coachOnboardingRequest->district_id)))
                         ->first();
-                    $school = $delegation?->school ?? $delegation?->district?->schools()->where('active', true)->first();
+                    $school = $coachOnboardingRequest->school ?? $delegation?->school ?? $delegation?->district?->schools()->where('active', true)->first();
                     if ($meetSport === null || $delegation === null || $school === null) {
                         continue;
                     }
@@ -199,6 +225,10 @@ class CoachAssignmentRequestController extends Controller
                         'status' => 'approved',
                         'reviewed_by' => $reviewer->id,
                         'reviewed_at' => now(),
+                        'assigned_by' => $reviewer->id,
+                        'assigned_at' => now(),
+                        'ended_at' => null,
+                        'scope_type' => 'event',
                         'review_notes' => $data['review_notes'] ?? null,
                     ]);
 
@@ -208,6 +238,10 @@ class CoachAssignmentRequestController extends Controller
                         $school,
                     );
                     $person->sports()->syncWithoutDetaching([$event->sport_id]);
+                    $audit->record('coach.assignment_added', $coachOnboardingRequest, [
+                        'coach' => $coachOnboardingRequest->user->name, 'sport' => $meetSport->sport_id,
+                        'event_id' => $event->id, 'delegation_id' => $delegation->id,
+                    ], $reviewer);
                 }
 
                 // Some public registrations select municipality + events
@@ -215,6 +249,10 @@ class CoachAssignmentRequestController extends Controller
                 // still establish the coach's roster identity immediately.
                 $this->materializeCoachPersonnel($coachOnboardingRequest);
             }
+
+            $audit->record(match ($data['status']) {
+                'approved' => 'coach.approved', 'returned' => 'coach.application_returned', default => 'coach.application_rejected',
+            }, $coachOnboardingRequest, ['coach' => $coachOnboardingRequest->user->name, 'review_notes' => $data['review_notes'] ?? null], $reviewer);
         });
 
         return back()->with('success', __('Coach account registration reviewed.'));
@@ -347,9 +385,14 @@ class CoachAssignmentRequestController extends Controller
             return true;
         }
 
-        return $request->events()->whereKey($user->tournamentEventIds())->exists()
-            && $user->meetSportAssignments()->where('status', 'active')
+        if ($request->meet_sport_id !== null) {
+            return $user->meetSportAssignments()->where('status', 'active')
+                ->where('meet_sport_id', $request->meet_sport_id)
                 ->whereIn('role', $this->coachReviewerRoles())->exists();
+        }
+
+        return $request->events()->whereKey($user->tournamentEventIds())->exists()
+            && $user->meetSportAssignments()->where('status', 'active')->whereIn('role', $this->coachReviewerRoles())->exists();
     }
 
     private function onboardingRegistrations(User $user): array
@@ -360,10 +403,14 @@ class CoachAssignmentRequestController extends Controller
             $query = CoachOnboardingRequest::query();
         } else {
             $query = CoachOnboardingRequest::query()
-                ->whereHas('events', fn ($events) => $events->whereKey($user->tournamentEventIds()));
+                ->where(function ($scope) use ($user): void {
+                    $scope->whereIn('meet_sport_id', $this->visibleMeetSportIds($user))
+                        ->orWhere(fn ($legacy) => $legacy->whereNull('meet_sport_id')
+                            ->whereHas('events', fn ($events) => $events->whereKey($user->tournamentEventIds())));
+                });
         }
 
-        return $query->with(['user:id,name,email,approval_status', 'district:id,name', 'events.sport:id,name', 'profile:id,mime_type', 'certification:id,mime_type'])
+        return $query->with(['user:id,name,email,approval_status', 'district:id,name', 'meetSport.meet:id,name', 'meetSport.sport:id,name', 'delegation.school:id,name', 'delegation.district:id,name', 'school:id,name', 'events.sport:id,name', 'profile:id,mime_type', 'certification:id,mime_type'])
             ->latest()->get()->map(function (CoachOnboardingRequest $item) use ($user): array {
                 $accreditationNumber = Accreditation::query()
                     ->whereHas('personnel', fn ($personnel) => $personnel->where('user_id', $item->user_id))
@@ -376,8 +423,13 @@ class CoachAssignmentRequestController extends Controller
                     'id' => $item->id,
                     'coach' => $item->user->name,
                     'email' => $item->user->email,
-                    'team' => $item->district?->name,
-                    'events' => $item->events->map(fn ($event) => $event->sport->name.' / '.$event->name)->join(', '),
+                    'team' => $item->delegation?->registrantName() ?? $item->district?->name,
+                    'school' => $item->school?->name,
+                    'sport' => $item->meetSport?->sport?->name ?? $item->events->pluck('sport.name')->filter()->unique()->join(', '),
+                    'events' => CoachAssignmentRequest::query()->where('user_id', $item->user_id)->where('status', 'approved')->whereNull('ended_at')->with('event:id,name')->get()->pluck('event.name')->filter()->join(', '),
+                    'assignment_options' => $item->meetSport === null ? [] : $item->meetSport->meet->events()->where('sport_id', $item->meetSport->sport_id)->orderBy('display_order')->get(['events.id', 'events.name', 'events.gender', 'events.age_division'])->map(fn (Event $event): array => [
+                        'id' => $event->id, 'label' => $event->name.' — '.$event->age_division->label().' '.$event->gender->label(),
+                    ])->values()->all(),
                     'status' => $item->status,
                     'review_notes' => $item->review_notes,
                     'profile_url' => $item->profile_upload_id ? route('coach.onboarding-documents.show', [$item, 'profile']) : null,
@@ -507,9 +559,14 @@ class CoachAssignmentRequestController extends Controller
             return true;
         }
 
-        return $request->events()->whereKey($user->tournamentEventIds())->exists()
-            && $user->meetSportAssignments()->where('status', 'active')
+        if ($request->meet_sport_id !== null) {
+            return $user->meetSportAssignments()->where('status', 'active')
+                ->where('meet_sport_id', $request->meet_sport_id)
                 ->whereIn('role', $this->coachAccreditorRoles())->exists();
+        }
+
+        return $request->events()->whereKey($user->tournamentEventIds())->exists()
+            && $user->meetSportAssignments()->where('status', 'active')->whereIn('role', $this->coachAccreditorRoles())->exists();
     }
 
     private function canAccreditCoach(User $user, Personnel $personnel): bool
@@ -580,10 +637,11 @@ class CoachAssignmentRequestController extends Controller
 
     private function isCoachApplicant(User $user): bool
     {
-        return $user->role === UserRole::Coach || CoachOnboardingRequest::query()
-            ->where('user_id', $user->id)
-            ->whereIn('status', ['pending', 'rejected'])
-            ->exists();
+        $onboarding = CoachOnboardingRequest::query()->where('user_id', $user->id)->first();
+
+        return $onboarding === null
+            ? $user->role === UserRole::Coach
+            : in_array($onboarding->status, ['pending', 'returned', 'rejected'], true);
     }
 
     private function requestOptions(): array

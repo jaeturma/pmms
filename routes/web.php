@@ -58,6 +58,8 @@ use App\Http\Controllers\SchoolController;
 use App\Http\Controllers\SchoolDistrictController;
 use App\Http\Controllers\ScoringSessionController;
 use App\Http\Controllers\SportController;
+use App\Http\Controllers\SportRosterController;
+use App\Http\Controllers\SwimmingRosterController;
 use App\Http\Controllers\SystemSettingsController;
 use App\Http\Controllers\TallyController;
 use App\Http\Controllers\TeamEntryController;
@@ -274,6 +276,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('entries/{entry}', [EntryController::class, 'destroy'])->name('entries.destroy');
     Route::post('team-entries', [TeamEntryController::class, 'store'])->name('team-entries.store');
     Route::patch('team-entries/{teamEntry}/confirm', [TeamEntryController::class, 'confirm'])->name('team-entries.confirm');
+    Route::post('sport-rosters/members', [SportRosterController::class, 'store'])->name('sport-rosters.members.store');
+    Route::delete('sport-rosters/members/{sportRosterMember}', [SportRosterController::class, 'destroy'])->name('sport-rosters.members.destroy');
+    Route::get('swimming/rosters', [SwimmingRosterController::class, 'index'])->name('swimming.rosters.index');
 
     Route::get('matches', [MatchController::class, 'index'])->name('matches.index');
     Route::get('matches/{match}/scoring-session', [ScoringSessionController::class, 'show'])->name('scoring.show');

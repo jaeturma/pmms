@@ -200,4 +200,9 @@ class Athlete extends Model
     {
         return $this->hasMany(Entry::class);
     }
+
+    public function sportRosterMemberships(): HasMany
+    {
+        return $this->hasMany(SportRosterMember::class);
+    }
 }

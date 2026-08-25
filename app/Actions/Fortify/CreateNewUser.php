@@ -5,11 +5,15 @@ namespace App\Actions\Fortify;
 use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
 use App\Models\CoachOnboardingRequest;
+use App\Models\Delegation;
+use App\Models\MeetSport;
+use App\Models\School;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\FileUploadService;
 use App\Services\RecaptchaVerifier;
 use App\Services\RegistrationCodeChallenge;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -53,16 +57,30 @@ class CreateNewUser implements CreatesNewUsers
             'password' => $this->passwordRules(),
             'account_type' => ['nullable', 'in:viewer,coach'],
             'district_id' => [
-                Rule::requiredIf(($input['account_type'] ?? 'viewer') === 'coach'),
                 'nullable',
                 Rule::exists('districts', 'id')->where('active', true),
             ],
-            'event_ids' => [Rule::requiredIf(($input['account_type'] ?? 'viewer') === 'coach'), 'nullable', 'array', 'min:1'],
-            'event_ids.*' => ['integer', 'distinct', Rule::exists('events', 'id')->where('active', true)],
+            'meet_sport_id' => [Rule::requiredIf($isCoach), 'nullable', 'integer', Rule::exists('meet_sports', 'id')->where('active', true)],
+            'delegation_id' => [Rule::requiredIf($isCoach), 'nullable', 'integer', Rule::exists('delegations', 'id')],
+            'school_id' => [Rule::requiredIf($isCoach), 'nullable', 'integer', Rule::exists('schools', 'id')->where('active', true)],
+            'event_id' => [$isCoach ? 'prohibited' : 'nullable'],
+            'event_ids' => [$isCoach ? 'prohibited' : 'nullable'],
+            'sport_category_id' => [$isCoach ? 'prohibited' : 'nullable'],
             'coach_profile' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
             'coach_certification' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
             'code_challenge' => ['required', 'string', 'size:5'],
         ])->validate();
+
+        if ($isCoach) {
+            $meetSport = MeetSport::query()->findOrFail($input['meet_sport_id']);
+            $delegation = Delegation::query()->findOrFail($input['delegation_id']);
+            $school = School::query()->findOrFail($input['school_id']);
+            if ($delegation->meet_id !== $meetSport->meet_id
+                || ! (($delegation->school_id !== null && $delegation->school_id === $school->id)
+                    || ($delegation->district_id !== null && $delegation->district_id === $school->district_id))) {
+                throw ValidationException::withMessages(['school_id' => [__('The selected school does not belong to this delegation and meet.')]]);
+            }
+        }
 
         // Same reCAPTCHA check as the login pipeline
         // (`App\Actions\Fortify\EnsureRecaptchaIsValid`) — registration
@@ -91,8 +109,11 @@ class CreateNewUser implements CreatesNewUsers
         if (($input['account_type'] ?? 'viewer') === 'coach') {
             $onboardingRequest = CoachOnboardingRequest::query()->create([
                 'user_id' => $user->id,
-                'district_id' => $input['district_id'],
-                'event_id' => $input['event_ids'][0],
+                'meet_sport_id' => $meetSport->id,
+                'delegation_id' => $delegation->id,
+                'school_id' => $school->id,
+                'district_id' => $school->district_id,
+                'submitted_at' => now(),
                 'profile_upload_id' => isset($input['coach_profile'])
                     ? $this->uploads->store($input['coach_profile'], $user, 'coach_profile')->id
                     : null,
@@ -100,7 +121,10 @@ class CreateNewUser implements CreatesNewUsers
                     ? $this->uploads->store($input['coach_certification'], $user, 'coach_certification')->id
                     : null,
             ]);
-            $onboardingRequest->events()->sync($input['event_ids']);
+            app(AuditLogger::class)->record('coach.application_submitted', $onboardingRequest, [
+                'coach' => $user->name, 'meet_sport_id' => $meetSport->id,
+                'sport' => $meetSport->sport()->value('name'), 'delegation_id' => $delegation->id,
+            ], $user);
         }
 
         return $user;

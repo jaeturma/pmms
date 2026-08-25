@@ -1,5 +1,5 @@
 import { Form, Head, Link, router, usePage } from '@inertiajs/react';
-import { ChevronDown, LogIn, RefreshCw, UserPlus } from 'lucide-react';
+import { LogIn, RefreshCw, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
@@ -7,12 +7,6 @@ import RecaptchaWidget from '@/components/recaptcha-widget';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-    DropdownMenu,
-    DropdownMenuCheckboxItem,
-    DropdownMenuContent,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -28,16 +22,23 @@ import { store } from '@/routes/register';
 
 type Props = {
     passwordRules: string;
-    municipalities: Array<{ id: number; name: string }>;
-    events: Array<{ id: number; label: string }>;
+    coachOptions: Array<{
+        meet_sport_id: number;
+        meet: string;
+        sport: string;
+        delegation_id: number;
+        delegation: string;
+        district_id: number;
+        school_id: number;
+        school: string;
+    }>;
     codeChallengeImage: string;
     registration: { users_enabled: boolean; coaches_enabled: boolean };
 };
 
 export default function Register({
     passwordRules,
-    municipalities,
-    events,
+    coachOptions,
     codeChallengeImage,
     registration,
 }: Props) {
@@ -45,7 +46,17 @@ export default function Register({
     const [isCoach, setIsCoach] = useState(
         !registration.users_enabled && registration.coaches_enabled,
     );
-    const [selectedEventIds, setSelectedEventIds] = useState<number[]>([]);
+    const [delegationId, setDelegationId] = useState('');
+    const [schoolId, setSchoolId] = useState('');
+    const delegationOptions = Array.from(
+        new Map(coachOptions.map((option) => [option.delegation_id, option])).values(),
+    );
+    const schoolOptions = coachOptions.filter(
+        (option) => String(option.delegation_id) === delegationId,
+    ).filter((option, index, all) => all.findIndex((item) => item.school_id === option.school_id) === index);
+    const sportOptions = coachOptions.filter(
+        (option) => String(option.delegation_id) === delegationId && String(option.school_id) === schoolId,
+    ).filter((option, index, all) => all.findIndex((item) => item.meet_sport_id === option.meet_sport_id) === index);
 
     return (
         <>
@@ -188,7 +199,7 @@ export default function Register({
                                         </span>
                                         <span className="text-muted-foreground">
                                             {registration.coaches_enabled
-                                                ? 'Coach accounts require a municipality/team and sports event.'
+                                                ? 'Choose your delegation, school, and sport. Specific event/category assignments are provided during approval.'
                                                 : 'Coach registration is currently suspended.'}
                                         </span>
                                     </span>
@@ -199,108 +210,55 @@ export default function Register({
                             {isCoach && (
                                 <>
                                     <div className="grid gap-2">
-                                        <Label htmlFor="district_id">
-                                            Municipality / Team *
+                                        <Label htmlFor="delegation_id">
+                                            Delegation / Municipality *
                                         </Label>
-                                        <Select name="district_id" required>
+                                        <Select name="delegation_id" required value={delegationId} onValueChange={(value) => { setDelegationId(value); setSchoolId(''); }}>
                                             <SelectTrigger
-                                                id="district_id"
+                                                id="delegation_id"
                                                 className="!h-10 w-full"
                                             >
                                                 <SelectValue placeholder="Select municipality / team" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {municipalities.map(
-                                                    (municipality) => (
+                                                {delegationOptions.map(
+                                                    (option) => (
                                                         <SelectItem
-                                                            key={
-                                                                municipality.id
-                                                            }
+                                                            key={option.delegation_id}
                                                             value={String(
-                                                                municipality.id,
+                                                                option.delegation_id,
                                                             )}
                                                         >
-                                                            {municipality.name}
+                                                            {option.delegation} — {option.meet}
                                                         </SelectItem>
                                                     ),
                                                 )}
                                             </SelectContent>
                                         </Select>
                                         <InputError
-                                            message={errors.district_id}
+                                            message={errors.delegation_id}
                                         />
                                     </div>
 
                                     <div className="grid gap-2">
-                                        <Label htmlFor="event_ids">
-                                            Specific sports events *
+                                        <Label htmlFor="school_id">School *</Label>
+                                        <Select name="school_id" required value={schoolId} onValueChange={setSchoolId} disabled={!delegationId}>
+                                            <SelectTrigger id="school_id" className="!h-10 w-full"><SelectValue placeholder="Select school" /></SelectTrigger>
+                                            <SelectContent>{schoolOptions.map((option) => <SelectItem key={option.school_id} value={String(option.school_id)}>{option.school}</SelectItem>)}</SelectContent>
+                                        </Select>
+                                        <InputError message={errors.school_id} />
+                                    </div>
+
+                                    <div className="grid gap-2 md:col-span-2">
+                                        <Label htmlFor="meet_sport_id">
+                                            Sport applied for *
                                         </Label>
-                                        {selectedEventIds.map((eventId) => (
-                                            <input
-                                                key={eventId}
-                                                type="hidden"
-                                                name="event_ids[]"
-                                                value={eventId}
-                                            />
-                                        ))}
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button
-                                                    id="event_ids"
-                                                    type="button"
-                                                    variant="outline"
-                                                    className="!h-10 w-full justify-between px-3 font-normal"
-                                                >
-                                                    <span className="truncate">
-                                                        {selectedEventIds.length ===
-                                                        0
-                                                            ? 'Select one or more sports events'
-                                                            : `${selectedEventIds.length} event${selectedEventIds.length === 1 ? '' : 's'} selected`}
-                                                    </span>
-                                                    <ChevronDown className="size-4 opacity-60" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent
-                                                align="start"
-                                                className="max-h-72 w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto"
-                                            >
-                                                {events.map((event) => (
-                                                    <DropdownMenuCheckboxItem
-                                                        key={event.id}
-                                                        checked={selectedEventIds.includes(
-                                                            event.id,
-                                                        )}
-                                                        onSelect={(event) =>
-                                                            event.preventDefault()
-                                                        }
-                                                        onCheckedChange={(
-                                                            checked,
-                                                        ) =>
-                                                            setSelectedEventIds(
-                                                                (current) =>
-                                                                    checked
-                                                                        ? [
-                                                                              ...current,
-                                                                              event.id,
-                                                                          ]
-                                                                        : current.filter(
-                                                                              (
-                                                                                  id,
-                                                                              ) =>
-                                                                                  id !==
-                                                                                  event.id,
-                                                                          ),
-                                                            )
-                                                        }
-                                                    >
-                                                        {event.label}
-                                                    </DropdownMenuCheckboxItem>
-                                                ))}
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                        <InputError
-                                            message={errors.event_ids}
-                                        />
+                                        <Select name="meet_sport_id" required disabled={!schoolId}>
+                                            <SelectTrigger id="meet_sport_id" className="!h-10 w-full"><SelectValue placeholder="Select sport" /></SelectTrigger>
+                                            <SelectContent>{sportOptions.map((option) => <SelectItem key={option.meet_sport_id} value={String(option.meet_sport_id)}>{option.sport} — {option.meet}</SelectItem>)}</SelectContent>
+                                        </Select>
+                                        <p className="text-xs text-muted-foreground">Specific sport event/category assignments will be assigned during Coach approval.</p>
+                                        <InputError message={errors.meet_sport_id} />
                                     </div>
                                 </>
                             )}

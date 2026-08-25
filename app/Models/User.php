@@ -290,44 +290,19 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     /** @return Collection<int, int> */
     public function approvedCoachEventIds(): Collection
     {
-        $requestEventIds = $this->coachAssignmentRequests()
-            ->where('status', 'approved')
-            ->pluck('event_id');
-        $onboardingEventIds = $this->coachOnboardingRequest()
-            ->where('status', 'approved')
-            ->with('events:id')
-            ->first()?->events->modelKeys() ?? [];
-
-        return $requestEventIds->merge($onboardingEventIds)->filter()->unique()->values();
+        return app(\App\Services\CoachAccessService::class)->eventIds($this);
     }
 
     /** @return Collection<int, int> */
     public function approvedCoachEventIdsForDelegation(Delegation $delegation): Collection
     {
-        $requestEventIds = $this->coachAssignmentRequests()
-            ->where('status', 'approved')
-            ->where('delegation_id', $delegation->id)
-            ->pluck('event_id');
-        $onboardingEventIds = $delegation->hasCoach($this)
-            ? ($this->coachOnboardingRequest()
-                ->where('status', 'approved')
-                ->with('events:id')
-                ->first()?->events->modelKeys() ?? [])
-            : [];
-
-        return $requestEventIds->merge($onboardingEventIds)->filter()->unique()->values();
+        return app(\App\Services\CoachAccessService::class)->eventIds($this, $delegation);
     }
 
     /** @return Collection<int, int> */
     public function approvedCoachDelegationIds(): Collection
     {
-        return $this->coachAssignmentRequests()
-            ->where('status', 'approved')
-            ->pluck('delegation_id')
-            ->merge(Personnel::query()->where('user_id', $this->id)->pluck('delegation_id'))
-            ->filter()
-            ->unique()
-            ->values();
+        return app(\App\Services\CoachAccessService::class)->delegationIds($this);
     }
 
     public function hasApprovedCoachScope(Delegation $delegation, ?Event $event = null): bool
@@ -336,18 +311,11 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             return false;
         }
 
-        if ($this->coachAssignmentRequests()
-            ->where('status', 'approved')
-            ->where('delegation_id', $delegation->id)
-            ->when($event !== null, fn ($query) => $query->where('event_id', $event->id))
-            ->exists()) {
-            return true;
-        }
+        $access = app(\App\Services\CoachAccessService::class);
 
-        return $delegation->hasCoach($this)
-            && $this->coachOnboardingRequest()->where('status', 'approved')
-                ->when($event !== null, fn ($query) => $query->whereHas('events', fn ($events) => $events->whereKey($event->id)))
-                ->exists();
+        return $event === null
+            ? $access->eventIds($this, $delegation)->isNotEmpty()
+            : $access->canAccessEvent($this, $event, $delegation);
     }
 
     public function hasPermission(Permission $permission, ?Meet $meet = null): bool

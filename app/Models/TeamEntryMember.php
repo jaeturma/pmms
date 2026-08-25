@@ -6,9 +6,13 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['team_entry_id', 'athlete_id', 'entry_id'])]
+#[Fillable(['team_entry_id', 'athlete_id', 'entry_id', 'member_order'])]
 class TeamEntryMember extends Model
 {
+    protected function casts(): array
+    {
+        return ['member_order' => 'integer'];
+    }
     public function teamEntry(): BelongsTo
     {
         return $this->belongsTo(TeamEntry::class);

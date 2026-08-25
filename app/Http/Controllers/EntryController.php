@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\EligibilityStatus;
 use App\Enums\EntryStatus;
 use App\Enums\MeetStatus;
+use App\Enums\MedicalClearanceStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Models\Athlete;
@@ -12,6 +13,8 @@ use App\Models\Delegation;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\Meet;
+use App\Models\MeetSport;
+use App\Models\SportRosterMember;
 use App\Models\TeamEntry;
 use App\Models\User;
 use App\Services\AuditLogger;
@@ -242,7 +245,7 @@ class EntryController extends Controller
         ]);
 
         $athlete = Athlete::query()
-            ->with(['delegation.meet', 'eligibilityReview:id,athlete_id,status'])
+            ->with(['delegation.meet', 'eligibilityReview:id,athlete_id,status', 'medicalClearance:id,athlete_id,status'])
             ->findOrFail($request->integer('athlete_id'));
 
         $delegation = $athlete->delegation;
@@ -267,6 +270,17 @@ class EntryController extends Controller
                 throw ValidationException::withMessages([
                     $errorKey => __(':event is a team or group event. Build its roster using Team entries.', ['event' => $event->name]),
                 ]);
+            }
+
+            if ($event->sport()->where('code', 'SWIMMING')->exists()) {
+                $meetSportId = MeetSport::query()->where('meet_id', $delegation->meet_id)
+                    ->where('sport_id', $event->sport_id)->value('id');
+                if ($meetSportId === null || ! SportRosterMember::query()
+                    ->where('meet_sport_id', $meetSportId)->where('delegation_id', $delegation->id)
+                    ->where('athlete_id', $athlete->id)->where('level', $event->age_division->value)
+                    ->where('gender', $event->gender->value)->exists()) {
+                    throw ValidationException::withMessages([$errorKey => __('Add this swimmer to the matching Swimming roster before assigning events.')]);
+                }
             }
 
             if (! $delegation->meet->events()->whereKey($event->id)->exists()) {
@@ -332,9 +346,18 @@ class EntryController extends Controller
     {
         Gate::authorize('confirm', $entry);
 
+        $entry->loadMissing(['event.sport', 'athlete.delegation.meet', 'athlete.eligibilityReview', 'athlete.medicalClearance']);
         if ($entry->athlete->eligibilityReview?->status !== EligibilityStatus::Approved) {
             throw ValidationException::withMessages([
                 'entry' => __('This entry cannot be confirmed until DSAC approves the athlete’s eligibility.'),
+            ]);
+        }
+
+        if ($entry->event->sport->code === 'SWIMMING'
+            && $entry->athlete->delegation->meet->medical_clearance_required
+            && $entry->athlete->medicalClearance?->status !== MedicalClearanceStatus::Cleared) {
+            throw ValidationException::withMessages([
+                'entry' => __('This entry cannot be confirmed until the athlete is medically cleared.'),
             ]);
         }
 

@@ -92,6 +92,16 @@ class MeetSport extends Model
         return $this->hasMany(MeetSportVenue::class)->orderBy('display_order');
     }
 
+    public function rosterLimits(): HasMany
+    {
+        return $this->hasMany(SportRosterLimit::class);
+    }
+
+    public function rosterMembers(): HasMany
+    {
+        return $this->hasMany(SportRosterMember::class);
+    }
+
     public function gameCoordinatorAssignments(): HasMany
     {
         return $this->hasMany(GameCoordinatorAssignment::class);
