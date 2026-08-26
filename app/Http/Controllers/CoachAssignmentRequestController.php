@@ -153,10 +153,7 @@ class CoachAssignmentRequestController extends Controller
     {
         /** @var User $reviewer */
         $reviewer = $request->user();
-        abort_unless($reviewer->canReviewCoachRegistrations() || (
-            $this->reviewableMeetSportIds($reviewer)->contains($coachAssignmentRequest->meet_sport_id)
-            && $reviewer->tournamentEventIds()->contains($coachAssignmentRequest->event_id)
-        ), 403);
+        abort_unless($reviewer->canManageProductionAccounts(), 403);
 
         $password = config('pmms.accounts.default_reset_password');
         abort_unless(is_string($password) && $password !== '', 503, 'The reset password is not configured.');
@@ -189,11 +186,6 @@ class CoachAssignmentRequestController extends Controller
             'review_notes' => ['nullable', 'string', 'max:1000'],
         ]);
         $selectedEvents = collect($data['event_ids'] ?? $coachOnboardingRequest->events()->pluck('events.id')->all());
-        if ($data['status'] === 'approved' && $coachOnboardingRequest->profile_upload_id === null) {
-            throw ValidationException::withMessages([
-                'profile' => __('A coach profile photo is required before approval.'),
-            ]);
-        }
         if ($data['status'] === 'approved' && $selectedEvents->isEmpty()) {
             throw ValidationException::withMessages([
                 'event_ids' => __('Assign at least one sports event before approving the coach.'),
@@ -533,7 +525,7 @@ class CoachAssignmentRequestController extends Controller
     {
         /** @var User $reviewer */
         $reviewer = $request->user();
-        abort_unless($this->canReviewOnboarding($reviewer, $coachOnboardingRequest), 403);
+        abort_unless($reviewer->canManageProductionAccounts(), 403);
         $password = config('pmms.accounts.default_reset_password');
         abort_unless(is_string($password) && $password !== '', 503, 'The reset password is not configured.');
         $coachOnboardingRequest->user->forceFill(['password' => Hash::make($password), 'must_change_password' => true, 'password_changed_at' => null])->save();
@@ -823,6 +815,7 @@ class CoachAssignmentRequestController extends Controller
     private function coachReviewerRoles(): array
     {
         return [
+            MeetSportAssignmentRole::TournamentSecretary->value,
             MeetSportAssignmentRole::TournamentICT->value,
         ];
     }

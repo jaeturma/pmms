@@ -67,7 +67,6 @@ test('tournament ict reviews only its sport and assigns scope during approval', 
         'user_id' => $coach->id, 'meet_sport_id' => $swimmingMeetSport->id,
         'delegation_id' => $delegation->id, 'school_id' => $school->id,
         'district_id' => $school->district_id, 'status' => 'pending', 'submitted_at' => now(),
-        'profile_upload_id' => FileUpload::factory()->create()->id,
     ]);
     $swimmingIct = User::factory()->create();
     MeetSportAssignment::factory()->create(['user_id' => $swimmingIct->id, 'meet_sport_id' => $swimmingMeetSport->id, 'role' => MeetSportAssignmentRole::TournamentICT, 'status' => MeetSportAssignmentStatus::Active]);
@@ -79,6 +78,7 @@ test('tournament ict reviews only its sport and assigns scope during approval', 
     $this->actingAs($basketballIct)->patch("/coach/onboarding-requests/{$application->id}", ['status' => 'approved', 'event_ids' => [$events->first()->id]])->assertForbidden();
 
     $this->actingAs($swimmingIct)->patch("/coach/onboarding-requests/{$application->id}", ['status' => 'approved', 'event_ids' => [$events->first()->id]])->assertSessionDoesntHaveErrors();
+    expect($application->fresh()->profile_upload_id)->toBeNull();
     expect($coach->fresh()->role)->toBe(UserRole::Coach)
         ->and($coach->approvedCoachEventIdsForDelegation($delegation)->all())->toBe([$events->first()->id]);
     $coach->refresh();

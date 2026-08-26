@@ -84,7 +84,7 @@ test('an active ICT team member can manage system users', function () {
     $this->actingAs($ict)->get('/system/users')->assertOk();
 });
 
-test('a tournament secretary can see coach registrations but only an account administrator can reset passwords', function () {
+test('a tournament secretary can approve coach registrations but only an account administrator can reset passwords', function () {
     config()->set('pmms.accounts.default_reset_password', 'TestDefaultPassword123!');
     $meetSport = MeetSport::factory()->create();
     $secretary = User::factory()->create();
@@ -116,7 +116,7 @@ test('a tournament secretary can see coach registrations but only an account adm
     $onboarding->events()->attach($event);
 
     $this->actingAs($secretary)->get('/coach/assignment-requests')->assertOk();
-    $this->actingAs($secretary)->patch("/coach/onboarding-requests/{$onboarding->id}", ['status' => 'approved'])->assertForbidden();
+    $this->actingAs($secretary)->patch("/coach/onboarding-requests/{$onboarding->id}", ['status' => 'approved'])->assertSessionHasNoErrors();
     $this->actingAs($secretary)->post("/coach/assignment-requests/{$coachRequest->id}/reset-password")->assertForbidden();
 
     $admin = User::factory()->admin()->create();
@@ -124,8 +124,9 @@ test('a tournament secretary can see coach registrations but only an account adm
 
     expect(Hash::check(config('pmms.accounts.default_reset_password'), $coach->fresh()->password))->toBeTrue()
         ->and($coach->fresh()->must_change_password)->toBeTrue()
-        ->and($pendingCoach->fresh()->approval_status)->toBe('pending')
-        ->and($onboarding->fresh()->status)->toBe('pending');
+        ->and($pendingCoach->fresh()->approval_status)->toBe('approved')
+        ->and($pendingCoach->fresh()->role)->toBe(UserRole::Coach)
+        ->and($onboarding->fresh()->status)->toBe('approved');
 });
 
 test('ordinary users cannot manage system accounts or reset coach passwords', function () {

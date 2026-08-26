@@ -183,23 +183,12 @@ function ApprovalDialog({
                             </label>
                         ))}
                     </div>
-                    <InputError
-                        message={
-                            form.errors.event_ids ??
-                            (form.errors as Record<string, string>).profile
-                        }
-                    />
-                    {!registration.profile_url && (
-                        <p className="text-sm text-destructive">
-                            Upload a profile photo before approval.
-                        </p>
-                    )}
+                    <InputError message={form.errors.event_ids} />
                     <Button
                         className="w-full"
                         disabled={
                             form.processing ||
-                            form.data.event_ids.length === 0 ||
-                            !registration.profile_url
+                            form.data.event_ids.length === 0
                         }
                         onClick={() =>
                             form.patch(
@@ -461,7 +450,7 @@ return;
                                                         <>
                                                             <Button
                                                                 size="sm"
-                                                                disabled={!item.profile_url || !item.events}
+                                                                disabled={!item.events}
                                                                 onClick={() => router.patch(`/coach/onboarding-requests/${item.id}`, { status: 'approved' }, { preserveScroll: true })}
                                                             >
                                                                 Approve account
