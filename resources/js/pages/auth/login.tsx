@@ -3,6 +3,7 @@ import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import RecaptchaWidget from '@/components/recaptcha-widget';
 import TextLink from '@/components/text-link';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -112,9 +113,10 @@ export default function Login({ status, canResetPassword }: Props) {
             </Form>
 
             {status && (
-                <div className="mb-4 text-center text-sm font-medium text-green-600">
-                    {status}
-                </div>
+                <Alert className="mb-4">
+                    <AlertTitle>Registration status</AlertTitle>
+                    <AlertDescription>{status}</AlertDescription>
+                </Alert>
             )}
         </>
     );

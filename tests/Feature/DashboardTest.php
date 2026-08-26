@@ -1,7 +1,16 @@
 <?php
 
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
 use App\Models\Athlete;
+use App\Models\CoachAssignmentRequest;
 use App\Models\Delegation;
+use App\Models\Entry;
+use App\Models\Event;
+use App\Models\Meet;
+use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
+use App\Models\Sport;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -47,3 +56,63 @@ test('the dashboard stats show only athlete and entry counts', function () {
             ->where('stats.1.value', 0),
     );
 });
+
+test('the dashboard reports athlete and coach totals for every event under each sport', function () {
+    $meet = Meet::current();
+    $sport = Sport::factory()->create(['name' => 'Athletics']);
+    $events = Event::factory()->count(2)->create(['sport_id' => $sport->id]);
+    $meet->events()->attach($events);
+    $delegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);
+    Entry::factory()->create([
+        'delegation_id' => $delegation->id,
+        'athlete_id' => $athlete->id,
+        'event_id' => $events->first()->id,
+    ]);
+    CoachAssignmentRequest::query()->create([
+        'user_id' => User::factory()->coach()->create()->id,
+        'meet_sport_id' => MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $sport->id])->id,
+        'delegation_id' => $delegation->id,
+        'event_id' => $events->first()->id,
+        'school_id' => null,
+        'status' => 'approved',
+        'ended_at' => null,
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('sportsEventReport.sports_count', 1)
+            ->where('sportsEventReport.events_count', 2)
+            ->where('sportsEventReport.rows', fn ($rows) => collect($rows)
+                ->contains(fn ($row) => $row['id'] === $events->first()->id
+                    && $row['athletes_count'] === 1
+                    && $row['coaches_count'] === 1)
+                && collect($rows)->contains(fn ($row) => $row['id'] === $events->last()->id
+                    && $row['athletes_count'] === 0)));
+});
+
+test('tournament personnel dashboard event reports respect active event scope', function (MeetSportAssignmentRole $role) {
+    $meet = Meet::current();
+    $assignedSport = Sport::factory()->create();
+    $otherSport = Sport::factory()->create();
+    $assignedEvent = Event::factory()->create(['sport_id' => $assignedSport->id]);
+    $otherEvent = Event::factory()->create(['sport_id' => $otherSport->id]);
+    $meet->events()->attach([$assignedEvent->id, $otherEvent->id]);
+    $user = User::factory()->create();
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $assignedSport->id])->id,
+        'user_id' => $user->id,
+        'role' => $role,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($user)->get(route('dashboard'))->assertInertia(fn (Assert $page) => $page
+        ->has('sportsEventReport.rows', 1)
+        ->where('sportsEventReport.rows.0.id', $assignedEvent->id));
+})->with([
+    'manager' => MeetSportAssignmentRole::TournamentManager,
+    'assistant manager' => MeetSportAssignmentRole::AssistantTournamentManager,
+    'secretary' => MeetSportAssignmentRole::TournamentSecretary,
+    'ICT' => MeetSportAssignmentRole::TournamentICT,
+    'technical official' => MeetSportAssignmentRole::TechnicalOfficial,
+]);

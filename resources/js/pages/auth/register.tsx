@@ -24,13 +24,9 @@ type Props = {
     passwordRules: string;
     coachOptions: Array<{
         meet_sport_id: number;
-        meet: string;
         sport: string;
         delegation_id: number;
         delegation: string;
-        district_id: number;
-        school_id: number;
-        school: string;
     }>;
     codeChallengeImage: string;
     registration: { users_enabled: boolean; coaches_enabled: boolean };
@@ -47,16 +43,19 @@ export default function Register({
         !registration.users_enabled && registration.coaches_enabled,
     );
     const [delegationId, setDelegationId] = useState('');
-    const [schoolId, setSchoolId] = useState('');
     const delegationOptions = Array.from(
-        new Map(coachOptions.map((option) => [option.delegation_id, option])).values(),
+        new Map(
+            coachOptions.map((option) => [option.delegation_id, option]),
+        ).values(),
     );
-    const schoolOptions = coachOptions.filter(
-        (option) => String(option.delegation_id) === delegationId,
-    ).filter((option, index, all) => all.findIndex((item) => item.school_id === option.school_id) === index);
-    const sportOptions = coachOptions.filter(
-        (option) => String(option.delegation_id) === delegationId && String(option.school_id) === schoolId,
-    ).filter((option, index, all) => all.findIndex((item) => item.meet_sport_id === option.meet_sport_id) === index);
+    const sportOptions = coachOptions
+        .filter((option) => String(option.delegation_id) === delegationId)
+        .filter(
+            (option, index, all) =>
+                all.findIndex(
+                    (item) => item.meet_sport_id === option.meet_sport_id,
+                ) === index,
+        );
 
     return (
         <>
@@ -199,7 +198,7 @@ export default function Register({
                                         </span>
                                         <span className="text-muted-foreground">
                                             {registration.coaches_enabled
-                                                ? 'Choose your delegation, school, and sport. Specific event/category assignments are provided during approval.'
+                                                ? 'Choose your delegation/team and sport. Sports events can be assigned after approval.'
                                                 : 'Coach registration is currently suspended.'}
                                         </span>
                                     </span>
@@ -213,7 +212,12 @@ export default function Register({
                                         <Label htmlFor="delegation_id">
                                             Delegation / Municipality *
                                         </Label>
-                                        <Select name="delegation_id" required value={delegationId} onValueChange={(value) => { setDelegationId(value); setSchoolId(''); }}>
+                                        <Select
+                                            name="delegation_id"
+                                            required
+                                            value={delegationId}
+                                            onValueChange={setDelegationId}
+                                        >
                                             <SelectTrigger
                                                 id="delegation_id"
                                                 className="!h-10 w-full"
@@ -224,12 +228,14 @@ export default function Register({
                                                 {delegationOptions.map(
                                                     (option) => (
                                                         <SelectItem
-                                                            key={option.delegation_id}
+                                                            key={
+                                                                option.delegation_id
+                                                            }
                                                             value={String(
                                                                 option.delegation_id,
                                                             )}
                                                         >
-                                                            {option.delegation} — {option.meet}
+                                                            {option.delegation}
                                                         </SelectItem>
                                                     ),
                                                 )}
@@ -241,24 +247,38 @@ export default function Register({
                                     </div>
 
                                     <div className="grid gap-2">
-                                        <Label htmlFor="school_id">School *</Label>
-                                        <Select name="school_id" required value={schoolId} onValueChange={setSchoolId} disabled={!delegationId}>
-                                            <SelectTrigger id="school_id" className="!h-10 w-full"><SelectValue placeholder="Select school" /></SelectTrigger>
-                                            <SelectContent>{schoolOptions.map((option) => <SelectItem key={option.school_id} value={String(option.school_id)}>{option.school}</SelectItem>)}</SelectContent>
-                                        </Select>
-                                        <InputError message={errors.school_id} />
-                                    </div>
-
-                                    <div className="grid gap-2 md:col-span-2">
                                         <Label htmlFor="meet_sport_id">
                                             Sport applied for *
                                         </Label>
-                                        <Select name="meet_sport_id" required disabled={!schoolId}>
-                                            <SelectTrigger id="meet_sport_id" className="!h-10 w-full"><SelectValue placeholder="Select sport" /></SelectTrigger>
-                                            <SelectContent>{sportOptions.map((option) => <SelectItem key={option.meet_sport_id} value={String(option.meet_sport_id)}>{option.sport} — {option.meet}</SelectItem>)}</SelectContent>
+                                        <Select
+                                            name="meet_sport_id"
+                                            required
+                                            disabled={!delegationId}
+                                        >
+                                            <SelectTrigger
+                                                id="meet_sport_id"
+                                                className="!h-10 w-full"
+                                            >
+                                                <SelectValue placeholder="Select sport" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {sportOptions.map((option) => (
+                                                    <SelectItem
+                                                        key={
+                                                            option.meet_sport_id
+                                                        }
+                                                        value={String(
+                                                            option.meet_sport_id,
+                                                        )}
+                                                    >
+                                                        {option.sport}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
                                         </Select>
-                                        <p className="text-xs text-muted-foreground">Specific sport event/category assignments will be assigned during Coach approval.</p>
-                                        <InputError message={errors.meet_sport_id} />
+                                        <InputError
+                                            message={errors.meet_sport_id}
+                                        />
                                     </div>
                                 </>
                             )}

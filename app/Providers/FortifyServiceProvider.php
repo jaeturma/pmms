@@ -128,17 +128,14 @@ class FortifyServiceProvider extends ServiceProvider
                 'coachOptions' => MeetSport::query()->where('active', true)
                     ->whereHas('meet', fn ($meets) => $meets->where('is_active', true))
                     ->whereHas('sport', fn ($sports) => $sports->where('active', true))
-                    ->with(['meet:id,name', 'sport:id,name', 'meet.delegations.school:id,name,district_id', 'meet.delegations.district.schools:id,name,district_id'])
-                    ->get()->flatMap(fn (MeetSport $meetSport) => $meetSport->meet->delegations->flatMap(function ($delegation) use ($meetSport) {
-                        $schools = $delegation->school ? collect([$delegation->school]) : ($delegation->district?->schools ?? collect());
-
-                        return $schools->map(fn ($school): array => [
-                            'meet_sport_id' => $meetSport->id, 'meet' => $meetSport->meet->name,
-                            'sport' => $meetSport->sport->name, 'delegation_id' => $delegation->id,
-                            'delegation' => $delegation->registrantName(), 'district_id' => $school->district_id,
-                            'school_id' => $school->id, 'school' => $school->name,
-                        ]);
-                    }))->values(),
+                    ->with(['sport:id,name', 'meet.delegations.school:id,name', 'meet.delegations.district:id,name,nickname'])
+                    ->get()->flatMap(fn (MeetSport $meetSport) => $meetSport->meet->delegations->map(fn ($delegation): array => [
+                        'meet_sport_id' => $meetSport->id,
+                        'sport' => $meetSport->sport->name, 'delegation_id' => $delegation->id,
+                        'delegation' => $delegation->district?->nickname
+                            ? sprintf('%s "%s"', $delegation->registrantName(), $delegation->district->nickname)
+                            : $delegation->registrantName(),
+                    ]))->values(),
                 'codeChallengeImage' => app(RegistrationCodeChallenge::class)->generate($request),
             ]);
         });

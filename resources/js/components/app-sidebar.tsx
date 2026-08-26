@@ -337,8 +337,7 @@ export function AppSidebar() {
         auth.user?.tournament_assignment_roles ?? [];
     const hasTournamentAssignment = tournamentAssignmentRoles.length > 0;
     const hasTournamentSetupAssignment = tournamentAssignmentRoles.some(
-        (value) =>
-            ['tournament_ict', 'tournament_secretary'].includes(value),
+        (value) => ['tournament_ict', 'tournament_secretary'].includes(value),
     );
     const teamTypes: string[] = auth.user?.team_types ?? [];
     const canManageAccounts = auth.user?.can_manage_accounts ?? false;
@@ -483,7 +482,7 @@ export function AppSidebar() {
                 icon: UsersRound,
                 items: [
                     {
-                        title: 'Coach',
+                        title: 'Coach Sports Events',
                         href: '/coach/assignment-requests',
                         icon: UserCog,
                     },
@@ -580,9 +579,7 @@ export function AppSidebar() {
             icon: Trophy,
             items:
                 role === 'technical_official' || role === 'tournament_manager'
-                    ? labeledItems.filter(
-                          (item) => item.title !== 'Dashboard',
-                      )
+                    ? labeledItems.filter((item) => item.title !== 'Dashboard')
                     : byTitle(
                           ['Schedule', 'Matches', 'Results', 'Medal tally'],
                           mainNavItems,
@@ -716,7 +713,7 @@ export function AppSidebar() {
         );
 
         const coachItem: NavItem = {
-            title: 'Coach',
+            title: 'Coach Sports Events',
             href: '/coach/assignment-requests',
             icon: UserCog,
         };
@@ -727,7 +724,11 @@ export function AppSidebar() {
         };
 
         if (registration) {
-            if (!registration.items.some((item) => item.title === 'Coach')) {
+            if (
+                !registration.items.some(
+                    (item) => item.title === 'Coach Sports Events',
+                )
+            ) {
                 registration.items.push(coachItem);
             }
 

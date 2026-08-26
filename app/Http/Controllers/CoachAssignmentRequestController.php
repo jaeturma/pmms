@@ -56,13 +56,13 @@ class CoachAssignmentRequestController extends Controller
             'registrations' => $this->onboardingRegistrations($user),
             'requests' => $query->get()->map(fn (CoachAssignmentRequest $item): array => [
                 'id' => $item->id, 'coach' => $item->user->name, 'email' => $item->user->email,
-                'meet' => $item->meetSport->meet->name, 'sport' => $item->meetSport->sport->name,
+                'sport' => $item->meetSport->sport->name,
                 'event' => $item->event?->name, 'team' => $item->delegation->registrantName(),
-                'school' => $item->school->name, 'status' => $item->status, 'review_notes' => $item->review_notes,
+                'school' => $item->school?->name, 'status' => $item->status, 'review_notes' => $item->review_notes,
             ]),
             'canRequest' => $canRequest,
             'canReview' => $user->canReviewCoachRegistrations() || $reviewableIds->isNotEmpty(),
-            'options' => $canRequest ? $this->requestOptions() : [],
+            'options' => $canRequest ? $this->requestOptions($user) : [],
         ]);
     }
 
@@ -73,24 +73,42 @@ class CoachAssignmentRequestController extends Controller
             'meet_sport_id' => ['required', Rule::exists('meet_sports', 'id')],
             'event_id' => ['required', Rule::exists('events', 'id')],
             'delegation_id' => ['required', Rule::exists('delegations', 'id')],
-            'school_id' => ['required', Rule::exists('schools', 'id')->where('active', true)],
+            'school_id' => ['prohibited'],
         ]);
         $delegation = Delegation::query()->findOrFail($data['delegation_id']);
-        $school = School::query()->findOrFail($data['school_id']);
         $meetSport = MeetSport::query()->findOrFail($data['meet_sport_id']);
         $event = Event::query()->findOrFail($data['event_id']);
 
         abort_unless($meetSport->meet_id === $delegation->meet_id, 422);
         abort_unless($event->sport_id === $meetSport->sport_id && $event->meets()->whereKey($meetSport->meet_id)->exists(), 422);
-        abort_unless(($delegation->district_id !== null && $school->district_id === $delegation->district_id)
-            || ($delegation->school_id !== null && $school->id === $delegation->school_id), 403);
+        $onboarding = CoachOnboardingRequest::query()->where('user_id', $request->user()->id)->first();
+        if ($onboarding !== null) {
+            abort_unless($onboarding->delegation_id === $delegation->id && $onboarding->meet_sport_id === $meetSport->id, 403);
+        }
+
+        $approved = $request->user()->role === UserRole::Coach && $request->user()->approval_status === 'approved';
 
         CoachAssignmentRequest::query()->updateOrCreate(
-            ['user_id' => $request->user()->id, 'event_id' => $event->id, 'delegation_id' => $delegation->id, 'school_id' => $school->id],
-            ['meet_sport_id' => $meetSport->id, 'status' => 'pending', 'reviewed_by' => null, 'reviewed_at' => null, 'review_notes' => null],
+            ['user_id' => $request->user()->id, 'event_id' => $event->id, 'delegation_id' => $delegation->id],
+            [
+                'meet_sport_id' => $meetSport->id, 'school_id' => null,
+                'status' => $approved ? 'approved' : 'pending',
+                'reviewed_by' => $approved ? $request->user()->id : null,
+                'reviewed_at' => $approved ? now() : null,
+                'assigned_by' => $approved ? $request->user()->id : null,
+                'assigned_at' => $approved ? now() : null,
+                'ended_at' => null, 'scope_type' => 'event', 'review_notes' => null,
+            ],
         );
 
-        return back()->with('success', __('Coach enrollment submitted for approval.'));
+        if ($approved && $onboarding !== null) {
+            $person = $this->coachPersonnel($onboarding, $delegation, null);
+            $person->sports()->syncWithoutDetaching([$event->sport_id]);
+        }
+
+        return back()->with('success', $approved
+            ? __('Sports event assigned to your coach account.')
+            : __('Coach enrollment submitted for approval.'));
     }
 
     public function review(Request $request, CoachAssignmentRequest $coachAssignmentRequest, AuditLogger $audit): RedirectResponse
@@ -211,15 +229,15 @@ class CoachAssignmentRequestController extends Controller
                         ->where(fn ($query) => $query->where('district_id', $coachOnboardingRequest->district_id)
                             ->orWhereHas('school', fn ($school) => $school->where('district_id', $coachOnboardingRequest->district_id)))
                         ->first();
-                    $school = $coachOnboardingRequest->school ?? $delegation?->school ?? $delegation?->district?->schools()->where('active', true)->first();
-                    if ($meetSport === null || $delegation === null || $school === null) {
+                    $school = $coachOnboardingRequest->school;
+                    if ($meetSport === null || $delegation === null) {
                         continue;
                     }
                     CoachAssignmentRequest::query()->updateOrCreate([
                         'user_id' => $coachOnboardingRequest->user_id,
                         'event_id' => $event->id,
                         'delegation_id' => $delegation->id,
-                        'school_id' => $school->id,
+                        'school_id' => null,
                     ], [
                         'meet_sport_id' => $meetSport->id,
                         'status' => 'approved',
@@ -489,7 +507,7 @@ class CoachAssignmentRequestController extends Controller
             ->get();
 
         foreach ($assignments as $assignment) {
-            if ($assignment->delegation === null || $assignment->school === null || $assignment->event === null) {
+            if ($assignment->delegation === null || $assignment->event === null) {
                 continue;
             }
 
@@ -639,25 +657,28 @@ class CoachAssignmentRequestController extends Controller
     {
         $onboarding = CoachOnboardingRequest::query()->where('user_id', $user->id)->first();
 
-        return $onboarding === null
-            ? $user->role === UserRole::Coach
-            : in_array($onboarding->status, ['pending', 'returned', 'rejected'], true);
+        return $user->role === UserRole::Coach
+            || ($onboarding !== null && in_array($onboarding->status, ['pending', 'returned', 'rejected'], true));
     }
 
-    private function requestOptions(): array
+    private function requestOptions(User $user): array
     {
-        return MeetSport::query()->where('active', true)->with([
-            'meet:id,name', 'sport:id,name', 'meet.delegations.school:id,name',
-            'meet.delegations.district:id,name', 'meet.delegations.district.schools:id,district_id,name',
-        ])->get()->flatMap(fn (MeetSport $meetSport) => $meetSport->meet->delegations->flatMap(function (Delegation $delegation) use ($meetSport) {
-            $schools = $delegation->school !== null ? collect([$delegation->school]) : $delegation->district->schools;
+        $onboarding = CoachOnboardingRequest::query()->where('user_id', $user->id)->first();
 
-            return $meetSport->meet->events()->where('sport_id', $meetSport->sport_id)->get()->flatMap(fn (Event $event) => $schools->map(fn (School $school): array => [
-                'meet_sport_id' => $meetSport->id, 'event_id' => $event->id,
-                'delegation_id' => $delegation->id, 'team' => $delegation->registrantName(),
-                'school_id' => $school->id, 'school' => $school->name,
-                'label' => "{$meetSport->meet->name} — {$meetSport->sport->name} / {$event->name} — {$delegation->registrantName()} ({$school->name})",
-            ]));
-        }))->values()->all();
+        return MeetSport::query()->where('active', true)
+            ->when($onboarding?->meet_sport_id !== null, fn ($query) => $query->whereKey($onboarding->meet_sport_id))
+            ->with([
+                'meet:id,name', 'sport:id,name', 'meet.delegations.school:id,name',
+                'meet.delegations.district:id,name', 'meet.delegations.district.schools:id,district_id,name',
+            ])->get()->flatMap(fn (MeetSport $meetSport) => $meetSport->meet->delegations
+            ->when($onboarding?->delegation_id !== null, fn ($delegations) => $delegations->where('id', $onboarding->delegation_id))
+            ->flatMap(function (Delegation $delegation) use ($meetSport) {
+
+                return $meetSport->meet->events()->where('sport_id', $meetSport->sport_id)->get()->map(fn (Event $event): array => [
+                    'meet_sport_id' => $meetSport->id, 'event_id' => $event->id,
+                    'delegation_id' => $delegation->id, 'team' => $delegation->registrantName(),
+                    'label' => "{$meetSport->sport->name} / {$event->name} — {$delegation->registrantName()}",
+                ]);
+            }))->values()->all();
     }
 }

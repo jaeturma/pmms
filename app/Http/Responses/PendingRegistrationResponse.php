@@ -14,6 +14,11 @@ class PendingRegistrationResponse implements RegisterResponse
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()->route('login')->with('status', __('Registration submitted. You can sign in after an administrator or ICT reviewer approves your account.'));
+        $message = __('Registration submitted. You can sign in after an administrator or ICT reviewer approves your account.');
+        if ($request->input('account_type') === 'coach') {
+            $message .= ' '.__('After approval, ICT can assign your sports events or you can add them yourself from Coach Sports Events.');
+        }
+
+        return redirect()->route('login')->with('status', $message);
     }
 }

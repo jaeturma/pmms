@@ -31,6 +31,7 @@ class EventController extends Controller
     public function index(Request $request): Response
     {
         $search = $this->searchTerm($request);
+        $sportId = $request->integer('sport_id') ?: null;
         $sportIds = $this->manageableSportIds($request->user());
         $canManage = $request->user()->isAdmin() || $sportIds->isNotEmpty();
 
@@ -40,6 +41,10 @@ class EventController extends Controller
 
         if (! $request->user()->isAdmin() && $sportIds->isNotEmpty()) {
             $query->whereIn('sport_id', $sportIds);
+        }
+
+        if ($sportId !== null) {
+            $query->where('sport_id', $sportId);
         }
 
         $this->applySearch($query, $search, ['name', 'sport.name']);
@@ -65,7 +70,7 @@ class EventController extends Controller
                         'coordinator_names' => $assignment->coordinators->pluck('full_name')->all(),
                     ]),
                 ]),
-            'filters' => ['search' => $search],
+            'filters' => ['search' => $search, 'sport_id' => $sportId],
             'sports' => Sport::query()
                 ->where('active', true)
                 ->when(! $request->user()->isAdmin() && $sportIds->isNotEmpty(), fn ($sports) => $sports->whereIn('id', $sportIds))

@@ -60,6 +60,12 @@ type Assignment = {
 type MeetSportOption = { id: number; sport_id: number; label: string };
 type SportCategoryOption = { id: number; sport_id: number; label: string };
 type ValueLabel = { value: string; label: string };
+type UserOption = {
+    id: number;
+    name: string;
+    identity: string;
+    role: string;
+};
 
 type Props = {
     assignments: Paginated<Assignment>;
@@ -68,7 +74,7 @@ type Props = {
     sportCategoryOptions: SportCategoryOption[];
     roleOptions: ValueLabel[];
     statusOptions: ValueLabel[];
-    userOptions: Array<{ id: number; label: string }>;
+    userOptions: UserOption[];
     canManage: boolean;
 };
 
@@ -92,7 +98,7 @@ function CreateDialog({
     meetSportOptions: MeetSportOption[];
     sportCategoryOptions: SportCategoryOption[];
     roleOptions: ValueLabel[];
-    userOptions: Array<{ id: number; label: string }>;
+    userOptions: UserOption[];
 }) {
     const { data, setData, post, processing, errors, reset } = useForm<{
         meet_sport_id: string;
@@ -140,13 +146,54 @@ function CreateDialog({
                 onOpenChange(next);
             }}
         >
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
                 <DialogHeader>
-                    <DialogTitle>Add assignment</DialogTitle>
+                    <DialogTitle>Add tournament assignment</DialogTitle>
+                    <p className="text-sm text-muted-foreground">
+                        Select an enabled user account and define their scope
+                        for the current meet.
+                    </p>
                 </DialogHeader>
-                <form onSubmit={submit} className="space-y-4">
+                <form onSubmit={submit} className="space-y-5">
                     <div className="space-y-2">
-                        <Label htmlFor="assignment-sport">Sport</Label>
+                        <Label htmlFor="assignment-user">Person *</Label>
+                        <Select
+                            value={data.user_id}
+                            onValueChange={(value) => setData('user_id', value)}
+                        >
+                            <SelectTrigger
+                                id="assignment-user"
+                                className="h-11"
+                            >
+                                <SelectValue placeholder="Select a user account" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-72 [&_[data-slot=select-viewport]]:max-h-64 [&_[data-slot=select-viewport]]:overflow-y-scroll">
+                                {userOptions.map((user) => (
+                                    <SelectItem
+                                        key={user.id}
+                                        value={String(user.id)}
+                                        className="py-2.5"
+                                    >
+                                        <span className="flex min-w-0 flex-col items-start">
+                                            <span className="font-medium">
+                                                {user.name}
+                                            </span>
+                                            <span className="max-w-96 truncate text-xs text-muted-foreground">
+                                                {user.identity} · {user.role}
+                                            </span>
+                                        </span>
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                            All enabled accounts, including newly created users,
+                            are available.
+                        </p>
+                        <InputError message={errors.user_id} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="assignment-sport">Sport *</Label>
                         <Select
                             value={data.meet_sport_id}
                             onValueChange={(value) =>
@@ -213,29 +260,7 @@ function CreateDialog({
                         <InputError message={errors.sport_category_id} />
                     </div>
                     <div className="space-y-2">
-                        <Label htmlFor="assignment-user">Person</Label>
-                        <Select
-                            value={data.user_id}
-                            onValueChange={(value) => setData('user_id', value)}
-                        >
-                            <SelectTrigger id="assignment-user">
-                                <SelectValue placeholder="Select a person" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {userOptions.map((user) => (
-                                    <SelectItem
-                                        key={user.id}
-                                        value={String(user.id)}
-                                    >
-                                        {user.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <InputError message={errors.user_id} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="assignment-role">Role</Label>
+                        <Label htmlFor="assignment-role">Role *</Label>
                         <Select
                             value={data.role}
                             onValueChange={(value) => setData('role', value)}
@@ -301,6 +326,13 @@ function CreateDialog({
                         </Label>
                     </div>
                     <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => onOpenChange(false)}
+                        >
+                            Cancel
+                        </Button>
                         <Button type="submit" disabled={processing}>
                             Add assignment
                         </Button>

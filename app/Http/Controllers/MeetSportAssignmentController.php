@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
-use App\Enums\UserRole;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
@@ -103,10 +102,15 @@ class MeetSportAssignmentController extends Controller
                 MeetSportAssignmentStatus::cases(),
             ),
             'userOptions' => User::query()
-                ->whereIn('role', [UserRole::Admin->value, UserRole::Organizer->value, UserRole::TournamentManager->value, UserRole::TechnicalOfficial->value])
+                ->whereNull('disabled_at')
                 ->orderBy('name')
-                ->get(['id', 'name', 'email'])
-                ->map(fn (User $user): array => ['id' => $user->id, 'label' => "{$user->name} ({$user->email})"]),
+                ->get(['id', 'name', 'username', 'email', 'role'])
+                ->map(fn (User $user): array => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'identity' => $user->email ?? $user->username ?? __('No login identifier'),
+                    'role' => $user->role->label(),
+                ]),
             'canManage' => Gate::allows('manage-meet-data') || $request->user()->canManageProductionAccounts(),
         ]);
     }
@@ -120,12 +124,7 @@ class MeetSportAssignmentController extends Controller
 
         $validated = $request->validate([
             'meet_sport_id' => ['required', 'integer', Rule::exists('meet_sports', 'id')],
-            'user_id' => [
-                'required', 'integer',
-                Rule::exists('users', 'id')->whereIn('role', [
-                    UserRole::Admin->value, UserRole::Organizer->value, UserRole::TournamentManager->value, UserRole::TechnicalOfficial->value,
-                ]),
-            ],
+            'user_id' => ['required', 'integer', Rule::exists('users', 'id')->whereNull('disabled_at')],
             'sport_category_id' => ['nullable', 'integer', Rule::exists('sport_categories', 'id')],
             'role' => ['required', Rule::enum(MeetSportAssignmentRole::class)],
             'is_lead' => ['boolean'],

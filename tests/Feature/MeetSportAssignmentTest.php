@@ -223,7 +223,7 @@ test('non-managers cannot create an assignment', function (User $user) {
     'coach' => fn () => User::factory()->coach()->create(),
 ]);
 
-test('a delegation officer cannot be assigned — only admin, organizer, or technical official accounts are eligible', function () {
+test('a newly created user account can be assigned regardless of its base role', function () {
     $meetSport = MeetSport::factory()->create();
     $officer = User::factory()->delegationOfficer()->create();
 
@@ -233,7 +233,28 @@ test('a delegation officer cannot be assigned — only admin, organizer, or tech
             'user_id' => $officer->id,
             'role' => MeetSportAssignmentRole::TournamentSecretary->value,
         ])
-        ->assertSessionHasErrors('user_id');
+        ->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('meet_sport_assignments', [
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $officer->id,
+        'role' => MeetSportAssignmentRole::TournamentSecretary->value,
+    ]);
+});
+
+test('disabled accounts are not available or assignable', function () {
+    $disabled = User::factory()->create(['disabled_at' => now()]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->get('/meet-sport-assignments')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('userOptions', fn ($options) => collect($options)->doesntContain('id', $disabled->id)));
+
+    $this->actingAs($admin)->post('/meet-sport-assignments', [
+        'meet_sport_id' => MeetSport::factory()->create()->id,
+        'user_id' => $disabled->id,
+        'role' => MeetSportAssignmentRole::TournamentICT->value,
+    ])->assertSessionHasErrors('user_id');
 });
 
 test('the same person cannot be assigned the same role twice for the same meet sport, with a field error', function () {

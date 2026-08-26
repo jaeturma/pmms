@@ -74,7 +74,7 @@ type SportOption = {
 
 type Props = {
     events: Paginated<MeetEvent>;
-    filters: { search: string };
+    filters: { search: string; sport_id: number | null };
     sports: SportOption[];
     venues: { id: number; name: string }[];
     people: { id: number; full_name: string }[];
@@ -505,11 +505,47 @@ export default function Events({
                     }
                 />
 
-                <SearchBar
-                    initial={filters.search}
-                    placeholder="Search events"
-                    url={index().url}
-                />
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_16rem]">
+                    <SearchBar
+                        initial={filters.search}
+                        placeholder="Search events"
+                        url={index().url}
+                        extraParams={
+                            filters.sport_id
+                                ? { sport_id: String(filters.sport_id) }
+                                : undefined
+                        }
+                    />
+                    <Select
+                        value={String(filters.sport_id ?? 'all')}
+                        onValueChange={(value) =>
+                            router.get(
+                                index().url,
+                                {
+                                    search: filters.search || undefined,
+                                    sport_id:
+                                        value === 'all' ? undefined : value,
+                                },
+                                { preserveState: true },
+                            )
+                        }
+                    >
+                        <SelectTrigger aria-label="Filter sports events by sport">
+                            <SelectValue placeholder="All sports" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All sports</SelectItem>
+                            {sports.map((sport) => (
+                                <SelectItem
+                                    key={sport.id}
+                                    value={String(sport.id)}
+                                >
+                                    {sport.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
 
                 {events.data.length === 0 ? (
                     <EmptyState
@@ -603,72 +639,76 @@ export default function Events({
                                                     >
                                                         Edit
                                                     </Button>
-                                                    {canArchive && <ConfirmDialog
-                                                        trigger={
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                            >
-                                                                {event.active
-                                                                    ? 'Archive'
-                                                                    : 'Restore'}
-                                                            </Button>
-                                                        }
-                                                        title={
-                                                            event.active
-                                                                ? 'Archive event?'
-                                                                : 'Restore event?'
-                                                        }
-                                                        description={
-                                                            event.active
-                                                                ? 'Archived events stay in records but are hidden from new meets.'
-                                                                : 'The event becomes available for meets again.'
-                                                        }
-                                                        confirmLabel={
-                                                            event.active
-                                                                ? 'Archive'
-                                                                : 'Restore'
-                                                        }
-                                                        onConfirm={() =>
-                                                            router.patch(
+                                                    {canArchive && (
+                                                        <ConfirmDialog
+                                                            trigger={
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                >
+                                                                    {event.active
+                                                                        ? 'Archive'
+                                                                        : 'Restore'}
+                                                                </Button>
+                                                            }
+                                                            title={
                                                                 event.active
-                                                                    ? archive(
-                                                                          event.id,
-                                                                      ).url
-                                                                    : restore(
-                                                                          event.id,
-                                                                      ).url,
-                                                                {},
-                                                                {
-                                                                    preserveScroll: true,
-                                                                },
-                                                            )
-                                                        }
-                                                    />}
-                                                    {canArchive && <ConfirmDialog
-                                                        trigger={
-                                                            <Button
-                                                                variant="destructive"
-                                                                size="sm"
-                                                            >
-                                                                Delete
-                                                            </Button>
-                                                        }
-                                                        title="Delete event?"
-                                                        description="This permanently removes the event from the catalog."
-                                                        confirmLabel="Delete"
-                                                        destructive
-                                                        onConfirm={() =>
-                                                            router.delete(
-                                                                destroy(
-                                                                    event.id,
-                                                                ).url,
-                                                                {
-                                                                    preserveScroll: true,
-                                                                },
-                                                            )
-                                                        }
-                                                    />}
+                                                                    ? 'Archive event?'
+                                                                    : 'Restore event?'
+                                                            }
+                                                            description={
+                                                                event.active
+                                                                    ? 'Archived events stay in records but are hidden from new meets.'
+                                                                    : 'The event becomes available for meets again.'
+                                                            }
+                                                            confirmLabel={
+                                                                event.active
+                                                                    ? 'Archive'
+                                                                    : 'Restore'
+                                                            }
+                                                            onConfirm={() =>
+                                                                router.patch(
+                                                                    event.active
+                                                                        ? archive(
+                                                                              event.id,
+                                                                          ).url
+                                                                        : restore(
+                                                                              event.id,
+                                                                          ).url,
+                                                                    {},
+                                                                    {
+                                                                        preserveScroll: true,
+                                                                    },
+                                                                )
+                                                            }
+                                                        />
+                                                    )}
+                                                    {canArchive && (
+                                                        <ConfirmDialog
+                                                            trigger={
+                                                                <Button
+                                                                    variant="destructive"
+                                                                    size="sm"
+                                                                >
+                                                                    Delete
+                                                                </Button>
+                                                            }
+                                                            title="Delete event?"
+                                                            description="This permanently removes the event from the catalog."
+                                                            confirmLabel="Delete"
+                                                            destructive
+                                                            onConfirm={() =>
+                                                                router.delete(
+                                                                    destroy(
+                                                                        event.id,
+                                                                    ).url,
+                                                                    {
+                                                                        preserveScroll: true,
+                                                                    },
+                                                                )
+                                                            }
+                                                        />
+                                                    )}
                                                 </div>
                                             </TableCell>
                                         )}
@@ -683,7 +723,12 @@ export default function Events({
                     page={events}
                     url={index().url}
                     label="events"
-                    params={filters.search ? { search: filters.search } : {}}
+                    params={{
+                        ...(filters.search ? { search: filters.search } : {}),
+                        ...(filters.sport_id
+                            ? { sport_id: filters.sport_id }
+                            : {}),
+                    }}
                 />
             </div>
 

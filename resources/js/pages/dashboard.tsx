@@ -132,8 +132,24 @@ type Props = {
     operations: Operations | null;
     coachAccreditation: CoachAccreditation | null;
     coachDashboard: CoachDashboard | null;
+    sportsEventReport: SportsEventReport;
     stats: Stat[];
     announcements: Announcement[];
+};
+
+type SportsEventReport = {
+    sports_count: number;
+    events_count: number;
+    rows: Array<{
+        id: number;
+        sport: string;
+        event: string;
+        division: string;
+        gender: string;
+        type: string;
+        athletes_count: number;
+        coaches_count: number;
+    }>;
 };
 
 type CoachAccreditation = {
@@ -206,16 +222,51 @@ const quickActions: Array<{
         icon: UsersRound,
         roles: ['admin', 'organizer', 'delegation_officer'],
     },
-    { label: 'Register athlete', href: athletesIndex().url, icon: Contact, roles: ['admin', 'coach'] },
-    { label: 'Add official', href: personnelIndex().url, icon: UserCog, roles: ['admin', 'organizer', 'delegation_officer'] },
-    { label: 'Manage events', href: eventsIndex().url, icon: Medal, roles: ['admin', 'organizer'] },
-    { label: 'Encode results', href: resultsIndex().url, icon: Award, roles: ['admin', 'organizer', 'tournament_manager'] },
-    { label: 'Medal tally', href: tallyIndex().url, icon: Crown, roles: ['admin', 'organizer', 'tournament_manager', 'technical_official', 'delegation_officer', 'coach', 'viewer'] },
+    {
+        label: 'Register athlete',
+        href: athletesIndex().url,
+        icon: Contact,
+        roles: ['admin', 'coach'],
+    },
+    {
+        label: 'Add official',
+        href: personnelIndex().url,
+        icon: UserCog,
+        roles: ['admin', 'organizer', 'delegation_officer'],
+    },
+    {
+        label: 'Manage events',
+        href: eventsIndex().url,
+        icon: Medal,
+        roles: ['admin', 'organizer'],
+    },
+    {
+        label: 'Encode results',
+        href: resultsIndex().url,
+        icon: Award,
+        roles: ['admin', 'organizer', 'tournament_manager'],
+    },
+    {
+        label: 'Medal tally',
+        href: tallyIndex().url,
+        icon: Crown,
+        roles: [
+            'admin',
+            'organizer',
+            'tournament_manager',
+            'technical_official',
+            'delegation_officer',
+            'coach',
+            'viewer',
+        ],
+    },
 ];
 
 function QuickActions({ compact = false }: { compact?: boolean }) {
     const role = usePage().props.auth.user?.role;
-    const permittedActions = quickActions.filter((action) => role && action.roles.includes(role));
+    const permittedActions = quickActions.filter(
+        (action) => role && action.roles.includes(role),
+    );
 
     if (permittedActions.length === 0) return null;
 
@@ -344,6 +395,84 @@ function EventsOverviewCard({ overview }: { overview: EventsOverview }) {
                             ))}
                         </dl>
                     </>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
+function SportsEventParticipationReport({
+    report,
+}: {
+    report: SportsEventReport;
+}) {
+    return (
+        <Card data-tone="cyan">
+            <CardHeader className="flex flex-row items-start justify-between gap-3">
+                <div>
+                    <CardTitle>Sports event participation</CardTitle>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        {report.sports_count} sport
+                        {report.sports_count === 1 ? '' : 's'} contain{' '}
+                        {report.events_count} sports event
+                        {report.events_count === 1 ? '' : 's'}. Athlete and
+                        coach totals follow your assigned scope.
+                    </p>
+                </div>
+                <Button variant="outline" size="sm" asChild>
+                    <Link href={eventsIndex()}>Sports Events</Link>
+                </Button>
+            </CardHeader>
+            <CardContent>
+                {report.rows.length === 0 ? (
+                    <EmptyState
+                        icon={Medal}
+                        title="No sports events assigned"
+                        description="Sports contain one or more events. Your assigned events will appear here."
+                    />
+                ) : (
+                    <div className="max-h-[30rem] overflow-auto rounded-md border">
+                        <Table>
+                            <TableHeader className="sticky top-0 z-10 bg-background">
+                                <TableRow>
+                                    <TableHead>Sport / Event</TableHead>
+                                    <TableHead>Classification</TableHead>
+                                    <TableHead className="text-center">
+                                        Athletes
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                        Coaches
+                                    </TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {report.rows.map((row) => (
+                                    <TableRow key={row.id}>
+                                        <TableCell>
+                                            <p className="font-medium">
+                                                {row.event}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {row.sport}
+                                            </p>
+                                        </TableCell>
+                                        <TableCell>
+                                            <p>{row.type}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {row.division} · {row.gender}
+                                            </p>
+                                        </TableCell>
+                                        <TableCell className="text-center text-base font-semibold">
+                                            {row.athletes_count}
+                                        </TableCell>
+                                        <TableCell className="text-center text-base font-semibold">
+                                            {row.coaches_count}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
                 )}
             </CardContent>
         </Card>
@@ -755,6 +884,7 @@ export default function Dashboard({
     operations,
     coachAccreditation,
     coachDashboard,
+    sportsEventReport,
     stats,
     announcements,
 }: Props) {
@@ -788,27 +918,28 @@ export default function Dashboard({
                             data-tone="primary"
                             className="overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background"
                         >
-                        <CardHeader className="flex flex-row items-center justify-between gap-2">
-                            <div>
-                                <p className="text-xs font-medium tracking-wide text-primary uppercase">
-                                    Current Meet
+                            <CardHeader className="flex flex-row items-center justify-between gap-2">
+                                <div>
+                                    <p className="text-xs font-medium tracking-wide text-primary uppercase">
+                                        Current Meet
+                                    </p>
+                                    <CardTitle className="mt-1">
+                                        {currentMeet.name}
+                                    </CardTitle>
+                                </div>
+                                <Badge>{currentMeet.status_label}</Badge>
+                            </CardHeader>
+                            <CardContent className="text-sm text-muted-foreground">
+                                <p>
+                                    SY {currentMeet.school_year} ·{' '}
+                                    {currentMeet.starts_at} →{' '}
+                                    {currentMeet.ends_at}
+                                    {currentMeet.venue &&
+                                        ` · ${currentMeet.venue}`}{' '}
+                                    · {currentMeet.events_count} event
+                                    {currentMeet.events_count === 1 ? '' : 's'}
                                 </p>
-                                <CardTitle className="mt-1">
-                                    {currentMeet.name}
-                                </CardTitle>
-                            </div>
-                            <Badge>{currentMeet.status_label}</Badge>
-                        </CardHeader>
-                        <CardContent className="text-sm text-muted-foreground">
-                            <p>
-                                SY {currentMeet.school_year} ·{' '}
-                                {currentMeet.starts_at} → {currentMeet.ends_at}
-                                {currentMeet.venue &&
-                                    ` · ${currentMeet.venue}`}{' '}
-                                · {currentMeet.events_count} event
-                                {currentMeet.events_count === 1 ? '' : 's'}
-                            </p>
-                        </CardContent>
+                            </CardContent>
                         </Card>
                     )}
 
@@ -817,50 +948,87 @@ export default function Dashboard({
                             data-tone="success"
                             className="border-success/20 bg-gradient-to-br from-success/10 via-background to-background"
                         >
-                        <CardHeader className="flex flex-row items-center justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                                <span className="flex size-9 items-center justify-center rounded-[5px] bg-primary/10 text-primary">
-                                    <IdCard className="size-5" aria-hidden="true" />
-                                </span>
-                                <div>
-                                    <CardTitle>Accreditation status</CardTitle>
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                        Your coach credential for {currentMeet?.name}.
+                            <CardHeader className="flex flex-row items-center justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                    <span className="flex size-9 items-center justify-center rounded-[5px] bg-primary/10 text-primary">
+                                        <IdCard
+                                            className="size-5"
+                                            aria-hidden="true"
+                                        />
+                                    </span>
+                                    <div>
+                                        <CardTitle>
+                                            Accreditation status
+                                        </CardTitle>
+                                        <p className="mt-1 text-sm text-muted-foreground">
+                                            Your coach credential for{' '}
+                                            {currentMeet?.name}.
+                                        </p>
+                                    </div>
+                                </div>
+                                <Badge
+                                    variant={
+                                        coachAccreditation.accredited
+                                            ? 'default'
+                                            : 'secondary'
+                                    }
+                                >
+                                    {coachAccreditation.status}
+                                </Badge>
+                            </CardHeader>
+                            <CardContent>
+                                <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                                    <div>
+                                        <dt className="text-muted-foreground">
+                                            Accreditation no.
+                                        </dt>
+                                        <dd className="font-medium">
+                                            {coachAccreditation.number ??
+                                                'Not assigned'}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-muted-foreground">
+                                            Municipality / Team
+                                        </dt>
+                                        <dd className="font-medium">
+                                            {coachAccreditation.team ??
+                                                'Not assigned'}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-muted-foreground">
+                                            School
+                                        </dt>
+                                        <dd className="font-medium">
+                                            {coachAccreditation.school ??
+                                                'Not assigned'}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-muted-foreground">
+                                            Sport / Event
+                                        </dt>
+                                        <dd className="font-medium">
+                                            {[
+                                                coachAccreditation.sport,
+                                                coachAccreditation.event,
+                                            ]
+                                                .filter(Boolean)
+                                                .join(' — ') || 'Not assigned'}
+                                        </dd>
+                                    </div>
+                                </dl>
+                                {(coachAccreditation.accredited_on ||
+                                    coachAccreditation.review_notes) && (
+                                    <p className="mt-4 border-t pt-3 text-sm text-muted-foreground">
+                                        {coachAccreditation.accredited_on &&
+                                            `Accredited on ${coachAccreditation.accredited_on}.`}
+                                        {coachAccreditation.review_notes &&
+                                            ` ${coachAccreditation.review_notes}`}
                                     </p>
-                                </div>
-                            </div>
-                            <Badge variant={coachAccreditation.accredited ? 'default' : 'secondary'}>
-                                {coachAccreditation.status}
-                            </Badge>
-                        </CardHeader>
-                        <CardContent>
-                            <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                                <div>
-                                    <dt className="text-muted-foreground">Accreditation no.</dt>
-                                    <dd className="font-medium">{coachAccreditation.number ?? 'Not assigned'}</dd>
-                                </div>
-                                <div>
-                                    <dt className="text-muted-foreground">Municipality / Team</dt>
-                                    <dd className="font-medium">{coachAccreditation.team ?? 'Not assigned'}</dd>
-                                </div>
-                                <div>
-                                    <dt className="text-muted-foreground">School</dt>
-                                    <dd className="font-medium">{coachAccreditation.school ?? 'Not assigned'}</dd>
-                                </div>
-                                <div>
-                                    <dt className="text-muted-foreground">Sport / Event</dt>
-                                    <dd className="font-medium">
-                                        {[coachAccreditation.sport, coachAccreditation.event].filter(Boolean).join(' — ') || 'Not assigned'}
-                                    </dd>
-                                </div>
-                            </dl>
-                            {(coachAccreditation.accredited_on || coachAccreditation.review_notes) && (
-                                <p className="mt-4 border-t pt-3 text-sm text-muted-foreground">
-                                    {coachAccreditation.accredited_on && `Accredited on ${coachAccreditation.accredited_on}.`}
-                                    {coachAccreditation.review_notes && ` ${coachAccreditation.review_notes}`}
-                                </p>
-                            )}
-                        </CardContent>
+                                )}
+                            </CardContent>
                         </Card>
                     )}
                 </div>
@@ -888,6 +1056,8 @@ export default function Dashboard({
                 {operations && !coachDashboard && (
                     <MeetOperations operations={operations} />
                 )}
+
+                <SportsEventParticipationReport report={sportsEventReport} />
 
                 {!coachDashboard && (
                     <div className="grid auto-rows-min gap-3 sm:grid-cols-2">

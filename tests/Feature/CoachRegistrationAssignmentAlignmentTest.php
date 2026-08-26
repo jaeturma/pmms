@@ -3,7 +3,6 @@
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\UserRole;
-use App\Models\Athlete;
 use App\Models\CoachAssignmentRequest;
 use App\Models\CoachOnboardingRequest;
 use App\Models\Delegation;
@@ -17,7 +16,6 @@ use App\Models\Setting;
 use App\Models\Sport;
 use App\Models\User;
 use App\Services\CoachAccessService;
-use App\Services\RegistrationCodeChallenge;
 use Inertia\Testing\AssertableInertia;
 
 function coachApplicationContext(string $sportName = 'Swimming'): array
@@ -41,7 +39,7 @@ test('coach self registration selects sport only and rejects self assigned event
         'name' => 'Sport Only Coach', 'email' => 'sport-only@example.test',
         'password' => 'Secure#Pass2026', 'password_confirmation' => 'Secure#Pass2026',
         'account_type' => 'coach', 'meet_sport_id' => $meetSport->id,
-        'delegation_id' => $delegation->id, 'school_id' => $school->id,
+        'delegation_id' => $delegation->id,
         'code_challenge' => 'ABC12',
     ];
 
@@ -54,7 +52,7 @@ test('coach self registration selects sport only and rejects self assigned event
     $application = CoachOnboardingRequest::query()->sole();
     expect($application->meet_sport_id)->toBe($meetSport->id)
         ->and($application->delegation_id)->toBe($delegation->id)
-        ->and($application->school_id)->toBe($school->id)
+        ->and($application->school_id)->toBeNull()
         ->and($application->events)->toBeEmpty()
         ->and($application->user->role)->toBe(UserRole::Viewer)
         ->and(app(CoachAccessService::class)->eventIds($application->user))->toBeEmpty();
@@ -111,4 +109,34 @@ test('one coach can hold multiple event and sport scopes without duplicate accou
 
     expect(User::query()->whereKey($coach->id)->count())->toBe(1)
         ->and($coach->approvedCoachEventIds())->toHaveCount(2);
+});
+
+test('an approved coach can assign another event without a school link', function () {
+    [, , $meetSport, $delegation, , $events] = coachApplicationContext();
+    $coach = User::factory()->coach()->create(['approval_status' => 'approved']);
+    CoachOnboardingRequest::query()->create([
+        'user_id' => $coach->id,
+        'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $delegation->id,
+        'school_id' => null,
+        'district_id' => $delegation->district_id,
+        'status' => 'approved',
+    ]);
+
+    $this->actingAs($coach)->get('/coach/assignment-requests')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('canRequest', true)
+            ->has('options', 2));
+
+    $this->actingAs($coach)->post('/coach/assignment-requests', [
+        'meet_sport_id' => $meetSport->id,
+        'event_id' => $events->first()->id,
+        'delegation_id' => $delegation->id,
+    ])->assertSessionDoesntHaveErrors();
+
+    $assignment = CoachAssignmentRequest::query()->sole();
+    expect($assignment->status)->toBe('approved')
+        ->and($assignment->school_id)->toBeNull()
+        ->and($coach->approvedCoachEventIdsForDelegation($delegation)->all())
+        ->toBe([$events->first()->id]);
 });

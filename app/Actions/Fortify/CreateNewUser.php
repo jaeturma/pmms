@@ -7,13 +7,12 @@ use App\Concerns\ProfileValidationRules;
 use App\Models\CoachOnboardingRequest;
 use App\Models\Delegation;
 use App\Models\MeetSport;
-use App\Models\School;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\AuditLogger;
 use App\Services\FileUploadService;
 use App\Services\RecaptchaVerifier;
 use App\Services\RegistrationCodeChallenge;
-use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -62,7 +61,7 @@ class CreateNewUser implements CreatesNewUsers
             ],
             'meet_sport_id' => [Rule::requiredIf($isCoach), 'nullable', 'integer', Rule::exists('meet_sports', 'id')->where('active', true)],
             'delegation_id' => [Rule::requiredIf($isCoach), 'nullable', 'integer', Rule::exists('delegations', 'id')],
-            'school_id' => [Rule::requiredIf($isCoach), 'nullable', 'integer', Rule::exists('schools', 'id')->where('active', true)],
+            'school_id' => [$isCoach ? 'prohibited' : 'nullable'],
             'event_id' => [$isCoach ? 'prohibited' : 'nullable'],
             'event_ids' => [$isCoach ? 'prohibited' : 'nullable'],
             'sport_category_id' => [$isCoach ? 'prohibited' : 'nullable'],
@@ -74,11 +73,8 @@ class CreateNewUser implements CreatesNewUsers
         if ($isCoach) {
             $meetSport = MeetSport::query()->findOrFail($input['meet_sport_id']);
             $delegation = Delegation::query()->findOrFail($input['delegation_id']);
-            $school = School::query()->findOrFail($input['school_id']);
-            if ($delegation->meet_id !== $meetSport->meet_id
-                || ! (($delegation->school_id !== null && $delegation->school_id === $school->id)
-                    || ($delegation->district_id !== null && $delegation->district_id === $school->district_id))) {
-                throw ValidationException::withMessages(['school_id' => [__('The selected school does not belong to this delegation and meet.')]]);
+            if ($delegation->meet_id !== $meetSport->meet_id) {
+                throw ValidationException::withMessages(['delegation_id' => [__('The selected delegation does not belong to this sports meet.')]]);
             }
         }
 
@@ -111,8 +107,8 @@ class CreateNewUser implements CreatesNewUsers
                 'user_id' => $user->id,
                 'meet_sport_id' => $meetSport->id,
                 'delegation_id' => $delegation->id,
-                'school_id' => $school->id,
-                'district_id' => $school->district_id,
+                'school_id' => null,
+                'district_id' => $delegation->district_id ?? $delegation->school?->district_id,
                 'submitted_at' => now(),
                 'profile_upload_id' => isset($input['coach_profile'])
                     ? $this->uploads->store($input['coach_profile'], $user, 'coach_profile')->id

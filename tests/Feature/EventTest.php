@@ -45,6 +45,20 @@ test('the events catalog renders with events and sport options', function () {
             ->where('canManage', false));
 });
 
+test('sports events can be filtered by sport while preserving the selected filter', function () {
+    $basketball = Sport::factory()->create(['name' => 'Basketball']);
+    $athletics = Sport::factory()->create(['name' => 'Athletics']);
+    Event::factory()->create(['sport_id' => $basketball->id]);
+    Event::factory()->create(['sport_id' => $athletics->id]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get("/events?sport_id={$basketball->id}")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('filters.sport_id', $basketball->id)
+            ->has('events.data', 1)
+            ->where('events.data.0.sport_id', $basketball->id));
+});
+
 test('organizers can create events', function () {
     $sport = Sport::factory()->create();
 

@@ -15,6 +15,7 @@ use App\Models\CoachAssignmentRequest;
 use App\Models\Delegation;
 use App\Models\EligibilityReview;
 use App\Models\Entry;
+use App\Models\Event;
 use App\Models\EventResult;
 use App\Models\EventSchedule;
 use App\Models\Incident;
@@ -76,6 +77,7 @@ class DashboardController extends Controller
             'operations' => $this->operations($request, $tally),
             'coachAccreditation' => $this->coachAccreditation($request, $currentMeet),
             'coachDashboard' => $this->coachDashboard($request, $currentMeet),
+            'sportsEventReport' => $this->sportsEventReport($user, $currentMeet),
             'stats' => [
                 [
                     'key' => 'athletes',
@@ -104,6 +106,53 @@ class DashboardController extends Controller
                 ])
                 ->values(),
         ]);
+    }
+
+    /** @return array{sports_count: int, events_count: int, rows: array<int, array<string, mixed>>} */
+    private function sportsEventReport(User $user, Meet $meet): array
+    {
+        $eventQuery = Event::query()
+            ->whereHas('meets', fn ($meets) => $meets->whereKey($meet->id))
+            ->with('sport:id,name')
+            ->orderBy('sport_id')->orderBy('display_order')->orderBy('name');
+
+        $delegationIds = null;
+        if ($user->role === UserRole::Coach) {
+            $eventQuery->whereKey($user->approvedCoachEventIds());
+            $delegationIds = $user->approvedCoachDelegationIds();
+        } elseif ($user->role === UserRole::DelegationOfficer) {
+            $delegationIds = Delegation::query()->where('meet_id', $meet->id)
+                ->whereHas('officers', fn ($officers) => $officers->whereKey($user->id))
+                ->pluck('id');
+        } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+            // Tournament managers, assistants, secretaries, ICT, and
+            // technical officials see only events granted by active scopes.
+            $eventQuery->whereKey($user->tournamentEventIds($meet->id));
+        }
+
+        $events = $eventQuery->get();
+        $eventIds = $events->modelKeys();
+        $athleteCounts = Entry::query()->whereIn('event_id', $eventIds)
+            ->when($delegationIds !== null, fn ($entries) => $entries->whereIn('delegation_id', $delegationIds))
+            ->selectRaw('event_id, COUNT(DISTINCT athlete_id) as aggregate')
+            ->groupBy('event_id')->pluck('aggregate', 'event_id');
+        $coachCounts = CoachAssignmentRequest::query()->whereIn('event_id', $eventIds)
+            ->where('status', 'approved')->whereNull('ended_at')
+            ->when($delegationIds !== null, fn ($coaches) => $coaches->whereIn('delegation_id', $delegationIds))
+            ->selectRaw('event_id, COUNT(DISTINCT user_id) as aggregate')
+            ->groupBy('event_id')->pluck('aggregate', 'event_id');
+
+        return [
+            'sports_count' => $events->pluck('sport_id')->unique()->count(),
+            'events_count' => $events->count(),
+            'rows' => $events->map(fn (Event $event): array => [
+                'id' => $event->id, 'sport' => $event->sport->name, 'event' => $event->name,
+                'division' => $event->age_division->label(), 'gender' => $event->gender->label(),
+                'type' => $event->is_team_event ? __('Team') : __('Individual'),
+                'athletes_count' => (int) ($athleteCounts[$event->id] ?? 0),
+                'coaches_count' => (int) ($coachCounts[$event->id] ?? 0),
+            ])->values()->all(),
+        ];
     }
 
     /**
