@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\EligibilityDocumentType;
 use App\Enums\Permission;
+use App\Enums\RequirementStatus;
 use App\Enums\ResultStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\BuildsSchoolOptionsByDelegation;
@@ -117,6 +118,14 @@ class AthleteController extends Controller
             ->when($sportId !== null, fn ($athletes) => $athletes->whereHas('entries.event', fn ($event) => $event->where('sport_id', $sportId)))
             ->when($accreditation === 'accredited', fn ($athletes) => $athletes->whereHas('accreditation'))
             ->when($accreditation === 'not_accredited', fn ($athletes) => $athletes->whereDoesntHave('accreditation'));
+
+        if ($accreditation === 'eligible') {
+            foreach (EligibilityDocumentType::qualificationRequirements() as $type) {
+                $query->whereHas('eligibilityDocuments', fn ($documents) => $documents
+                    ->where('document_type', $type->value)
+                    ->where('status', RequirementStatus::Verified->value));
+            }
+        }
 
         $this->applySearch($query, $search, ['first_name', 'last_name', 'lrn']);
 

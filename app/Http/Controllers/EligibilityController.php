@@ -19,6 +19,7 @@ use App\Models\Sport;
 use App\Models\SportCategory;
 use App\Models\TechnicalOfficialAccreditation;
 use App\Models\User;
+use App\Notifications\CoachEligibilityRemarksNotification;
 use App\Services\AthletePhotoService;
 use App\Services\AuditLogger;
 use App\Services\Eligibility\AthleteEligibilityChecker;
@@ -219,6 +220,62 @@ class EligibilityController extends Controller
         ]);
     }
 
+    public function show(Request $request, EligibilityReview $review): Response
+    {
+        Gate::authorize('view', $review);
+        $review->loadMissing([
+            'athlete.school.schoolDistrict', 'athlete.school.district', 'athlete.delegation.meet',
+            'athlete.eligibilityDocuments.fileUpload:id,original_name',
+            'athlete.eligibilityDocuments.verifier:id,name', 'athlete.accreditation:id,athlete_id',
+            'athlete.entries.event.sport:id,name', 'reviewer:id,name',
+        ]);
+        $row = $this->reviewRow($review, $request->user());
+        $athlete = $review->athlete;
+
+        return Inertia::render('eligibility/show', [
+            'review' => $row,
+            'athlete' => [
+                'id' => $athlete->id,
+                'name' => $athlete->fullName(),
+                'photo_url' => $athlete->photo_upload_id ? route('athletes.photo', $athlete) : null,
+                'sex' => $athlete->sex->label(),
+                'birthdate' => $athlete->birthdate->toDateString(),
+                'age' => $athlete->age(),
+                'grade_level' => $athlete->grade_level,
+                'lrn' => $athlete->lrn,
+                'school' => $athlete->school->name,
+                'district' => $athlete->school->schoolDistrict?->name ?? $athlete->school->district?->name,
+                'delegation' => $athlete->delegation->registrantName(),
+                'sports' => $athlete->entries->pluck('event.sport.name')->filter()->unique()->join(', '),
+            ],
+        ]);
+    }
+
+    public function notifyCoach(Request $request, EligibilityReview $review): RedirectResponse
+    {
+        abort_unless($request->user()?->can('decide', $review)
+            || $request->user()?->hasPermission(Permission::AthleteDocumentsVerify, $review->meet), 403);
+        $data = $request->validate(['remarks' => ['nullable', 'string', 'max:500']]);
+        $review->loadMissing(['athlete.registrar', 'athlete.delegation']);
+        $coach = $review->athlete->registrar;
+        if ($coach === null || $coach->role !== UserRole::Coach) {
+            $coach = User::query()->whereHas('coachAssignmentRequests', fn ($assignments) => $assignments
+                ->where('delegation_id', $review->athlete->delegation_id)
+                ->where('status', 'approved'))->first();
+        }
+        if ($coach === null) {
+            throw ValidationException::withMessages(['remarks' => __('No coach account is linked to this athlete.')]);
+        }
+
+        $remarks = trim((string) ($data['remarks'] ?? ''));
+        $review->forceFill(['remarks' => $remarks !== '' ? $remarks : $review->remarks])->save();
+        $coach->notify(new CoachEligibilityRemarksNotification($review, $remarks !== '' ? $remarks : null));
+        $this->audit->record('eligibility.coach_notified', $review, ['coach_id' => $coach->id, 'remarks' => $remarks ?: null]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('The coach has been notified.')]);
+
+        return back();
+    }
+
     /**
      * @return array{id: int, athlete: string, school: string, meet: string, status: string, status_label: string, remarks: string|null, reviewer: string|null, decided_at: string|null, documents: array<int, array{id: int, label: string, file_name: string, uploaded_at: string|null, url: string, can_delete: bool}>, can_decide: bool}
      */
@@ -263,6 +320,8 @@ class EligibilityController extends Controller
             'can_review' => $user->can('view', $review),
             'can_decide' => $review->status === EligibilityStatus::Pending
                 && $user->can('decide', $review),
+            'can_notify' => $user->can('decide', $review)
+                || $user->hasPermission(Permission::AthleteDocumentsVerify, $review->meet),
             'can_accredit' => $review->status === EligibilityStatus::Approved
                 && $requirementsValidated
                 && $review->athlete->accreditation === null
@@ -286,12 +345,7 @@ class EligibilityController extends Controller
             'remarks' => $document->remarks,
             'verified_by' => $document->verifier?->name,
             'verified_at' => $document->verified_at?->diffForHumans(),
-            'can_verify' => $user->hasPermission(
-                $document->document_type === EligibilityDocumentType::MedicalCertificate
-                    ? Permission::MedicalClearanceEvaluate
-                    : Permission::AthleteDocumentsVerify,
-                $review->meet,
-            ),
+            'can_verify' => $user->can('verify', $document),
             'can_delete' => ! in_array($review->status, [EligibilityStatus::Approved, EligibilityStatus::Rejected], true)
                 && $user->can('upload', [EligibilityReview::class, $review->athlete->delegation]),
         ];
@@ -448,16 +502,17 @@ class EligibilityController extends Controller
     {
         $review = $document->athlete->eligibilityReview;
         abort_if($review === null, 404);
-        $permission = $document->document_type === EligibilityDocumentType::MedicalCertificate
-            ? Permission::MedicalClearanceEvaluate
-            : Permission::AthleteDocumentsVerify;
-        abort_unless($request->user()?->hasPermission($permission, $review->meet), 403);
+        Gate::authorize('verify', $document);
         $data = $request->validate(['status' => ['required', Rule::enum(RequirementStatus::class)], 'remarks' => ['nullable', 'string', 'max:1000']]);
         abort_unless(in_array($data['status'], [RequirementStatus::Verified->value, RequirementStatus::Rejected->value, RequirementStatus::UnderReview->value], true), 422);
+        $oldStatus = $document->status->value;
         $document->forceFill(['status' => $data['status'], 'verified_by' => $request->user()?->id,
             'verified_at' => $data['status'] === RequirementStatus::UnderReview->value ? null : now(), 'remarks' => $data['remarks'] ?? null])->save();
         $action = $data['status'] === RequirementStatus::Verified->value ? 'athlete.document.verified' : ($data['status'] === RequirementStatus::Rejected->value ? 'athlete.document.rejected' : 'athlete.document.under_review');
-        $this->audit->record($action, $document, ['athlete' => $document->athlete->fullName(), 'type' => $document->document_type->value]);
+        $this->audit->record($action, $document, [
+            'athlete' => $document->athlete->fullName(), 'type' => $document->document_type->value,
+            'old_status' => $oldStatus, 'new_status' => $data['status'], 'meet_id' => $review->meet_id,
+        ]);
 
         return back();
     }

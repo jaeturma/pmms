@@ -131,7 +131,9 @@ test('coach selects events on a separate page and only ict approves the account'
 
     $this->actingAs($coach)->get("/coach/onboarding-requests/{$application->id}/assignments")
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('coach/manage-assignments')->has('events', 2)->where('canApprove', false));
+            ->component('coach/manage-assignments')
+            ->where('registration.sport', $meetSport->sport->name)
+            ->has('events', 2)->where('canApprove', false));
     $this->actingAs($coach)->put("/coach/onboarding-requests/{$application->id}/assignments", [
         'event_ids' => $events->modelKeys(),
     ])->assertSessionHasNoErrors();
@@ -144,19 +146,52 @@ test('coach selects events on a separate page and only ict approves the account'
         ->and($coach->fresh()->approvedCoachEventIdsForDelegation($delegation))->toHaveCount(2);
 });
 
-test('legacy coach registration without meet sport opens and repairs assignment scope', function () {
-    [$meet, , , $delegation, , $events] = coachApplicationContext();
+test('applied sport shows catalog events even when the meet event pivot is missing', function () {
+    [$meet, $sport, $meetSport, $delegation] = coachApplicationContext();
+    $meet->events()->detach();
+    $event = Event::factory()->create([
+        'sport_id' => $sport->id,
+        'gender' => 'boys',
+        'age_division' => 'secondary',
+        'active' => true,
+    ]);
+    $coach = User::factory()->create(['role' => UserRole::Viewer, 'approval_status' => 'pending']);
+    $application = CoachOnboardingRequest::query()->create([
+        'user_id' => $coach->id,
+        'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $delegation->id,
+        'district_id' => $delegation->district_id,
+        'status' => 'pending',
+    ]);
+
+    $this->actingAs($coach)->get("/coach/onboarding-requests/{$application->id}/assignments")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('registration.sport', $sport->name)
+            ->has('events', 3));
+
+    $this->actingAs($coach)->put("/coach/onboarding-requests/{$application->id}/assignments", [
+        'event_ids' => [$event->id],
+    ])->assertSessionHasNoErrors();
+
+    expect($meet->events()->whereKey($event)->exists())->toBeTrue()
+        ->and($application->fresh()->meet_sport_id)->toBe($meetSport->id)
+        ->and($application->fresh()->events->modelKeys())->toBe([$event->id]);
+});
+
+test('legacy coach registration with only an event derives its sport and repairs assignment scope', function () {
+    [$meet, $sport, , $delegation, , $events] = coachApplicationContext();
     $coach = User::factory()->create(['role' => UserRole::Viewer, 'approval_status' => 'pending']);
     $application = CoachOnboardingRequest::query()->create([
         'user_id' => $coach->id, 'meet_sport_id' => null,
         'delegation_id' => $delegation->id, 'district_id' => $delegation->district_id,
         'event_id' => $events->first()->id, 'status' => 'pending', 'submitted_at' => now(),
     ]);
-    $application->events()->attach($events->first());
-
     $this->actingAs($coach)->get("/coach/onboarding-requests/{$application->id}/assignments")
         ->assertOk()->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('coach/manage-assignments')->has('events', 2));
+            ->component('coach/manage-assignments')
+            ->where('registration.sport', $sport->name)
+            ->where('selectedEventIds', [$events->first()->id])
+            ->has('events', 2));
     $this->actingAs($coach)->put("/coach/onboarding-requests/{$application->id}/assignments", [
         'event_ids' => [$events->last()->id],
     ])->assertSessionHasNoErrors();

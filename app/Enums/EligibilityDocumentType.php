@@ -29,6 +29,13 @@ enum EligibilityDocumentType: string
         };
     }
 
+    public function verificationPermission(): Permission
+    {
+        return $this === self::MedicalCertificate
+            ? Permission::MedicalClearanceEvaluate
+            : Permission::AthleteDocumentsVerify;
+    }
+
     /** @return list<self> */
     public static function qualificationRequirements(): array
     {

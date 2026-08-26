@@ -139,7 +139,7 @@ class Athlete extends Model
     public function fullName(): string
     {
         return collect([$this->first_name, $this->middle_name, $this->last_name, $this->name_extension])
-            ->filter()
+            ->filter(fn (?string $part): bool => filled($part) && ! in_array(strtolower(trim($part)), ['n/a', 'none'], true))
             ->join(' ');
     }
 

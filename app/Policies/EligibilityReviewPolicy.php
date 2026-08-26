@@ -77,6 +77,9 @@ class EligibilityReviewPolicy
      */
     public function decide(User $user, EligibilityReview $review): bool
     {
-        return $user->isDsacAccreditationLeader($review->meet);
+        return $user->isAdmin()
+            || $user->isDsacAccreditationLeader($review->meet)
+            || ($review->athlete->entries()->whereIn('event_id', $user->tournamentEventIds())->exists()
+                && $user->meetSportAssignments()->where('status', 'active')->where('role', 'tournament_ict')->exists());
     }
 }

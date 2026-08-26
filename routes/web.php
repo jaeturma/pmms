@@ -395,6 +395,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('emergency-communication-logs', [EmergencyCommunicationLogController::class, 'store'])->name('emergency-communication-logs.store');
 
     Route::get('eligibility', [EligibilityController::class, 'index'])->name('eligibility.index');
+    Route::get('eligibility/reviews/{review}', [EligibilityController::class, 'show'])->name('eligibility.reviews.show');
+    Route::post('eligibility/reviews/{review}/notify-coach', [EligibilityController::class, 'notifyCoach'])->name('eligibility.reviews.notify-coach');
     Route::get('technical-officials/{official}/eligibility', [EligibilityController::class, 'officialChecker'])->name('technical-officials.eligibility');
     Route::post('technical-official-accreditations', [TechnicalOfficialAccreditationController::class, 'store'])->name('technical-official-accreditations.store');
     Route::get('technical-official-accreditations/{accreditation}', [TechnicalOfficialAccreditationController::class, 'download'])->name('technical-official-accreditations.download');

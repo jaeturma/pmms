@@ -67,7 +67,7 @@ class AthleteRequest extends FormRequest
             'first_name' => ['required', 'string', 'max:80'],
             'middle_name' => ['nullable', 'string', 'max:80'],
             'last_name' => ['required', 'string', 'max:80'],
-            'name_extension' => ['nullable', Rule::in(['Jr.', 'Sr.', 'II', 'III'])],
+            'name_extension' => ['nullable', Rule::in(['None', 'Jr.', 'Sr.', 'II', 'III'])],
             'sex' => ['required', Rule::enum(Sex::class)],
             'birthdate' => [
                 'required',
@@ -94,6 +94,8 @@ class AthleteRequest extends FormRequest
         ];
 
         if ($athlete === null) {
+            $rules['middle_name'] = ['required', 'string', 'max:80'];
+            $rules['name_extension'] = ['required', Rule::in(['None', 'Jr.', 'Sr.', 'II', 'III'])];
             $rules['delegation_id'] = ['required', 'integer', Rule::exists('delegations', 'id')];
             $rules['school_id'] = ['required', 'integer', Rule::exists('schools', 'id')->where('active', true)];
             if ($this->user()?->role === UserRole::Coach) {

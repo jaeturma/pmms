@@ -140,7 +140,7 @@ function AthleteFormDialog({
             first_name: '',
             middle_name: '',
             last_name: '',
-            name_extension: '',
+            name_extension: 'None',
             sex: '',
             birthdate: '',
             lrn: '',
@@ -156,11 +156,7 @@ function AthleteFormDialog({
             medical_certificate: null,
         });
     const allSchoolOptions = data.delegation_id
-        ? (schoolOptionsByDelegation[Number(data.delegation_id)] ?? []).filter(
-              (school) =>
-                  !data.district_id ||
-                  school.district_id === Number(data.district_id),
-          )
+        ? (schoolOptionsByDelegation[Number(data.delegation_id)] ?? [])
         : [];
     const availableSchoolDistricts = schoolDistricts.filter(
         (district) => district.district_id === Number(data.district_id),
@@ -245,8 +241,9 @@ function AthleteFormDialog({
                                 <InputError message={errors.delegation_id} />
                             </div>
                         )}
+                        <div className="grid gap-4 sm:grid-cols-2 lg:col-span-3 lg:grid-cols-4">
                         <div className="space-y-2">
-                            <Label htmlFor="athlete-lrn">LRN (12 digits)</Label>
+                            <Label htmlFor="athlete-lrn">LRN (12 digits) *</Label>
                             <Input
                                 id="athlete-lrn"
                                 value={data.lrn}
@@ -271,7 +268,7 @@ function AthleteFormDialog({
                             {fixedDelegationId !== null && (
                                 <div className="space-y-2">
                                     <Label>School district *</Label>
-                                    <Select value={data.school_district_id} onValueChange={(value) => setData((current) => ({ ...current, school_district_id: value, school_id: '' }))}>
+                                    <Select value={data.school_district_id} onValueChange={(value) => setData('school_district_id', value)}>
                                         <SelectTrigger><SelectValue placeholder="Select school district" /></SelectTrigger>
                                         <SelectContent>{availableSchoolDistricts.map((district) => <SelectItem key={district.id} value={String(district.id)}>{district.name}</SelectItem>)}</SelectContent>
                                     </Select>
@@ -305,6 +302,7 @@ function AthleteFormDialog({
                             </div>
                             </>
                         )}
+                        </div>
                         <div className="grid gap-4 lg:col-span-3 lg:grid-cols-3">
                             <div className="space-y-2">
                                 <Label htmlFor="athlete-last">Last name</Label>
@@ -333,11 +331,12 @@ function AthleteFormDialog({
                             <div className="grid grid-cols-[1fr_7rem] gap-3">
                                 <div className="space-y-2">
                                     <Label htmlFor="athlete-middle">
-                                        Middle name (optional)
+                                        Middle name / N/A *
                                     </Label>
                                     <Input
                                         id="athlete-middle"
                                         value={data.middle_name}
+                                        required
                                         onChange={(e) =>
                                             setData(
                                                 'middle_name',
@@ -349,7 +348,7 @@ function AthleteFormDialog({
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="athlete-extension">
-                                        Extension
+                                        Extension *
                                     </Label>
                                     <Select
                                         value={data.name_extension}
@@ -358,9 +357,10 @@ function AthleteFormDialog({
                                         }
                                     >
                                         <SelectTrigger id="athlete-extension">
-                                            <SelectValue placeholder="None" />
+                                            <SelectValue placeholder="Select extension" />
                                         </SelectTrigger>
                                         <SelectContent>
+                                            <SelectItem value="None">None</SelectItem>
                                             {['Jr.', 'Sr.', 'II', 'III'].map(
                                                 (suffix) => (
                                                     <SelectItem
@@ -421,7 +421,7 @@ function AthleteFormDialog({
                             </div>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="athlete-grade">Grade level</Label>
+                            <Label htmlFor="athlete-grade">Grade level *</Label>
                             <Select
                                 value={data.grade_level}
                                 onValueChange={(value) =>
@@ -448,7 +448,7 @@ function AthleteFormDialog({
                             <InputError message={errors.grade_level} />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="athlete-sex">Sex</Label>
+                            <Label htmlFor="athlete-sex">Sex *</Label>
                             <Select
                                 value={data.sex}
                                 onValueChange={(value) => setData('sex', value)}
@@ -466,10 +466,11 @@ function AthleteFormDialog({
                             <InputError message={errors.sex} />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="athlete-birthdate">Birthdate</Label>
+                            <Label htmlFor="athlete-birthdate">Birthdate *</Label>
                             <Input
                                 id="athlete-birthdate"
                                 type="date"
+                                required
                                 value={data.birthdate}
                                 onChange={(e) =>
                                     setData('birthdate', e.target.value)
@@ -855,7 +856,7 @@ export default function Athletes({
                     <Select value={String(filters.school_id ?? 'all')} onValueChange={(value) => applyFilter('school_id', value)}><SelectTrigger><SelectValue placeholder="School" /></SelectTrigger><SelectContent><SelectItem value="all">All schools</SelectItem>{filterSchools.filter((item) => (!filters.municipality_id || item.district_id === filters.municipality_id) && (!filters.school_district_id || item.school_district_id === filters.school_district_id)).map((item) => <SelectItem key={item.id} value={String(item.id)}>{item.name}</SelectItem>)}</SelectContent></Select>
                     <Select value={filters.sex || 'all'} onValueChange={(value) => applyFilter('sex', value)}><SelectTrigger><SelectValue placeholder="Sex" /></SelectTrigger><SelectContent><SelectItem value="all">All sexes</SelectItem><SelectItem value="male">Male</SelectItem><SelectItem value="female">Female</SelectItem></SelectContent></Select>
                     <Select value={String(filters.sport_id ?? 'all')} onValueChange={(value) => applyFilter('sport_id', value)}><SelectTrigger><SelectValue placeholder="Sport" /></SelectTrigger><SelectContent><SelectItem value="all">All sports</SelectItem>{sports.map((sport) => <SelectItem key={sport.id} value={String(sport.id)}>{sport.name}</SelectItem>)}</SelectContent></Select>
-                    <Select value={filters.accreditation || 'all'} onValueChange={(value) => applyFilter('accreditation', value)}><SelectTrigger><SelectValue placeholder="Accreditation" /></SelectTrigger><SelectContent><SelectItem value="all">All accreditation</SelectItem><SelectItem value="accredited">Accredited</SelectItem><SelectItem value="not_accredited">Not accredited</SelectItem></SelectContent></Select>
+                    <Select value={filters.accreditation || 'all'} onValueChange={(value) => applyFilter('accreditation', value)}><SelectTrigger><SelectValue placeholder="Eligibility" /></SelectTrigger><SelectContent><SelectItem value="all">All eligibility</SelectItem><SelectItem value="eligible">Eligible (documents validated)</SelectItem><SelectItem value="accredited">Accredited</SelectItem><SelectItem value="not_accredited">Not accredited</SelectItem></SelectContent></Select>
                 </div>
 
                 {athletes.data.length === 0 ? (

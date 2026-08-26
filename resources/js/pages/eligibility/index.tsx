@@ -1,4 +1,4 @@
-import { Head, router, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
 import { FileCheck, FileText, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
@@ -790,11 +790,9 @@ export default function Eligibility({
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
-                                                        onClick={() =>
-                                                            setReviewing(review)
-                                                        }
+                                                        asChild
                                                     >
-                                                        Review
+                                                        <Link href={`/eligibility/reviews/${review.id}`}>Open athlete</Link>
                                                     </Button>
                                                 )}
                                                 {review.can_decide && (

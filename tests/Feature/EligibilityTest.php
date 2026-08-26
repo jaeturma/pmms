@@ -4,6 +4,8 @@ use App\Enums\EligibilityDocumentType;
 use App\Enums\EligibilityStatus;
 use App\Enums\ManagementTeamMemberStatus;
 use App\Enums\ManagementTeamType;
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\RequirementStatus;
 use App\Models\Athlete;
 use App\Models\AuditLog;
@@ -14,9 +16,13 @@ use App\Models\Entry;
 use App\Models\ManagementTeam;
 use App\Models\ManagementTeamMember;
 use App\Models\Meet;
+use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
 use App\Models\User;
+use App\Notifications\CoachEligibilityRemarksNotification;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia;
 
 beforeEach(function () {
@@ -95,6 +101,52 @@ test('an incomplete athlete remains in the DSAC queue with all five checklist re
             ->has('reviews.data.0.requirement_checklist', 5)
             ->where('reviews.data.0.requirements_validated', false)
             ->where('reviews.data.0.requirements_summary', '0 of 5 required documents validated'));
+});
+
+test('the athlete review page shows the profile and eligible badge after every document is validated', function () {
+    $athlete = Athlete::factory()->create();
+    $review = EligibilityReview::factory()->create(['athlete_id' => $athlete->id, 'meet_id' => $athlete->delegation->meet_id]);
+    createVerifiedQualificationDocuments($athlete);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get("/eligibility/reviews/{$review->id}")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('eligibility/show')
+            ->where('athlete.name', $athlete->fullName())
+            ->where('review.requirements_validated', true)
+            ->has('review.documents', 5));
+});
+
+test('an administrator can send optional eligibility remarks to the registering coach', function () {
+    Notification::fake();
+    $coach = User::factory()->coach()->create();
+    $athlete = Athlete::factory()->create(['registered_by' => $coach->id]);
+    $review = EligibilityReview::factory()->create(['athlete_id' => $athlete->id, 'meet_id' => $athlete->delegation->meet_id]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post("/eligibility/reviews/{$review->id}/notify-coach", ['remarks' => 'Please replace the unclear certificate.'])
+        ->assertSessionHasNoErrors();
+
+    Notification::assertSentTo($coach, CoachEligibilityRemarksNotification::class);
+    expect($review->fresh()->remarks)->toBe('Please replace the unclear certificate.')
+        ->and(AuditLog::query()->where('action', 'eligibility.coach_notified')->exists())->toBeTrue();
+});
+
+test('sport scoped ICT can view eligibility but cannot cross DSAC document authority', function () {
+    $athlete = Athlete::factory()->create();
+    $meet = $athlete->delegation->meet;
+    $event = \App\Models\Event::factory()->create();
+    $meet->events()->attach($event);
+    Entry::factory()->create(['athlete_id' => $athlete->id, 'delegation_id' => $athlete->delegation_id, 'event_id' => $event->id]);
+    $review = EligibilityReview::factory()->create(['athlete_id' => $athlete->id, 'meet_id' => $meet->id]);
+    $document = EligibilityDocument::factory()->create(['athlete_id' => $athlete->id, 'status' => RequirementStatus::Submitted]);
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $event->sport_id]);
+    $ict = User::factory()->create();
+    MeetSportAssignment::factory()->create(['user_id' => $ict->id, 'meet_sport_id' => $meetSport->id, 'role' => MeetSportAssignmentRole::TournamentICT, 'status' => MeetSportAssignmentStatus::Active]);
+
+    $this->actingAs($ict)->get("/eligibility/reviews/{$review->id}")->assertOk();
+    $this->actingAs($ict)->patch("/eligibility/documents/{$document->id}/status", ['status' => 'verified'])->assertForbidden();
+    expect($document->fresh()->status)->toBe(RequirementStatus::Submitted);
 });
 
 test('officers cannot upload for foreign athletes or when registration is closed', function () {

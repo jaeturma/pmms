@@ -62,6 +62,11 @@ function coachFor(Delegation $delegation): User
     return $coach;
 }
 
+function requiredCoachAthleteFields(): array
+{
+    return ['middle_name' => 'N/A', 'name_extension' => 'None'];
+}
+
 test('a coach can view and register athletes for their own delegation', function () {
     $delegation = Delegation::factory()->create(['status' => DelegationStatus::Draft]);
     $coach = coachFor($delegation);
@@ -70,6 +75,7 @@ test('a coach can view and register athletes for their own delegation', function
 
     $this->actingAs($coach)
         ->post('/athletes', [
+            ...requiredCoachAthleteFields(),
             'delegation_id' => $delegation->id,
             'school_id' => schoolForDelegation($delegation)->id,
             'first_name' => 'Juan',
@@ -94,6 +100,7 @@ test('an administrator can suspend athlete registration by coaches', function ()
 
     $this->actingAs($coach)
         ->post('/athletes', [
+            ...requiredCoachAthleteFields(),
             'delegation_id' => $delegation->id,
             'school_id' => schoolForDelegation($delegation)->id,
             'first_name' => 'Blocked',
@@ -154,6 +161,7 @@ test('a coach registers an athlete only in an assigned event with photos and acc
     $assignment->event->forceFill(['gender' => 'boys', 'age_division' => 'secondary'])->save();
 
     $this->actingAs($coach)->post('/athletes', [
+        ...requiredCoachAthleteFields(),
         'delegation_id' => $delegation->id,
         'school_id' => schoolForDelegation($delegation)->id,
         'event_id' => $assignment->event_id,
@@ -182,6 +190,7 @@ test('a coach registers an athlete only in an assigned event with photos and acc
     $otherEvent = Event::factory()->create(['gender' => 'boys', 'age_division' => 'secondary']);
     $delegation->meet->events()->attach($otherEvent);
     $this->actingAs($coach)->post('/athletes', [
+        ...requiredCoachAthleteFields(),
         'delegation_id' => $delegation->id, 'school_id' => schoolForDelegation($delegation)->id,
         'event_id' => $otherEvent->id, 'first_name' => 'Wrong', 'last_name' => 'Sport', 'sex' => 'male',
         'birthdate' => now()->subYears(15)->toDateString(), 'lrn' => '321654987013', 'grade_level' => 9,
@@ -228,6 +237,7 @@ test('a coach with multiple approved events registers an athlete without an auto
     ]);
 
     $this->actingAs($coach)->post('/athletes', [
+        ...requiredCoachAthleteFields(),
         'delegation_id' => $delegation->id,
         'school_id' => schoolForDelegation($delegation)->id,
         'first_name' => 'Multi',
@@ -254,6 +264,7 @@ test('coach athlete registration synchronizes the submitted school district and 
     $school = School::factory()->create();
 
     $this->actingAs($coach)->post('/athletes', [
+        ...requiredCoachAthleteFields(),
         'delegation_id' => $delegation->id,
         'school_id' => $school->id,
         'district_id' => $municipality->id,
@@ -273,6 +284,7 @@ test('a sole team event assignment requires manual roster entry', function () {
     $assignment->event->forceFill(['is_team_event' => true])->save();
 
     $this->actingAs($coach)->post('/athletes', [
+        ...requiredCoachAthleteFields(),
         'delegation_id' => $delegation->id,
         'school_id' => schoolForDelegation($delegation)->id,
         'first_name' => 'Team',
@@ -329,6 +341,7 @@ test('a coach cannot view or register athletes for another delegation', function
 
     $this->actingAs($coach)
         ->post('/athletes', [
+            ...requiredCoachAthleteFields(),
             'delegation_id' => $otherDelegation->id,
             'school_id' => schoolForDelegation($otherDelegation)->id,
             'first_name' => 'X',

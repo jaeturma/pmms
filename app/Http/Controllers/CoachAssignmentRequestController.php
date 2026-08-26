@@ -291,20 +291,24 @@ class CoachAssignmentRequestController extends Controller
     public function assignments(Request $request, CoachOnboardingRequest $coachOnboardingRequest): Response
     {
         abort_unless($this->canManageOnboardingAssignments($request->user(), $coachOnboardingRequest), 403);
-        $coachOnboardingRequest->loadMissing(['user:id,name,email', 'meetSport.meet', 'delegation.meet', 'delegation.school', 'delegation.district', 'event.sport', 'events.sport', 'profile:id,mime_type', 'certification:id,mime_type']);
+        $coachOnboardingRequest->loadMissing(['user:id,name,email', 'meetSport.meet', 'meetSport.sport:id,name', 'delegation.meet', 'delegation.school', 'delegation.district', 'event.sport', 'events.sport', 'profile:id,mime_type', 'certification:id,mime_type']);
         $existingAssignments = CoachAssignmentRequest::query()->where('user_id', $coachOnboardingRequest->user_id)
             ->with(['event.sport', 'meetSport.meet'])->get();
         $selectedEvents = $coachOnboardingRequest->events
             ->when($coachOnboardingRequest->event !== null, fn ($events) => $events->push($coachOnboardingRequest->event))
             ->merge($existingAssignments->pluck('event')->filter())->unique('id')->values();
+        $assignedSportNames = collect([$coachOnboardingRequest->meetSport?->sport?->name])
+            ->merge($selectedEvents->pluck('sport.name'))
+            ->filter()->unique()->values();
         $meet = $coachOnboardingRequest->meetSport?->meet
             ?? $coachOnboardingRequest->delegation?->meet
             ?? $existingAssignments->pluck('meetSport.meet')->filter()->first()
             ?? $selectedEvents->first()?->meets()->latest('meets.id')->first()
             ?? Meet::current();
         $manageableSportIds = $this->manageableCoachSportIds($request->user(), $coachOnboardingRequest, $meet);
-        $availableEvents = $meet->events()
+        $availableEvents = Event::query()
             ->whereIn('sport_id', $manageableSportIds)
+            ->where(fn ($events) => $events->where('active', true)->orWhereIn('id', $selectedEvents->modelKeys()))
             ->with('sport:id,name')
             ->orderBy('sport_id')->orderBy('display_order')->orderBy('name')->get();
         $coachDelegationIds = $existingAssignments->pluck('delegation_id')->push($coachOnboardingRequest->delegation_id)->filter()->unique();
@@ -317,7 +321,7 @@ class CoachAssignmentRequestController extends Controller
                 'id' => $coachOnboardingRequest->id,
                 'coach' => $coachOnboardingRequest->user->name,
                 'email' => $coachOnboardingRequest->user->email,
-                'sport' => $selectedEvents->pluck('sport.name')->filter()->unique()->join(', ') ?: __('No sports assigned'),
+                'sport' => $assignedSportNames->join(', ') ?: __('No sports assigned'),
                 'meet' => $meet->name,
                 'team' => $coachOnboardingRequest->delegation?->registrantName(),
                 'status' => $coachOnboardingRequest->status,
@@ -365,7 +369,7 @@ class CoachAssignmentRequestController extends Controller
             ->first();
         abort_if($delegation === null, 422, 'No delegation in this meet matches the coach registration municipality.');
         $manageableSportIds = $this->manageableCoachSportIds($request->user(), $coachOnboardingRequest, $meet);
-        $validCount = $meet->events()->whereIn('sport_id', $manageableSportIds)->whereKey($requestedEventIds)->count();
+        $validCount = Event::query()->whereIn('sport_id', $manageableSportIds)->whereKey($requestedEventIds)->count();
         if ($validCount !== $requestedEventIds->count()) {
             throw ValidationException::withMessages(['event_ids' => __('Every selected event must belong to one of your assigned sports in this meet.')]);
         }
@@ -384,6 +388,7 @@ class CoachAssignmentRequestController extends Controller
                 'meet_sport_id' => $meetSportIds->count() === 1 ? $meetSportIds->first() : null,
                 'delegation_id' => $delegation->id,
             ])->save();
+            $meet->events()->syncWithoutDetaching($requestedEventIds);
             $coachOnboardingRequest->events()->sync($eventIds);
             $meetEventIds = $meet->events()->whereIn('sport_id', $manageableSportIds)->pluck('events.id');
             CoachAssignmentRequest::query()->where('user_id', $coachOnboardingRequest->user_id)
@@ -549,7 +554,8 @@ class CoachAssignmentRequestController extends Controller
                 ->whereIn('role', $this->coachReviewerRoles())->exists();
         }
 
-        return $request->events()->whereKey($user->tournamentEventIds())->exists()
+        return ($request->events()->whereKey($user->tournamentEventIds())->exists()
+            || ($request->event_id !== null && $user->tournamentEventIds()->contains($request->event_id)))
             && $user->meetSportAssignments()->where('status', 'active')->whereIn('role', $this->coachReviewerRoles())->exists();
     }
 
@@ -578,11 +584,11 @@ class CoachAssignmentRequestController extends Controller
             }
         }
 
-        return collect([$request->meetSport?->sport_id])
+        return collect([$request->meetSport?->sport_id, $request->event?->sport_id])
             ->merge($request->events()->pluck('sport_id'))
             ->merge(CoachAssignmentRequest::query()
                 ->where('user_id', $request->user_id)
-                ->whereHas('meetSport', fn ($query) => $query->where('meet_id', $meet->id))
+                ->whereHas('event.meets', fn ($query) => $query->whereKey($meet->id))
                 ->with('event:id,sport_id')
                 ->get()
                 ->pluck('event.sport_id'))
@@ -602,11 +608,13 @@ class CoachAssignmentRequestController extends Controller
                 ->where(function ($scope) use ($user): void {
                     $scope->whereIn('meet_sport_id', $this->visibleMeetSportIds($user))
                         ->orWhere(fn ($legacy) => $legacy->whereNull('meet_sport_id')
-                            ->whereHas('events', fn ($events) => $events->whereKey($user->tournamentEventIds())));
+                            ->where(fn ($events) => $events
+                                ->whereHas('events', fn ($selected) => $selected->whereKey($user->tournamentEventIds()))
+                                ->orWhereIn('event_id', $user->tournamentEventIds())));
                 });
         }
 
-        return $query->with(['user:id,name,email,approval_status', 'district:id,name', 'meetSport.meet:id,name', 'meetSport.sport:id,name', 'delegation.school:id,name', 'delegation.district:id,name', 'school:id,name', 'events.sport:id,name', 'profile:id,mime_type', 'certification:id,mime_type'])
+        return $query->with(['user:id,name,email,approval_status', 'district:id,name', 'meetSport.meet:id,name', 'meetSport.sport:id,name', 'delegation.school:id,name', 'delegation.district:id,name', 'school:id,name', 'event.sport:id,name', 'events.sport:id,name', 'profile:id,mime_type', 'certification:id,mime_type'])
             ->latest()->get()->map(function (CoachOnboardingRequest $item) use ($user): array {
                 $accreditationNumber = Accreditation::query()
                     ->whereHas('personnel', fn ($personnel) => $personnel->where('user_id', $item->user_id))
@@ -642,7 +650,8 @@ class CoachAssignmentRequestController extends Controller
                     'email' => $item->user->email,
                     'team' => $item->delegation?->registrantName() ?? $item->district?->name,
                     'school' => $item->school?->name,
-                    'sport' => $item->meetSport?->sport?->name ?? $item->events->pluck('sport.name')->filter()->unique()->join(', '),
+                    'sport' => $item->meetSport?->sport?->name
+                        ?? ($item->events->pluck('sport.name')->filter()->unique()->join(', ') ?: $item->event?->sport?->name),
                     'events' => $item->events->pluck('name')->filter()->join(', '),
                     'assignment_options' => $item->meetSport === null ? [] : $item->meetSport->meet->events()->where('sport_id', $item->meetSport->sport_id)->orderBy('display_order')->get(['events.id', 'events.name', 'events.gender', 'events.age_division'])->map(fn (Event $event): array => [
                         'id' => $event->id, 'label' => $event->name.' — '.$event->age_division->label().' '.$event->gender->label(),

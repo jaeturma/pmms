@@ -54,7 +54,7 @@ test('approved coach scope limits registration and DSAC accreditation confirms t
 
     $athletePayload = [
         'delegation_id' => $delegation->id, 'school_id' => $school->id,
-        'first_name' => 'Juan', 'last_name' => 'Dela Cruz', 'sex' => 'male',
+        'first_name' => 'Juan', 'middle_name' => 'N/A', 'last_name' => 'Dela Cruz', 'name_extension' => 'None', 'sex' => 'male',
         'birthdate' => now()->subYears(15)->toDateString(), 'lrn' => '123456789012', 'grade_level' => 9,
     ];
     $this->actingAs($coach)->post('/athletes', $athletePayload)->assertSessionHasNoErrors();

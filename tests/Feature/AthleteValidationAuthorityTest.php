@@ -61,6 +61,7 @@ test('DSAC verifies qualification documents but cannot verify a medical certific
     $medical = EligibilityDocument::factory()->create(['athlete_id' => $athlete->id, 'document_type' => EligibilityDocumentType::MedicalCertificate]);
     $this->actingAs($dsac)->patch("/eligibility/documents/{$schoolId->id}/status", ['status' => RequirementStatus::Verified->value])->assertRedirect();
     $this->actingAs($dsac)->patch("/eligibility/documents/{$medical->id}/status", ['status' => RequirementStatus::Verified->value])->assertForbidden();
+    expect($medical->fresh()->status)->not->toBe(RequirementStatus::Verified);
 });
 
 test('Medical Team verifies medical requirements but cannot alter PSA verification', function () {
