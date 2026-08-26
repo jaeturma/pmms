@@ -1,15 +1,15 @@
 import { Head, Link } from '@inertiajs/react';
 import { Trophy } from 'lucide-react';
-import {
-    results as publicResults,
-    tally as publicTally,
-} from '@/routes/public';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { PortalHero } from '@/apps/portal/components/hero';
 import type {
     PortalContestedSport,
     PortalMeetSummary,
 } from '@/apps/portal/types';
+import {
+    results as publicResults,
+    tally as publicTally,
+} from '@/routes/public';
 
 type Props = {
     meet: PortalMeetSummary;

@@ -45,6 +45,7 @@ export default function AthleteEligibility({
             : evaluation?.result === 'ineligible'
               ? XCircle
               : AlertTriangle;
+
     return (
         <>
             <Head title="Athlete Eligibility Checker" />

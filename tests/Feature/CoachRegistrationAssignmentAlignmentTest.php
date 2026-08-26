@@ -8,6 +8,7 @@ use App\Models\CoachOnboardingRequest;
 use App\Models\Delegation;
 use App\Models\District;
 use App\Models\Event;
+use App\Models\FileUpload;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
@@ -109,6 +110,59 @@ test('one coach can hold multiple event and sport scopes without duplicate accou
 
     expect(User::query()->whereKey($coach->id)->count())->toBe(1)
         ->and($coach->approvedCoachEventIds())->toHaveCount(2);
+});
+
+test('coach selects events on a separate page and only ict approves the account', function () {
+    [, , $meetSport, $delegation, , $events] = coachApplicationContext();
+    $coach = User::factory()->create(['role' => UserRole::Viewer, 'approval_status' => 'pending']);
+    $application = CoachOnboardingRequest::query()->create([
+        'user_id' => $coach->id, 'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $delegation->id, 'district_id' => $delegation->district_id,
+        'status' => 'pending', 'submitted_at' => now(),
+        'profile_upload_id' => FileUpload::factory()->create()->id,
+    ]);
+    $ict = User::factory()->create();
+    MeetSportAssignment::factory()->create([
+        'user_id' => $ict->id, 'meet_sport_id' => $meetSport->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($coach)->get("/coach/onboarding-requests/{$application->id}/assignments")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('coach/manage-assignments')->has('events', 2)->where('canApprove', false));
+    $this->actingAs($coach)->put("/coach/onboarding-requests/{$application->id}/assignments", [
+        'event_ids' => $events->modelKeys(),
+    ])->assertSessionHasNoErrors();
+    expect($application->fresh()->events)->toHaveCount(2)
+        ->and($coach->fresh()->approval_status)->toBe('pending');
+
+    $this->actingAs($coach)->patch("/coach/onboarding-requests/{$application->id}", ['status' => 'approved'])->assertForbidden();
+    $this->actingAs($ict)->patch("/coach/onboarding-requests/{$application->id}", ['status' => 'approved'])->assertSessionHasNoErrors();
+    expect($coach->fresh()->role)->toBe(UserRole::Coach)
+        ->and($coach->fresh()->approvedCoachEventIdsForDelegation($delegation))->toHaveCount(2);
+});
+
+test('legacy coach registration without meet sport opens and repairs assignment scope', function () {
+    [$meet, , , $delegation, , $events] = coachApplicationContext();
+    $coach = User::factory()->create(['role' => UserRole::Viewer, 'approval_status' => 'pending']);
+    $application = CoachOnboardingRequest::query()->create([
+        'user_id' => $coach->id, 'meet_sport_id' => null,
+        'delegation_id' => $delegation->id, 'district_id' => $delegation->district_id,
+        'event_id' => $events->first()->id, 'status' => 'pending', 'submitted_at' => now(),
+    ]);
+    $application->events()->attach($events->first());
+
+    $this->actingAs($coach)->get("/coach/onboarding-requests/{$application->id}/assignments")
+        ->assertOk()->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('coach/manage-assignments')->has('events', 2));
+    $this->actingAs($coach)->put("/coach/onboarding-requests/{$application->id}/assignments", [
+        'event_ids' => [$events->last()->id],
+    ])->assertSessionHasNoErrors();
+
+    expect($application->fresh()->meet_sport_id)->not->toBeNull()
+        ->and($application->fresh()->meetSport->meet_id)->toBe($meet->id)
+        ->and($application->fresh()->events->modelKeys())->toBe([$events->last()->id]);
 });
 
 test('an approved coach can assign another event without a school link', function () {

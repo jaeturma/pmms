@@ -65,7 +65,9 @@ function InviteDialog({
         target_role: provision?.target_role ?? '',
     });
 
-    if (!provision) return null;
+    if (!provision) {
+return null;
+}
 
     const submit = (event: FormEvent) => {
         event.preventDefault();

@@ -14,6 +14,7 @@ export default function OfficialEligibility({
     const [sportId, setSportId] = useState(
         selectedSport?.id ? String(selectedSport.id) : '',
     );
+
     return (
         <>
             <Head title="Technical Official Eligibility" />

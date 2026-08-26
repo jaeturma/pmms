@@ -1,8 +1,8 @@
 import { Link, usePage } from '@inertiajs/react';
 import { LayoutGrid, Menu } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
-import { SiteLogo } from '@/components/site-logo';
 import { Breadcrumbs } from '@/components/breadcrumbs';
+import { SiteLogo } from '@/components/site-logo';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {

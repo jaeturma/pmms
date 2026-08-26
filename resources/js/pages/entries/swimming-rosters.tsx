@@ -87,6 +87,7 @@ export default function SwimmingRosters({ rosters }: { rosters: Roster[] }) {
                     <div className="grid gap-5 xl:grid-cols-2">
                         {rosters.map((roster) => {
                             const full = roster.members.length >= roster.maximum;
+
                             return (
                                 <Card key={`${roster.meet_sport_id}-${roster.delegation_id}-${roster.level}-${roster.gender}`}>
                                     <CardHeader className="flex-row items-start justify-between">

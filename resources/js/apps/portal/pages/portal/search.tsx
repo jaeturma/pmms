@@ -1,12 +1,13 @@
 import { Head, router } from '@inertiajs/react';
 import { Search as SearchIcon } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
-import { search as publicSearch } from '@/routes/public';
+import { useState  } from 'react';
+import type {FormEvent} from 'react';
 import { PortalButton } from '@/apps/portal/components/button';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { PortalHero } from '@/apps/portal/components/hero';
 import { PortalSectionHeader } from '@/apps/portal/components/section-header';
 import type { PortalAnnouncement, PortalContestedSport, PortalMeetSummary, PortalSchool, PortalSearchPlacement } from '@/apps/portal/types';
+import { search as publicSearch } from '@/routes/public';
 
 type Props = {
     meet: PortalMeetSummary;

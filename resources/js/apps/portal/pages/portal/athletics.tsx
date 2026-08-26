@@ -1,12 +1,12 @@
 import { Head } from '@inertiajs/react';
 import { CalendarClock } from 'lucide-react';
-import { athletics as publicAthletics } from '@/routes/public';
 import { PortalDaySwitcher } from '@/apps/portal/components/day-switcher';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { PortalHero } from '@/apps/portal/components/hero';
 import { PortalMedalTotalsRow } from '@/apps/portal/components/medal-totals';
 import { PortalSectionHeader } from '@/apps/portal/components/section-header';
 import type { PortalAthleticsSlot, PortalDay, PortalMeetSummary, PortalMedalTotals } from '@/apps/portal/types';
+import { athletics as publicAthletics } from '@/routes/public';
 
 type Props = {
     meet: PortalMeetSummary;

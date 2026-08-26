@@ -1,9 +1,9 @@
 import { Head, Link } from '@inertiajs/react';
 import { Image as ImageIcon } from 'lucide-react';
-import { results as publicResults } from '@/routes/public';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { PortalHero } from '@/apps/portal/components/hero';
 import type { PortalContestedSport, PortalMeetSummary } from '@/apps/portal/types';
+import { results as publicResults } from '@/routes/public';
 
 type Props = {
     meet: PortalMeetSummary;

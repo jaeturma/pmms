@@ -1,6 +1,6 @@
 import { AlertTriangle } from 'lucide-react';
-import { cn } from '@/apps/portal/lib/utils';
 import { PortalButton } from '@/apps/portal/components/button';
+import { cn } from '@/apps/portal/lib/utils';
 
 type PortalErrorStateProps = {
     title?: string;

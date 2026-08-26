@@ -390,12 +390,15 @@ function EventFormDialog({
                                             <div className="grid grid-cols-3 gap-2">
                                                 {(['gold', 'silver', 'bronze'] as const).map((medal) => {
                                                     const key = `${medal}_${kind}_quantity` as keyof typeof data.medal_config;
+
                                                     return <div key={medal} className="space-y-1"><Label className="capitalize">{medal}</Label><Input type="number" min={0} value={String(data.medal_config[key])} disabled={kind === 'tally' && tallyFollowsPhysical} onChange={(e) => {
                                                         const next = { ...data.medal_config, [key]: e.target.value };
+
                                                         if (kind === 'physical' && tallyFollowsPhysical) {
                                                             const tallyKey = `${medal}_tally_quantity` as keyof typeof data.medal_config;
                                                             next[tallyKey] = e.target.value as never;
                                                         }
+
                                                         setData('medal_config', next);
                                                     }} /></div>;
                                                 })}
@@ -410,12 +413,15 @@ function EventFormDialog({
                                         onCheckedChange={(checked) => {
                                             const follows = checked === true;
                                             setTallyFollowsPhysical(follows);
-                                            if (follows) setData('medal_config', {
+
+                                            if (follows) {
+setData('medal_config', {
                                                 ...data.medal_config,
                                                 gold_tally_quantity: data.medal_config.gold_physical_quantity,
                                                 silver_tally_quantity: data.medal_config.silver_physical_quantity,
                                                 bronze_tally_quantity: data.medal_config.bronze_physical_quantity,
                                             });
+}
                                         }}
                                     />
                                     <Label htmlFor="tally-follows">Tally follows physical quantity</Label>

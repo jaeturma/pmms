@@ -8,10 +8,6 @@ import {
     Radio,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import {
-    athletics as publicAthletics,
-    meet as publicMeet,
-} from '@/routes/public';
 import { PortalDaySwitcher } from '@/apps/portal/components/day-switcher';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { PortalHero } from '@/apps/portal/components/hero';
@@ -25,6 +21,10 @@ import type {
     PortalScheduleVenueGroup,
     PortalVenueGuideEntry,
 } from '@/apps/portal/types';
+import {
+    athletics as publicAthletics,
+    meet as publicMeet,
+} from '@/routes/public';
 
 type Props = {
     meet: PortalMeetSummary;

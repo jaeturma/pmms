@@ -18,7 +18,9 @@ use App\Models\Entry;
 use App\Models\FileUpload;
 use App\Models\Meet;
 use App\Models\ResultPlacement;
+use App\Models\School;
 use App\Models\SchoolDistrict;
+use App\Models\Sport;
 use App\Models\User;
 use App\Services\AthletePhotoService;
 use App\Services\AuditLogger;
@@ -55,6 +57,12 @@ class AthleteController extends Controller
         $user = $request->user();
 
         $search = $this->searchTerm($request);
+        $municipalityId = $request->integer('municipality_id') ?: null;
+        $schoolDistrictId = $request->integer('school_district_id') ?: null;
+        $schoolId = $request->integer('school_id') ?: null;
+        $sportId = $request->integer('sport_id') ?: null;
+        $sex = $request->string('sex')->value();
+        $accreditation = $request->string('accreditation')->value();
 
         $query = Athlete::query()
             ->with([
@@ -100,6 +108,15 @@ class AthleteController extends Controller
                 });
             });
         }
+
+        $query
+            ->when($municipalityId !== null, fn ($athletes) => $athletes->whereHas('school', fn ($school) => $school->where('district_id', $municipalityId)))
+            ->when($schoolDistrictId !== null, fn ($athletes) => $athletes->whereHas('school', fn ($school) => $school->where('school_district_id', $schoolDistrictId)))
+            ->when($schoolId !== null, fn ($athletes) => $athletes->where('school_id', $schoolId))
+            ->when(in_array($sex, ['male', 'female'], true), fn ($athletes) => $athletes->where('sex', $sex))
+            ->when($sportId !== null, fn ($athletes) => $athletes->whereHas('entries.event', fn ($event) => $event->where('sport_id', $sportId)))
+            ->when($accreditation === 'accredited', fn ($athletes) => $athletes->whereHas('accreditation'))
+            ->when($accreditation === 'not_accredited', fn ($athletes) => $athletes->whereDoesntHave('accreditation'));
 
         $this->applySearch($query, $search, ['first_name', 'last_name', 'lrn']);
 
@@ -147,7 +164,11 @@ class AthleteController extends Controller
                     'can_update' => $user->can('update', $athlete),
                     'can_delete' => $user->can('delete', $athlete),
                 ]),
-            'filters' => ['search' => $search],
+            'filters' => [
+                'search' => $search, 'municipality_id' => $municipalityId,
+                'school_district_id' => $schoolDistrictId, 'school_id' => $schoolId,
+                'sport_id' => $sportId, 'sex' => $sex, 'accreditation' => $accreditation,
+            ],
             'delegationOptions' => $availableDelegations
                 ->map(fn (Delegation $delegation): array => [
                     'id' => $delegation->id,
@@ -163,6 +184,8 @@ class AthleteController extends Controller
                 : null,
             'municipalities' => District::query()->where('active', true)->orderBy('name')->get(['id', 'name']),
             'schoolDistricts' => SchoolDistrict::query()->where('active', true)->orderBy('name')->get(['id', 'district_id', 'name']),
+            'filterSchools' => School::query()->where('active', true)->orderBy('name')->get(['id', 'district_id', 'school_district_id', 'name']),
+            'sports' => Sport::query()->where('active', true)->orderBy('name')->get(['id', 'name']),
         ]);
     }
 

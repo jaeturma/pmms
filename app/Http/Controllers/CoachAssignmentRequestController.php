@@ -184,18 +184,17 @@ class CoachAssignmentRequestController extends Controller
         abort_unless($this->canReviewOnboarding($reviewer, $coachOnboardingRequest), 403);
         $data = $request->validate([
             'status' => ['required', Rule::in(['approved', 'returned', 'rejected'])],
-            'event_ids' => [Rule::requiredIf($request->input('status') === 'approved' && $coachOnboardingRequest->meet_sport_id !== null), 'nullable', 'array', 'min:1'],
+            'event_ids' => ['nullable', 'array', 'min:1'],
             'event_ids.*' => ['integer', 'distinct', Rule::exists('events', 'id')],
             'review_notes' => ['nullable', 'string', 'max:1000'],
         ]);
-        $selectedEvents = collect($data['event_ids'] ?? []);
+        $selectedEvents = collect($data['event_ids'] ?? $coachOnboardingRequest->events()->pluck('events.id')->all());
         if ($data['status'] === 'approved' && $coachOnboardingRequest->profile_upload_id === null) {
             throw ValidationException::withMessages([
                 'profile' => __('A coach profile photo is required before approval.'),
             ]);
         }
-        if ($data['status'] === 'approved' && $coachOnboardingRequest->meet_sport_id === null
-            && $selectedEvents->isEmpty() && ! $coachOnboardingRequest->events()->exists()) {
+        if ($data['status'] === 'approved' && $selectedEvents->isEmpty()) {
             throw ValidationException::withMessages([
                 'event_ids' => __('Assign at least one sports event before approving the coach.'),
             ]);
@@ -225,6 +224,7 @@ class CoachAssignmentRequestController extends Controller
 
             if ($data['status'] === 'approved') {
                 $coachOnboardingRequest->loadMissing(['events', 'meetSport', 'delegation', 'school']);
+                $coachOnboardingRequest->events()->sync($selectedEvents);
                 $events = $coachOnboardingRequest->meet_sport_id !== null
                     ? Event::query()->whereKey($selectedEvents)->get()
                     : $coachOnboardingRequest->events;
@@ -286,6 +286,134 @@ class CoachAssignmentRequestController extends Controller
         });
 
         return back()->with('success', __('Coach account registration reviewed.'));
+    }
+
+    public function assignments(Request $request, CoachOnboardingRequest $coachOnboardingRequest): Response
+    {
+        abort_unless($this->canManageOnboardingAssignments($request->user(), $coachOnboardingRequest), 403);
+        $coachOnboardingRequest->loadMissing(['user:id,name,email', 'meetSport.meet', 'delegation.meet', 'delegation.school', 'delegation.district', 'event.sport', 'events.sport', 'profile:id,mime_type', 'certification:id,mime_type']);
+        $existingAssignments = CoachAssignmentRequest::query()->where('user_id', $coachOnboardingRequest->user_id)
+            ->with(['event.sport', 'meetSport.meet'])->get();
+        $selectedEvents = $coachOnboardingRequest->events
+            ->when($coachOnboardingRequest->event !== null, fn ($events) => $events->push($coachOnboardingRequest->event))
+            ->merge($existingAssignments->pluck('event')->filter())->unique('id')->values();
+        $meet = $coachOnboardingRequest->meetSport?->meet
+            ?? $coachOnboardingRequest->delegation?->meet
+            ?? $existingAssignments->pluck('meetSport.meet')->filter()->first()
+            ?? $selectedEvents->first()?->meets()->latest('meets.id')->first()
+            ?? Meet::current();
+        $manageableSportIds = $this->manageableCoachSportIds($request->user(), $coachOnboardingRequest, $meet);
+        $availableEvents = $meet->events()
+            ->whereIn('sport_id', $manageableSportIds)
+            ->with('sport:id,name')
+            ->orderBy('sport_id')->orderBy('display_order')->orderBy('name')->get();
+        $coachDelegationIds = $existingAssignments->pluck('delegation_id')->push($coachOnboardingRequest->delegation_id)->filter()->unique();
+        $registeredAthletes = Athlete::query()->where('registered_by', $coachOnboardingRequest->user_id)
+            ->whereIn('delegation_id', $coachDelegationIds)->with(['school:id,name', 'entries.event:id,name'])
+            ->orderBy('last_name')->orderBy('first_name')->get();
+
+        return Inertia::render('coach/manage-assignments', [
+            'registration' => [
+                'id' => $coachOnboardingRequest->id,
+                'coach' => $coachOnboardingRequest->user->name,
+                'email' => $coachOnboardingRequest->user->email,
+                'sport' => $selectedEvents->pluck('sport.name')->filter()->unique()->join(', ') ?: __('No sports assigned'),
+                'meet' => $meet->name,
+                'team' => $coachOnboardingRequest->delegation?->registrantName(),
+                'status' => $coachOnboardingRequest->status,
+                'profile_url' => $coachOnboardingRequest->profile_upload_id ? route('coach.onboarding-documents.show', [$coachOnboardingRequest, 'profile']) : null,
+                'profile_mime_type' => $coachOnboardingRequest->profile?->mime_type,
+                'certification_url' => $coachOnboardingRequest->certification_upload_id ? route('coach.onboarding-documents.show', [$coachOnboardingRequest, 'certification']) : null,
+                'certification_mime_type' => $coachOnboardingRequest->certification?->mime_type,
+                'selected_events' => $selectedEvents->pluck('name')->join(', '),
+                'registered_athletes' => $registeredAthletes->map(fn (Athlete $athlete): array => [
+                    'id' => $athlete->id, 'name' => $athlete->fullName(), 'school' => $athlete->school->name,
+                    'events' => $athlete->entries->pluck('event.name')->filter()->join(', '),
+                    'profile_url' => route('athletes.show', $athlete),
+                    'photo_url' => $athlete->photo_upload_id ? route('athletes.photo', $athlete) : null,
+                ])->all(),
+            ],
+            'events' => $availableEvents
+                ->map(fn (Event $event): array => [
+                    'id' => $event->id,
+                    'name' => $event->name,
+                    'sport' => $event->sport->name,
+                    'category' => $event->age_division->label().' / '.$event->gender->label(),
+                ])->all(),
+            'selectedEventIds' => $selectedEvents->whereIn('sport_id', $manageableSportIds)->modelKeys(),
+            'canApprove' => $this->canReviewOnboarding($request->user(), $coachOnboardingRequest),
+        ]);
+    }
+
+    public function syncAssignments(Request $request, CoachOnboardingRequest $coachOnboardingRequest, AuditLogger $audit): RedirectResponse
+    {
+        abort_unless($this->canManageOnboardingAssignments($request->user(), $coachOnboardingRequest), 403);
+        $data = $request->validate([
+            'event_ids' => ['required', 'array', 'min:1'],
+            'event_ids.*' => ['integer', 'distinct', Rule::exists('events', 'id')],
+        ]);
+        $requestedEventIds = collect($data['event_ids'])->values();
+        $coachOnboardingRequest->loadMissing(['meetSport.meet', 'delegation']);
+        $requestedEvents = Event::query()->whereKey($requestedEventIds)->get();
+        $meet = $coachOnboardingRequest->delegation?->meet
+            ?? $coachOnboardingRequest->meetSport?->meet
+            ?? $requestedEvents->first()?->meets()->latest('meets.id')->first()
+            ?? Meet::current();
+        $delegation = $coachOnboardingRequest->delegation ?? $meet->delegations()
+            ->where(fn ($delegations) => $delegations->where('district_id', $coachOnboardingRequest->district_id)
+                ->orWhereHas('school', fn ($school) => $school->where('district_id', $coachOnboardingRequest->district_id)))
+            ->first();
+        abort_if($delegation === null, 422, 'No delegation in this meet matches the coach registration municipality.');
+        $manageableSportIds = $this->manageableCoachSportIds($request->user(), $coachOnboardingRequest, $meet);
+        $validCount = $meet->events()->whereIn('sport_id', $manageableSportIds)->whereKey($requestedEventIds)->count();
+        if ($validCount !== $requestedEventIds->count()) {
+            throw ValidationException::withMessages(['event_ids' => __('Every selected event must belong to one of your assigned sports in this meet.')]);
+        }
+        $preservedEventIds = $coachOnboardingRequest->events()->whereNotIn('sport_id', $manageableSportIds)->pluck('events.id');
+        $eventIds = $requestedEventIds->merge($preservedEventIds)->unique()->values();
+        $selectedEvents = Event::query()->whereKey($eventIds)->get();
+
+        DB::transaction(function () use ($coachOnboardingRequest, $eventIds, $requestedEventIds, $requestedEvents, $selectedEvents, $manageableSportIds, $meet, $delegation, $request, $audit): void {
+            $meetSportIds = $selectedEvents->pluck('sport_id')->unique()->mapWithKeys(fn (int $sportId): array => [
+                $sportId => MeetSport::query()->firstOrCreate(
+                    ['meet_id' => $meet->id, 'sport_id' => $sportId],
+                    ['active' => true],
+                )->id,
+            ]);
+            $coachOnboardingRequest->forceFill([
+                'meet_sport_id' => $meetSportIds->count() === 1 ? $meetSportIds->first() : null,
+                'delegation_id' => $delegation->id,
+            ])->save();
+            $coachOnboardingRequest->events()->sync($eventIds);
+            $meetEventIds = $meet->events()->whereIn('sport_id', $manageableSportIds)->pluck('events.id');
+            CoachAssignmentRequest::query()->where('user_id', $coachOnboardingRequest->user_id)
+                ->whereIn('event_id', $meetEventIds)
+                ->whereNotIn('event_id', $requestedEventIds)->where('status', 'pending')->delete();
+            if ($coachOnboardingRequest->status === 'approved') {
+                CoachAssignmentRequest::query()->where('user_id', $coachOnboardingRequest->user_id)
+                    ->whereIn('event_id', $meetEventIds)
+                    ->whereNotIn('event_id', $requestedEventIds)->where('status', 'approved')
+                    ->update(['status' => 'inactive', 'ended_at' => now()]);
+            }
+            foreach ($requestedEvents as $selectedEvent) {
+                CoachAssignmentRequest::query()->updateOrCreate([
+                    'user_id' => $coachOnboardingRequest->user_id,
+                    'event_id' => $selectedEvent->id,
+                    'delegation_id' => $delegation->id,
+                    'school_id' => null,
+                ], [
+                    'meet_sport_id' => $meetSportIds->get($selectedEvent->sport_id),
+                    'status' => $coachOnboardingRequest->status === 'approved' ? 'approved' : 'pending',
+                    'scope_type' => 'event',
+                    'ended_at' => null,
+                ]);
+            }
+            $audit->record('coach.assignments_selected', $coachOnboardingRequest, [
+                'event_ids' => $eventIds->all(), 'selected_by' => $request->user()->id,
+            ]);
+        });
+
+        return back()->with('success', __('Coach sports event assignments saved. ICT approval is still required for the coach account.'));
     }
 
     public function accredit(Request $request, CoachOnboardingRequest $coachOnboardingRequest, AuditLogger $audit): RedirectResponse
@@ -425,6 +553,44 @@ class CoachAssignmentRequestController extends Controller
             && $user->meetSportAssignments()->where('status', 'active')->whereIn('role', $this->coachReviewerRoles())->exists();
     }
 
+    private function canManageOnboardingAssignments(User $user, CoachOnboardingRequest $request): bool
+    {
+        return $request->user_id === $user->id || $this->canReviewOnboarding($user, $request);
+    }
+
+    /** @return Collection<int, int> */
+    private function manageableCoachSportIds(User $user, CoachOnboardingRequest $request, Meet $meet): Collection
+    {
+        if ($request->user_id !== $user->id) {
+            $ictSportIds = $user->meetSportAssignments()
+                ->where('status', 'active')
+                ->where('role', MeetSportAssignmentRole::TournamentICT->value)
+                ->whereHas('meetSport', fn ($query) => $query->where('meet_id', $meet->id))
+                ->with('meetSport:id,sport_id')
+                ->get()
+                ->pluck('meetSport.sport_id')
+                ->filter()
+                ->unique()
+                ->values();
+
+            if ($ictSportIds->isNotEmpty()) {
+                return $ictSportIds;
+            }
+        }
+
+        return collect([$request->meetSport?->sport_id])
+            ->merge($request->events()->pluck('sport_id'))
+            ->merge(CoachAssignmentRequest::query()
+                ->where('user_id', $request->user_id)
+                ->whereHas('meetSport', fn ($query) => $query->where('meet_id', $meet->id))
+                ->with('event:id,sport_id')
+                ->get()
+                ->pluck('event.sport_id'))
+            ->filter()
+            ->unique()
+            ->values();
+    }
+
     private function onboardingRegistrations(User $user): array
     {
         if ($this->isCoachApplicant($user)) {
@@ -477,7 +643,7 @@ class CoachAssignmentRequestController extends Controller
                     'team' => $item->delegation?->registrantName() ?? $item->district?->name,
                     'school' => $item->school?->name,
                     'sport' => $item->meetSport?->sport?->name ?? $item->events->pluck('sport.name')->filter()->unique()->join(', '),
-                    'events' => CoachAssignmentRequest::query()->where('user_id', $item->user_id)->where('status', 'approved')->whereNull('ended_at')->with('event:id,name')->get()->pluck('event.name')->filter()->join(', '),
+                    'events' => $item->events->pluck('name')->filter()->join(', '),
                     'assignment_options' => $item->meetSport === null ? [] : $item->meetSport->meet->events()->where('sport_id', $item->meetSport->sport_id)->orderBy('display_order')->get(['events.id', 'events.name', 'events.gender', 'events.age_division'])->map(fn (Event $event): array => [
                         'id' => $event->id, 'label' => $event->name.' — '.$event->age_division->label().' '.$event->gender->label(),
                     ])->values()->all(),
@@ -489,6 +655,8 @@ class CoachAssignmentRequestController extends Controller
                     'certification_mime_type' => $item->certification?->mime_type,
                     'documents_complete' => $item->profile_upload_id !== null && $item->certification_upload_id !== null,
                     'registered_athletes' => $registeredAthletes,
+                    'assignment_url' => route('coach.onboarding-assignments.edit', $item),
+                    'can_manage_assignments' => $this->canManageOnboardingAssignments($user, $item),
                     'can_update_attachments' => $canManageDocuments
                         && ! ($item->status === 'approved' && $accreditationNumber !== null),
                     'can_accredit' => $item->status === 'approved'
@@ -646,7 +814,6 @@ class CoachAssignmentRequestController extends Controller
     private function coachReviewerRoles(): array
     {
         return [
-            MeetSportAssignmentRole::TournamentSecretary->value,
             MeetSportAssignmentRole::TournamentICT->value,
         ];
     }

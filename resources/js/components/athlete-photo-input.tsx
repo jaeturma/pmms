@@ -34,15 +34,26 @@ export function AthletePhotoInput({
 
     useEffect(
         () => () => {
-            if (source) URL.revokeObjectURL(source);
-            if (preview) URL.revokeObjectURL(preview);
+            if (source) {
+URL.revokeObjectURL(source);
+}
+
+            if (preview) {
+URL.revokeObjectURL(preview);
+}
         },
         [source, preview],
     );
 
     const select = (file?: File) => {
-        if (!file) return;
-        if (source) URL.revokeObjectURL(source);
+        if (!file) {
+return;
+}
+
+        if (source) {
+URL.revokeObjectURL(source);
+}
+
         setSource(URL.createObjectURL(file));
         setZoom(1);
         setOffsetX(0);
@@ -51,12 +62,20 @@ export function AthletePhotoInput({
     };
     const usePhoto = async () => {
         const image = imageRef.current;
-        if (!image) return;
+
+        if (!image) {
+return;
+}
+
         const canvas = document.createElement('canvas');
         canvas.width = 800;
         canvas.height = 1000;
         const context = canvas.getContext('2d');
-        if (!context) return;
+
+        if (!context) {
+return;
+}
+
         context.fillStyle = '#fff';
         context.fillRect(0, 0, 800, 1000);
         context.save();
@@ -76,18 +95,31 @@ export function AthletePhotoInput({
         context.restore();
         let quality = 0.86;
         let blob: Blob | null = null;
+
         for (let attempt = 0; attempt < 8; attempt++) {
             blob = await new Promise((resolve) =>
                 canvas.toBlob(resolve, 'image/jpeg', quality),
             );
-            if (blob && blob.size <= 500 * 1024) break;
+
+            if (blob && blob.size <= 500 * 1024) {
+break;
+}
+
             quality -= 0.08;
         }
-        if (!blob) return;
+
+        if (!blob) {
+return;
+}
+
         const file = new File([blob], `${id}-${Date.now()}.jpg`, {
             type: 'image/jpeg',
         });
-        if (preview) URL.revokeObjectURL(preview);
+
+        if (preview) {
+URL.revokeObjectURL(preview);
+}
+
         setPreview(URL.createObjectURL(file));
         onChange(file);
         setSource(null);

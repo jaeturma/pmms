@@ -194,6 +194,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('coach/assignment-requests/{coachAssignmentRequest}/reset-password', [CoachAssignmentRequestController::class, 'resetPassword'])
         ->middleware('throttle:6,1')->name('coach.assignment-requests.reset-password');
     Route::patch('coach/onboarding-requests/{coachOnboardingRequest}', [CoachAssignmentRequestController::class, 'reviewOnboarding'])->name('coach.onboarding-requests.review');
+    Route::get('coach/onboarding-requests/{coachOnboardingRequest}/assignments', [CoachAssignmentRequestController::class, 'assignments'])->name('coach.onboarding-assignments.edit');
+    Route::put('coach/onboarding-requests/{coachOnboardingRequest}/assignments', [CoachAssignmentRequestController::class, 'syncAssignments'])->name('coach.onboarding-assignments.update');
     Route::post('coach/onboarding-requests/{coachOnboardingRequest}/accredit', [CoachAssignmentRequestController::class, 'accredit'])->name('coach.onboarding-accredit');
     Route::get('coach/onboarding-requests/{coachOnboardingRequest}/documents/{type}', [CoachAssignmentRequestController::class, 'document'])->name('coach.onboarding-documents.show');
     Route::post('coach/onboarding-requests/{coachOnboardingRequest}/documents/{type}', [CoachAssignmentRequestController::class, 'uploadDocument'])->name('coach.onboarding-documents.store');

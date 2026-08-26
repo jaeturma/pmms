@@ -27,7 +27,6 @@ export function PortalPagination({ links }: PortalPaginationProps) {
                     <span
                         key={index}
                         className="rounded-[calc(var(--portal-radius)-0.25rem)] px-3 py-1.5 text-sm text-[var(--portal-muted-foreground)]"
-                        // eslint-disable-next-line react/no-danger -- Laravel's own "&laquo;"/"&raquo;" labels
                         dangerouslySetInnerHTML={{ __html: link.label }}
                     />
                 ) : (

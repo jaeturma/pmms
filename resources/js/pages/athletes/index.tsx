@@ -77,13 +77,15 @@ type SchoolOption = {
 
 type Props = {
     athletes: Paginated<AthleteRow>;
-    filters: { search: string };
+    filters: { search: string; municipality_id: number | null; school_district_id: number | null; school_id: number | null; sport_id: number | null; sex: string; accreditation: string };
     delegationOptions: DelegationOption[];
     schoolOptionsByDelegation: Record<number, SchoolOption[]>;
     fixedDelegationId: number | null;
     fixedMunicipalityId: number | null;
     municipalities: Array<{ id: number; name: string }>;
     schoolDistricts: Array<{ id: number; district_id: number; name: string }>;
+    filterSchools: Array<{ id: number; district_id: number | null; school_district_id: number | null; name: string }>;
+    sports: Array<{ id: number; name: string }>;
 };
 
 function AthleteFormDialog({
@@ -806,11 +808,23 @@ export default function Athletes({
     fixedMunicipalityId,
     municipalities,
     schoolDistricts,
+    filterSchools,
+    sports,
 }: Props) {
     const [createOpen, setCreateOpen] = useState(false);
     const [editingAthlete, setEditingAthlete] = useState<AthleteRow | null>(
         null,
     );
+    const filterParams = {
+        ...(filters.search ? { search: filters.search } : {}),
+        ...(filters.municipality_id ? { municipality_id: String(filters.municipality_id) } : {}),
+        ...(filters.school_district_id ? { school_district_id: String(filters.school_district_id) } : {}),
+        ...(filters.school_id ? { school_id: String(filters.school_id) } : {}),
+        ...(filters.sport_id ? { sport_id: String(filters.sport_id) } : {}),
+        ...(filters.sex ? { sex: filters.sex } : {}),
+        ...(filters.accreditation ? { accreditation: filters.accreditation } : {}),
+    };
+    const applyFilter = (key: string, value: string) => router.get(index().url, { ...filterParams, [key]: value === 'all' ? undefined : value }, { preserveState: true, preserveScroll: true });
 
     return (
         <>
@@ -833,7 +847,16 @@ export default function Athletes({
                     initial={filters.search}
                     placeholder="Search name or LRN"
                     url={index().url}
+                    extraParams={filterParams}
                 />
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                    <Select value={String(filters.municipality_id ?? 'all')} onValueChange={(value) => applyFilter('municipality_id', value)}><SelectTrigger><SelectValue placeholder="Municipality" /></SelectTrigger><SelectContent><SelectItem value="all">All municipalities</SelectItem>{municipalities.map((item) => <SelectItem key={item.id} value={String(item.id)}>{item.name}</SelectItem>)}</SelectContent></Select>
+                    <Select value={String(filters.school_district_id ?? 'all')} onValueChange={(value) => applyFilter('school_district_id', value)}><SelectTrigger><SelectValue placeholder="School district" /></SelectTrigger><SelectContent><SelectItem value="all">All school districts</SelectItem>{schoolDistricts.filter((item) => !filters.municipality_id || item.district_id === filters.municipality_id).map((item) => <SelectItem key={item.id} value={String(item.id)}>{item.name}</SelectItem>)}</SelectContent></Select>
+                    <Select value={String(filters.school_id ?? 'all')} onValueChange={(value) => applyFilter('school_id', value)}><SelectTrigger><SelectValue placeholder="School" /></SelectTrigger><SelectContent><SelectItem value="all">All schools</SelectItem>{filterSchools.filter((item) => (!filters.municipality_id || item.district_id === filters.municipality_id) && (!filters.school_district_id || item.school_district_id === filters.school_district_id)).map((item) => <SelectItem key={item.id} value={String(item.id)}>{item.name}</SelectItem>)}</SelectContent></Select>
+                    <Select value={filters.sex || 'all'} onValueChange={(value) => applyFilter('sex', value)}><SelectTrigger><SelectValue placeholder="Sex" /></SelectTrigger><SelectContent><SelectItem value="all">All sexes</SelectItem><SelectItem value="male">Male</SelectItem><SelectItem value="female">Female</SelectItem></SelectContent></Select>
+                    <Select value={String(filters.sport_id ?? 'all')} onValueChange={(value) => applyFilter('sport_id', value)}><SelectTrigger><SelectValue placeholder="Sport" /></SelectTrigger><SelectContent><SelectItem value="all">All sports</SelectItem>{sports.map((sport) => <SelectItem key={sport.id} value={String(sport.id)}>{sport.name}</SelectItem>)}</SelectContent></Select>
+                    <Select value={filters.accreditation || 'all'} onValueChange={(value) => applyFilter('accreditation', value)}><SelectTrigger><SelectValue placeholder="Accreditation" /></SelectTrigger><SelectContent><SelectItem value="all">All accreditation</SelectItem><SelectItem value="accredited">Accredited</SelectItem><SelectItem value="not_accredited">Not accredited</SelectItem></SelectContent></Select>
+                </div>
 
                 {athletes.data.length === 0 ? (
                     <EmptyState
@@ -971,9 +994,7 @@ export default function Athletes({
                             page={athletes}
                             url={index().url}
                             label="athletes"
-                            params={
-                                filters.search ? { search: filters.search } : {}
-                            }
+                            params={filterParams}
                         />
                     </>
                 )}

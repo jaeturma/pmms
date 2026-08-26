@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { cn } from '@/apps/portal/lib/utils';
 import { MunicipalityCrest, MunicipalityWatermark } from '@/apps/portal/components/municipality-crest';
+import { cn } from '@/apps/portal/lib/utils';
 import type { PortalLiveNow } from '@/apps/portal/types';
 
 type PortalLiveScoreCardProps = {
