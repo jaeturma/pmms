@@ -119,7 +119,7 @@ class AccountProvisionController extends Controller
 
         $user->forceFill([
             'password' => Hash::make($password),
-            'must_change_password' => false,
+            'must_change_password' => true,
             'password_changed_at' => null,
         ])->save();
         $accountProvision->forceFill(['status' => 'active', 'activated_at' => now()])->save();

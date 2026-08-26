@@ -41,13 +41,13 @@ test('approved coach scope limits registration and DSAC accreditation confirms t
     $manager = User::factory()->create();
     MeetSportAssignment::factory()->create([
         'meet_sport_id' => $meetSport->id, 'user_id' => $manager->id,
-        'role' => MeetSportAssignmentRole::TournamentSecretary,
+        'role' => MeetSportAssignmentRole::TournamentICT,
         'status' => MeetSportAssignmentStatus::Active,
     ]);
 
     $this->actingAs($coach)->post('/coach/assignment-requests', [
         'meet_sport_id' => $meetSport->id, 'event_id' => $event->id,
-        'delegation_id' => $delegation->id, 'school_id' => $school->id,
+        'delegation_id' => $delegation->id,
     ])->assertSessionHasNoErrors();
     $request = CoachAssignmentRequest::query()->sole();
     $this->actingAs($manager)->patch("/coach/assignment-requests/{$request->id}", ['status' => 'approved'])->assertSessionHasNoErrors();

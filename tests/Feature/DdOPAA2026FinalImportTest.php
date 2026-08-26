@@ -72,7 +72,6 @@ test('requesting coach onboarding does not self grant coach authority', function
     $municipality = District::factory()->create();
     $event = Event::factory()->create();
     $delegation = \App\Models\Delegation::factory()->create(['district_id' => $municipality->id, 'school_id' => null]);
-    $school = \App\Models\School::factory()->create(['district_id' => $municipality->id]);
     $meetSport = \App\Models\MeetSport::factory()->create(['meet_id' => $delegation->meet_id, 'sport_id' => $event->sport_id]);
     request()->setLaravelSession(app('session.store'));
     app(RegistrationCodeChallenge::class)->generate(request());
@@ -85,7 +84,6 @@ test('requesting coach onboarding does not self grant coach authority', function
         'account_type' => 'coach',
         'meet_sport_id' => $meetSport->id,
         'delegation_id' => $delegation->id,
-        'school_id' => $school->id,
         'code_challenge' => 'ABC12',
     ]);
 

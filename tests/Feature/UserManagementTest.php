@@ -84,7 +84,8 @@ test('an active ICT team member can manage system users', function () {
     $this->actingAs($ict)->get('/system/users')->assertOk();
 });
 
-test('a tournament secretary can see coach registrations and reset the coach password', function () {
+test('a tournament secretary can see coach registrations but only an account administrator can reset passwords', function () {
+    config()->set('pmms.accounts.default_reset_password', 'TestDefaultPassword123!');
     $meetSport = MeetSport::factory()->create();
     $secretary = User::factory()->create();
     MeetSportAssignment::factory()->create([
@@ -115,13 +116,16 @@ test('a tournament secretary can see coach registrations and reset the coach pas
     $onboarding->events()->attach($event);
 
     $this->actingAs($secretary)->get('/coach/assignment-requests')->assertOk();
-    $this->actingAs($secretary)->patch("/coach/onboarding-requests/{$onboarding->id}", ['status' => 'approved'])->assertSessionHasNoErrors();
-    $this->actingAs($secretary)->post("/coach/assignment-requests/{$coachRequest->id}/reset-password")->assertSessionHasNoErrors();
+    $this->actingAs($secretary)->patch("/coach/onboarding-requests/{$onboarding->id}", ['status' => 'approved'])->assertForbidden();
+    $this->actingAs($secretary)->post("/coach/assignment-requests/{$coachRequest->id}/reset-password")->assertForbidden();
 
-    expect(Hash::check('DdOPaa2026!', $coach->fresh()->password))->toBeTrue()
-        ->and($pendingCoach->fresh()->approval_status)->toBe('approved')
-        ->and($pendingCoach->fresh()->role)->toBe(UserRole::Coach)
-        ->and($pendingCoach->coachAssignmentRequests()->where('event_id', $event->id)->where('status', 'approved')->exists())->toBeTrue();
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin)->post("/system/users/{$coach->id}/reset-password")->assertSessionHasNoErrors();
+
+    expect(Hash::check(config('pmms.accounts.default_reset_password'), $coach->fresh()->password))->toBeTrue()
+        ->and($coach->fresh()->must_change_password)->toBeTrue()
+        ->and($pendingCoach->fresh()->approval_status)->toBe('pending')
+        ->and($onboarding->fresh()->status)->toBe('pending');
 });
 
 test('ordinary users cannot manage system accounts or reset coach passwords', function () {

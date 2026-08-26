@@ -163,7 +163,7 @@ class CoachAssignmentRequestController extends Controller
 
         $coachAssignmentRequest->user->forceFill([
             'password' => Hash::make($password),
-            'must_change_password' => false,
+            'must_change_password' => true,
             'password_changed_at' => null,
         ])->save();
 
@@ -172,7 +172,7 @@ class CoachAssignmentRequestController extends Controller
             'reset_by' => $reviewer->id,
         ]);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Coach password reset to DdOPaa2026!.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Coach password reset. The coach must change it at next sign-in.')]);
 
         return back();
     }
@@ -531,10 +531,10 @@ class CoachAssignmentRequestController extends Controller
         abort_unless($this->canReviewOnboarding($reviewer, $coachOnboardingRequest), 403);
         $password = config('pmms.accounts.default_reset_password');
         abort_unless(is_string($password) && $password !== '', 503, 'The reset password is not configured.');
-        $coachOnboardingRequest->user->forceFill(['password' => Hash::make($password), 'must_change_password' => false, 'password_changed_at' => null])->save();
+        $coachOnboardingRequest->user->forceFill(['password' => Hash::make($password), 'must_change_password' => true, 'password_changed_at' => null])->save();
         $audit->record('user.password_reset', $coachOnboardingRequest->user, ['coach_onboarding_request_id' => $coachOnboardingRequest->id, 'reset_by' => $reviewer->id]);
 
-        return back()->with('success', __('Coach password reset to DdOPaa2026!.'));
+        return back()->with('success', __('Coach password reset. The coach must change it at next sign-in.'));
     }
 
     private function canReviewOnboarding(User $user, CoachOnboardingRequest $request): bool

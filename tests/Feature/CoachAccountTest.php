@@ -303,6 +303,10 @@ test('a coach can manually build a team event from their approved athletes', fun
         'athlete_id' => $athlete->id,
         'meet_id' => $delegation->meet_id,
     ]));
+    $athletes->each(fn (Athlete $athlete) => Accreditation::factory()->create([
+        'delegation_id' => $delegation->id,
+        'athlete_id' => $athlete->id,
+    ]));
 
     $this->actingAs($coach)->post('/team-entries', [
         'event_id' => $event->id,
@@ -444,6 +448,10 @@ test('a coach can submit and withdraw an entry but cannot confirm it', function 
     EligibilityReview::factory()->approved()->create([
         'athlete_id' => $athlete->id,
         'meet_id' => $meet->id,
+    ]);
+    Accreditation::factory()->create([
+        'delegation_id' => $delegation->id,
+        'athlete_id' => $athlete->id,
     ]);
     CoachAssignmentRequest::query()->create([
         'user_id' => $coach->id,

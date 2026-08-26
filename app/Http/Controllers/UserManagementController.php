@@ -153,11 +153,11 @@ class UserManagementController extends Controller
 
         $user->forceFill([
             'password' => Hash::make($password),
-            'must_change_password' => false,
+            'must_change_password' => true,
             'password_changed_at' => null,
         ])->save();
         $this->audit->record('user.password_reset', $user, ['reset_by' => $request->user()->id]);
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Password reset to DdOPaa2026!.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Password reset. The user must change it at next sign-in.')]);
 
         return back();
     }
