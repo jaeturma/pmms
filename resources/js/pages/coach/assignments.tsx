@@ -61,6 +61,13 @@ type RegistrationRow = {
     can_accredit: boolean;
     accreditation_number: string | null;
     documents_complete: boolean;
+    registered_athletes: Array<{
+        id: number;
+        name: string;
+        school: string;
+        events: string;
+        profile_url: string;
+    }>;
 };
 type Option = {
     meet_sport_id: number;
@@ -169,11 +176,23 @@ function ApprovalDialog({
                             </label>
                         ))}
                     </div>
-                    <InputError message={form.errors.event_ids} />
+                    <InputError
+                        message={
+                            form.errors.event_ids ??
+                            (form.errors as Record<string, string>).profile
+                        }
+                    />
+                    {!registration.profile_url && (
+                        <p className="text-sm text-destructive">
+                            Upload a profile photo before approval.
+                        </p>
+                    )}
                     <Button
                         className="w-full"
                         disabled={
-                            form.processing || form.data.event_ids.length === 0
+                            form.processing ||
+                            form.data.event_ids.length === 0 ||
+                            !registration.profile_url
                         }
                         onClick={() =>
                             form.patch(
@@ -251,6 +270,7 @@ export default function CoachAssignments({
                                         </TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead>Documents</TableHead>
+                                        <TableHead>Registered athletes</TableHead>
                                         {(canReview || canAccredit) && (
                                             <TableHead className="text-right">
                                                 Actions
@@ -362,8 +382,8 @@ export default function CoachAssignments({
                                             </TableCell>
                                             <TableCell className="space-x-2 whitespace-nowrap">
                                                 {!item.certification_url && (
-                                                    <span className="mr-2 text-xs text-destructive">
-                                                        Certification required
+                                                    <span className="mr-2 text-xs text-muted-foreground">
+                                                        No certificate (optional)
                                                     </span>
                                                 )}
                                                 {item.certification_url && (
@@ -389,6 +409,35 @@ export default function CoachAssignments({
                                                         registrationId={item.id}
                                                         type="certification"
                                                     />
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="max-w-sm whitespace-normal">
+                                                {item.registered_athletes.length === 0 ? (
+                                                    <span className="text-xs text-muted-foreground">
+                                                        No athletes registered
+                                                    </span>
+                                                ) : (
+                                                    <div className="space-y-2">
+                                                        {item.registered_athletes.map(
+                                                            (athlete) => (
+                                                                <a
+                                                                    key={athlete.id}
+                                                                    href={athlete.profile_url}
+                                                                    className="block rounded border p-2 text-xs hover:bg-muted/50"
+                                                                >
+                                                                    <span className="font-medium">
+                                                                        {athlete.name}
+                                                                    </span>
+                                                                    <span className="block text-muted-foreground">
+                                                                        {athlete.school}
+                                                                        {athlete.events
+                                                                            ? ` · ${athlete.events}`
+                                                                            : ' · Entry pending'}
+                                                                    </span>
+                                                                </a>
+                                                            ),
+                                                        )}
+                                                    </div>
                                                 )}
                                             </TableCell>
                                             {(canReview ||

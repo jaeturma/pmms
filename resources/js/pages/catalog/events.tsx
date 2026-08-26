@@ -54,8 +54,23 @@ type MeetEvent = {
     is_team_event: boolean;
     max_entries_per_delegation: number;
     active: boolean;
+    medal_config: MedalConfig;
     sport: { id: number; name: string };
     venues: EventVenue[];
+};
+
+type MedalConfig = {
+    awards_medals: boolean;
+    award_type: 'INDIVIDUAL' | 'PAIR' | 'TEAM' | 'RELAY' | 'GROUP';
+    physical_quantity_mode: 'FIXED' | 'TEAM_MEMBER_COUNT';
+    gold_physical_quantity: number | null;
+    silver_physical_quantity: number | null;
+    bronze_physical_quantity: number | null;
+    gold_tally_quantity: number | null;
+    silver_tally_quantity: number | null;
+    bronze_tally_quantity: number | null;
+    notes: string | null;
+    status: string;
 };
 
 type EventVenue = {
@@ -108,6 +123,14 @@ function EventFormDialog({
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
+    const existingConfig = event?.medal_config;
+    const [tallyFollowsPhysical, setTallyFollowsPhysical] = useState(
+        existingConfig
+            ? existingConfig.gold_physical_quantity === existingConfig.gold_tally_quantity &&
+                  existingConfig.silver_physical_quantity === existingConfig.silver_tally_quantity &&
+                  existingConfig.bronze_physical_quantity === existingConfig.bronze_tally_quantity
+            : true,
+    );
     const { data, setData, post, put, processing, errors, reset } = useForm({
         sport_id: event ? String(event.sport_id) : '',
         name: event?.name ?? '',
@@ -117,6 +140,31 @@ function EventFormDialog({
         max_entries_per_delegation: event
             ? String(event.max_entries_per_delegation)
             : '1',
+        medal_config: {
+            awards_medals: existingConfig?.awards_medals ?? true,
+            award_type: existingConfig?.award_type ?? 'INDIVIDUAL',
+            physical_quantity_mode:
+                existingConfig?.physical_quantity_mode ?? 'FIXED',
+            gold_physical_quantity: String(
+                existingConfig?.gold_physical_quantity ?? 1,
+            ),
+            silver_physical_quantity: String(
+                existingConfig?.silver_physical_quantity ?? 1,
+            ),
+            bronze_physical_quantity: String(
+                existingConfig?.bronze_physical_quantity ?? 1,
+            ),
+            gold_tally_quantity: String(
+                existingConfig?.gold_tally_quantity ?? 1,
+            ),
+            silver_tally_quantity: String(
+                existingConfig?.silver_tally_quantity ?? 1,
+            ),
+            bronze_tally_quantity: String(
+                existingConfig?.bronze_tally_quantity ?? 1,
+            ),
+            notes: existingConfig?.notes ?? '',
+        },
         venues:
             event?.venues.map((venue) => ({
                 ...venue,
@@ -155,7 +203,7 @@ function EventFormDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
                 <DialogHeader>
                     <DialogTitle>
                         {event ? 'Edit event' : 'Add event'}
@@ -281,6 +329,101 @@ function EventFormDialog({
                         <Label htmlFor="event-team">Team event</Label>
                     </div>
                     <InputError message={errors.is_team_event} />
+                    <div className="space-y-4 border-t pt-4">
+                        <div>
+                            <Label className="text-base">Medal configuration</Label>
+                            <p className="text-sm text-muted-foreground">
+                                Physical quantity is the number of actual medal pieces awarded. Official tally quantity is the number credited to the Delegation&apos;s official Gold/Silver/Bronze totals.
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Checkbox
+                                id="awards-medals"
+                                checked={data.medal_config.awards_medals}
+                                onCheckedChange={(checked) =>
+                                    setData('medal_config', {
+                                        ...data.medal_config,
+                                        awards_medals: checked === true,
+                                    })
+                                }
+                            />
+                            <Label htmlFor="awards-medals">Awards medals</Label>
+                        </div>
+                        {data.medal_config.awards_medals && (
+                            <>
+                                <div className="grid gap-4 sm:grid-cols-2">
+                                    <div className="space-y-2">
+                                        <Label>Award type</Label>
+                                        <Select
+                                            value={data.medal_config.award_type}
+                                            onValueChange={(value) =>
+                                                setData('medal_config', {
+                                                    ...data.medal_config,
+                                                    award_type: value as MedalConfig['award_type'],
+                                                })
+                                            }
+                                        >
+                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                {['INDIVIDUAL', 'PAIR', 'TEAM', 'RELAY', 'GROUP'].map((type) => <SelectItem key={type} value={type}>{type}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Physical quantity mode</Label>
+                                        <Select
+                                            value={data.medal_config.physical_quantity_mode}
+                                            onValueChange={(value) => setData('medal_config', { ...data.medal_config, physical_quantity_mode: value as MedalConfig['physical_quantity_mode'] })}
+                                        >
+                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="FIXED">Fixed</SelectItem>
+                                                <SelectItem value="TEAM_MEMBER_COUNT">Team member count</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                                <div className="grid gap-4 sm:grid-cols-2">
+                                    {(['physical', 'tally'] as const).map((kind) => (
+                                        <div key={kind} className="space-y-3 rounded-lg border p-3">
+                                            <Label>{kind === 'physical' ? 'Physical medal pieces' : 'Official medal tally'}</Label>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                {(['gold', 'silver', 'bronze'] as const).map((medal) => {
+                                                    const key = `${medal}_${kind}_quantity` as keyof typeof data.medal_config;
+                                                    return <div key={medal} className="space-y-1"><Label className="capitalize">{medal}</Label><Input type="number" min={0} value={String(data.medal_config[key])} disabled={kind === 'tally' && tallyFollowsPhysical} onChange={(e) => {
+                                                        const next = { ...data.medal_config, [key]: e.target.value };
+                                                        if (kind === 'physical' && tallyFollowsPhysical) {
+                                                            const tallyKey = `${medal}_tally_quantity` as keyof typeof data.medal_config;
+                                                            next[tallyKey] = e.target.value as never;
+                                                        }
+                                                        setData('medal_config', next);
+                                                    }} /></div>;
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Checkbox
+                                        id="tally-follows"
+                                        checked={tallyFollowsPhysical}
+                                        onCheckedChange={(checked) => {
+                                            const follows = checked === true;
+                                            setTallyFollowsPhysical(follows);
+                                            if (follows) setData('medal_config', {
+                                                ...data.medal_config,
+                                                gold_tally_quantity: data.medal_config.gold_physical_quantity,
+                                                silver_tally_quantity: data.medal_config.silver_physical_quantity,
+                                                bronze_tally_quantity: data.medal_config.bronze_physical_quantity,
+                                            });
+                                        }}
+                                    />
+                                    <Label htmlFor="tally-follows">Tally follows physical quantity</Label>
+                                </div>
+                                <InputError message={(errors as Record<string, string>)['medal_config.gold_physical_quantity'] ?? (errors as Record<string, string>)['medal_config.gold_tally_quantity']} />
+                            </>
+                        )}
+                    </div>
                     <div className="space-y-3 border-t pt-4">
                         <div className="flex items-center justify-between">
                             <div>
@@ -569,6 +712,8 @@ export default function Events({
                                     <TableHead>Division</TableHead>
                                     <TableHead>Type</TableHead>
                                     <TableHead>Max entries</TableHead>
+                                    <TableHead>Physical G/S/B</TableHead>
+                                    <TableHead>Official tally G/S/B</TableHead>
                                     <TableHead>Playing areas</TableHead>
                                     <TableHead>Status</TableHead>
                                     {canManage && (
@@ -603,6 +748,15 @@ export default function Events({
                                         </TableCell>
                                         <TableCell>
                                             {event.max_entries_per_delegation}
+                                        </TableCell>
+                                        <TableCell>
+                                            {event.medal_config.awards_medals
+                                                ? `${event.medal_config.gold_physical_quantity ?? '—'} / ${event.medal_config.silver_physical_quantity ?? '—'} / ${event.medal_config.bronze_physical_quantity ?? '—'}`
+                                                : 'N/A'}
+                                        </TableCell>
+                                        <TableCell>
+                                            <div>{event.medal_config.awards_medals ? `${event.medal_config.gold_tally_quantity ?? '—'} / ${event.medal_config.silver_tally_quantity ?? '—'} / ${event.medal_config.bronze_tally_quantity ?? '—'}` : 'N/A'}</div>
+                                            <Badge variant={event.medal_config.status === 'MEDAL_CONFIGURATION_REQUIRED' ? 'destructive' : 'outline'}>{event.medal_config.status.replaceAll('_', ' ')}</Badge>
                                         </TableCell>
                                         <TableCell className="max-w-64 text-sm">
                                             {event.venues.length === 0
@@ -726,7 +880,7 @@ export default function Events({
                     params={{
                         ...(filters.search ? { search: filters.search } : {}),
                         ...(filters.sport_id
-                            ? { sport_id: filters.sport_id }
+                            ? { sport_id: String(filters.sport_id) }
                             : {}),
                     }}
                 />

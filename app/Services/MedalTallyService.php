@@ -269,6 +269,7 @@ class MedalTallyService
         ?bool $paragames = null,
     ): Builder {
         return ResultPlacement::query()
+            ->with('medalAward')
             ->whereIn('rank', [1, 2, 3])
             ->whereHas('result', fn ($result) => $result
                 ->where('status', ResultStatus::Official->value)
@@ -474,9 +475,9 @@ class MedalTallyService
     private function medals(Collection $placements): array
     {
         $placements = $this->medalUnits($placements);
-        $byRank = fn (int $rank): int => $placements
+        $byRank = fn (int $rank): int => (int) $placements
             ->filter(fn (ResultPlacement $placement): bool => $placement->rank === $rank)
-            ->count();
+            ->sum(fn (ResultPlacement $placement): int => $placement->medalAward?->tally_quantity ?? 1);
 
         $gold = $byRank(1);
         $silver = $byRank(2);
@@ -491,10 +492,9 @@ class MedalTallyService
     }
 
     /**
-     * A team event awards one medal result to a delegation, not one medal
-     * per physical member. Legacy team results contain one tied placement
-     * per athlete, so collapse those rows into the same logical medal unit.
-     * Individual placements remain one-for-one.
+     * Collapse legacy per-athlete team placements to the one snapshotted
+     * award whose tally quantity is authoritative. Individual placements
+     * remain one-for-one.
      *
      * @param  Collection<int, ResultPlacement>  $placements
      * @return Collection<int, ResultPlacement>

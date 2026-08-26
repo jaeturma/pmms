@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\CompetitionAccessService;
 use App\Services\FileUploadService;
+use App\Services\MedalAwardService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -27,6 +28,7 @@ class ResultWorkflowController extends Controller
     public function __construct(
         private readonly FileUploadService $uploads,
         private readonly AuditLogger $audit,
+        private readonly MedalAwardService $medalAwards,
     ) {}
 
     public function form(Request $request, EventResult $result): View
@@ -218,11 +220,14 @@ class ResultWorkflowController extends Controller
         abort_unless($result->status === ResultStatus::Validated, 422);
         abort_if($result->currentSignedForm() === null, 422, 'The signed Result Form is missing.');
 
-        $result->forceFill([
-            'status' => ResultStatus::Official,
-            'official_by' => $request->user()->id,
-            'official_at' => now(),
-        ])->save();
+        DB::transaction(function () use ($result, $request): void {
+            $this->medalAwards->synchronize($result, $request->user());
+            $result->forceFill([
+                'status' => ResultStatus::Official,
+                'official_by' => $request->user()->id,
+                'official_at' => now(),
+            ])->save();
+        });
         $this->audit->record('result.made_official', $result, $this->context($result));
 
         return back()->with('success', 'Result marked official.');
@@ -243,6 +248,21 @@ class ResultWorkflowController extends Controller
         $this->audit->record('result.reopened', $result, [...$this->context($result), 'reason' => $validated['reason']]);
 
         return back()->with('success', 'Official result reopened for correction.');
+    }
+
+    public function recalculateMedalAwards(Request $request, EventResult $result): RedirectResponse
+    {
+        abort_unless($request->user()->isAdmin() || $this->isEventSecretariat($request->user(), $result), 403);
+        abort_unless($result->status === ResultStatus::Official, 422);
+        $validated = $request->validate(['reason' => ['required', 'string', 'max:1000']]);
+
+        DB::transaction(fn () => $this->medalAwards->synchronize($result, $request->user()));
+        $this->audit->record('result.medal_awards_recalculated', $result, [
+            ...$this->context($result),
+            'reason' => $validated['reason'],
+        ]);
+
+        return back()->with('success', 'Official medal award quantities recalculated with an audit record.');
     }
 
     private function authorizeSportDocument(User $user, EventResult $result): void

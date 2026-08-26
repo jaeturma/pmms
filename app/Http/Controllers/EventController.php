@@ -36,7 +36,7 @@ class EventController extends Controller
         $canManage = $request->user()->isAdmin() || $sportIds->isNotEmpty();
 
         $query = Event::query()
-            ->with(['sport:id,name', 'venueAssignments.venue:id,name', 'venueAssignments.coordinators:id,full_name'])
+            ->with(['sport:id,name', 'medalConfig', 'venueAssignments.venue:id,name', 'venueAssignments.coordinators:id,full_name'])
             ->orderBy('name');
 
         if (! $request->user()->isAdmin() && $sportIds->isNotEmpty()) {
@@ -59,6 +59,7 @@ class EventController extends Controller
                     'age_division' => $event->age_division->value,
                     'is_team_event' => $event->is_team_event,
                     'max_entries_per_delegation' => $event->max_entries_per_delegation,
+                    'medal_config' => $this->medalConfigPayload($event),
                     'active' => $event->active,
                     'sport' => ['id' => $event->sport->id, 'name' => $event->sport->name],
                     'venues' => $event->venueAssignments->map(fn ($assignment): array => [
@@ -98,6 +99,9 @@ class EventController extends Controller
 
         $event = DB::transaction(function () use ($request): Event {
             $event = Event::create($request->eventData());
+            if ($request->medalConfigData() !== null) {
+                $event->medalConfig()->create($request->medalConfigData());
+            }
             $this->syncVenues($event, $request->validated('venues', []));
 
             return $event;
@@ -121,6 +125,9 @@ class EventController extends Controller
 
         DB::transaction(function () use ($request, $event): void {
             $event->update($request->eventData());
+            if ($request->medalConfigData() !== null) {
+                $event->medalConfig()->updateOrCreate([], $request->medalConfigData());
+            }
             $this->syncVenues($event, $request->validated('venues', []));
         });
 
@@ -227,9 +234,28 @@ class EventController extends Controller
     {
         return $user->meetSportAssignments()
             ->where('status', 'active')
-            ->whereIn('role', [MeetSportAssignmentRole::TournamentICT, MeetSportAssignmentRole::TournamentSecretary])
+            ->whereIn('role', [MeetSportAssignmentRole::TournamentManager, MeetSportAssignmentRole::TournamentICT, MeetSportAssignmentRole::TournamentSecretary])
             ->whereHas('meetSport.meet', fn ($meet) => $meet->whereKey(Meet::current()->id))
             ->with('meetSport:id,sport_id')
             ->get()->pluck('meetSport.sport_id')->map(fn ($id): int => (int) $id)->unique()->values();
+    }
+
+    private function medalConfigPayload(Event $event): array
+    {
+        $config = $event->resolvedMedalConfig();
+
+        return [
+            'awards_medals' => $config->awards_medals,
+            'award_type' => $config->award_type,
+            'physical_quantity_mode' => $config->physical_quantity_mode,
+            'gold_physical_quantity' => $config->gold_physical_quantity,
+            'silver_physical_quantity' => $config->silver_physical_quantity,
+            'bronze_physical_quantity' => $config->bronze_physical_quantity,
+            'gold_tally_quantity' => $config->gold_tally_quantity,
+            'silver_tally_quantity' => $config->silver_tally_quantity,
+            'bronze_tally_quantity' => $config->bronze_tally_quantity,
+            'notes' => $config->notes,
+            'status' => ! $config->awards_medals ? 'NOT_APPLICABLE' : ($config->isComplete() ? ($event->medalConfig ? 'CONFIGURED' : 'DEFAULT_INDIVIDUAL_1') : 'MEDAL_CONFIGURATION_REQUIRED'),
+        ];
     }
 }

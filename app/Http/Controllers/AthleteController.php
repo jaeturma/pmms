@@ -11,12 +11,14 @@ use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\AthleteRequest;
 use App\Models\Athlete;
 use App\Models\Delegation;
+use App\Models\District;
 use App\Models\EligibilityDocument;
 use App\Models\EligibilityReview;
 use App\Models\Entry;
 use App\Models\FileUpload;
 use App\Models\Meet;
 use App\Models\ResultPlacement;
+use App\Models\SchoolDistrict;
 use App\Models\User;
 use App\Services\AthletePhotoService;
 use App\Services\AuditLogger;
@@ -156,6 +158,11 @@ class AthleteController extends Controller
             'fixedDelegationId' => $user->role === UserRole::Coach
                 ? $availableDelegations->first()?->id
                 : null,
+            'fixedMunicipalityId' => $user->role === UserRole::Coach
+                ? ($availableDelegations->first()?->district_id ?? $availableDelegations->first()?->school?->district_id)
+                : null,
+            'municipalities' => District::query()->where('active', true)->orderBy('name')->get(['id', 'name']),
+            'schoolDistricts' => SchoolDistrict::query()->where('active', true)->orderBy('name')->get(['id', 'district_id', 'name']),
         ]);
     }
 
@@ -290,7 +297,7 @@ class AthleteController extends Controller
 
         Gate::authorize('create', [Athlete::class, $delegation]);
 
-        $fileFields = ['photo', 'sports_photo', 'athlete_history', 'form_10', 'school_id_document', 'birth_certificate', 'report_card', 'parental_consent', 'medical_certificate', 'event_id'];
+        $fileFields = ['photo', 'sports_photo', 'athlete_history', 'form_10', 'school_id_document', 'birth_certificate', 'report_card', 'parental_consent', 'medical_certificate', 'event_id', 'district_id', 'school_district_id'];
         $athlete = new Athlete($request->safe()->except($fileFields));
 
         /** @var User $user */
@@ -306,6 +313,12 @@ class AthleteController extends Controller
         }
 
         DB::transaction(function () use ($request, $athlete, $user): void {
+            if ($user->role === UserRole::Coach && $request->filled(['district_id', 'school_district_id'])) {
+                $athlete->school()->getRelated()->newQuery()->whereKey($athlete->school_id)->update([
+                    'district_id' => $request->integer('district_id'),
+                    'school_district_id' => $request->integer('school_district_id'),
+                ]);
+            }
             $athlete->save();
 
             $documents = [

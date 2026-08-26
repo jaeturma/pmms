@@ -92,6 +92,11 @@ class EventResult extends Model
         return $this->hasMany(ResultPlacement::class);
     }
 
+    public function medalAwards(): HasMany
+    {
+        return $this->hasMany(MedalAward::class);
+    }
+
     /**
      * @return BelongsTo<User, $this>
      */

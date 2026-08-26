@@ -10,6 +10,7 @@ use App\Models\Delegation;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\School;
+use App\Models\SchoolDistrict;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
@@ -95,6 +96,10 @@ class AthleteRequest extends FormRequest
         if ($athlete === null) {
             $rules['delegation_id'] = ['required', 'integer', Rule::exists('delegations', 'id')];
             $rules['school_id'] = ['required', 'integer', Rule::exists('schools', 'id')->where('active', true)];
+            if ($this->user()?->role === UserRole::Coach) {
+                $rules['district_id'] = ['sometimes', 'required', 'integer', Rule::exists('districts', 'id')->where('active', true)];
+                $rules['school_district_id'] = ['sometimes', 'required', 'integer', Rule::exists('school_districts', 'id')->where('active', true)];
+            }
             $rules['event_id'] = $this->user()?->role === UserRole::Coach
                 ? ['nullable', 'integer', Rule::exists('events', 'id')]
                 : ['nullable', 'integer', Rule::exists('events', 'id')];
@@ -122,6 +127,18 @@ class AthleteRequest extends FormRequest
 
             if ($delegation === null || $school === null) {
                 return;
+            }
+
+            if ($this->user()?->role === UserRole::Coach && $this->filled('district_id')) {
+                $municipalityId = $this->integer('district_id');
+                $schoolDistrict = SchoolDistrict::find($this->integer('school_district_id'));
+                $delegationMunicipalityId = $delegation->district_id ?? $delegation->school?->district_id;
+                if ($delegationMunicipalityId !== $municipalityId) {
+                    $validator->errors()->add('district_id', __('The athlete municipality must match the coach’s approved delegation.'));
+                }
+                if (! $this->filled('school_district_id') || $schoolDistrict === null || $schoolDistrict->district_id !== $municipalityId) {
+                    $validator->errors()->add('school_district_id', __('The selected school district must belong to the athlete’s municipality.'));
+                }
             }
 
             $event = $this->filled('event_id') ? Event::find($this->integer('event_id')) : null;

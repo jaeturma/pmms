@@ -292,6 +292,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('results/{result}/return', [ResultWorkflowController::class, 'returnResult'])->name('results.return');
     Route::post('results/{result}/event-secretariat-validation', [ResultWorkflowController::class, 'validateResult'])->name('results.event-secretariat.validate');
     Route::post('results/{result}/official', [ResultWorkflowController::class, 'makeOfficial'])->name('results.official');
+    Route::post('results/{result}/medal-awards/recalculate', [ResultWorkflowController::class, 'recalculateMedalAwards'])->name('results.medal-awards.recalculate');
     Route::post('results/{result}/reopen', [ResultWorkflowController::class, 'reopen'])->name('results.reopen');
     Route::get('tally', [TallyController::class, 'index'])->name('tally.index');
 
@@ -414,6 +415,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('reports/results/{result}/download', [ReportController::class, 'downloadResultSheet'])->name('reports.result-sheet.download');
     Route::get('reports/tally', [ReportController::class, 'tallyReport'])->name('reports.tally');
     Route::get('reports/tally/download', [ReportController::class, 'downloadTallyReport'])->name('reports.tally.download');
+    Route::get('reports/medal-configuration', [ReportController::class, 'medalConfiguration'])->name('reports.medal-configuration');
+    Route::get('reports/medal-configuration/download', [ReportController::class, 'downloadMedalConfiguration'])->name('reports.medal-configuration.download');
     Route::get('reports/schedule', [ReportController::class, 'scheduleSheet'])->name('reports.schedule');
     Route::get('reports/schedule/download', [ReportController::class, 'downloadScheduleSheet'])->name('reports.schedule.download');
 

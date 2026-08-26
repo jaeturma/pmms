@@ -45,6 +45,18 @@ class AthletePolicy
             return true;
         }
 
+        // In-scope tournament staff may inspect athletes registered by a
+        // coach even before that coach creates the event entry.
+        if ($athlete->registered_by !== null && $user->tournamentEventIds()->isNotEmpty()
+            && $athlete->registrar?->coachAssignmentRequests()
+                ->where('delegation_id', $athlete->delegation_id)
+                ->where('status', 'approved')
+                ->whereNull('ended_at')
+                ->whereIn('event_id', $user->tournamentEventIds())
+                ->exists()) {
+            return true;
+        }
+
         if ($user->athleteOversightAssignments()->where('active', true)->where('meet_id', $athlete->delegation->meet_id)
             ->where(function ($query) use ($athlete) {
                 $query->where(fn ($scope) => $scope->where('authority_type', 'district_sports_coordinator')->where('school_district_id', $athlete->school->school_district_id))

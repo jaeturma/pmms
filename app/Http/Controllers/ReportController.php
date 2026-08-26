@@ -12,6 +12,7 @@ use App\Models\Event;
 use App\Models\EventResult;
 use App\Models\EventSchedule;
 use App\Models\Meet;
+use App\Models\MedalAward;
 use App\Models\Personnel;
 use App\Models\ResultPlacement;
 use App\Models\School;
@@ -29,6 +30,67 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class ReportController extends Controller
 {
     public function __construct(private readonly AuditLogger $audit) {}
+
+    public function medalConfiguration(Request $request): Response
+    {
+        $this->authorizeMedalConfigurationReport($request);
+
+        return Inertia::render('reports/medal-configuration', [
+            'events' => $this->medalConfigurationRows(),
+            'officialAwards' => $this->officialMedalAwardRows(),
+            'generatedAt' => now()->toDayDateTimeString(),
+        ]);
+    }
+
+    public function downloadMedalConfiguration(Request $request): StreamedResponse
+    {
+        $this->authorizeMedalConfigurationReport($request);
+        $rows = [['Sport', 'Event', 'Entry Type', 'Awards Medals', 'Physical G', 'Physical S', 'Physical B', 'Tally G', 'Tally S', 'Tally B', 'Configuration Status']];
+        foreach ($this->medalConfigurationRows() as $event) {
+            $rows[] = array_values($event);
+        }
+        $this->audit->record('report.medal_configuration_exported', Meet::current());
+
+        return $this->csv('medal-configuration-review.csv', $rows);
+    }
+
+    private function authorizeMedalConfigurationReport(Request $request): void
+    {
+        abort_unless($request->user()->isAdmin() || $request->user()->canManageProductionAccounts()
+            || $request->user()->meetSportAssignments()->where('status', 'active')->whereIn('role', [
+                'tournament_manager', 'tournament_ict', 'tournament_secretary',
+            ])->exists(), 403);
+    }
+
+    private function medalConfigurationRows(): array
+    {
+        return Event::query()->with(['sport:id,name', 'medalConfig'])->orderBy('sport_id')->orderBy('name')->get()
+            ->map(function (Event $event): array {
+                $config = $event->resolvedMedalConfig();
+
+                return [
+                    'sport' => $event->sport->name, 'event' => $event->name,
+                    'entry_type' => $config->award_type, 'awards_medals' => $config->awards_medals ? 'Yes' : 'No',
+                    'gold_physical' => $config->gold_physical_quantity, 'silver_physical' => $config->silver_physical_quantity, 'bronze_physical' => $config->bronze_physical_quantity,
+                    'gold_tally' => $config->gold_tally_quantity, 'silver_tally' => $config->silver_tally_quantity, 'bronze_tally' => $config->bronze_tally_quantity,
+                    'status' => ! $config->awards_medals ? 'NOT_APPLICABLE' : ($config->isComplete() ? ($event->medalConfig ? 'CONFIGURED' : 'DEFAULT_INDIVIDUAL_1') : 'MISSING_CONFIGURATION'),
+                ];
+            })->all();
+    }
+
+    private function officialMedalAwardRows(): array
+    {
+        return MedalAward::query()->whereHas('result', fn ($result) => $result->where('meet_id', Meet::current()->id))
+            ->with('result.event.sport')->get()->groupBy('event_result_id')->map(function ($awards): array {
+                $first = $awards->first();
+
+                return [
+                    'sport' => $first->result->event->sport->name, 'event' => $first->result->event->name,
+                    'physical_pieces' => (int) $awards->sum('physical_quantity'),
+                    'official_tally' => (int) $awards->sum('tally_quantity'),
+                ];
+            })->values()->all();
+    }
 
     /**
      * Printable delegation roster: athletes and personnel of one delegation.

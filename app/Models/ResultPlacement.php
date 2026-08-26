@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -59,5 +60,10 @@ class ResultPlacement extends Model
     public function teamEntry(): BelongsTo
     {
         return $this->belongsTo(TeamEntry::class);
+    }
+
+    public function medalAward(): HasOne
+    {
+        return $this->hasOne(MedalAward::class);
     }
 }

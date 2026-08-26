@@ -35,6 +35,7 @@ trait BuildsSchoolOptionsByDelegation
                             'id' => $school->id,
                             'name' => $school->name,
                             'school_id_code' => $school->school_id_code,
+                            'district_id' => $school->district_id,
                             'district' => $school->district?->name ?? '',
                             'school_district_id' => $school->school_district_id,
                             'school_district' => $school->schoolDistrict?->name ?? $school->district?->name ?? '',

@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -124,5 +125,29 @@ class Event extends Model
     public function venueAssignments(): HasMany
     {
         return $this->hasMany(EventVenue::class);
+    }
+
+    public function medalConfig(): HasOne
+    {
+        return $this->hasOne(EventMedalConfig::class);
+    }
+
+    public function resolvedMedalConfig(): EventMedalConfig
+    {
+        if ($this->medalConfig !== null) {
+            return $this->medalConfig;
+        }
+
+        return new EventMedalConfig([
+            'awards_medals' => $this->is_medal_event,
+            'award_type' => $this->is_team_event ? 'TEAM' : 'INDIVIDUAL',
+            'physical_quantity_mode' => 'FIXED',
+            'gold_physical_quantity' => $this->is_team_event ? null : 1,
+            'silver_physical_quantity' => $this->is_team_event ? null : 1,
+            'bronze_physical_quantity' => $this->is_team_event ? null : 1,
+            'gold_tally_quantity' => $this->is_team_event ? null : 1,
+            'silver_tally_quantity' => $this->is_team_event ? null : 1,
+            'bronze_tally_quantity' => $this->is_team_event ? null : 1,
+        ]);
     }
 }

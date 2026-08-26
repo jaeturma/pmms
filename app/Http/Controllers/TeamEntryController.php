@@ -114,6 +114,11 @@ class TeamEntryController extends Controller
         if ($user->role === UserRole::Coach && $athletes->contains(fn (Athlete $athlete): bool => ! $athlete->isOwnedBy($user))) {
             throw ValidationException::withMessages(['athlete_ids' => __('A coach may add only athletes registered under their account.')]);
         }
+        if ($user->role === UserRole::Coach && $athletes->contains(
+            fn (Athlete $athlete): bool => $athlete->accreditation()->doesntExist(),
+        )) {
+            throw ValidationException::withMessages(['athlete_ids' => __('A coach may select only accredited athletes for an entry.')]);
+        }
         foreach ($athletes as $athlete) {
             if ($athlete->eligibilityReview?->status !== EligibilityStatus::Approved) {
                 throw ValidationException::withMessages(['athlete_ids' => __('Every team member must be DSAC approved.')]);

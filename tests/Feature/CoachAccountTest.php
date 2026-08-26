@@ -8,6 +8,7 @@ use App\Models\Athlete;
 use App\Models\CoachAssignmentRequest;
 use App\Models\CoachOnboardingRequest;
 use App\Models\Delegation;
+use App\Models\District;
 use App\Models\EligibilityReview;
 use App\Models\Entry;
 use App\Models\Event;
@@ -15,6 +16,8 @@ use App\Models\EventResult;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\Personnel;
+use App\Models\School;
+use App\Models\SchoolDistrict;
 use App\Models\Setting;
 use App\Models\Sport;
 use App\Models\TeamEntry;
@@ -237,6 +240,30 @@ test('a coach with multiple approved events registers an athlete without an auto
 
     $athlete = Athlete::query()->where('lrn', '321654987099')->sole();
     expect($athlete->entries()->count())->toBe(0);
+});
+
+test('coach athlete registration synchronizes the submitted school district and municipality', function () {
+    $municipality = District::factory()->create();
+    $delegation = Delegation::factory()->create([
+        'district_id' => $municipality->id,
+        'school_id' => null,
+        'status' => DelegationStatus::Draft,
+    ]);
+    $coach = coachFor($delegation);
+    $schoolDistrict = SchoolDistrict::factory()->create(['district_id' => $municipality->id]);
+    $school = School::factory()->create();
+
+    $this->actingAs($coach)->post('/athletes', [
+        'delegation_id' => $delegation->id,
+        'school_id' => $school->id,
+        'district_id' => $municipality->id,
+        'school_district_id' => $schoolDistrict->id,
+        'first_name' => 'District', 'last_name' => 'Athlete', 'sex' => 'male',
+        'birthdate' => now()->subYears(15)->toDateString(), 'lrn' => '321654987097', 'grade_level' => 9,
+    ])->assertSessionHasNoErrors();
+
+    expect($school->fresh()->district_id)->toBe($municipality->id)
+        ->and($school->fresh()->school_district_id)->toBe($schoolDistrict->id);
 });
 
 test('a sole team event assignment requires manual roster entry', function () {

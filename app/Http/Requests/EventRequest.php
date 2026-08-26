@@ -18,6 +18,7 @@ class EventRequest extends FormRequest
         $user = $this->user();
 
         return $user !== null && ($user->isAdmin() || app(CompetitionAccessService::class)->hasAssignmentRole($user, [
+            MeetSportAssignmentRole::TournamentManager->value,
             MeetSportAssignmentRole::TournamentSecretary->value,
             MeetSportAssignmentRole::TournamentICT->value,
         ], Meet::current()->id));
@@ -48,6 +49,17 @@ class EventRequest extends FormRequest
             'age_division' => ['required', Rule::enum(AgeDivision::class)],
             'is_team_event' => ['required', 'boolean'],
             'max_entries_per_delegation' => ['required', 'integer', 'min:1', 'max:50'],
+            'medal_config' => ['sometimes', 'array'],
+            'medal_config.awards_medals' => ['required_with:medal_config', 'boolean'],
+            'medal_config.award_type' => ['required_with:medal_config', Rule::in(['INDIVIDUAL', 'PAIR', 'TEAM', 'RELAY', 'GROUP'])],
+            'medal_config.physical_quantity_mode' => ['required_with:medal_config', Rule::in(['FIXED', 'TEAM_MEMBER_COUNT'])],
+            'medal_config.gold_physical_quantity' => ['nullable', 'required_if:medal_config.awards_medals,1', 'integer', 'min:0', 'max:1000'],
+            'medal_config.silver_physical_quantity' => ['nullable', 'required_if:medal_config.awards_medals,1', 'integer', 'min:0', 'max:1000'],
+            'medal_config.bronze_physical_quantity' => ['nullable', 'required_if:medal_config.awards_medals,1', 'integer', 'min:0', 'max:1000'],
+            'medal_config.gold_tally_quantity' => ['nullable', 'required_if:medal_config.awards_medals,1', 'integer', 'min:0', 'max:1000'],
+            'medal_config.silver_tally_quantity' => ['nullable', 'required_if:medal_config.awards_medals,1', 'integer', 'min:0', 'max:1000'],
+            'medal_config.bronze_tally_quantity' => ['nullable', 'required_if:medal_config.awards_medals,1', 'integer', 'min:0', 'max:1000'],
+            'medal_config.notes' => ['nullable', 'string', 'max:2000'],
             'venues' => ['sometimes', 'array'],
             'venues.*.venue_id' => ['required', 'integer', 'distinct', Rule::exists('venues', 'id')->where('active', true)],
             'venues.*.playing_area_type' => ['required', Rule::in(['venue', 'court', 'table'])],
@@ -59,6 +71,11 @@ class EventRequest extends FormRequest
 
     public function eventData(): array
     {
-        return $this->safe()->except('venues');
+        return $this->safe()->except(['venues', 'medal_config']);
+    }
+
+    public function medalConfigData(): ?array
+    {
+        return $this->has('medal_config') ? $this->validated('medal_config') : null;
     }
 }

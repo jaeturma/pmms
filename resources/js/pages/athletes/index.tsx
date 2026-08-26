@@ -69,6 +69,7 @@ type SchoolOption = {
     id: number;
     name: string;
     school_id_code: string;
+    district_id: number | null;
     district: string;
     school_district_id: number | null;
     school_district: string;
@@ -80,18 +81,27 @@ type Props = {
     delegationOptions: DelegationOption[];
     schoolOptionsByDelegation: Record<number, SchoolOption[]>;
     fixedDelegationId: number | null;
+    fixedMunicipalityId: number | null;
+    municipalities: Array<{ id: number; name: string }>;
+    schoolDistricts: Array<{ id: number; district_id: number; name: string }>;
 };
 
 function AthleteFormDialog({
     delegationOptions,
     schoolOptionsByDelegation,
     fixedDelegationId,
+    fixedMunicipalityId,
+    municipalities,
+    schoolDistricts,
     open,
     onOpenChange,
 }: {
     delegationOptions: DelegationOption[];
     schoolOptionsByDelegation: Record<number, SchoolOption[]>;
     fixedDelegationId: number | null;
+    fixedMunicipalityId: number | null;
+    municipalities: Array<{ id: number; name: string }>;
+    schoolDistricts: Array<{ id: number; district_id: number; name: string }>;
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
@@ -99,6 +109,8 @@ function AthleteFormDialog({
         useForm<{
             delegation_id: string;
             school_id: string;
+            district_id: string;
+            school_district_id: string;
             first_name: string;
             middle_name: string;
             last_name: string;
@@ -120,6 +132,9 @@ function AthleteFormDialog({
             delegation_id:
                 fixedDelegationId === null ? '' : String(fixedDelegationId),
             school_id: '',
+            district_id:
+                fixedMunicipalityId === null ? '' : String(fixedMunicipalityId),
+            school_district_id: '',
             first_name: '',
             middle_name: '',
             last_name: '',
@@ -139,8 +154,15 @@ function AthleteFormDialog({
             medical_certificate: null,
         });
     const allSchoolOptions = data.delegation_id
-        ? (schoolOptionsByDelegation[Number(data.delegation_id)] ?? [])
+        ? (schoolOptionsByDelegation[Number(data.delegation_id)] ?? []).filter(
+              (school) =>
+                  !data.district_id ||
+                  school.district_id === Number(data.district_id),
+          )
         : [];
+    const availableSchoolDistricts = schoolDistricts.filter(
+        (district) => district.district_id === Number(data.district_id),
+    );
 
     const selectDelegation = (value: string) => {
         const options = schoolOptionsByDelegation[Number(value)] ?? [];
@@ -233,7 +255,28 @@ function AthleteFormDialog({
                             <InputError message={errors.lrn} />
                         </div>
                         {data.delegation_id && (
-                            <div className="space-y-2 lg:col-span-2">
+                            <>
+                            {fixedDelegationId !== null && (
+                                <div className="space-y-2">
+                                    <Label>Municipality *</Label>
+                                    <Select value={data.district_id} disabled>
+                                        <SelectTrigger><SelectValue placeholder="Municipality" /></SelectTrigger>
+                                        <SelectContent>{municipalities.map((municipality) => <SelectItem key={municipality.id} value={String(municipality.id)}>{municipality.name}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                    <InputError message={errors.district_id} />
+                                </div>
+                            )}
+                            {fixedDelegationId !== null && (
+                                <div className="space-y-2">
+                                    <Label>School district *</Label>
+                                    <Select value={data.school_district_id} onValueChange={(value) => setData((current) => ({ ...current, school_district_id: value, school_id: '' }))}>
+                                        <SelectTrigger><SelectValue placeholder="Select school district" /></SelectTrigger>
+                                        <SelectContent>{availableSchoolDistricts.map((district) => <SelectItem key={district.id} value={String(district.id)}>{district.name}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                    <InputError message={errors.school_district_id} />
+                                </div>
+                            )}
+                            <div className="space-y-2">
                                 <Label htmlFor="athlete-school">School *</Label>
                                 <Select
                                     value={data.school_id}
@@ -258,6 +301,7 @@ function AthleteFormDialog({
                                 </Select>
                                 <InputError message={errors.school_id} />
                             </div>
+                            </>
                         )}
                         <div className="grid gap-4 lg:col-span-3 lg:grid-cols-3">
                             <div className="space-y-2">
@@ -759,6 +803,9 @@ export default function Athletes({
     delegationOptions,
     schoolOptionsByDelegation,
     fixedDelegationId,
+    fixedMunicipalityId,
+    municipalities,
+    schoolDistricts,
 }: Props) {
     const [createOpen, setCreateOpen] = useState(false);
     const [editingAthlete, setEditingAthlete] = useState<AthleteRow | null>(
@@ -936,6 +983,9 @@ export default function Athletes({
                 delegationOptions={delegationOptions}
                 schoolOptionsByDelegation={schoolOptionsByDelegation}
                 fixedDelegationId={fixedDelegationId}
+                fixedMunicipalityId={fixedMunicipalityId}
+                municipalities={municipalities}
+                schoolDistricts={schoolDistricts}
                 open={createOpen}
                 onOpenChange={setCreateOpen}
             />

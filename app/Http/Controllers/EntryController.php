@@ -251,9 +251,9 @@ class EntryController extends Controller
         $delegation = $athlete->delegation;
 
         if ($request->user()?->role === UserRole::Coach
-            && $athlete->eligibilityReview?->status !== EligibilityStatus::Approved) {
+            && $athlete->accreditation()->doesntExist()) {
             throw ValidationException::withMessages([
-                'athlete_id' => __('Only approved athletes may be submitted to a sports event.'),
+                'athlete_id' => __('Only accredited athletes may be submitted to a sports event by a coach.'),
             ]);
         }
 

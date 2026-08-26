@@ -6,6 +6,7 @@ use App\Enums\MeetSportAssignmentRole;
 use App\Enums\PersonnelRole;
 use App\Enums\UserRole;
 use App\Models\Accreditation;
+use App\Models\Athlete;
 use App\Models\CoachAssignmentRequest;
 use App\Models\CoachOnboardingRequest;
 use App\Models\Delegation;
@@ -188,6 +189,17 @@ class CoachAssignmentRequestController extends Controller
             'review_notes' => ['nullable', 'string', 'max:1000'],
         ]);
         $selectedEvents = collect($data['event_ids'] ?? []);
+        if ($data['status'] === 'approved' && $coachOnboardingRequest->profile_upload_id === null) {
+            throw ValidationException::withMessages([
+                'profile' => __('A coach profile photo is required before approval.'),
+            ]);
+        }
+        if ($data['status'] === 'approved' && $coachOnboardingRequest->meet_sport_id === null
+            && $selectedEvents->isEmpty() && ! $coachOnboardingRequest->events()->exists()) {
+            throw ValidationException::withMessages([
+                'event_ids' => __('Assign at least one sports event before approving the coach.'),
+            ]);
+        }
         if ($coachOnboardingRequest->meet_sport_id !== null && $selectedEvents->isNotEmpty()) {
             $validCount = Event::query()->whereKey($selectedEvents)
                 ->where('sport_id', $coachOnboardingRequest->meetSport->sport_id)
@@ -282,9 +294,9 @@ class CoachAssignmentRequestController extends Controller
         abort_unless($coachOnboardingRequest->status === 'approved', 422, 'Only approved coaches can be accredited.');
         abort_unless($this->canAccreditOnboarding($request->user(), $coachOnboardingRequest), 403);
 
-        if ($coachOnboardingRequest->profile_upload_id === null || $coachOnboardingRequest->certification_upload_id === null) {
+        if ($coachOnboardingRequest->profile_upload_id === null) {
             throw ValidationException::withMessages([
-                'documents' => __('A coach profile photo and coaching certification are required before accreditation.'),
+                'documents' => __('A coach profile photo is required before accreditation. The coaching certificate is optional.'),
             ]);
         }
 
@@ -436,6 +448,27 @@ class CoachAssignmentRequestController extends Controller
                 $canManageDocuments = $item->user_id === $user->id
                     || $this->canReviewOnboarding($user, $item)
                     || $this->canAccreditOnboarding($user, $item);
+                $coachDelegationIds = CoachAssignmentRequest::query()
+                    ->where('user_id', $item->user_id)
+                    ->where('status', 'approved')
+                    ->whereNull('ended_at')
+                    ->when($item->meet_sport_id !== null, fn ($assignments) => $assignments
+                        ->where('meet_sport_id', $item->meet_sport_id))
+                    ->pluck('delegation_id');
+                $registeredAthletes = Athlete::query()
+                    ->where('registered_by', $item->user_id)
+                    ->whereIn('delegation_id', $coachDelegationIds)
+                    ->with(['school:id,name', 'entries.event:id,name'])
+                    ->orderBy('last_name')
+                    ->orderBy('first_name')
+                    ->get()
+                    ->map(fn (Athlete $athlete): array => [
+                        'id' => $athlete->id,
+                        'name' => $athlete->fullName(),
+                        'school' => $athlete->school->name,
+                        'events' => $athlete->entries->pluck('event.name')->filter()->join(', '),
+                        'profile_url' => route('athletes.show', $athlete),
+                    ])->all();
 
                 return [
                     'id' => $item->id,
@@ -455,11 +488,11 @@ class CoachAssignmentRequestController extends Controller
                     'certification_url' => $item->certification_upload_id ? route('coach.onboarding-documents.show', [$item, 'certification']) : null,
                     'certification_mime_type' => $item->certification?->mime_type,
                     'documents_complete' => $item->profile_upload_id !== null && $item->certification_upload_id !== null,
+                    'registered_athletes' => $registeredAthletes,
                     'can_update_attachments' => $canManageDocuments
                         && ! ($item->status === 'approved' && $accreditationNumber !== null),
                     'can_accredit' => $item->status === 'approved'
                         && $item->profile_upload_id !== null
-                        && $item->certification_upload_id !== null
                         && $this->canAccreditOnboarding($user, $item),
                     'accreditation_number' => $accreditationNumber,
                 ];
