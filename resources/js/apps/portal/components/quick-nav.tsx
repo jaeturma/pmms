@@ -2,7 +2,8 @@ import { Link } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/apps/portal/lib/utils';
 
-export type PortalQuickNavTone = 'accent' | 'ink' | 'maroon' | 'warning' | 'live' | 'muted';
+export type PortalQuickNavTone =
+    'accent' | 'ink' | 'maroon' | 'warning' | 'live' | 'muted';
 
 export type PortalQuickNavItem = {
     label: string;
@@ -42,7 +43,10 @@ const TONE_CLASSES: Record<PortalQuickNavTone, string> = {
  */
 export function PortalQuickNav({ items, className }: PortalQuickNavProps) {
     return (
-        <nav aria-label="Quick navigation" className={cn('grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6', className)}>
+        <nav
+            aria-label="Quick navigation"
+            className={cn('flex flex-wrap justify-center gap-3', className)}
+        >
             {items.map((item, index) => {
                 const Icon = item.icon;
 
@@ -50,8 +54,10 @@ export function PortalQuickNav({ items, className }: PortalQuickNavProps) {
                     <Link
                         key={item.href}
                         href={item.href}
-                        className="portal-animate-in group flex flex-col items-center gap-2.5 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] px-3 py-5 text-center transition-all duration-200 ease-[var(--portal-ease)] hover:-translate-y-1 hover:border-[var(--portal-accent)] hover:shadow-[0_10px_28px_rgba(0,0,0,0.10)] focus-visible:-translate-y-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--portal-accent)]"
-                        style={{ animationDelay: `${Math.min(index, STAGGER_CAP) * 60}ms` }}
+                        className="portal-animate-in group flex w-[calc(50%-0.375rem)] flex-col items-center gap-2.5 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] px-3 py-5 text-center transition-all duration-200 ease-[var(--portal-ease)] hover:-translate-y-1 hover:border-[var(--portal-accent)] hover:shadow-[0_10px_28px_rgba(0,0,0,0.10)] focus-visible:-translate-y-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--portal-accent)] sm:w-[calc(33.333%-0.5rem)] md:w-44 lg:w-48"
+                        style={{
+                            animationDelay: `${Math.min(index, STAGGER_CAP) * 60}ms`,
+                        }}
                     >
                         <span
                             className={cn(
@@ -67,7 +73,9 @@ export function PortalQuickNav({ items, className }: PortalQuickNavProps) {
                                 />
                             )}
                         </span>
-                        <span className="text-sm font-semibold text-[var(--portal-fg)]">{item.label}</span>
+                        <span className="text-sm font-semibold text-[var(--portal-fg)]">
+                            {item.label}
+                        </span>
                     </Link>
                 );
             })}

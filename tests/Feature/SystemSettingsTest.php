@@ -123,6 +123,22 @@ test('admins can configure the application title and logo', function () {
     $this->get('/branding/logo')->assertOk();
 });
 
+test('admins can configure the favicon and system timezone', function () {
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/system-settings', [
+            '_method' => 'put',
+            'favicon' => UploadedFile::fake()->image('favicon.png', 64, 64),
+            'timezone' => 'Asia/Manila',
+            'recaptcha_enabled' => false,
+            'email_verification_enabled' => false,
+        ])->assertSessionHasNoErrors();
+
+    expect(Setting::current()->timezone)->toBe('Asia/Manila')
+        ->and(Setting::current()->favicon_upload_id)->not->toBeNull();
+
+    $this->get('/branding/favicon')->assertOk();
+});
+
 test('admins can configure the login splash headline and background', function () {
     $this->actingAs(User::factory()->admin()->create())
         ->post('/system-settings', [

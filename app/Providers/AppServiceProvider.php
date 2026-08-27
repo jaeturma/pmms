@@ -53,6 +53,12 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configureDefaults(): void
     {
+        if (Schema::hasTable('system_settings')) {
+            $timezone = Setting::current()->timezone ?: 'Asia/Manila';
+            config(['app.timezone' => $timezone]);
+            date_default_timezone_set($timezone);
+        }
+
         Date::use(CarbonImmutable::class);
 
         DB::prohibitDestructiveCommands(

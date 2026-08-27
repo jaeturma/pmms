@@ -4,6 +4,13 @@ namespace App\Enums;
 
 enum Permission: string
 {
+    case ContentView = 'content.view';
+    case NewsManage = 'news.manage';
+    case AnnouncementsManage = 'announcements.manage';
+    case FaqManage = 'faq.manage';
+    case GalleryUploadCandidate = 'gallery.upload_candidate';
+    case GalleryReview = 'gallery.review';
+    case GalleryPublish = 'gallery.publish';
     case AthleteRegistrationCreate = 'athlete.registration.create';
     case AthleteRegistrationView = 'athlete.registration.view';
     case AthleteProfileValidate = 'athlete.profile.validate';

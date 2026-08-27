@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\UserRole;
+use App\Models\Athlete;
 use App\Models\Event;
 use App\Models\MeetSportAssignment;
 use App\Models\User;
@@ -18,6 +19,23 @@ use Illuminate\Support\Collection;
  */
 class CompetitionAccessService
 {
+    public function scopeAthletes(Builder $query, User $user, ?int $meetId = null): Builder
+    {
+        $eventIds = $this->eventIds($user, $meetId);
+
+        return $query->whereHas(
+            'entries',
+            fn (Builder $entries): Builder => $entries->whereIn('event_id', $eventIds),
+        );
+    }
+
+    public function canAccessAthlete(User $user, Athlete $athlete): bool
+    {
+        return $athlete->entries()
+            ->whereIn('event_id', $this->eventIds($user, $athlete->delegation->meet_id))
+            ->exists();
+    }
+
     /** @return list<string> */
     public function competitionManagerRoles(): array
     {

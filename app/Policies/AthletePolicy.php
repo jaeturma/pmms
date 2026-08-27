@@ -2,13 +2,13 @@
 
 namespace App\Policies;
 
-use App\Enums\MeetSportAssignmentRole;
 use App\Enums\Permission;
 use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\Delegation;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\CompetitionAccessService;
 
 class AthletePolicy
 {
@@ -24,7 +24,7 @@ class AthletePolicy
             || $user->hasPermission(Permission::AthleteEligibilityReview)
             || $user->hasPermission(Permission::DistrictAthletesView)
             || $user->hasPermission(Permission::MunicipalityAthletesView)
-            || $user->tournamentEventIds()->isNotEmpty();
+            || $user->tournamentMeetIds()->isNotEmpty();
     }
 
     /**
@@ -33,7 +33,7 @@ class AthletePolicy
      */
     public function view(User $user, Athlete $athlete): bool
     {
-        if ($user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+        if ($user->hasRole(UserRole::Admin, UserRole::Organizer) || $user->canManageProductionAccounts()) {
             return true;
         }
 
@@ -41,19 +41,7 @@ class AthletePolicy
             return true;
         }
 
-        if ($athlete->entries()->whereIn('event_id', $user->tournamentEventIds())->exists()) {
-            return true;
-        }
-
-        // In-scope tournament staff may inspect athletes registered by a
-        // coach even before that coach creates the event entry.
-        if ($athlete->registered_by !== null && $user->tournamentEventIds()->isNotEmpty()
-            && $athlete->registrar?->coachAssignmentRequests()
-                ->where('delegation_id', $athlete->delegation_id)
-                ->where('status', 'approved')
-                ->whereNull('ended_at')
-                ->whereIn('event_id', $user->tournamentEventIds())
-                ->exists()) {
+        if (app(CompetitionAccessService::class)->canAccessAthlete($user, $athlete)) {
             return true;
         }
 

@@ -11,6 +11,7 @@ use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\BilletingAssignmentController;
 use App\Http\Controllers\BilletingVenueController;
 use App\Http\Controllers\CoachAssignmentRequestController;
+use App\Http\Controllers\ContentManagementController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DelegationController;
 use App\Http\Controllers\DistrictController;
@@ -29,7 +30,9 @@ use App\Http\Controllers\EquipmentReturnController;
 use App\Http\Controllers\EquipmentTransferController;
 use App\Http\Controllers\EvacuationRouteController;
 use App\Http\Controllers\EventController;
+use App\Http\Controllers\FaqController;
 use App\Http\Controllers\FileUploadController;
+use App\Http\Controllers\GalleryController;
 use App\Http\Controllers\IncidentController;
 use App\Http\Controllers\InventoryAdjustmentController;
 use App\Http\Controllers\ManagementDashboardController;
@@ -43,6 +46,7 @@ use App\Http\Controllers\MedicalAccessController;
 use App\Http\Controllers\MedicalClearanceController;
 use App\Http\Controllers\MeetController;
 use App\Http\Controllers\MeetSportAssignmentController;
+use App\Http\Controllers\NewsController;
 use App\Http\Controllers\PersonnelController;
 use App\Http\Controllers\PortalController;
 use App\Http\Controllers\PortalSportsController;
@@ -88,12 +92,20 @@ Route::middleware('auth')->group(function () {
 // Public portal — guest routes, throttled, published data only.
 Route::middleware('throttle:60,1')->group(function () {
     Route::get('/', [PortalController::class, 'home'])->name('home');
+    Route::get('about', [PortalController::class, 'currentAbout'])->name('about');
+    Route::get('news', [PortalController::class, 'currentNews'])->name('news');
+    Route::get('news/{slug}', [PortalController::class, 'newsShow'])->name('news.show');
+    Route::get('news-images/{newsItem}', [NewsController::class, 'publicImage'])->name('news.public-image');
+    Route::get('gallery', [PortalController::class, 'currentGallery'])->name('gallery');
+    Route::get('gallery-images/{galleryItem}', [GalleryController::class, 'publicImage'])->name('gallery.public-image');
+    Route::get('faq', [PortalController::class, 'currentFaqs'])->name('faq');
     Route::get('districts/{district}/logo', [DistrictController::class, 'logo'])->name('districts.logo');
     Route::get('districts/{district}/team-logo', [DistrictController::class, 'teamLogo'])->name('districts.team-logo');
     Route::get('sports/{sport}/photo', [SportController::class, 'photo'])->name('sports.photo');
     Route::get('division/logo', [DivisionController::class, 'logo'])->name('division.logo');
     Route::get('division/hero-icon', [DivisionController::class, 'heroIcon'])->name('division.hero-icon');
     Route::get('branding/logo', [SystemSettingsController::class, 'logo'])->name('branding.logo');
+    Route::get('branding/favicon', [SystemSettingsController::class, 'favicon'])->name('branding.favicon');
     Route::get('branding/login-background', [SystemSettingsController::class, 'loginBackground'])->name('branding.login-background');
     Route::get('meets/{meet}', [PortalController::class, 'meet'])
         ->whereNumber('meet')
@@ -443,6 +455,24 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('announcements/{announcement}/publish', [AnnouncementController::class, 'publish'])->name('announcements.publish');
     Route::patch('announcements/{announcement}/unpublish', [AnnouncementController::class, 'unpublish'])->name('announcements.unpublish');
     Route::delete('announcements/{announcement}', [AnnouncementController::class, 'destroy'])->name('announcements.destroy');
+
+    Route::get('content', [ContentManagementController::class, 'index'])->name('content.index');
+    Route::get('content/news', [NewsController::class, 'index'])->name('content.news.index');
+    Route::post('content/news', [NewsController::class, 'store'])->name('content.news.store');
+    Route::put('content/news/{newsItem}', [NewsController::class, 'update'])->name('content.news.update');
+    Route::patch('content/news/{newsItem}/status', [NewsController::class, 'status'])->name('content.news.status');
+    Route::delete('content/news/{newsItem}', [NewsController::class, 'destroy'])->name('content.news.destroy');
+    Route::get('content/faq', [FaqController::class, 'index'])->name('content.faq.index');
+    Route::post('content/faq', [FaqController::class, 'store'])->name('content.faq.store');
+    Route::put('content/faq/{faqItem}', [FaqController::class, 'update'])->name('content.faq.update');
+    Route::patch('content/faq/{faqItem}/status', [FaqController::class, 'status'])->name('content.faq.status');
+    Route::delete('content/faq/{faqItem}', [FaqController::class, 'destroy'])->name('content.faq.destroy');
+    Route::get('content/gallery', [GalleryController::class, 'index'])->name('content.gallery.index');
+    Route::post('content/gallery', [GalleryController::class, 'store'])->name('content.gallery.store');
+    Route::patch('content/gallery/{galleryItem}/review', [GalleryController::class, 'review'])->name('content.gallery.review');
+    Route::patch('content/gallery/publish', [GalleryController::class, 'publish'])->name('content.gallery.publish');
+    Route::patch('content/gallery/{galleryItem}/unpublish', [GalleryController::class, 'unpublish'])->name('content.gallery.unpublish');
+    Route::get('content/gallery/{galleryItem}/image', [GalleryController::class, 'image'])->name('content.gallery.image');
 
     Route::get('division', [DivisionController::class, 'edit'])
         ->middleware('can:administer')

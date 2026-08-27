@@ -1,10 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
 import type { PortalNavShared } from '@/apps/portal/types';
 import {
-    about as publicAbout,
-    faqs as publicFaqs,
     meet as publicMeet,
-    news as publicNews,
     rankings as publicRankings,
     results as publicResults,
     tally as publicTally,
@@ -24,7 +21,7 @@ export function PortalFooter() {
                 <div className="flex items-center justify-between gap-6">
                     {nav && (
                         <nav
-                            className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:flex sm:flex-wrap"
+                            className="hidden gap-x-6 gap-y-2 text-sm sm:flex sm:flex-wrap"
                             aria-label="Footer"
                         >
                             <Link
@@ -52,19 +49,19 @@ export function PortalFooter() {
                                 Standings
                             </Link>
                             <Link
-                                href={publicNews(nav.meetId).url}
+                                href="/news"
                                 className="text-[var(--portal-ink-foreground)]/70 hover:text-[var(--portal-ink-foreground)]"
                             >
                                 News
                             </Link>
                             <Link
-                                href={publicAbout(nav.meetId).url}
+                                href="/about"
                                 className="text-[var(--portal-ink-foreground)]/70 hover:text-[var(--portal-ink-foreground)]"
                             >
                                 About
                             </Link>
                             <Link
-                                href={publicFaqs(nav.meetId).url}
+                                href="/faq"
                                 className="text-[var(--portal-ink-foreground)]/70 hover:text-[var(--portal-ink-foreground)]"
                             >
                                 FAQs
@@ -72,8 +69,8 @@ export function PortalFooter() {
                         </nav>
                     )}
                     <p className="ml-auto shrink-0 text-right text-xs text-[var(--portal-ink-foreground)]/70">
-                        &copy; {new Date().getFullYear()} Schools Division Office.
-                        All rights reserved.
+                        &copy; {new Date().getFullYear()} Schools Division
+                        Office. All rights reserved.
                     </p>
                 </div>
             </div>

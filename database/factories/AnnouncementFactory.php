@@ -22,6 +22,12 @@ class AnnouncementFactory extends Factory
             'meet_id' => null,
             'title' => 'Advisory: '.fake()->unique()->sentence(3),
             'body' => fake()->paragraph(),
+            'status' => 'draft',
+            'priority' => 'normal',
+            'audience' => 'public',
+            'status' => 'draft',
+            'priority' => 'normal',
+            'audience' => 'public',
             'is_published' => false,
             'published_at' => null,
             'created_by' => User::factory()->organizer(),
@@ -35,6 +41,8 @@ class AnnouncementFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'is_published' => true,
+            'status' => 'published',
+            'status' => 'published',
             'published_at' => now(),
         ]);
     }

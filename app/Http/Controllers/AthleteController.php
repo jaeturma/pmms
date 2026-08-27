@@ -25,6 +25,7 @@ use App\Models\Sport;
 use App\Models\User;
 use App\Services\AthletePhotoService;
 use App\Services\AuditLogger;
+use App\Services\CompetitionAccessService;
 use App\Services\FileUploadService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -92,11 +93,11 @@ class AthleteController extends Controller
                 ->where(fn ($athletes) => $athletes
                     ->whereDoesntHave('entries')
                     ->orWhereHas('entries', fn ($entries) => $entries->whereIn('event_id', $assignedEventIds)));
-        } elseif (! $user->isAdmin() && $user->tournamentEventIds()->isNotEmpty()) {
-            $query->whereHas('entries', fn ($entries) => $entries->whereIn('event_id', $user->tournamentEventIds()));
         } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer)
             && $user->hasPermission(Permission::AthleteEligibilityReview, Meet::current())) {
             $query->whereHas('delegation', fn ($delegation) => $delegation->where('meet_id', Meet::current()->id));
+        } elseif (! $user->canManageProductionAccounts() && $user->tournamentMeetIds()->isNotEmpty()) {
+            app(CompetitionAccessService::class)->scopeAthletes($query, $user);
         } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer) && ! $user->canManageProductionAccounts()) {
             $assignments = $user->athleteOversightAssignments()->where('active', true)->get();
             $query->whereHas('school', function ($school) use ($assignments): void {
@@ -169,7 +170,9 @@ class AthleteController extends Controller
                     'sports' => $athlete->entries->pluck('event.sport.name')->filter()->unique()->values()->join(', '),
                     'accreditation_status' => $athlete->accreditation !== null
                         ? __('Accredited')
-                        : ($athlete->eligibilityReview?->status->label() ?? __('Documents not submitted')),
+                        : __('Not accredited'),
+                    'eligibility_status' => $athlete->eligibilityReview?->status->label()
+                        ?? __('Documents not submitted'),
                     'can_update' => $user->can('update', $athlete),
                     'can_delete' => $user->can('delete', $athlete),
                 ]),

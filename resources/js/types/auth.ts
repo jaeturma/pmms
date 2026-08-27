@@ -10,6 +10,9 @@ export type User = {
     can_review_coaches?: boolean;
     can_manage_accounts?: boolean;
     can_manage_announcements?: boolean;
+    can_access_content_management?: boolean;
+    can_manage_editorial_content?: boolean;
+    can_upload_gallery_candidates?: boolean;
     can_manage_personnel?: boolean;
     can_file_protest?: boolean;
     can_view_management_reports?: boolean;

@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'gallery' => [
+        'daily_candidate_min' => (int) env('PMMS_GALLERY_DAILY_CANDIDATE_MIN', 5),
+        'daily_candidate_max' => (int) env('PMMS_GALLERY_DAILY_CANDIDATE_MAX', 10),
+        'daily_public_max' => (int) env('PMMS_GALLERY_DAILY_PUBLIC_MAX', 5),
+        'public_limit_scope' => env('PMMS_GALLERY_PUBLIC_LIMIT_SCOPE', 'sport'),
+        'strict_candidate_limit' => (bool) env('PMMS_GALLERY_STRICT_CANDIDATE_LIMIT', false),
+        'max_upload_kb' => (int) env('PMMS_GALLERY_MAX_UPLOAD_KB', 15360),
+    ],
 
     /*
     |--------------------------------------------------------------------------

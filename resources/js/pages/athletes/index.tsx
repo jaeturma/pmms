@@ -56,6 +56,7 @@ type AthleteRow = {
     photo_url: string | null;
     sports: string;
     accreditation_status: string;
+    eligibility_status: string;
     can_update: boolean;
     can_delete: boolean;
 };
@@ -881,6 +882,7 @@ export default function Athletes({
                                         <TableHead>Age</TableHead>
                                         <TableHead>Grade</TableHead>
                                         <TableHead>Sport</TableHead>
+                                        <TableHead>Eligibility</TableHead>
                                         <TableHead>Accreditation</TableHead>
                                         <TableHead className="text-right">
                                             Actions
@@ -923,6 +925,9 @@ export default function Athletes({
                                             </TableCell>
                                             <TableCell>
                                                 {athlete.sports || '—'}
+                                            </TableCell>
+                                            <TableCell>
+                                                {athlete.eligibility_status}
                                             </TableCell>
                                             <TableCell>
                                                 {athlete.accreditation_status}

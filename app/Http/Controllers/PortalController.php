@@ -16,9 +16,12 @@ use App\Models\District;
 use App\Models\EventMatch;
 use App\Models\EventResult;
 use App\Models\EventSchedule;
+use App\Models\FaqItem;
+use App\Models\GalleryItem;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
+use App\Models\NewsItem;
 use App\Models\ResultPlacement;
 use App\Models\School;
 use App\Models\ScoringSession;
@@ -43,6 +46,29 @@ use Inertia\Response;
  */
 class PortalController extends Controller
 {
+    /** Public, stable About URL for the active published meet. */
+    public function currentAbout(): Response
+    {
+        $meet = Meet::query()->published()->active()->firstOrFail();
+
+        return $this->about($meet->id);
+    }
+
+    public function currentNews(): Response
+    {
+        return $this->news(Meet::query()->published()->active()->firstOrFail()->id);
+    }
+
+    public function currentGallery(): Response
+    {
+        return $this->gallery(Meet::query()->published()->active()->firstOrFail()->id);
+    }
+
+    public function currentFaqs(): Response
+    {
+        return $this->faqs(Meet::query()->published()->active()->firstOrFail()->id);
+    }
+
     /**
      * Portal home: the single meet the system admin has set active, with
      * the municipalities competing in it. Only one meet is ever active
@@ -627,6 +653,16 @@ class PortalController extends Controller
         return Inertia::render('portal/gallery', [
             'meet' => $this->meetSummary($meet),
             'sports' => $this->contestedSports($meet),
+            'items' => GalleryItem::query()->publiclyVisible()
+                ->where('meet_id', $meet->id)
+                ->with(['meetSport.sport:id,name', 'event:id,name'])
+                ->orderByDesc('is_featured')->orderBy('display_order')->orderByDesc('capture_date')
+                ->get()->map(fn (GalleryItem $item) => [
+                    'id' => $item->id, 'title' => $item->title, 'caption' => $item->caption,
+                    'sport' => $item->meetSport?->sport?->name, 'event' => $item->event?->name,
+                    'capture_date' => $item->capture_date->format('M j, Y'),
+                    'image_url' => route('gallery.public-image', $item), 'is_featured' => $item->is_featured,
+                ]),
         ]);
     }
 
@@ -667,20 +703,36 @@ class PortalController extends Controller
 
         return Inertia::render('portal/news', [
             'meet' => $this->meetSummary($meet),
-            'announcements' => Announcement::query()
-                ->published()
+            'announcements' => Announcement::query()->published()->where('meet_id', $meet->id)
+                ->orderByDesc('published_at')->orderByDesc('id')->paginate(10)->withQueryString()
+                ->through(fn (Announcement $announcement): array => [
+                    'id' => $announcement->id, 'title' => $announcement->title, 'body' => $announcement->body,
+                    'meet' => $meet->name, 'published_at' => $announcement->published_at?->format('M j, Y g:i A'),
+                ]),
+            'news' => NewsItem::query()
+                ->publiclyVisible()
                 ->where('meet_id', $meet->id)
                 ->orderByDesc('published_at')
                 ->orderByDesc('id')
                 ->paginate(10)
                 ->withQueryString()
-                ->through(fn (Announcement $announcement): array => [
-                    'id' => $announcement->id,
-                    'title' => $announcement->title,
-                    'body' => $announcement->body,
-                    'meet' => $meet->name,
-                    'published_at' => $announcement->published_at?->format('M j, Y g:i A'),
+                ->through(fn (NewsItem $item): array => [
+                    'id' => $item->id, 'title' => $item->title, 'slug' => $item->slug,
+                    'summary' => $item->summary, 'body' => $item->body, 'is_featured' => $item->is_featured,
+                    'featured_image_url' => $item->featured_image_upload_id ? route('news.public-image', $item) : null,
+                    'published_at' => $item->published_at?->format('M j, Y g:i A'),
                 ]),
+        ]);
+    }
+
+    public function newsShow(string $slug): Response
+    {
+        $meet = Meet::query()->published()->active()->firstOrFail();
+        $item = NewsItem::query()->publiclyVisible()->where('meet_id', $meet->id)->where('slug', $slug)->firstOrFail();
+
+        return Inertia::render('portal/news-show', [
+            'meet' => $this->meetSummary($meet),
+            'item' => ['title' => $item->title, 'summary' => $item->summary, 'body' => $item->body, 'published_at' => $item->published_at?->format('M j, Y g:i A'), 'featured_image_url' => $item->featured_image_upload_id ? route('news.public-image', $item) : null],
         ]);
     }
 
@@ -765,6 +817,9 @@ class PortalController extends Controller
 
         return Inertia::render('portal/faqs', [
             'meet' => $this->meetSummary($meet),
+            'items' => FaqItem::query()->publiclyVisible()->where('meet_id', $meet->id)
+                ->orderByDesc('is_featured')->orderBy('display_order')->orderBy('id')
+                ->get(['id', 'question', 'answer', 'category', 'is_featured']),
         ]);
     }
 
@@ -1634,12 +1689,24 @@ class PortalController extends Controller
      */
     private function currentLeaders(Collection $districtStandings): array
     {
+        $districts = District::query()
+            ->whereIn('id', $districtStandings->take(3)->pluck('district_id'))
+            ->get()
+            ->keyBy('id');
+
         return $districtStandings
             ->take(3)
-            ->map(fn (array $row): array => [
-                'district' => $row['district'],
-                'points' => $row['points'],
-            ])
+            ->map(function (array $row) use ($districts): array {
+                $district = $districts->get($row['district_id']);
+
+                return [
+                    'district' => $row['district'],
+                    'points' => $row['points'],
+                    'logo_url' => $district?->logoUrl(),
+                    'team_logo_url' => $district?->teamLogoUrl(),
+                    'slug' => Str::slug($row['district']),
+                ];
+            })
             ->values()
             ->all();
     }

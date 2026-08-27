@@ -7,6 +7,7 @@ use App\Enums\MeetSportAssignmentStatus;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
+use App\Models\Sport;
 use App\Models\SportCategory;
 use App\Models\User;
 use App\Services\AuditLogger;
@@ -76,14 +77,12 @@ class MeetSportAssignmentController extends Controller
                 'status_label' => $assignment->status->label(),
             ]),
             'filters' => ['search' => $search],
-            'meetSportOptions' => MeetSport::query()
-                ->where('meet_id', Meet::current()->id)
-                ->with('sport:id,name')
-                ->get(['id', 'sport_id'])
-                ->map(fn (MeetSport $meetSport): array => [
-                    'id' => $meetSport->id,
-                    'sport_id' => $meetSport->sport_id,
-                    'label' => $meetSport->sport->name,
+            'sportOptions' => Sport::query()
+                ->orderBy('name')
+                ->get(['id', 'name'])
+                ->map(fn (Sport $sport): array => [
+                    'id' => $sport->id,
+                    'label' => $sport->name,
                 ]),
             'sportCategoryOptions' => SportCategory::query()
                 ->orderBy('display_name')
@@ -123,7 +122,8 @@ class MeetSportAssignmentController extends Controller
         $this->authorizeManage($request);
 
         $validated = $request->validate([
-            'meet_sport_id' => ['required', 'integer', Rule::exists('meet_sports', 'id')],
+            'meet_sport_id' => ['nullable', 'required_without:sport_id', 'integer', Rule::exists('meet_sports', 'id')],
+            'sport_id' => ['nullable', 'required_without:meet_sport_id', 'integer', Rule::exists('sports', 'id')],
             'user_id' => ['required', 'integer', Rule::exists('users', 'id')->whereNull('disabled_at')],
             'sport_category_id' => ['nullable', 'integer', Rule::exists('sport_categories', 'id')],
             'role' => ['required', Rule::enum(MeetSportAssignmentRole::class)],
@@ -132,8 +132,15 @@ class MeetSportAssignmentController extends Controller
             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
         ]);
 
+        $meetSport = isset($validated['meet_sport_id'])
+            ? MeetSport::query()->findOrFail($validated['meet_sport_id'])
+            : MeetSport::query()->firstOrCreate(
+                ['meet_id' => Meet::current()->id, 'sport_id' => $validated['sport_id']],
+                ['active' => true],
+            );
+        $validated['meet_sport_id'] = $meetSport->id;
+
         if (isset($validated['sport_category_id'])) {
-            $meetSport = MeetSport::query()->findOrFail($validated['meet_sport_id']);
             $categoryMatchesSport = SportCategory::query()
                 ->whereKey($validated['sport_category_id'])
                 ->where('sport_id', $meetSport->sport_id)

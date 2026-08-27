@@ -3,6 +3,7 @@
 use App\Enums\PersonnelRole;
 use App\Models\Athlete;
 use App\Models\CoachAssignmentRequest;
+use App\Models\CoachOnboardingRequest;
 use App\Models\CongressionalDistrict;
 use App\Models\Delegation;
 use App\Models\District;
@@ -10,6 +11,7 @@ use App\Models\EligibilityReview;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\EventResult;
+use App\Models\FileUpload;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\Personnel;
@@ -331,9 +333,30 @@ test('players and coaches are grouped by sport and scoped to the requested munic
             ->where('sports.0.athletes.0.name', 'Mark Santos')
             ->where('sports.0.athletes.0.level', 'secondary')
             ->where('sports.0.athletes.0.school', 'Nabunturan NHS')
+            ->where('sports.0.athletes.0.eligibility_status', 'Not Submitted')
+            ->where('sports.0.athletes.0.is_eligible', false)
             ->has('sports.0.coaches', 1)
             ->where('sports.0.coaches.0.name', 'Ana Reyes')
-            ->where('sports.0.coaches.0.role', 'Coach'));
+            ->where('sports.0.coaches.0.role', 'Coach')
+            ->where('sports.0.coaches.0.status', 'Registered')
+            ->where('sports.0.coaches.0.is_accredited', false));
+});
+
+test('submitted athletes remain visible with their eligibility status', function () {
+    $meet = Meet::factory()->active()->published()->featured()->create();
+    $municipality = District::factory()->create(['name' => 'Mawab']);
+    $school = School::factory()->create(['district_id' => $municipality->id]);
+    $sport = Sport::factory()->create(['name' => 'Badminton']);
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+    $entry = teamsEntry($meet, $municipality, $event, $school);
+    $entry->update(['status' => 'submitted']);
+
+    $this->get('/teams/mawab/players-coaches')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('sports.0.athletes', 1)
+            ->where('sports.0.athletes.0.eligibility_status', 'Not Submitted')
+            ->where('sports.0.athletes.0.is_eligible', false));
 });
 
 test('approved coach accounts and qualified athletes are visible on the municipal roster', function () {
@@ -364,14 +387,27 @@ test('approved coach accounts and qualified athletes are visible on the municipa
         'school_id' => $school->id,
         'status' => 'approved',
     ]);
+    CoachOnboardingRequest::query()->create([
+        'user_id' => $coach->id,
+        'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $delegation->id,
+        'school_id' => $school->id,
+        'district_id' => $municipality->id,
+        'certification_upload_id' => FileUpload::factory()->create()->id,
+        'status' => 'approved',
+    ]);
 
     $this->get('/teams/laak/players-coaches')
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('sports.0.sport', 'Volleyball')
             ->has('sports.0.athletes', 1)
+            ->where('sports.0.athletes.0.eligibility_status', 'Eligible')
+            ->where('sports.0.athletes.0.is_eligible', true)
             ->has('sports.0.coaches', 1)
-            ->where('sports.0.coaches.0.name', 'Approved Coach'));
+            ->where('sports.0.coaches.0.name', 'Approved Coach')
+            ->where('sports.0.coaches.0.status', 'Accredited')
+            ->where('sports.0.coaches.0.is_accredited', true));
 });
 
 test('a paragames sport section is flagged so the frontend can filter on it', function () {

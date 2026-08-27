@@ -24,7 +24,7 @@ export function AppSidebarHeader({
 }: {
     breadcrumbs?: BreadcrumbItemType[];
 }) {
-    const { auth } = usePage().props;
+    const { auth, systemTimezone } = usePage().props;
     const now = useClock();
 
     return (
@@ -43,6 +43,7 @@ export function AppSidebarHeader({
                                 year: 'numeric',
                                 month: 'long',
                                 day: 'numeric',
+                                timeZone: systemTimezone,
                             })}
                         </span>
                         <span aria-hidden="true">·</span>
@@ -50,6 +51,8 @@ export function AppSidebarHeader({
                             {now.toLocaleTimeString(undefined, {
                                 hour: 'numeric',
                                 minute: '2-digit',
+                                second: '2-digit',
+                                timeZone: systemTimezone,
                             })}
                         </span>
                     </div>

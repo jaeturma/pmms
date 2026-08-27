@@ -105,6 +105,7 @@ class AnnouncementController extends Controller
 
         $announcement->forceFill([
             'is_published' => true,
+            'status' => 'published',
             'published_at' => now(),
         ])->save();
 
@@ -132,6 +133,7 @@ class AnnouncementController extends Controller
 
         $announcement->forceFill([
             'is_published' => false,
+            'status' => 'draft',
             'published_at' => null,
         ])->save();
 
@@ -168,12 +170,20 @@ class AnnouncementController extends Controller
             'tied_to_meet' => ['boolean'],
             'title' => ['required', 'string', 'max:160'],
             'body' => ['required', 'string', 'max:2000'],
+            'priority' => ['nullable', 'in:normal,important,urgent'],
+            'audience' => ['nullable', 'in:public,all_users,coaches,tournament_personnel,delegation,internal'],
+            'starts_at' => ['nullable', 'date'],
+            'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
         ]);
 
         return [
             'meet_id' => $request->boolean('tied_to_meet') ? Meet::current()->id : null,
             'title' => $validated['title'],
             'body' => $validated['body'],
+            'priority' => $validated['priority'] ?? 'normal',
+            'audience' => $validated['audience'] ?? 'public',
+            'starts_at' => $validated['starts_at'] ?? null,
+            'ends_at' => $validated['ends_at'] ?? null,
         ];
     }
 

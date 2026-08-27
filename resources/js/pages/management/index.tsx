@@ -122,7 +122,51 @@ type Props = {
     operations: OperationsRow[];
     performance: Performance;
     venues: VenueRow[];
+    meetProgress: MeetProgress;
     generatedAt: string;
+};
+
+type MedalQuantities = {
+    gold: number;
+    silver: number;
+    bronze: number;
+    total: number;
+};
+type MeetProgress = {
+    expected: MedalQuantities;
+    awarded: MedalQuantities;
+    remaining: MedalQuantities;
+    percentage: number;
+    status: string;
+    data_review_required: boolean;
+    configuration: {
+        configured_events: number;
+        missing_events: number;
+        complete: boolean;
+        issues: {
+            event_id: number;
+            sport: string;
+            event: string;
+            issue: string;
+        }[];
+    };
+    sports: {
+        sport_id: number;
+        sport: string;
+        expected: MedalQuantities;
+        awarded: MedalQuantities;
+        remaining: MedalQuantities;
+        percentage: number;
+        status: string;
+        official_events: number;
+        pending_results: number;
+    }[];
+    last_official_result: null | {
+        sport: string;
+        event: string;
+        official_at: string | null;
+        reference: string;
+    };
 };
 
 export default function ManagementDashboard({
@@ -131,6 +175,7 @@ export default function ManagementDashboard({
     operations,
     performance,
     venues,
+    meetProgress,
     generatedAt,
 }: Props) {
     const { division } = usePage().props;
@@ -156,6 +201,195 @@ export default function ManagementDashboard({
                 <p className="text-sm text-muted-foreground">
                     Generated {generatedAt}.
                 </p>
+
+                <section className="space-y-4 rounded-xl border bg-card p-5 shadow-sm">
+                    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                        <div>
+                            <p className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+                                Meet Progress by Medal Awards
+                            </p>
+                            <div className="mt-1 flex items-end gap-3">
+                                <span className="text-4xl font-black tabular-nums">
+                                    {meetProgress.percentage}%
+                                </span>
+                                <Badge
+                                    variant={
+                                        meetProgress.status ===
+                                        'NEEDS ATTENTION'
+                                            ? 'destructive'
+                                            : 'secondary'
+                                    }
+                                >
+                                    {meetProgress.status}
+                                </Badge>
+                            </div>
+                            <p className="mt-2 text-sm text-muted-foreground">
+                                {meetProgress.awarded.total} of{' '}
+                                {meetProgress.expected.total} official medal
+                                tally quantities awarded. Calculated against
+                                configured medal-producing events.
+                            </p>
+                        </div>
+                        <div className="text-sm sm:text-right">
+                            <p>
+                                <span className="text-muted-foreground">
+                                    Remaining:
+                                </span>{' '}
+                                <strong>{meetProgress.remaining.total}</strong>
+                            </p>
+                            {meetProgress.last_official_result && (
+                                <p className="mt-1 text-muted-foreground">
+                                    Last official:{' '}
+                                    {meetProgress.last_official_result.sport} —{' '}
+                                    {meetProgress.last_official_result.event}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+
+                    <div
+                        className="h-3 overflow-hidden rounded-full bg-muted"
+                        aria-label={`${meetProgress.percentage}% medal award progress`}
+                    >
+                        <div
+                            className="h-full rounded-full bg-success transition-none"
+                            style={{ width: `${meetProgress.percentage}%` }}
+                        />
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        {(['gold', 'silver', 'bronze'] as const).map(
+                            (medal) => {
+                                const expected = meetProgress.expected[medal];
+                                const awarded = meetProgress.awarded[medal];
+                                const percentage =
+                                    expected > 0
+                                        ? Math.min(
+                                              100,
+                                              Math.round(
+                                                  (awarded / expected) * 1000,
+                                              ) / 10,
+                                          )
+                                        : 0;
+                                return (
+                                    <div
+                                        key={medal}
+                                        className="rounded-lg border p-3"
+                                    >
+                                        <p className="text-sm font-semibold capitalize">
+                                            {medal} progress
+                                        </p>
+                                        <p className="mt-1 text-xl font-bold tabular-nums">
+                                            {awarded} / {expected}
+                                        </p>
+                                        <p className="text-sm text-muted-foreground">
+                                            {percentage}% awarded
+                                        </p>
+                                    </div>
+                                );
+                            },
+                        )}
+                        <div className="rounded-lg border p-3">
+                            <p className="text-sm font-semibold">
+                                Configuration
+                            </p>
+                            <p className="mt-1 text-xl font-bold tabular-nums">
+                                {meetProgress.configuration.configured_events}{' '}
+                                configured
+                            </p>
+                            <p
+                                className={
+                                    meetProgress.configuration.complete
+                                        ? 'text-sm text-success'
+                                        : 'text-sm font-medium text-destructive'
+                                }
+                            >
+                                {meetProgress.configuration.complete
+                                    ? 'Expected total complete'
+                                    : `${meetProgress.configuration.missing_events} event(s) require review`}
+                            </p>
+                        </div>
+                    </div>
+
+                    {(meetProgress.data_review_required ||
+                        !meetProgress.configuration.complete) && (
+                        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                            <strong>Data review required.</strong>{' '}
+                            {meetProgress.data_review_required
+                                ? 'Official awarded tally exceeds configured expected quantities.'
+                                : 'The expected medal total is provisional because medal configuration is incomplete.'}
+                        </div>
+                    )}
+                </section>
+
+                <section className="space-y-3">
+                    <Heading
+                        variant="small"
+                        title="Sport progress"
+                        description="Official tally quantities awarded against each sport’s configured expected total."
+                    />
+                    <div className="overflow-x-auto rounded-xl border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Sport</TableHead>
+                                    <TableHead className="text-center">
+                                        Expected
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                        Awarded
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                        Progress
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                        Events official
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                        Pending results
+                                    </TableHead>
+                                    <TableHead>Status</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {meetProgress.sports.map((sport) => (
+                                    <TableRow key={sport.sport_id}>
+                                        <TableCell className="font-medium">
+                                            {sport.sport}
+                                        </TableCell>
+                                        <TableCell className="text-center tabular-nums">
+                                            {sport.expected.total}
+                                        </TableCell>
+                                        <TableCell className="text-center tabular-nums">
+                                            {sport.awarded.total}
+                                        </TableCell>
+                                        <TableCell className="text-center font-semibold tabular-nums">
+                                            {sport.percentage}%
+                                        </TableCell>
+                                        <TableCell className="text-center tabular-nums">
+                                            {sport.official_events}
+                                        </TableCell>
+                                        <TableCell className="text-center tabular-nums">
+                                            {sport.pending_results}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge
+                                                variant={
+                                                    sport.status ===
+                                                    'NEEDS ATTENTION'
+                                                        ? 'destructive'
+                                                        : 'outline'
+                                                }
+                                            >
+                                                {sport.status}
+                                            </Badge>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </section>
 
                 {meets.length === 0 ? (
                     <EmptyState

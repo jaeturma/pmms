@@ -6,12 +6,14 @@ import {
     Boxes,
     Bus,
     CalendarDays,
+    CircleHelp,
     ClipboardList,
     Contact,
     Crown,
     FileCheck,
     Flag,
     Gavel,
+    Images,
     Landmark,
     LayoutGrid,
     LifeBuoy,
@@ -20,6 +22,7 @@ import {
     Medal,
     Megaphone,
     Milestone,
+    Newspaper,
     Siren,
     School,
     ScrollText,
@@ -341,7 +344,10 @@ export function AppSidebar() {
     );
     const teamTypes: string[] = auth.user?.team_types ?? [];
     const canManageAccounts = auth.user?.can_manage_accounts ?? false;
-    const canManageAnnouncements = auth.user?.can_manage_announcements ?? false;
+    const canAccessContentManagement =
+        auth.user?.can_access_content_management ?? false;
+    const canManageEditorialContent =
+        auth.user?.can_manage_editorial_content ?? false;
     const canManagePersonnel = auth.user?.can_manage_personnel ?? false;
     const canFileProtest = auth.user?.can_file_protest ?? false;
     const canViewManagementReports =
@@ -465,8 +471,8 @@ export function AppSidebar() {
             {
                 title: 'Monitoring',
                 icon: BarChart3,
-                items: managerNavItems.filter((item) =>
-                    ['Management', 'Announcements'].includes(item.title),
+                items: managerNavItems.filter(
+                    (item) => item.title === 'Management',
                 ),
             },
         );
@@ -538,9 +544,7 @@ export function AppSidebar() {
                 icon: LifeBuoy,
                 items: managerNavItems.filter(
                     (item) =>
-                        ['Announcements', 'Billeting', 'Transport'].includes(
-                            item.title,
-                        ) ||
+                        ['Billeting', 'Transport'].includes(item.title) ||
                         (item.title === 'Equipment' &&
                             teamTypes.includes('supply')) ||
                         (item.title === 'Medical' &&
@@ -699,11 +703,32 @@ export function AppSidebar() {
         });
     }
 
-    if (canManageAnnouncements && role !== 'admin' && role !== 'organizer') {
+    if (canAccessContentManagement) {
         navSections.push({
-            title: 'Information',
+            title: 'Content Management',
             icon: Megaphone,
-            items: byTitle(['Announcements'], managerNavItems),
+            items: [
+                ...(canManageEditorialContent
+                    ? [
+                          {
+                              title: 'News',
+                              href: '/content/news',
+                              icon: Newspaper,
+                          },
+                          {
+                              title: 'Announcements',
+                              href: '/announcements',
+                              icon: Megaphone,
+                          },
+                          {
+                              title: 'FAQ',
+                              href: '/content/faq',
+                              icon: CircleHelp,
+                          },
+                      ]
+                    : []),
+                { title: 'Gallery', href: '/content/gallery', icon: Images },
+            ],
         });
     }
 

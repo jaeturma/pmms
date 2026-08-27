@@ -90,6 +90,39 @@ type Props = {
         schools: SchoolStandingRow[];
     };
     venues: VenueRow[];
+    meetProgress: {
+        expected: {
+            gold: number;
+            silver: number;
+            bronze: number;
+            total: number;
+        };
+        awarded: {
+            gold: number;
+            silver: number;
+            bronze: number;
+            total: number;
+        };
+        remaining: {
+            gold: number;
+            silver: number;
+            bronze: number;
+            total: number;
+        };
+        percentage: number;
+        status: string;
+        configuration: { complete: boolean; missing_events: number };
+        sports: {
+            sport_id: number;
+            sport: string;
+            expected: { total: number };
+            awarded: { total: number };
+            percentage: number;
+            official_events: number;
+            pending_results: number;
+            status: string;
+        }[];
+    };
     generatedAt: string;
 };
 
@@ -99,6 +132,7 @@ export default function ManagementReport({
     operations,
     performance,
     venues,
+    meetProgress,
     generatedAt,
 }: Props) {
     const { division } = usePage().props;
@@ -110,14 +144,64 @@ export default function ManagementReport({
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
                     title="Management dashboard report"
-                    actions={
-                        <ReportActions downloadUrl={download().url} />
-                    }
+                    actions={<ReportActions downloadUrl={download().url} />}
                 />
 
                 <p className="text-sm text-muted-foreground">
                     Generated {generatedAt}
                 </p>
+
+                <section className="rounded-xl border p-5">
+                    <h2 className="text-base font-semibold">
+                        Meet Progress by Medal Awards
+                    </h2>
+                    <p className="mt-2 text-3xl font-black tabular-nums">
+                        {meetProgress.percentage}%
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                        {meetProgress.awarded.total} of{' '}
+                        {meetProgress.expected.total} official medal tally
+                        quantities awarded; {meetProgress.remaining.total}{' '}
+                        remaining. Status: {meetProgress.status}.
+                    </p>
+                    {!meetProgress.configuration.complete && (
+                        <p className="mt-2 font-medium text-destructive">
+                            Provisional expected total:{' '}
+                            {meetProgress.configuration.missing_events} medal
+                            event(s) require configuration review.
+                        </p>
+                    )}
+                    <div className="mt-4 overflow-x-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Sport</TableHead>
+                                    <TableHead>Expected</TableHead>
+                                    <TableHead>Awarded</TableHead>
+                                    <TableHead>Progress</TableHead>
+                                    <TableHead>Status</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {meetProgress.sports.map((sport) => (
+                                    <TableRow key={sport.sport_id}>
+                                        <TableCell>{sport.sport}</TableCell>
+                                        <TableCell>
+                                            {sport.expected.total}
+                                        </TableCell>
+                                        <TableCell>
+                                            {sport.awarded.total}
+                                        </TableCell>
+                                        <TableCell>
+                                            {sport.percentage}%
+                                        </TableCell>
+                                        <TableCell>{sport.status}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </section>
 
                 {meets.length === 0 ? (
                     <EmptyState

@@ -24,6 +24,8 @@ class SystemSettingsRequest extends FormRequest
         return [
             'app_title' => ['nullable', 'string', 'max:120'],
             'app_logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'favicon' => ['nullable', 'file', 'mimes:ico,png,svg,webp', 'max:1024'],
+            'timezone' => ['sometimes', 'required', 'string', Rule::in(timezone_identifiers_list())],
             'login_splash_title' => ['nullable', 'string', 'max:180'],
             'login_background' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
             'remove_login_background' => ['sometimes', 'boolean'],

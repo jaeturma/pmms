@@ -38,6 +38,9 @@ class SystemSettingsController extends Controller
             'settings' => [
                 'app_title' => $settings->app_title ?? config('app.name'),
                 'app_logo_url' => $settings->app_logo_upload_id === null ? null : route('branding.logo'),
+                'favicon_url' => $settings->favicon_upload_id === null ? null : route('branding.favicon'),
+                'timezone' => $settings->timezone ?: config('app.timezone'),
+                'timezones' => timezone_identifiers_list(),
                 'login_splash_title' => $settings->login_splash_title ?: 'One secure place to manage every moment of the meet.',
                 'login_background_url' => $settings->login_background_upload_id === null ? null : route('branding.login-background'),
                 'facebook_live_enabled' => $settings->facebook_live_enabled,
@@ -75,6 +78,7 @@ class SystemSettingsController extends Controller
 
         $settings->forceFill([
             'app_title' => $validated['app_title'] ?? $settings->app_title ?? config('app.name'),
+            'timezone' => $validated['timezone'] ?? $settings->timezone ?? 'Asia/Manila',
             'login_splash_title' => $validated['login_splash_title'] ?? $settings->login_splash_title,
             'facebook_live_enabled' => $validated['facebook_live_enabled'] ?? $settings->facebook_live_enabled,
             'facebook_live_url' => $validated['facebook_live_url'] ?? null,
@@ -99,6 +103,15 @@ class SystemSettingsController extends Controller
             $settings->save();
             if ($oldLogo !== null) {
                 $this->uploads->delete($oldLogo);
+            }
+        }
+
+        if ($request->hasFile('favicon')) {
+            $oldFavicon = $settings->favicon;
+            $settings->favicon_upload_id = $this->uploads->store($request->file('favicon'), $request->user(), 'favicon')->id;
+            $settings->save();
+            if ($oldFavicon !== null) {
+                $this->uploads->delete($oldFavicon);
             }
         }
 
@@ -151,6 +164,7 @@ class SystemSettingsController extends Controller
             'coach_registration_enabled' => $settings->coach_registration_enabled,
             'coach_athlete_registration_enabled' => $settings->coach_athlete_registration_enabled,
             'medal_tally_official' => $settings->medal_tally_official,
+            'timezone' => $settings->timezone,
         ]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('System settings updated.')]);
@@ -172,5 +186,15 @@ class SystemSettingsController extends Controller
         abort_if($upload === null, 404);
 
         return Storage::disk($upload->disk)->response($upload->path, $upload->original_name);
+    }
+
+    public function favicon(): HttpResponse
+    {
+        $upload = Setting::current()->favicon;
+        abort_if($upload === null, 404);
+
+        return Storage::disk($upload->disk)->response($upload->path, $upload->original_name, [
+            'Content-Type' => $upload->mime_type,
+        ]);
     }
 }

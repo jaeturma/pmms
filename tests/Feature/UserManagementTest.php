@@ -15,6 +15,7 @@ use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
+use Inertia\Testing\AssertableInertia;
 
 test('an administrator can manage user roles and reset passwords', function () {
     $admin = User::factory()->admin()->create();
@@ -72,6 +73,34 @@ test('an administrator can assign multiple roles including tournament ICT and se
         ->and($user->hasRole(UserRole::TournamentSecretary))->toBeTrue();
 });
 
+test('the users role column includes sports and events for coaches without assignment payloads', function () {
+    $admin = User::factory()->admin()->create();
+    $meetSport = MeetSport::factory()->create();
+    $event = Event::factory()->create([
+        'sport_id' => $meetSport->sport_id,
+        'name' => 'Girls Doubles',
+    ]);
+    $delegation = Delegation::factory()->create(['meet_id' => $meetSport->meet_id]);
+    $coach = User::factory()->coach()->create(['name' => 'Scoped Coach']);
+    CoachAssignmentRequest::query()->create([
+        'user_id' => $coach->id,
+        'meet_sport_id' => $meetSport->id,
+        'event_id' => $event->id,
+        'delegation_id' => $delegation->id,
+        'school_id' => schoolForDelegation($delegation)->id,
+        'status' => 'approved',
+        'assigned_at' => now(),
+    ]);
+
+    $this->actingAs($admin)
+        ->get('/system/users?search=Scoped%20Coach')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('users.data', 1)
+            ->where('users.data.0.coach_scopes.0', $meetSport->sport->name.' — Girls Doubles')
+            ->missing('users.data.0.assignments'));
+});
+
 test('an active ICT team member can manage system users', function () {
     $ict = User::factory()->create();
     $team = ManagementTeam::factory()->create(['team_type' => ManagementTeamType::ICT]);
@@ -127,6 +156,43 @@ test('a tournament secretary can approve coach registrations but only an account
         ->and($pendingCoach->fresh()->approval_status)->toBe('approved')
         ->and($pendingCoach->fresh()->role)->toBe(UserRole::Coach)
         ->and($onboarding->fresh()->status)->toBe('approved');
+});
+
+test('tournament ICT can reset coach passwords only within the assigned sport scope', function () {
+    config()->set('pmms.accounts.default_reset_password', 'ScopedResetPassword123!');
+    $assignedMeetSport = MeetSport::factory()->create();
+    $otherMeetSport = MeetSport::factory()->create(['meet_id' => $assignedMeetSport->meet_id]);
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $assignedMeetSport->id,
+        'user_id' => $ict->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $assignedCoach = User::factory()->coach()->create(['password' => Hash::make('OldPassword!')]);
+    $assignedOnboarding = CoachOnboardingRequest::query()->create([
+        'user_id' => $assignedCoach->id,
+        'meet_sport_id' => $assignedMeetSport->id,
+        'status' => 'approved',
+    ]);
+    $otherCoach = User::factory()->coach()->create(['password' => Hash::make('OtherOldPassword!')]);
+    $otherOnboarding = CoachOnboardingRequest::query()->create([
+        'user_id' => $otherCoach->id,
+        'meet_sport_id' => $otherMeetSport->id,
+        'status' => 'approved',
+    ]);
+
+    $this->actingAs($ict)
+        ->post("/coach/onboarding-requests/{$assignedOnboarding->id}/reset-password")
+        ->assertSessionHasNoErrors();
+    $this->actingAs($ict)
+        ->post("/coach/onboarding-requests/{$otherOnboarding->id}/reset-password")
+        ->assertForbidden();
+
+    expect(Hash::check('ScopedResetPassword123!', $assignedCoach->fresh()->password))->toBeTrue()
+        ->and($assignedCoach->fresh()->must_change_password)->toBeTrue()
+        ->and(Hash::check('OtherOldPassword!', $otherCoach->fresh()->password))->toBeTrue();
 });
 
 test('ordinary users cannot manage system accounts or reset coach passwords', function () {

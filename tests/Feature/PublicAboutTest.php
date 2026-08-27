@@ -26,6 +26,16 @@ test('guests can view the about page for a published meet; unpublished meets 404
     $this->get("/meets/{$hidden->id}/about")->assertNotFound();
 });
 
+test('guests can access the stable about URL for the active published meet', function () {
+    Meet::factory()->active()->featured()->published()->create(['name' => 'DdOPAA Provincial Meet 2026']);
+
+    $this->get('/about')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('portal/about')
+            ->where('meet.name', 'DdOPAA Provincial Meet 2026'));
+});
+
 test('the about page counts real competing municipalities, schools, and sports', function () {
     $meet = Meet::factory()->active()->published()->create();
 

@@ -22,6 +22,9 @@ type Props = {
     settings: {
         app_title: string;
         app_logo_url: string | null;
+        favicon_url: string | null;
+        timezone: string;
+        timezones: string[];
         login_splash_title: string;
         login_background_url: string | null;
         facebook_live_enabled: boolean;
@@ -54,6 +57,8 @@ export default function SystemSettingsEdit({ settings }: Props) {
         _method: 'put',
         app_title: settings.app_title,
         app_logo: null as File | null,
+        favicon: null as File | null,
+        timezone: settings.timezone,
         login_splash_title: settings.login_splash_title,
         login_background: null as File | null,
         remove_login_background: false,
@@ -231,6 +236,53 @@ export default function SystemSettingsEdit({ settings }: Props) {
                                 }
                             />
                             <InputError message={errors.app_logo} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="favicon">Browser favicon</Label>
+                            {settings.favicon_url && (
+                                <img
+                                    src={settings.favicon_url}
+                                    alt="Current favicon"
+                                    className="size-12 rounded border object-contain"
+                                />
+                            )}
+                            <Input
+                                id="favicon"
+                                type="file"
+                                accept="image/x-icon,image/png,image/svg+xml,image/webp,.ico"
+                                onChange={(event) =>
+                                    setData(
+                                        'favicon',
+                                        event.target.files?.[0] ?? null,
+                                    )
+                                }
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                ICO, PNG, SVG, or WebP; maximum 1MB.
+                            </p>
+                            <InputError message={errors.favicon} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="timezone">System timezone</Label>
+                            <select
+                                id="timezone"
+                                value={data.timezone}
+                                onChange={(event) =>
+                                    setData('timezone', event.target.value)
+                                }
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+                            >
+                                {settings.timezones.map((timezone) => (
+                                    <option key={timezone} value={timezone}>
+                                        {timezone}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-muted-foreground">
+                                Used for backend dates, reports, and the top
+                                navigation clock.
+                            </p>
+                            <InputError message={errors.timezone} />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="login_splash_title">

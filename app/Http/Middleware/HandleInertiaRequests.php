@@ -59,6 +59,7 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'name' => $settings->app_title ?: config('app.name'),
+            'systemTimezone' => $settings->timezone ?: config('app.timezone'),
             'branding' => [
                 'title' => $settings->app_title ?: config('app.name'),
                 'logoUrl' => $settings->app_logo_upload_id === null ? null : route('branding.logo'),
@@ -82,6 +83,9 @@ class HandleInertiaRequests extends Middleware
                     'can_review_coaches' => $user->canReviewCoachRegistrations() || $user->meetSportAssignments()
                         ->where('status', 'active')
                         ->whereIn('role', [
+                            MeetSportAssignmentRole::TournamentManager->value,
+                            MeetSportAssignmentRole::AssistantTournamentManager->value,
+                            MeetSportAssignmentRole::TechnicalOfficial->value,
                             MeetSportAssignmentRole::TournamentICT->value,
                             MeetSportAssignmentRole::TournamentSecretary->value,
                         ])->exists(),
@@ -90,6 +94,9 @@ class HandleInertiaRequests extends Middleware
                     'can_manage_school_master_data' => $user->canManageSchoolMasterData(),
                     'can_manage_accounts' => $user->canManageProductionAccounts(),
                     'can_manage_announcements' => $user->canManageAnnouncements(),
+                    'can_access_content_management' => $user->canAccessContentManagement(),
+                    'can_manage_editorial_content' => $user->canManageEditorialContent(),
+                    'can_upload_gallery_candidates' => $user->canUploadGalleryCandidates(),
                     'can_manage_personnel' => $user->canManagePersonnel(),
                     'can_file_protest' => $user->canFileProtest(),
                     'can_view_management_reports' => $user->canViewManagementReports(),

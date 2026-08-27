@@ -9,6 +9,7 @@ use App\Enums\MeetSportAssignmentRole;
 use App\Enums\Permission;
 use App\Enums\PersonnelRole;
 use App\Enums\UserRole;
+use App\Services\CoachAccessService;
 use App\Services\CompetitionAccessService;
 use Database\Factories\UserFactory;
 use Illuminate\Auth\MustVerifyEmail as VerifiesEmail;
@@ -145,6 +146,36 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
                 ->exists();
     }
 
+    public function isInformationTeamMember(?Meet $meet = null): bool
+    {
+        return $this->managementTeamMemberships()
+            ->where('status', ManagementTeamMemberStatus::Active)
+            ->whereHas('managementTeam', fn ($team) => $team
+                ->where('source_code', 'INFORMATION')
+                ->when($meet !== null, fn ($scope) => $scope->where('meet_id', $meet->id)))
+            ->exists();
+    }
+
+    public function canManageEditorialContent(?Meet $meet = null): bool
+    {
+        return $this->isAdmin() || $this->isInformationTeamMember($meet);
+    }
+
+    public function canUploadGalleryCandidates(): bool
+    {
+        return $this->isAdmin() || $this->canManageEditorialContent() || $this->meetSportAssignments()
+            ->where('status', 'active')
+            ->whereIn('role', [
+                MeetSportAssignmentRole::TournamentICT->value,
+                MeetSportAssignmentRole::TournamentSecretary->value,
+            ])->exists();
+    }
+
+    public function canAccessContentManagement(): bool
+    {
+        return $this->canManageEditorialContent() || $this->canUploadGalleryCandidates();
+    }
+
     public function canViewAnnouncements(): bool
     {
         return $this->hasRole(UserRole::Organizer) || $this->canManageAnnouncements();
@@ -204,6 +235,28 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     public function tournamentEventIds(?int $meetId = null): Collection
     {
         return app(CompetitionAccessService::class)->eventIds($this, $meetId);
+    }
+
+    /** @return Collection<int, int> */
+    public function tournamentMeetIds(): Collection
+    {
+        return $this->meetSportAssignments()
+            ->where('meet_sport_assignments.status', 'active')
+            ->whereIn('meet_sport_assignments.role', [
+                MeetSportAssignmentRole::TournamentManager->value,
+                MeetSportAssignmentRole::AssistantTournamentManager->value,
+                MeetSportAssignmentRole::TrackTournamentManager->value,
+                MeetSportAssignmentRole::FieldTournamentManager->value,
+                MeetSportAssignmentRole::BoysTournamentManager->value,
+                MeetSportAssignmentRole::GirlsTournamentManager->value,
+                MeetSportAssignmentRole::CategoryTournamentManager->value,
+                MeetSportAssignmentRole::TechnicalOfficial->value,
+                MeetSportAssignmentRole::TournamentICT->value,
+                MeetSportAssignmentRole::TournamentSecretary->value,
+            ])
+            ->join('meet_sports', 'meet_sports.id', '=', 'meet_sport_assignments.meet_sport_id')
+            ->distinct()
+            ->pluck('meet_sports.meet_id');
     }
 
     /**
@@ -290,19 +343,19 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     /** @return Collection<int, int> */
     public function approvedCoachEventIds(): Collection
     {
-        return app(\App\Services\CoachAccessService::class)->eventIds($this);
+        return app(CoachAccessService::class)->eventIds($this);
     }
 
     /** @return Collection<int, int> */
     public function approvedCoachEventIdsForDelegation(Delegation $delegation): Collection
     {
-        return app(\App\Services\CoachAccessService::class)->eventIds($this, $delegation);
+        return app(CoachAccessService::class)->eventIds($this, $delegation);
     }
 
     /** @return Collection<int, int> */
     public function approvedCoachDelegationIds(): Collection
     {
-        return app(\App\Services\CoachAccessService::class)->delegationIds($this);
+        return app(CoachAccessService::class)->delegationIds($this);
     }
 
     public function hasApprovedCoachScope(Delegation $delegation, ?Event $event = null): bool
@@ -311,7 +364,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             return false;
         }
 
-        $access = app(\App\Services\CoachAccessService::class);
+        $access = app(CoachAccessService::class);
 
         return $event === null
             ? $access->eventIds($this, $delegation)->isNotEmpty()
@@ -322,6 +375,21 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     {
         if ($this->isAdmin()) {
             return true;
+        }
+
+        if (in_array($permission, [
+            Permission::ContentView,
+            Permission::NewsManage,
+            Permission::AnnouncementsManage,
+            Permission::FaqManage,
+            Permission::GalleryReview,
+            Permission::GalleryPublish,
+        ], true)) {
+            return $this->canManageEditorialContent($meet);
+        }
+
+        if ($permission === Permission::GalleryUploadCandidate) {
+            return $this->canUploadGalleryCandidates();
         }
 
         $teamType = match ($permission) {

@@ -24,7 +24,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['meet_id', 'title', 'body'])]
+#[Fillable(['meet_id', 'title', 'body', 'status', 'priority', 'audience', 'starts_at', 'ends_at'])]
 class Announcement extends Model
 {
     /** @use HasFactory<AnnouncementFactory> */
@@ -40,6 +40,8 @@ class Announcement extends Model
         return [
             'is_published' => 'boolean',
             'published_at' => 'datetime',
+            'starts_at' => 'datetime',
+            'ends_at' => 'datetime',
         ];
     }
 
@@ -51,7 +53,11 @@ class Announcement extends Model
      */
     public function scopePublished($query)
     {
-        return $query->where('is_published', true);
+        return $query->where('is_published', true)
+            ->where('status', 'published')
+            ->where('audience', 'public')
+            ->where(fn ($window) => $window->whereNull('starts_at')->orWhere('starts_at', '<=', now()))
+            ->where(fn ($window) => $window->whereNull('ends_at')->orWhere('ends_at', '>=', now()));
     }
 
     /**

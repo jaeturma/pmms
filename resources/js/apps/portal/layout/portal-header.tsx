@@ -8,11 +8,7 @@ import type { PortalNavItem } from '@/apps/portal/layout/portal-navigation';
 import type { PortalNavShared } from '@/apps/portal/types';
 import { dashboard, home, login } from '@/routes';
 import {
-    about as publicAbout,
-    faqs as publicFaqs,
-    gallery as publicGallery,
     meet as publicMeet,
-    news as publicNews,
     results as publicResults,
     search as publicSearch,
     sports as publicSports,
@@ -80,10 +76,10 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
     const moreItems = nav
         ? [
               { label: 'Sports directory', href: publicSports(nav.meetId).url },
-              { label: 'Gallery', href: publicGallery(nav.meetId).url },
-              { label: 'News', href: publicNews(nav.meetId).url },
-              { label: 'About', href: publicAbout(nav.meetId).url },
-              { label: 'FAQs', href: publicFaqs(nav.meetId).url },
+              { label: 'Gallery', href: '/gallery' },
+              { label: 'News', href: '/news' },
+              { label: 'About', href: '/about' },
+              { label: 'FAQs', href: '/faq' },
               { label: 'Search', href: publicSearch(nav.meetId).url },
           ]
         : [];

@@ -3,6 +3,7 @@ import { cn } from '@/apps/portal/lib/utils';
 type PortalTab = {
     value: string;
     label: string;
+    mobileLabel?: string;
 };
 
 type PortalTabsProps = {
@@ -47,7 +48,18 @@ export function PortalTabs({
                                 : 'text-[var(--portal-muted-foreground)] hover:text-[var(--portal-fg)]',
                         )}
                     >
-                        {tab.label}
+                        {tab.mobileLabel ? (
+                            <>
+                                <span className="sm:hidden">
+                                    {tab.mobileLabel}
+                                </span>
+                                <span className="hidden sm:inline">
+                                    {tab.label}
+                                </span>
+                            </>
+                        ) : (
+                            tab.label
+                        )}
                     </button>
                 );
             })}

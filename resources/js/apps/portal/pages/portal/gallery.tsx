@@ -1,51 +1,70 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import { Image as ImageIcon } from 'lucide-react';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { PortalHero } from '@/apps/portal/components/hero';
-import type { PortalContestedSport, PortalMeetSummary } from '@/apps/portal/types';
-import { results as publicResults } from '@/routes/public';
+import type { PortalMeetSummary } from '@/apps/portal/types';
 
-type Props = {
-    meet: PortalMeetSummary;
-    sports: PortalContestedSport[];
+type GalleryItem = {
+    id: number;
+    title: string | null;
+    caption: string | null;
+    sport: string | null;
+    event: string | null;
+    capture_date: string;
+    image_url: string;
+    is_featured: boolean;
 };
-
-const TILE_TONES = [
-    { bg: 'var(--portal-ink)', fg: 'var(--portal-ink-foreground)' },
-    { bg: 'var(--portal-accent)', fg: 'var(--portal-accent-foreground)' },
-    { bg: 'var(--portal-maroon)', fg: 'var(--portal-maroon-foreground)' },
-] as const;
-
-/** No photo/media model or upload pipeline exists anywhere in PMMS —
- * these are real sport-identity tiles (name + event count), never
- * fabricated stock photography. Same real data as `sports.tsx`, a
- * different visual presentation of it. */
-export default function PortalGallery({ meet, sports }: Props) {
+type Props = { meet: PortalMeetSummary; items: GalleryItem[] };
+export default function PortalGallery({ meet, items }: Props) {
     return (
         <>
             <Head title={`Gallery — ${meet.name}`} />
             <div className="flex flex-col gap-6">
-                <PortalHero title="Gallery" description="Sport identity tiles for every sport contested at this meet." />
-
-                {sports.length === 0 ? (
-                    <PortalEmptyState icon={ImageIcon} title="Nothing to show yet" />
+                <PortalHero
+                    title="Gallery"
+                    description="Information Team-selected moments from across the meet."
+                />
+                {items.length === 0 ? (
+                    <PortalEmptyState
+                        icon={ImageIcon}
+                        title="No published photos yet"
+                        description="Reviewed photos will appear here once published."
+                    />
                 ) : (
-                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-                        {sports.map((sport, index) => {
-                            const tone = TILE_TONES[index % TILE_TONES.length];
-
-                            return (
-                                <Link
-                                    key={sport.id}
-                                    href={publicResults(meet.id, { query: { sport_id: sport.id } }).url}
-                                    className="portal-animate-in flex aspect-square flex-col items-center justify-center gap-2 rounded-[var(--portal-radius)] p-4 text-center shadow-md transition-transform hover:-translate-y-0.5"
-                                    style={{ backgroundColor: tone.bg, color: tone.fg }}
-                                >
-                                    <span className="text-2xl font-bold">{sport.name.slice(0, 2).toUpperCase()}</span>
-                                    <span className="text-sm font-medium">{sport.name}</span>
-                                </Link>
-                            );
-                        })}
+                    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                        {items.map((item) => (
+                            <figure
+                                key={item.id}
+                                className={`portal-animate-in overflow-hidden rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] ${item.is_featured ? 'sm:col-span-2' : ''}`}
+                            >
+                                <img
+                                    src={item.image_url}
+                                    alt={
+                                        item.caption ??
+                                        `${item.sport ?? 'Meet'} gallery photo`
+                                    }
+                                    className="aspect-[4/3] w-full object-cover"
+                                    loading="lazy"
+                                />
+                                <figcaption className="p-4">
+                                    <p className="text-xs font-bold tracking-wide text-[var(--portal-maroon)] uppercase">
+                                        {item.sport}
+                                        {item.event ? ` · ${item.event}` : ''}
+                                    </p>
+                                    {item.title && (
+                                        <h2 className="mt-1 font-semibold">
+                                            {item.title}
+                                        </h2>
+                                    )}
+                                    <p className="mt-1 text-sm text-[var(--portal-muted-foreground)]">
+                                        {item.caption}
+                                    </p>
+                                    <p className="mt-3 text-xs text-[var(--portal-muted-foreground)]">
+                                        {item.capture_date}
+                                    </p>
+                                </figcaption>
+                            </figure>
+                        ))}
                     </div>
                 )}
             </div>

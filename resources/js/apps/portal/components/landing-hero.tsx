@@ -70,16 +70,24 @@ export function PortalLandingHero({
 
             <div className="portal-hero-in relative mx-auto flex w-full max-w-4xl flex-col items-center gap-5 text-center">
                 {heroIconUrl ? (
-                    <img src={heroIconUrl} alt="" className="h-20 w-auto object-contain sm:h-24" />
+                    <img
+                        src={heroIconUrl}
+                        alt=""
+                        className="h-24 w-48 max-w-[90vw] object-contain sm:h-[7.2rem] sm:w-[14.4rem]"
+                    />
                 ) : (
-                    <PortalTorchIcon className="h-20 w-auto text-[var(--portal-ink-foreground)] sm:h-24" />
+                    <PortalTorchIcon className="h-24 w-auto text-[var(--portal-ink-foreground)] sm:h-[7.2rem]" />
                 )}
-
-                <h1 className="text-4xl leading-[1.05] font-extrabold tracking-tight sm:text-6xl lg:text-7xl">{title}</h1>
 
                 {description && (
-                    <p className="max-w-2xl text-base text-[var(--portal-ink-foreground)]/85 sm:text-lg">{description}</p>
+                    <p className="max-w-2xl text-base whitespace-pre-line text-[var(--portal-ink-foreground)]/85 sm:text-lg">
+                        {description}
+                    </p>
                 )}
+
+                <h1 className="text-[1.8rem] leading-[1.05] font-extrabold tracking-tight sm:text-5xl lg:text-[3.6rem]">
+                    {title}
+                </h1>
 
                 {meta && (
                     <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm font-medium text-[var(--portal-ink-foreground)]/80">
@@ -89,7 +97,11 @@ export function PortalLandingHero({
 
                 {startsAtIso && (
                     <div className="mt-2">
-                        <PortalCountdown targetIso={startsAtIso} variant="display" onElapsed="hide" />
+                        <PortalCountdown
+                            targetIso={startsAtIso}
+                            variant="display"
+                            onElapsed="hide"
+                        />
                     </div>
                 )}
             </div>
@@ -101,8 +113,10 @@ export function PortalLandingHero({
                     aria-label="Competing municipalities"
                 >
                     {municipalities.map((municipality) => {
-                        const nicknameWords = municipality.nickname?.split(' ') ?? [];
-                        const logoUrl = municipality.team_logo_url ?? municipality.logo_url;
+                        const nicknameWords =
+                            municipality.nickname?.split(' ') ?? [];
+                        const logoUrl =
+                            municipality.team_logo_url ?? municipality.logo_url;
 
                         return (
                             <Link
@@ -128,7 +142,10 @@ export function PortalLandingHero({
                                                 <>
                                                     "{nicknameWords[0]}
                                                     <br />
-                                                    {nicknameWords.slice(1).join(' ')}"
+                                                    {nicknameWords
+                                                        .slice(1)
+                                                        .join(' ')}
+                                                    "
                                                 </>
                                             ) : (
                                                 `"${nicknameWords[0]}"`

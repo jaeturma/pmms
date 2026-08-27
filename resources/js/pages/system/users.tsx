@@ -52,7 +52,7 @@ type UserRow = {
     additional_roles: string[];
     person: string | null;
     roles: string[];
-    assignments: Array<{ type: string; scope: string; status: string }>;
+    coach_scopes: string[];
     disabled: boolean;
     approval_status: string;
 };
@@ -98,8 +98,8 @@ function AdditionalRoles({
                     ))}
             </div>
             <p className="text-xs text-muted-foreground">
-                A user can hold multiple roles, such as Technical Official
-                and Tournament ICT.
+                A user can hold multiple roles, such as Technical Official and
+                Tournament ICT.
             </p>
         </div>
     );
@@ -428,7 +428,6 @@ export default function Users({
                             <TableRow>
                                 <TableHead>User</TableHead>
                                 <TableHead>Role</TableHead>
-                                <TableHead>Assignments</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead className="text-right">
                                     Actions
@@ -466,37 +465,20 @@ export default function Users({
                                                 </Badge>
                                             ))}
                                         </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="min-w-56 space-y-2">
-                                            {user.assignments.length === 0 ? (
-                                                <span className="text-xs text-muted-foreground">
-                                                    No scoped assignment
-                                                </span>
-                                            ) : (
-                                                user.assignments.map(
-                                                    (assignment, index) => (
-                                                        <div
-                                                            key={`${assignment.type}-${assignment.scope}-${index}`}
+                                        {user.coach_scopes.length > 0 && (
+                                            <div className="mt-2 space-y-1">
+                                                {user.coach_scopes.map(
+                                                    (scope) => (
+                                                        <p
+                                                            key={scope}
+                                                            className="text-xs text-muted-foreground"
                                                         >
-                                                            <p className="text-xs font-medium">
-                                                                {
-                                                                    assignment.type
-                                                                }{' '}
-                                                                ·{' '}
-                                                                {
-                                                                    assignment.status
-                                                                }
-                                                            </p>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                {assignment.scope ||
-                                                                    'Organization-wide'}
-                                                            </p>
-                                                        </div>
+                                                            {scope}
+                                                        </p>
                                                     ),
-                                                )
-                                            )}
-                                        </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </TableCell>
                                     <TableCell>
                                         <Badge

@@ -19,11 +19,11 @@ import { tally as publicTally } from '@/routes/public';
 
 type ViewTab = 'overall' | 'elementary' | 'secondary' | 'top-medalist';
 
-const VIEW_TABS: { value: ViewTab; label: string }[] = [
+const VIEW_TABS: { value: ViewTab; label: string; mobileLabel?: string }[] = [
     { value: 'overall', label: 'Overall' },
-    { value: 'elementary', label: 'Elementary' },
-    { value: 'secondary', label: 'Secondary' },
-    { value: 'top-medalist', label: 'Top Medalist' },
+    { value: 'elementary', label: 'Elementary', mobileLabel: 'Elem' },
+    { value: 'secondary', label: 'Secondary', mobileLabel: 'Sec' },
+    { value: 'top-medalist', label: 'Top Medalist', mobileLabel: 'Top' },
 ];
 
 type Props = {
@@ -127,7 +127,7 @@ export default function PortalTally({
                 ) : (
                     <>
                         <PortalSectionHeader
-                            title={`Overall Standings (${medalTallyOfficial ? 'Official' : 'Unofficial'} Result)`}
+                            title={`Overall Standings (${medalTallyOfficial ? 'Official Result' : 'Unofficial'})`}
                             action={
                                 <PortalSelect
                                     value={filters.sport_id ?? ''}
@@ -162,7 +162,7 @@ export default function PortalTally({
                         <PortalMedalTotalsRow totals={totals} />
 
                         <PortalSectionHeader
-                            title={`School Standings (${medalTallyOfficial ? 'Official' : 'Unofficial'} Result)`}
+                            title={`School Standings (${medalTallyOfficial ? 'Official Result' : 'Unofficial'})`}
                         />
                         <PortalStandingsTable
                             nameLabel="School"

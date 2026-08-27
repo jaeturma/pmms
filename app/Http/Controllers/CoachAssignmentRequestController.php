@@ -49,8 +49,7 @@ class CoachAssignmentRequestController extends Controller
         if ($canRequest) {
             $query->where('user_id', $user->id);
         } elseif (! $user->canReviewCoachRegistrations()) {
-            $query->whereIn('meet_sport_id', $visibleIds)
-                ->whereIn('event_id', $user->tournamentEventIds());
+            $query->whereIn('event_id', $user->tournamentEventIds());
         }
 
         return Inertia::render('coach/assignments', [
@@ -60,6 +59,7 @@ class CoachAssignmentRequestController extends Controller
                 'sport' => $item->meetSport->sport->name,
                 'event' => $item->event?->name, 'team' => $item->delegation->registrantName(),
                 'school' => $item->school?->name, 'status' => $item->status, 'review_notes' => $item->review_notes,
+                'can_reset_password' => $this->canResetAssignmentPassword($user, $item),
             ]),
             'canRequest' => $canRequest,
             'canReview' => $user->canReviewCoachRegistrations() || $reviewableIds->isNotEmpty(),
@@ -153,7 +153,7 @@ class CoachAssignmentRequestController extends Controller
     {
         /** @var User $reviewer */
         $reviewer = $request->user();
-        abort_unless($reviewer->canManageProductionAccounts(), 403);
+        abort_unless($this->canResetAssignmentPassword($reviewer, $coachAssignmentRequest), 403);
 
         $password = config('pmms.accounts.default_reset_password');
         abort_unless(is_string($password) && $password !== '', 503, 'The reset password is not configured.');
@@ -525,7 +525,7 @@ class CoachAssignmentRequestController extends Controller
     {
         /** @var User $reviewer */
         $reviewer = $request->user();
-        abort_unless($reviewer->canManageProductionAccounts(), 403);
+        abort_unless($this->canResetOnboardingPassword($reviewer, $coachOnboardingRequest), 403);
         $password = config('pmms.accounts.default_reset_password');
         abort_unless(is_string($password) && $password !== '', 503, 'The reset password is not configured.');
         $coachOnboardingRequest->user->forceFill(['password' => Hash::make($password), 'must_change_password' => true, 'password_changed_at' => null])->save();
@@ -540,10 +540,13 @@ class CoachAssignmentRequestController extends Controller
             return true;
         }
 
-        if ($request->meet_sport_id !== null) {
-            return $user->meetSportAssignments()->where('status', 'active')
-                ->where('meet_sport_id', $request->meet_sport_id)
-                ->whereIn('role', $this->coachReviewerRoles())->exists();
+        if ($request->meet_sport_id !== null && $user->meetSportAssignments()
+            ->where('status', 'active')
+            ->where('meet_sport_id', $request->meet_sport_id)
+            ->whereNull('sport_category_id')
+            ->whereIn('role', $this->coachReviewerRoles())
+            ->exists()) {
+            return true;
         }
 
         return ($request->events()->whereKey($user->tournamentEventIds())->exists()
@@ -596,13 +599,17 @@ class CoachAssignmentRequestController extends Controller
         } elseif ($user->canReviewCoachRegistrations()) {
             $query = CoachOnboardingRequest::query();
         } else {
+            $eventIds = $user->tournamentEventIds();
+            $wholeSportIds = $user->meetSportAssignments()
+                ->where('status', 'active')
+                ->whereNull('sport_category_id')
+                ->whereIn('role', $this->coachViewerRoles())
+                ->pluck('meet_sport_id');
             $query = CoachOnboardingRequest::query()
-                ->where(function ($scope) use ($user): void {
-                    $scope->whereIn('meet_sport_id', $this->visibleMeetSportIds($user))
-                        ->orWhere(fn ($legacy) => $legacy->whereNull('meet_sport_id')
-                            ->where(fn ($events) => $events
-                                ->whereHas('events', fn ($selected) => $selected->whereKey($user->tournamentEventIds()))
-                                ->orWhereIn('event_id', $user->tournamentEventIds())));
+                ->where(function ($scope) use ($eventIds, $wholeSportIds): void {
+                    $scope->whereIn('meet_sport_id', $wholeSportIds)
+                        ->orWhereHas('events', fn ($events) => $events->whereKey($eventIds))
+                        ->orWhereIn('event_id', $eventIds);
                 });
         }
 
@@ -658,6 +665,7 @@ class CoachAssignmentRequestController extends Controller
                     'registered_athletes' => $registeredAthletes,
                     'assignment_url' => route('coach.onboarding-assignments.edit', $item),
                     'can_manage_assignments' => $this->canManageOnboardingAssignments($user, $item),
+                    'can_reset_password' => $this->canResetOnboardingPassword($user, $item),
                     'can_update_attachments' => $canManageDocuments
                         && ! ($item->status === 'approved' && $accreditationNumber !== null),
                     'can_accredit' => $item->status === 'approved'
@@ -810,6 +818,45 @@ class CoachAssignmentRequestController extends Controller
             MeetSportAssignmentRole::TournamentSecretary->value,
             MeetSportAssignmentRole::TournamentICT->value,
         ];
+    }
+
+    private function canResetAssignmentPassword(User $user, CoachAssignmentRequest $request): bool
+    {
+        return $user->canManageProductionAccounts()
+            || $user->meetSportAssignments()
+                ->where('status', 'active')
+                ->where('role', MeetSportAssignmentRole::TournamentICT->value)
+                ->where('meet_sport_id', $request->meet_sport_id)
+                ->exists();
+    }
+
+    private function canResetOnboardingPassword(User $user, CoachOnboardingRequest $request): bool
+    {
+        if ($user->canManageProductionAccounts()) {
+            return true;
+        }
+
+        $ictMeetSports = $user->meetSportAssignments()
+            ->where('status', 'active')
+            ->where('role', MeetSportAssignmentRole::TournamentICT->value)
+            ->with('meetSport:id,meet_id,sport_id')
+            ->get()
+            ->pluck('meetSport')
+            ->filter();
+
+        if ($request->meet_sport_id !== null) {
+            return $ictMeetSports->contains('id', $request->meet_sport_id);
+        }
+
+        $eventIds = $request->events()->pluck('events.id')
+            ->when($request->event_id !== null, fn (Collection $ids) => $ids->push($request->event_id))
+            ->unique();
+
+        return $ictMeetSports->contains(fn (MeetSport $meetSport): bool => Event::query()
+            ->whereKey($eventIds)
+            ->where('sport_id', $meetSport->sport_id)
+            ->whereHas('meets', fn ($meets) => $meets->whereKey($meetSport->meet_id))
+            ->exists());
     }
 
     private function coachReviewerRoles(): array

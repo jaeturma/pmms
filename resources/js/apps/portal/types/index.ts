@@ -36,6 +36,9 @@ export type PortalMunicipality = {
 export type PortalLeader = {
     district: string;
     points: number;
+    logo_url: string | null;
+    team_logo_url: string | null;
+    slug: string;
 };
 
 export type PortalUpcomingEvent = {
@@ -365,12 +368,16 @@ export type PortalTeamAthlete = {
     level: 'elementary' | 'secondary';
     category: string;
     school: string;
+    eligibility_status: string;
+    is_eligible: boolean;
 };
 
 export type PortalTeamCoach = {
     name: string;
     role: string;
     school: string;
+    status: string;
+    is_accredited: boolean;
 };
 
 export type PortalSportPersonnel = {

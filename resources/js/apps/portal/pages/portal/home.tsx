@@ -129,7 +129,7 @@ export default function PortalHome({
             <div className="flex flex-col gap-10">
                 <PortalLandingHero
                     title={meet.name}
-                    description={`Department of Education - Schools Division of ${props.division.name}`}
+                    description={`Department of Education\nSchools Division of ${props.division.name}`}
                     startsAtIso={meet.starts_at_iso}
                     heroIconUrl={props.division.heroIconUrl}
                     municipalities={municipalities}
@@ -244,6 +244,9 @@ export default function PortalHome({
                             rows={currentLeaders.map((leader) => ({
                                 label: leader.district,
                                 points: leader.points,
+                                logoUrl: leader.logo_url,
+                                teamLogoUrl: leader.team_logo_url,
+                                slug: leader.slug,
                             }))}
                             unavailableTitle="No standings yet"
                             unavailableDescription="Leaders appear once results are validated."
@@ -278,7 +281,7 @@ export default function PortalHome({
                     </div>
 
                     <div className="space-y-3">
-                        <PortalSectionHeader title="Latest official result" />
+                        <PortalSectionHeader title="Latest Unofficial Result" />
                         {latestResult === null ? (
                             <PortalEmptyState
                                 icon={Award}
@@ -291,8 +294,7 @@ export default function PortalHome({
                                 </p>
                                 {latestResult.official_as_of && (
                                     <p className="text-xs text-[var(--portal-muted-foreground)]">
-                                        Official as of{' '}
-                                        {latestResult.official_as_of}
+                                        As of {latestResult.official_as_of}
                                     </p>
                                 )}
                                 <ol className="space-y-1 text-sm">

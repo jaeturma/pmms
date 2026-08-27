@@ -97,6 +97,11 @@ class Setting extends Model
         return $this->belongsTo(FileUpload::class, 'login_background_upload_id');
     }
 
+    public function favicon(): BelongsTo
+    {
+        return $this->belongsTo(FileUpload::class, 'favicon_upload_id');
+    }
+
     /**
      * reCAPTCHA is only actually usable once an admin has turned it on
      * *and* both keys are present — a half-configured toggle (enabled with

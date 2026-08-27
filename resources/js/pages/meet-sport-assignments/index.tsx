@@ -57,7 +57,7 @@ type Assignment = {
     status_label: string;
 };
 
-type MeetSportOption = { id: number; sport_id: number; label: string };
+type SportOption = { id: number; label: string };
 type SportCategoryOption = { id: number; sport_id: number; label: string };
 type ValueLabel = { value: string; label: string };
 type UserOption = {
@@ -70,7 +70,7 @@ type UserOption = {
 type Props = {
     assignments: Paginated<Assignment>;
     filters: { search: string };
-    meetSportOptions: MeetSportOption[];
+    sportOptions: SportOption[];
     sportCategoryOptions: SportCategoryOption[];
     roleOptions: ValueLabel[];
     statusOptions: ValueLabel[];
@@ -88,20 +88,20 @@ const statusVariant: Record<string, 'default' | 'outline' | 'destructive'> = {
 function CreateDialog({
     open,
     onOpenChange,
-    meetSportOptions,
+    sportOptions,
     sportCategoryOptions,
     roleOptions,
     userOptions,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    meetSportOptions: MeetSportOption[];
+    sportOptions: SportOption[];
     sportCategoryOptions: SportCategoryOption[];
     roleOptions: ValueLabel[];
     userOptions: UserOption[];
 }) {
     const { data, setData, post, processing, errors, reset } = useForm<{
-        meet_sport_id: string;
+        sport_id: string;
         sport_category_id: string;
         user_id: string;
         role: string;
@@ -109,7 +109,7 @@ function CreateDialog({
         start_date: string;
         end_date: string;
     }>({
-        meet_sport_id: '',
+        sport_id: '',
         sport_category_id: '',
         user_id: '',
         role: '',
@@ -117,11 +117,11 @@ function CreateDialog({
         start_date: '',
         end_date: '',
     });
-    const selectedSport = meetSportOptions.find(
-        (option) => String(option.id) === data.meet_sport_id,
+    const selectedSport = sportOptions.find(
+        (option) => String(option.id) === data.sport_id,
     );
     const availableCategories = sportCategoryOptions.filter(
-        (option) => option.sport_id === selectedSport?.sport_id,
+        (option) => option.sport_id === selectedSport?.id,
     );
 
     const submit = (e: FormEvent) => {
@@ -195,11 +195,11 @@ function CreateDialog({
                     <div className="space-y-2">
                         <Label htmlFor="assignment-sport">Sport *</Label>
                         <Select
-                            value={data.meet_sport_id}
+                            value={data.sport_id}
                             onValueChange={(value) =>
                                 setData((current) => ({
                                     ...current,
-                                    meet_sport_id: value,
+                                    sport_id: value,
                                     sport_category_id: '',
                                 }))
                             }
@@ -207,14 +207,14 @@ function CreateDialog({
                             <SelectTrigger id="assignment-sport">
                                 <SelectValue
                                     placeholder={
-                                        meetSportOptions.length === 0
-                                            ? 'No sports on this meet yet'
+                                        sportOptions.length === 0
+                                            ? 'No sports available'
                                             : 'Select a sport'
                                     }
                                 />
                             </SelectTrigger>
                             <SelectContent>
-                                {meetSportOptions.map((option) => (
+                                {sportOptions.map((option) => (
                                     <SelectItem
                                         key={option.id}
                                         value={String(option.id)}
@@ -224,7 +224,7 @@ function CreateDialog({
                                 ))}
                             </SelectContent>
                         </Select>
-                        <InputError message={errors.meet_sport_id} />
+                        <InputError message={errors.sport_id} />
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="assignment-category">
@@ -346,7 +346,7 @@ function CreateDialog({
 export default function MeetSportAssignments({
     assignments,
     filters,
-    meetSportOptions,
+    sportOptions,
     sportCategoryOptions,
     roleOptions,
     statusOptions,
@@ -539,7 +539,7 @@ export default function MeetSportAssignments({
             <CreateDialog
                 open={createOpen}
                 onOpenChange={setCreateOpen}
-                meetSportOptions={meetSportOptions}
+                sportOptions={sportOptions}
                 sportCategoryOptions={sportCategoryOptions}
                 roleOptions={roleOptions}
                 userOptions={userOptions}

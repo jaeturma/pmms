@@ -6,6 +6,7 @@ use App\Enums\EligibilityStatus;
 use App\Enums\EntryStatus;
 use App\Enums\PersonnelRole;
 use App\Models\CoachAssignmentRequest;
+use App\Models\CoachOnboardingRequest;
 use App\Models\Delegation;
 use App\Models\District;
 use App\Models\Entry;
@@ -234,18 +235,26 @@ class PortalTeamsController extends Controller
      */
     private function sportPersonnel(Meet $meet, District $district): array
     {
+        $certifiedCoachSports = CoachOnboardingRequest::query()
+            ->whereNotNull('certification_upload_id')
+            ->whereHas('meetSport', fn ($query) => $query->where('meet_id', $meet->id))
+            ->with(['meetSport.sport:id,name', 'school:id,district_id', 'delegation:id,district_id,school_id', 'delegation.school:id,district_id'])
+            ->get()
+            ->filter(fn (CoachOnboardingRequest $request): bool => ($request->district_id
+                ?? $request->school?->district_id
+                ?? $request->delegation?->district_id
+                ?? $request->delegation?->school?->district_id) === $district->id)
+            ->mapWithKeys(fn (CoachOnboardingRequest $request): array => [
+                $request->user_id.'|'.$request->meetSport->sport->name => true,
+            ]);
+
         $entries = Entry::query()
             ->whereHas('delegation', fn ($query) => $query->where('meet_id', $meet->id))
             ->where('status', '!=', EntryStatus::Withdrawn->value)
-            ->where(function ($query) use ($meet): void {
-                $query->where('status', EntryStatus::Confirmed->value)
-                    ->orWhereHas('athlete.eligibilityReview', fn ($reviews) => $reviews
-                        ->where('meet_id', $meet->id)
-                        ->where('status', EligibilityStatus::Approved->value));
-            })
             ->with([
                 'athlete:id,first_name,last_name,school_id',
                 'athlete.school:id,name',
+                'athlete.eligibilityReview:id,athlete_id,meet_id,status',
                 'delegation:id,district_id,school_id',
                 'delegation.school:id,district_id,name',
                 'event:id,sport_id,name,gender,age_division',
@@ -274,6 +283,7 @@ class PortalTeamsController extends Controller
                 'name' => $coach->fullName(),
                 'role' => $coach->role->label(),
                 'school' => $coach->school?->name ?? $coach->delegation->registrantName(),
+                'status' => $certifiedCoachSports->has($coach->user_id.'|'.$sport->name) ? 'Accredited' : 'Registered',
             ]));
 
         $approvedAccountCoaches = CoachAssignmentRequest::query()
@@ -293,6 +303,7 @@ class PortalTeamsController extends Controller
                 'name' => $request->user?->name ?? __('Unknown coach'),
                 'role' => 'Coach',
                 'school' => $request->school?->name ?? $request->delegation->registrantName(),
+                'status' => $certifiedCoachSports->has($request->user_id.'|'.$request->meetSport->sport->name) ? 'Accredited' : 'Registered',
             ]);
 
         $coachesBySport = $personnelCoaches
@@ -324,6 +335,10 @@ class PortalTeamsController extends Controller
                         'level' => $entry->event->age_division->value,
                         'category' => sprintf('%s %s', $entry->event->age_division->label(), $entry->event->gender->label()),
                         'school' => $entry->athlete->school->name,
+                        'eligibility_status' => $entry->athlete->eligibilityReview?->status === EligibilityStatus::Approved
+                            ? 'Eligible'
+                            : ($entry->athlete->eligibilityReview?->status->label() ?? 'Not Submitted'),
+                        'is_eligible' => $entry->athlete->eligibilityReview?->status === EligibilityStatus::Approved,
                     ])
                     ->sortBy('name')
                     ->values()
@@ -333,6 +348,8 @@ class PortalTeamsController extends Controller
                         'name' => $coach['name'],
                         'role' => $coach['role'],
                         'school' => $coach['school'],
+                        'status' => $coach['status'],
+                        'is_accredited' => $coach['status'] === 'Accredited',
                     ])
                     ->sortBy('name')
                     ->values()

@@ -21,6 +21,7 @@ use App\Models\Personnel;
 use App\Models\Protest;
 use App\Services\AuditLogger;
 use App\Services\MedalTallyService;
+use App\Services\MeetProgressService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
@@ -41,7 +42,10 @@ class ManagementDashboardController extends Controller
      */
     private const STALLED_RESULT_HOURS = 24;
 
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(
+        private readonly AuditLogger $audit,
+        private readonly MeetProgressService $progress,
+    ) {}
 
     public function index(MedalTallyService $tally): Response
     {
@@ -49,6 +53,7 @@ class ManagementDashboardController extends Controller
 
         return Inertia::render('management/index', [
             ...$this->widgetData($meets, $tally),
+            'meetProgress' => $this->progress->summary($meets->first()),
             'generatedAt' => now()->toDayDateTimeString(),
         ]);
     }
@@ -63,6 +68,7 @@ class ManagementDashboardController extends Controller
 
         return Inertia::render('reports/management', [
             ...$this->widgetData($meets, $tally),
+            'meetProgress' => $this->progress->summary($meets->first()),
             'generatedAt' => now()->toDayDateTimeString(),
         ]);
     }
@@ -77,12 +83,28 @@ class ManagementDashboardController extends Controller
     {
         $meets = collect([Meet::current()]);
         $data = $this->widgetData($meets, $tally);
+        $progress = $this->progress->summary($meets->first());
 
         $this->audit->record('report.management_exported', null, [
             'meet' => Meet::current()->name,
         ]);
 
         $rows = [];
+
+        $rows[] = ['Meet Progress by Medal Awards'];
+        $rows[] = ['Medal', 'Official Awarded', 'Expected', 'Remaining'];
+        foreach (['gold', 'silver', 'bronze', 'total'] as $medal) {
+            $rows[] = [ucfirst($medal), $progress['awarded'][$medal], $progress['expected'][$medal], $progress['remaining'][$medal]];
+        }
+        $rows[] = ['Progress', $progress['percentage'].'%', 'Status', $progress['status']];
+        $rows[] = [];
+
+        $rows[] = ['Sport Progress'];
+        $rows[] = ['Sport', 'Expected', 'Awarded', 'Progress', 'Events Official', 'Pending Results', 'Status'];
+        foreach ($progress['sports'] as $sport) {
+            $rows[] = [$sport['sport'], $sport['expected']['total'], $sport['awarded']['total'], $sport['percentage'].'%', $sport['official_events'], $sport['pending_results'], $sport['status']];
+        }
+        $rows[] = [];
 
         $rows[] = ['Participation - Delegations by status'];
         $rows[] = ['Meet', 'Draft', 'Submitted', 'Approved', 'Total'];

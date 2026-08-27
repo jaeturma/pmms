@@ -7,6 +7,7 @@ use App\Models\Event;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
+use App\Models\Sport;
 use App\Models\SportCategory;
 use App\Models\User;
 use Illuminate\Database\QueryException;
@@ -158,6 +159,20 @@ test('the assignments page is viewable by any authenticated role, including view
         ->assertInertia(fn (AssertableInertia $page) => $page->where('canManage', false));
 });
 
+test('the assignment sport list includes every catalog sport and reflects renamed sports', function () {
+    $sport = Sport::factory()->create(['name' => 'Old Sport Name']);
+    $sport->update(['name' => 'Renamed Sport']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get('/meet-sport-assignments')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('sportOptions', fn ($options) => collect($options)->contains(
+                fn (array $option): bool => $option['id'] === $sport->id
+                    && $option['label'] === 'Renamed Sport',
+            )));
+});
+
 test('tournament assignments can be searched by person, sport, role, and status', function () {
     $target = MeetSportAssignment::factory()->create([
         'role' => MeetSportAssignmentRole::TournamentICT,
@@ -204,6 +219,36 @@ test('organizers can create an assignment', function () {
     ]);
 
     expect(AuditLog::query()->where('action', 'meet_sport_assignment.created')->exists())->toBeTrue();
+});
+
+test('assigning a catalog sport adds it to the current tournament', function () {
+    $meet = Meet::factory()->create();
+    $sport = Sport::factory()->create();
+    $official = User::factory()->technicalOfficial()->create();
+
+    expect(MeetSport::query()
+        ->where('meet_id', $meet->id)
+        ->where('sport_id', $sport->id)
+        ->exists())->toBeFalse();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/meet-sport-assignments', [
+            'sport_id' => $sport->id,
+            'user_id' => $official->id,
+            'role' => MeetSportAssignmentRole::TournamentICT->value,
+        ])
+        ->assertSessionHasNoErrors();
+
+    $meetSport = MeetSport::query()
+        ->where('meet_id', $meet->id)
+        ->where('sport_id', $sport->id)
+        ->sole();
+
+    $this->assertDatabaseHas('meet_sport_assignments', [
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $official->id,
+        'role' => MeetSportAssignmentRole::TournamentICT->value,
+    ]);
 });
 
 test('non-managers cannot create an assignment', function (User $user) {

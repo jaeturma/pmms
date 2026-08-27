@@ -57,6 +57,7 @@ class DashboardController extends Controller
             $athletes->whereHas('delegation', fn ($query) => $query->where('meet_id', $currentMeet->id));
             $entries->whereHas('delegation', fn ($query) => $query->where('meet_id', $currentMeet->id));
         } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer)
+            && ! $user->canManageProductionAccounts()
             && $user->tournamentEventIds($currentMeet->id)->isNotEmpty()) {
             $eventIds = $user->tournamentEventIds($currentMeet->id);
             $athletes->whereHas('entries', fn ($query) => $query->whereIn('event_id', $eventIds));

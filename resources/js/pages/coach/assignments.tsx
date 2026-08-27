@@ -41,6 +41,7 @@ type RequestRow = {
     school: string | null;
     status: string;
     review_notes: string | null;
+    can_reset_password: boolean;
 };
 type RegistrationRow = {
     id: number;
@@ -70,6 +71,7 @@ type RegistrationRow = {
     }>;
     assignment_url: string;
     can_manage_assignments: boolean;
+    can_reset_password: boolean;
 };
 type Option = {
     meet_sport_id: number;
@@ -107,8 +109,8 @@ function CoachDocumentUpload({
                     const document = event.target.files?.[0];
 
                     if (!document) {
-return;
-}
+                        return;
+                    }
 
                     router.post(
                         `/coach/onboarding-requests/${registrationId}/documents/${type}`,
@@ -187,8 +189,7 @@ function ApprovalDialog({
                     <Button
                         className="w-full"
                         disabled={
-                            form.processing ||
-                            form.data.event_ids.length === 0
+                            form.processing || form.data.event_ids.length === 0
                         }
                         onClick={() =>
                             form.patch(
@@ -214,12 +215,16 @@ export default function CoachAssignments({
     canReview,
 }: Props) {
     const canAccredit = registrations.some((item) => item.can_accredit);
-    const canManageAny = registrations.some((item) => item.can_manage_assignments);
+    const canManageAny = registrations.some(
+        (item) => item.can_manage_assignments,
+    );
     const [viewedDocument, setViewedDocument] = useState<ViewedDocument | null>(
         null,
     );
     const [documentZoom, setDocumentZoom] = useState(1);
-    const [viewedCoach, setViewedCoach] = useState<RegistrationRow | null>(null);
+    const [viewedCoach, setViewedCoach] = useState<RegistrationRow | null>(
+        null,
+    );
     const form = useForm({
         option: '',
         meet_sport_id: '',
@@ -267,8 +272,12 @@ export default function CoachAssignments({
                                         </TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead>Documents</TableHead>
-                                        <TableHead className="hidden">Registered athletes</TableHead>
-                                        {(canReview || canAccredit || canManageAny) && (
+                                        <TableHead className="hidden">
+                                            Registered athletes
+                                        </TableHead>
+                                        {(canReview ||
+                                            canAccredit ||
+                                            canManageAny) && (
                                             <TableHead className="text-right">
                                                 Actions
                                             </TableHead>
@@ -295,8 +304,8 @@ export default function CoachAssignments({
                                                             if (
                                                                 !item.profile_url
                                                             ) {
-return;
-}
+                                                                return;
+                                                            }
 
                                                             setDocumentZoom(1);
                                                             setViewedDocument({
@@ -327,7 +336,15 @@ return;
                                                         )}
                                                     </button>
                                                     <div className="min-w-0">
-                                                        <button type="button" className="font-medium hover:underline" onClick={() => setViewedCoach(item)}>
+                                                        <button
+                                                            type="button"
+                                                            className="font-medium hover:underline"
+                                                            onClick={() =>
+                                                                setViewedCoach(
+                                                                    item,
+                                                                )
+                                                            }
+                                                        >
                                                             {item.coach}
                                                         </button>
                                                         <div className="text-xs text-muted-foreground">
@@ -382,7 +399,8 @@ return;
                                             <TableCell className="space-x-2 whitespace-nowrap">
                                                 {!item.certification_url && (
                                                     <span className="mr-2 text-xs text-muted-foreground">
-                                                        No certificate (optional)
+                                                        No certificate
+                                                        (optional)
                                                     </span>
                                                 )}
                                                 {item.certification_url && (
@@ -411,7 +429,8 @@ return;
                                                 )}
                                             </TableCell>
                                             <TableCell className="hidden max-w-sm whitespace-normal">
-                                                {item.registered_athletes.length === 0 ? (
+                                                {item.registered_athletes
+                                                    .length === 0 ? (
                                                     <span className="text-xs text-muted-foreground">
                                                         No athletes registered
                                                     </span>
@@ -420,15 +439,23 @@ return;
                                                         {item.registered_athletes.map(
                                                             (athlete) => (
                                                                 <a
-                                                                    key={athlete.id}
-                                                                    href={athlete.profile_url}
+                                                                    key={
+                                                                        athlete.id
+                                                                    }
+                                                                    href={
+                                                                        athlete.profile_url
+                                                                    }
                                                                     className="block rounded border p-2 text-xs hover:bg-muted/50"
                                                                 >
                                                                     <span className="font-medium">
-                                                                        {athlete.name}
+                                                                        {
+                                                                            athlete.name
+                                                                        }
                                                                     </span>
                                                                     <span className="block text-muted-foreground">
-                                                                        {athlete.school}
+                                                                        {
+                                                                            athlete.school
+                                                                        }
                                                                         {athlete.events
                                                                             ? ` · ${athlete.events}`
                                                                             : ' · Entry pending'}
@@ -439,59 +466,87 @@ return;
                                                     </div>
                                                 )}
                                             </TableCell>
-                                            {(canReview || item.can_accredit || item.can_manage_assignments) && (
+                                            {(canReview ||
+                                                item.can_accredit ||
+                                                item.can_manage_assignments) && (
                                                 <TableCell className="space-x-2 text-right whitespace-nowrap">
                                                     {item.can_manage_assignments && (
-                                                        <Button size="sm" variant="outline" asChild>
-                                                            <a href={item.assignment_url}>Manage assignments</a>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            asChild
+                                                        >
+                                                            <a
+                                                                href={
+                                                                    item.assignment_url
+                                                                }
+                                                            >
+                                                                Manage
+                                                                assignments
+                                                            </a>
                                                         </Button>
                                                     )}
-                                                    {canReview && item.status !== 'approved' && (
-                                                        <>
-                                                            <Button
-                                                                size="sm"
-                                                                disabled={!item.events}
-                                                                onClick={() => router.patch(`/coach/onboarding-requests/${item.id}`, { status: 'approved' }, { preserveScroll: true })}
-                                                            >
-                                                                Approve account
-                                                            </Button>
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                onClick={() =>
-                                                                    router.patch(
-                                                                        `/coach/onboarding-requests/${item.id}`,
-                                                                        {
-                                                                            status: 'returned',
-                                                                        },
-                                                                        {
-                                                                            preserveScroll: true,
-                                                                        },
-                                                                    )
-                                                                }
-                                                            >
-                                                                Return
-                                                            </Button>
-                                                            <Button
-                                                                size="sm"
-                                                                variant="destructive"
-                                                                onClick={() =>
-                                                                    router.patch(
-                                                                        `/coach/onboarding-requests/${item.id}`,
-                                                                        {
-                                                                            status: 'rejected',
-                                                                        },
-                                                                        {
-                                                                            preserveScroll: true,
-                                                                        },
-                                                                    )
-                                                                }
-                                                            >
-                                                                Reject
-                                                            </Button>
-                                                        </>
-                                                    )}
-                                                    {canReview && (
+                                                    {canReview &&
+                                                        item.status !==
+                                                            'approved' && (
+                                                            <>
+                                                                <Button
+                                                                    size="sm"
+                                                                    disabled={
+                                                                        !item.events
+                                                                    }
+                                                                    onClick={() =>
+                                                                        router.patch(
+                                                                            `/coach/onboarding-requests/${item.id}`,
+                                                                            {
+                                                                                status: 'approved',
+                                                                            },
+                                                                            {
+                                                                                preserveScroll: true,
+                                                                            },
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    Approve
+                                                                    account
+                                                                </Button>
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    onClick={() =>
+                                                                        router.patch(
+                                                                            `/coach/onboarding-requests/${item.id}`,
+                                                                            {
+                                                                                status: 'returned',
+                                                                            },
+                                                                            {
+                                                                                preserveScroll: true,
+                                                                            },
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    Return
+                                                                </Button>
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="destructive"
+                                                                    onClick={() =>
+                                                                        router.patch(
+                                                                            `/coach/onboarding-requests/${item.id}`,
+                                                                            {
+                                                                                status: 'rejected',
+                                                                            },
+                                                                            {
+                                                                                preserveScroll: true,
+                                                                            },
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    Reject
+                                                                </Button>
+                                                            </>
+                                                        )}
+                                                    {item.can_reset_password && (
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
@@ -501,14 +556,14 @@ return;
                                                                         `Reset ${item.coach}'s password to DdOPaa2026!?`,
                                                                     )
                                                                 ) {
-router.post(
+                                                                    router.post(
                                                                         `/coach/onboarding-requests/${item.id}/reset-password`,
                                                                         {},
                                                                         {
                                                                             preserveScroll: true,
                                                                         },
                                                                     );
-}
+                                                                }
                                                             }}
                                                         >
                                                             <KeyRound className="size-4" />
@@ -542,173 +597,276 @@ router.post(
                         </div>
                     </div>
                 )}
-                {false && (<>{canRequest && (
-                    <form
-                        onSubmit={submit}
-                        className="flex max-w-3xl items-end gap-3 rounded-xl border p-4"
-                    >
-                        <div className="flex-1 space-y-2">
-                            <Label>Sports event and team</Label>
-                            <Select
-                                value={form.data.option}
-                                onValueChange={selectOption}
+                {false && (
+                    <>
+                        {canRequest && (
+                            <form
+                                onSubmit={submit}
+                                className="flex max-w-3xl items-end gap-3 rounded-xl border p-4"
                             >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select event and team" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {options.map((option, index) => (
-                                        <SelectItem
-                                            key={`${option.event_id}-${option.delegation_id}`}
-                                            value={String(index)}
-                                        >
-                                            {option.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <InputError
-                                message={
-                                    form.errors.event_id ??
-                                    form.errors.delegation_id
-                                }
+                                <div className="flex-1 space-y-2">
+                                    <Label>Sports event and team</Label>
+                                    <Select
+                                        value={form.data.option}
+                                        onValueChange={selectOption}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select event and team" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {options.map((option, index) => (
+                                                <SelectItem
+                                                    key={`${option.event_id}-${option.delegation_id}`}
+                                                    value={String(index)}
+                                                >
+                                                    {option.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <InputError
+                                        message={
+                                            form.errors.event_id ??
+                                            form.errors.delegation_id
+                                        }
+                                    />
+                                </div>
+                                <Button
+                                    disabled={
+                                        form.processing || !form.data.option
+                                    }
+                                >
+                                    Assign sports event
+                                </Button>
+                            </form>
+                        )}
+                        {requests.length === 0 ? (
+                            <EmptyState
+                                icon={UserCheck}
+                                title="No event enrollment requests"
+                                description="Enrollment requests will appear here."
                             />
-                        </div>
-                        <Button disabled={form.processing || !form.data.option}>
-                            Assign sports event
-                        </Button>
-                    </form>
-                )}
-                {requests.length === 0 ? (
-                    <EmptyState
-                        icon={UserCheck}
-                        title="No event enrollment requests"
-                        description="Enrollment requests will appear here."
-                    />
-                ) : (
-                    <div className="overflow-x-auto rounded-xl border">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Coach</TableHead>
-                                    <TableHead>Sport / Event</TableHead>
-                                    <TableHead>Team</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    {canReview && (
-                                        <TableHead className="text-right">
-                                            Review
-                                        </TableHead>
-                                    )}
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {requests.map((item) => (
-                                    <TableRow key={item.id}>
-                                        <TableCell>
-                                            <div className="font-medium">
-                                                {item.coach}
-                                            </div>
-                                            <div className="text-xs text-muted-foreground">
-                                                {item.email}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            {item.sport} / {item.event}
-                                        </TableCell>
-                                        <TableCell>
-                                            {item.team}
-                                            {item.school && (
-                                                <div className="text-xs text-muted-foreground">
-                                                    {item.school}
-                                                </div>
+                        ) : (
+                            <div className="overflow-x-auto rounded-xl border">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Coach</TableHead>
+                                            <TableHead>Sport / Event</TableHead>
+                                            <TableHead>Team</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            {canReview && (
+                                                <TableHead className="text-right">
+                                                    Review
+                                                </TableHead>
                                             )}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge
-                                                variant={
-                                                    item.status === 'approved'
-                                                        ? 'secondary'
-                                                        : 'outline'
-                                                }
-                                            >
-                                                {item.status}
-                                            </Badge>
-                                        </TableCell>
-                                        {canReview && (
-                                            <TableCell className="space-x-2 text-right whitespace-nowrap">
-                                                <Button
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        router.patch(
-                                                            `/coach/assignment-requests/${item.id}`,
-                                                            {
-                                                                status: 'approved',
-                                                            },
-                                                            {
-                                                                preserveScroll: true,
-                                                            },
-                                                        )
-                                                    }
-                                                >
-                                                    Approve
-                                                </Button>
-                                                <Button
-                                                    size="sm"
-                                                    variant="destructive"
-                                                    onClick={() =>
-                                                        router.patch(
-                                                            `/coach/assignment-requests/${item.id}`,
-                                                            {
-                                                                status: 'rejected',
-                                                            },
-                                                            {
-                                                                preserveScroll: true,
-                                                            },
-                                                        )
-                                                    }
-                                                >
-                                                    Reject
-                                                </Button>
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() => {
-                                                        if (
-                                                            window.confirm(
-                                                                `Reset ${item.coach}'s password to DdOPaa2026!?`,
-                                                            )
-                                                        ) {
-                                                            router.post(
-                                                                `/coach/assignment-requests/${item.id}/reset-password`,
-                                                                {},
-                                                                {
-                                                                    preserveScroll: true,
-                                                                },
-                                                            );
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {requests.map((item) => (
+                                            <TableRow key={item.id}>
+                                                <TableCell>
+                                                    <div className="font-medium">
+                                                        {item.coach}
+                                                    </div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        {item.email}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {item.sport} / {item.event}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {item.team}
+                                                    {item.school && (
+                                                        <div className="text-xs text-muted-foreground">
+                                                            {item.school}
+                                                        </div>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge
+                                                        variant={
+                                                            item.status ===
+                                                            'approved'
+                                                                ? 'secondary'
+                                                                : 'outline'
                                                         }
-                                                    }}
-                                                >
-                                                    <KeyRound className="size-4" />
-                                                    Reset password
-                                                </Button>
-                                            </TableCell>
-                                        )}
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </div>
-                )}</>)}
-                <Dialog open={viewedCoach !== null} onOpenChange={(open) => !open && setViewedCoach(null)}>
-                    <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-                        <DialogHeader><DialogTitle>{viewedCoach?.coach ?? 'Coach profile'}</DialogTitle></DialogHeader>
-                        {viewedCoach && <div className="space-y-5">
-                            <div className="grid gap-4 sm:grid-cols-[8rem_1fr]">
-                                <div className="flex size-32 items-center justify-center overflow-hidden rounded-xl border bg-muted text-xl font-semibold">{viewedCoach.profile_url ? <img src={viewedCoach.profile_url} alt={`${viewedCoach.coach} profile`} className="size-full object-cover" /> : viewedCoach.coach.split(' ').map((part) => part[0]).slice(0, 2).join('')}</div>
-                                <dl className="grid content-start gap-3 text-sm sm:grid-cols-2"><div><dt className="text-muted-foreground">Email</dt><dd className="font-medium">{viewedCoach.email}</dd></div><div><dt className="text-muted-foreground">Team / Delegation</dt><dd className="font-medium">{viewedCoach.team ?? 'Not assigned'}</dd></div><div><dt className="text-muted-foreground">Sports</dt><dd className="font-medium">{viewedCoach.sport}</dd></div><div><dt className="text-muted-foreground">Events</dt><dd className="font-medium">{viewedCoach.events || 'Pending assignment'}</dd></div></dl>
+                                                    >
+                                                        {item.status}
+                                                    </Badge>
+                                                </TableCell>
+                                                {canReview && (
+                                                    <TableCell className="space-x-2 text-right whitespace-nowrap">
+                                                        {item.can_reset_password && (
+                                                            <Button
+                                                                size="sm"
+                                                                onClick={() =>
+                                                                    router.patch(
+                                                                        `/coach/assignment-requests/${item.id}`,
+                                                                        {
+                                                                            status: 'approved',
+                                                                        },
+                                                                        {
+                                                                            preserveScroll: true,
+                                                                        },
+                                                                    )
+                                                                }
+                                                            >
+                                                                Approve
+                                                            </Button>
+                                                        )}
+                                                        <Button
+                                                            size="sm"
+                                                            variant="destructive"
+                                                            onClick={() =>
+                                                                router.patch(
+                                                                    `/coach/assignment-requests/${item.id}`,
+                                                                    {
+                                                                        status: 'rejected',
+                                                                    },
+                                                                    {
+                                                                        preserveScroll: true,
+                                                                    },
+                                                                )
+                                                            }
+                                                        >
+                                                            Reject
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => {
+                                                                if (
+                                                                    window.confirm(
+                                                                        `Reset ${item.coach}'s password to DdOPaa2026!?`,
+                                                                    )
+                                                                ) {
+                                                                    router.post(
+                                                                        `/coach/assignment-requests/${item.id}/reset-password`,
+                                                                        {},
+                                                                        {
+                                                                            preserveScroll: true,
+                                                                        },
+                                                                    );
+                                                                }
+                                                            }}
+                                                        >
+                                                            <KeyRound className="size-4" />
+                                                            Reset password
+                                                        </Button>
+                                                    </TableCell>
+                                                )}
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
                             </div>
-                            <section className="space-y-2"><h3 className="font-semibold">Registered athletes</h3>{viewedCoach.registered_athletes.length === 0 ? <p className="text-sm text-muted-foreground">No athletes registered.</p> : <div className="grid gap-2 sm:grid-cols-2">{viewedCoach.registered_athletes.map((athlete) => <a key={athlete.id} href={athlete.profile_url} className="rounded-lg border p-3 text-sm hover:bg-muted/50"><span className="font-medium">{athlete.name}</span><span className="block text-muted-foreground">{athlete.school}{athlete.events ? ` · ${athlete.events}` : ' · Entry pending'}</span></a>)}</div>}</section>
-                        </div>}
+                        )}
+                    </>
+                )}
+                <Dialog
+                    open={viewedCoach !== null}
+                    onOpenChange={(open) => !open && setViewedCoach(null)}
+                >
+                    <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+                        <DialogHeader>
+                            <DialogTitle>
+                                {viewedCoach?.coach ?? 'Coach profile'}
+                            </DialogTitle>
+                        </DialogHeader>
+                        {viewedCoach && (
+                            <div className="space-y-5">
+                                <div className="grid gap-4 sm:grid-cols-[8rem_1fr]">
+                                    <div className="flex size-32 items-center justify-center overflow-hidden rounded-xl border bg-muted text-xl font-semibold">
+                                        {viewedCoach.profile_url ? (
+                                            <img
+                                                src={viewedCoach.profile_url}
+                                                alt={`${viewedCoach.coach} profile`}
+                                                className="size-full object-cover"
+                                            />
+                                        ) : (
+                                            viewedCoach.coach
+                                                .split(' ')
+                                                .map((part) => part[0])
+                                                .slice(0, 2)
+                                                .join('')
+                                        )}
+                                    </div>
+                                    <dl className="grid content-start gap-3 text-sm sm:grid-cols-2">
+                                        <div>
+                                            <dt className="text-muted-foreground">
+                                                Email
+                                            </dt>
+                                            <dd className="font-medium">
+                                                {viewedCoach.email}
+                                            </dd>
+                                        </div>
+                                        <div>
+                                            <dt className="text-muted-foreground">
+                                                Team / Delegation
+                                            </dt>
+                                            <dd className="font-medium">
+                                                {viewedCoach.team ??
+                                                    'Not assigned'}
+                                            </dd>
+                                        </div>
+                                        <div>
+                                            <dt className="text-muted-foreground">
+                                                Sports
+                                            </dt>
+                                            <dd className="font-medium">
+                                                {viewedCoach.sport}
+                                            </dd>
+                                        </div>
+                                        <div>
+                                            <dt className="text-muted-foreground">
+                                                Events
+                                            </dt>
+                                            <dd className="font-medium">
+                                                {viewedCoach.events ||
+                                                    'Pending assignment'}
+                                            </dd>
+                                        </div>
+                                    </dl>
+                                </div>
+                                <section className="space-y-2">
+                                    <h3 className="font-semibold">
+                                        Registered athletes
+                                    </h3>
+                                    {viewedCoach.registered_athletes.length ===
+                                    0 ? (
+                                        <p className="text-sm text-muted-foreground">
+                                            No athletes registered.
+                                        </p>
+                                    ) : (
+                                        <div className="grid gap-2 sm:grid-cols-2">
+                                            {viewedCoach.registered_athletes.map(
+                                                (athlete) => (
+                                                    <a
+                                                        key={athlete.id}
+                                                        href={
+                                                            athlete.profile_url
+                                                        }
+                                                        className="rounded-lg border p-3 text-sm hover:bg-muted/50"
+                                                    >
+                                                        <span className="font-medium">
+                                                            {athlete.name}
+                                                        </span>
+                                                        <span className="block text-muted-foreground">
+                                                            {athlete.school}
+                                                            {athlete.events
+                                                                ? ` · ${athlete.events}`
+                                                                : ' · Entry pending'}
+                                                        </span>
+                                                    </a>
+                                                ),
+                                            )}
+                                        </div>
+                                    )}
+                                </section>
+                            </div>
+                        )}
                     </DialogContent>
                 </Dialog>
                 <Dialog

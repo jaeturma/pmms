@@ -52,8 +52,34 @@ test('a category assignment sees its event across delegations but not sibling or
         ->where('athletes.data.0.id', fn ($id) => in_array($id, [$nabunturanBoy->id, $monkayoBoy->id], true))
         ->where('athletes.data.1.id', fn ($id) => in_array($id, [$nabunturanBoy->id, $monkayoBoy->id], true)));
 
+    $this->actingAs($official)->get('/dashboard')->assertInertia(fn (AssertableInertia $page) => $page
+        ->where('stats.0.key', 'athletes')
+        ->where('stats.0.value', 2));
+
     $this->actingAs($official)->get("/athletes/{$nabunturanBoy->id}")->assertOk();
     $this->actingAs($official)->get("/athletes/{$monkayoBoy->id}")->assertOk();
     $this->actingAs($official)->get("/athletes/{$basketballGirl->id}")->assertForbidden();
     $this->actingAs($official)->get("/athletes/{$volleyballAthlete->id}")->assertForbidden();
+
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'sport_category_id' => $girls->id,
+        'user_id' => $official->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($official)->get('/athletes')->assertInertia(fn (AssertableInertia $page) => $page
+        ->has('athletes.data', 3));
+
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'sport_category_id' => null,
+        'user_id' => $official->id,
+        'role' => MeetSportAssignmentRole::TournamentSecretary,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($official)->get('/athletes')->assertInertia(fn (AssertableInertia $page) => $page
+        ->has('athletes.data', 3));
 });
