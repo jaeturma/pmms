@@ -74,6 +74,7 @@ class MealScheduleController extends Controller
                 'date' => $schedule->date->toDateString(),
                 'starts_at' => $schedule->starts_at,
                 'ends_at' => $schedule->ends_at,
+                'enforce_serving_time' => $schedule->enforce_serving_time,
                 'venue' => $schedule->venue?->name,
                 'notes' => $schedule->notes,
             ])->values(),
@@ -105,6 +106,7 @@ class MealScheduleController extends Controller
             'date' => ['required', 'date'],
             'starts_at' => ['nullable', 'date_format:H:i'],
             'ends_at' => ['nullable', 'date_format:H:i', 'after:starts_at'],
+            'enforce_serving_time' => ['sometimes', 'boolean'],
             'venue_id' => ['nullable', 'integer', Rule::exists('venues', 'id')],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
@@ -142,6 +144,7 @@ class MealScheduleController extends Controller
         $validated = $request->validate([
             'starts_at' => ['nullable', 'date_format:H:i'],
             'ends_at' => ['nullable', 'date_format:H:i', 'after:starts_at'],
+            'enforce_serving_time' => ['sometimes', 'boolean'],
             'venue_id' => ['nullable', 'integer', Rule::exists('venues', 'id')],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);

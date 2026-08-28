@@ -227,7 +227,7 @@ class EligibilityController extends Controller
             'athlete.school.schoolDistrict', 'athlete.school.district', 'athlete.delegation.meet',
             'athlete.eligibilityDocuments.fileUpload:id,original_name',
             'athlete.eligibilityDocuments.verifier:id,name', 'athlete.accreditation:id,athlete_id',
-            'athlete.entries.event.sport:id,name', 'reviewer:id,name',
+            'athlete.sportRosterMemberships.meetSport.sport:id,name', 'reviewer:id,name',
         ]);
         $row = $this->reviewRow($review, $request->user());
         $athlete = $review->athlete;
@@ -246,7 +246,7 @@ class EligibilityController extends Controller
                 'school' => $athlete->school->name,
                 'district' => $athlete->school->schoolDistrict?->name ?? $athlete->school->district?->name,
                 'delegation' => $athlete->delegation->registrantName(),
-                'sports' => $athlete->entries->pluck('event.sport.name')->filter()->unique()->join(', '),
+                'sports' => $athlete->rosterSportNames()->join(', '),
             ],
         ]);
     }

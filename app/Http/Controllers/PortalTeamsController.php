@@ -13,6 +13,7 @@ use App\Models\Entry;
 use App\Models\Meet;
 use App\Models\Personnel;
 use App\Models\Sport;
+use App\Models\SportRosterMember;
 use App\Services\MedalTallyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -201,21 +202,27 @@ class PortalTeamsController extends Controller
      */
     private function municipalityParticipation(Meet $meet): Collection
     {
-        return Entry::query()
-            ->whereHas('delegation', fn ($query) => $query->where('meet_id', $meet->id))
+        return SportRosterMember::query()
+            ->whereHas('meetSport', fn ($query) => $query->where('meet_id', $meet->id))
             ->with([
                 'athlete:id,school_id',
                 'athlete.school:id,district_id',
                 'delegation:id,district_id',
-                'event:id,sport_id',
+                'meetSport:id,sport_id',
             ])
             ->get()
-            ->filter(fn (Entry $entry): bool => $this->entryMunicipalityId($entry) !== null)
-            ->groupBy(fn (Entry $entry): int => $this->entryMunicipalityId($entry))
-            ->map(fn (Collection $entries): array => [
-                'athlete_count' => $entries->pluck('athlete.id')->unique()->count(),
-                'sport_count' => $entries->pluck('event.sport_id')->unique()->count(),
+            ->filter(fn (SportRosterMember $member): bool => $this->rosterMunicipalityId($member) !== null)
+            ->groupBy(fn (SportRosterMember $member): int => $this->rosterMunicipalityId($member))
+            ->map(fn (Collection $members): array => [
+                'athlete_count' => $members->pluck('athlete.id')->unique()->count(),
+                'sport_count' => $members->pluck('meetSport.sport_id')->unique()->count(),
             ]);
+    }
+
+    private function rosterMunicipalityId(SportRosterMember $member): ?int
+    {
+        return $member->athlete?->school?->district_id
+            ?? $member->delegation?->district_id;
     }
 
     /**
@@ -267,6 +274,9 @@ class PortalTeamsController extends Controller
             ->whereHas('delegation', fn ($query) => $query->where('meet_id', $meet->id))
             ->where('status', '!=', EntryStatus::Withdrawn->value)
             ->whereHas('event', fn ($query) => $query->where('sport_id', $sportId))
+            ->whereHas('athlete.sportRosterMemberships.meetSport', fn ($query) => $query
+                ->where('meet_id', $meet->id)
+                ->where('sport_id', $sportId))
             ->with([
                 'athlete:id,first_name,last_name,school_id',
                 'athlete.school:id,name',

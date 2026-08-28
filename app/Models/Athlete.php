@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * @property int $id
@@ -204,5 +205,16 @@ class Athlete extends Model
     public function sportRosterMemberships(): HasMany
     {
         return $this->hasMany(SportRosterMember::class);
+    }
+
+    /** @return Collection<int, string> */
+    public function rosterSportNames(): Collection
+    {
+        return $this->sportRosterMemberships
+            ->pluck('meetSport.sport.name')
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values();
     }
 }

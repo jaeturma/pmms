@@ -64,6 +64,7 @@ import { index as entriesIndex } from '@/routes/entries';
 import { index as equipmentIndex } from '@/routes/equipment';
 import { index as eventsIndex } from '@/routes/events';
 import { index as foodIndex } from '@/routes/food';
+import { show as mealStubShow } from '@/routes/meal-stub';
 import { index as incidentsIndex } from '@/routes/incidents';
 import { index as managementIndex } from '@/routes/management';
 import { index as managementTeamsIndex } from '@/routes/management-teams';
@@ -416,6 +417,13 @@ export function AppSidebar() {
             .filter((item): item is NavItem => item !== undefined);
 
     const navItems: NavItem[] = byTitle(['Dashboard']);
+    if (auth.user?.can_access_meal_stub) {
+        navItems.push({
+            title: 'Meal Stub',
+            href: mealStubShow(),
+            icon: Utensils,
+        });
+    }
     const trailingNavItems: NavItem[] = [
         { title: 'Support', href: support(), icon: LifeBuoy },
     ];

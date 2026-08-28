@@ -101,6 +101,8 @@ class HandleInertiaRequests extends Middleware
                     'can_file_protest' => $user->canFileProtest(),
                     'can_view_management_reports' => $user->canViewManagementReports(),
                     'can_view_system_logs' => $user->can('view-system-logs'),
+                    'can_access_meal_stub' => app(\App\Services\MealEntitlementService::class)
+                        ->isEligible($user, Meet::current()),
                     'can_view_tournament_athletes' => $user->tournamentAthleteSportIds()->isNotEmpty(),
                     'assigned_sports' => $assignedSports->values(),
                     'is_tournament_scoped' => $assignedSports->isNotEmpty()

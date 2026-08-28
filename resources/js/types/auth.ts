@@ -7,6 +7,7 @@ export type User = {
     additional_roles?: string[];
     tournament_assignment_roles?: string[];
     team_types?: string[];
+    can_access_meal_stub?: boolean;
     can_review_coaches?: boolean;
     can_manage_accounts?: boolean;
     can_manage_announcements?: boolean;

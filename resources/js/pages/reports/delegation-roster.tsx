@@ -24,6 +24,7 @@ type AthleteRow = {
     age: number;
     lrn: string;
     grade_level: number;
+    sports: string;
 };
 
 type PersonnelRow = {
@@ -97,6 +98,7 @@ export default function DelegationRoster({
                                         <TableHead>Age</TableHead>
                                         <TableHead>LRN</TableHead>
                                         <TableHead>Grade</TableHead>
+                                        <TableHead>Sports</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -119,6 +121,9 @@ export default function DelegationRoster({
                                             <TableCell>{athlete.lrn}</TableCell>
                                             <TableCell>
                                                 {athlete.grade_level}
+                                            </TableCell>
+                                            <TableCell>
+                                                {athlete.sports || 'Not assigned'}
                                             </TableCell>
                                         </TableRow>
                                     ))}

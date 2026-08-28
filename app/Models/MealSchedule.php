@@ -22,7 +22,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['meet_id', 'meal_type', 'date', 'starts_at', 'ends_at', 'venue_id', 'notes'])]
+#[Fillable(['meet_id', 'meal_type', 'date', 'starts_at', 'ends_at', 'enforce_serving_time', 'venue_id', 'notes'])]
 class MealSchedule extends Model
 {
     /** @use HasFactory<MealScheduleFactory> */
@@ -38,6 +38,7 @@ class MealSchedule extends Model
         return [
             'meal_type' => MealType::class,
             'date' => 'date',
+            'enforce_serving_time' => 'boolean',
         ];
     }
 

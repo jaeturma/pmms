@@ -42,6 +42,7 @@ use App\Http\Controllers\MatchController;
 use App\Http\Controllers\MatchRosterController;
 use App\Http\Controllers\MealAnnouncementController;
 use App\Http\Controllers\MealScheduleController;
+use App\Http\Controllers\MealStubController;
 use App\Http\Controllers\MedicalAccessController;
 use App\Http\Controllers\MedicalClearanceController;
 use App\Http\Controllers\MeetController;
@@ -250,6 +251,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('management-team-members/{managementTeamMember}', [ManagementTeamMemberController::class, 'destroy'])->name('management-team-members.destroy');
     Route::get('equipment', [EquipmentCategoryController::class, 'index'])->name('equipment.index');
     Route::get('food', [MealScheduleController::class, 'index'])->name('food.index');
+    Route::get('meal-stub', [MealStubController::class, 'show'])->name('meal-stub.show');
+    Route::post('meal-stub/{mealEntitlement}/consume', [MealStubController::class, 'consumeOwn'])->name('meal-stub.consume');
+    Route::get('food/distribution', [MealStubController::class, 'distribution'])->name('food.distribution');
+    Route::post('food/distribution/{mealEntitlement}/consume', [MealStubController::class, 'consumeStaff'])->name('food.distribution.consume');
     Route::get('billeting', [BilletingVenueController::class, 'index'])->name('billeting.index');
     Route::get('transport', [VehicleController::class, 'index'])->name('transport.index');
     Route::get('medical', [MedicalClearanceController::class, 'index'])->name('medical.index');

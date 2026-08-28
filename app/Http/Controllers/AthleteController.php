@@ -77,7 +77,7 @@ class AthleteController extends Controller
                 'delegation.district:id,name',
                 'eligibilityReview:id,athlete_id,status',
                 'accreditation:id,athlete_id',
-                'entries.event.sport:id,name',
+                'sportRosterMemberships.meetSport.sport:id,name',
                 'registrar:id,name,role',
             ])
             ->orderBy('last_name')
@@ -118,7 +118,10 @@ class AthleteController extends Controller
             ->when($schoolDistrictId !== null, fn ($athletes) => $athletes->whereHas('school', fn ($school) => $school->where('school_district_id', $schoolDistrictId)))
             ->when($schoolId !== null, fn ($athletes) => $athletes->where('school_id', $schoolId))
             ->when(in_array($sex, ['male', 'female'], true), fn ($athletes) => $athletes->where('sex', $sex))
-            ->when($sportId !== null, fn ($athletes) => $athletes->whereHas('entries.event', fn ($event) => $event->where('sport_id', $sportId)))
+            ->when($sportId !== null, fn ($athletes) => $athletes->whereHas(
+                'sportRosterMemberships.meetSport',
+                fn ($meetSports) => $meetSports->where('sport_id', $sportId),
+            ))
             ->when($accreditation === 'accredited', fn ($athletes) => $athletes->whereHas('accreditation'))
             ->when($accreditation === 'not_accredited', fn ($athletes) => $athletes->whereDoesntHave('accreditation'));
 
@@ -170,7 +173,7 @@ class AthleteController extends Controller
                         ? $athlete->registrar->name
                         : null,
                     'photo_url' => $athlete->photo_upload_id === null ? null : route('athletes.photo', $athlete),
-                    'sports' => $athlete->entries->pluck('event.sport.name')->filter()->unique()->values()->join(', '),
+                    'sports' => $athlete->rosterSportNames()->join(', '),
                     'accreditation_status' => $athlete->accreditation !== null
                         ? __('Accredited')
                         : __('Not accredited'),
@@ -234,7 +237,7 @@ class AthleteController extends Controller
             'eligibilityReview:id,athlete_id,status',
             'eligibilityDocuments.fileUpload:id,original_name',
             'accreditation:id,athlete_id',
-            'entries.event.sport:id,name',
+            'sportRosterMemberships.meetSport.sport:id,name',
             'registrar:id,name,role',
         ]);
 
@@ -286,7 +289,7 @@ class AthleteController extends Controller
                     ? null
                     : route('athletes.photo', $athlete),
                 'sports_photo_url' => $athlete->sportsPhotoUrl(),
-                'sports' => $athlete->entries->pluck('event.sport.name')->filter()->unique()->values()->join(', '),
+                'sports' => $athlete->rosterSportNames()->join(', '),
                 'accreditation_status' => $athlete->accreditation !== null
                     ? __('Accredited')
                     : ($athlete->eligibilityReview?->status->label() ?? __('Documents not submitted')),

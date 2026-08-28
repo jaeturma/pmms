@@ -6,8 +6,11 @@ use App\Models\Delegation;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\Meet;
+use App\Models\MeetSport;
 use App\Models\Personnel;
 use App\Models\School;
+use App\Models\Sport;
+use App\Models\SportRosterMember;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 
@@ -28,7 +31,13 @@ test('guests are redirected from report pages', function () {
 
 test('the delegation roster lists athletes and personnel', function () {
     $delegation = Delegation::factory()->create();
-    Athlete::factory()->count(2)->for($delegation)->create();
+    $athletes = Athlete::factory()->count(2)->for($delegation)->create();
+    $sport = Sport::factory()->create(['name' => 'Swimming']);
+    $meetSport = MeetSport::factory()->create(['meet_id' => $delegation->meet_id, 'sport_id' => $sport->id]);
+    SportRosterMember::query()->create([
+        'meet_sport_id' => $meetSport->id, 'delegation_id' => $delegation->id,
+        'athlete_id' => $athletes->first()->id, 'level' => 'elementary', 'gender' => 'girls',
+    ]);
     Personnel::factory()->for($delegation)->create();
 
     $this->actingAs(User::factory()->organizer()->create())
@@ -37,6 +46,7 @@ test('the delegation roster lists athletes and personnel', function () {
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('reports/delegation-roster')
             ->has('athletes', 2)
+            ->where('athletes', fn ($rows) => collect($rows)->contains('sports', 'Swimming'))
             ->has('personnel', 1)
             ->where('delegation.registrant', $delegation->school->name));
 });

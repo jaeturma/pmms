@@ -18,6 +18,7 @@ use App\Models\Personnel;
 use App\Models\ResultPlacement;
 use App\Models\School;
 use App\Models\Sport;
+use App\Models\SportRosterMember;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia;
@@ -42,6 +43,18 @@ function teamsEntry(Meet $meet, District $municipality, Event $event, ?School $s
         ]);
 
     $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id, 'school_id' => $school->id]);
+
+    $meetSport = MeetSport::query()->firstOrCreate([
+        'meet_id' => $meet->id,
+        'sport_id' => $event->sport_id,
+    ], ['active' => true]);
+    SportRosterMember::query()->create([
+        'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $delegation->id,
+        'athlete_id' => $athlete->id,
+        'level' => $event->age_division->value,
+        'gender' => $event->gender->value,
+    ]);
 
     return Entry::factory()->confirmed()->create([
         'athlete_id' => $athlete->id,
@@ -379,11 +392,10 @@ test('approved coach accounts and qualified athletes are visible on the municipa
     ]);
 
     $delegation = $entry->delegation;
-    $meetSport = MeetSport::factory()->create([
+    $meetSport = MeetSport::query()->where([
         'meet_id' => $meet->id,
         'sport_id' => $volleyball->id,
-        'active' => true,
-    ]);
+    ])->sole();
     $coach = User::factory()->create(['name' => 'Approved Coach']);
     CoachAssignmentRequest::query()->create([
         'user_id' => $coach->id,

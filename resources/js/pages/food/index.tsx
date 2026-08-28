@@ -1,4 +1,4 @@
-import { Head, router, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
 import { Plus, Trash2, Utensils } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
@@ -8,6 +8,7 @@ import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Dialog,
@@ -45,6 +46,7 @@ type Schedule = {
     date: string;
     starts_at: string | null;
     ends_at: string | null;
+    enforce_serving_time: boolean;
     venue: string | null;
     notes: string | null;
 };
@@ -90,6 +92,7 @@ function CreateScheduleDialog({
         date: string;
         starts_at: string;
         ends_at: string;
+        enforce_serving_time: boolean;
         venue_id: string;
         notes: string;
     }>({
@@ -98,6 +101,7 @@ function CreateScheduleDialog({
         date: '',
         starts_at: '',
         ends_at: '',
+        enforce_serving_time: true,
         venue_id: '',
         notes: '',
     });
@@ -153,6 +157,15 @@ reset();
                         </Select>
                         <InputError message={errors.meal_type} />
                     </div>
+                    <label className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                            checked={data.enforce_serving_time}
+                            onCheckedChange={(checked) =>
+                                setData('enforce_serving_time', checked === true)
+                            }
+                        />
+                        Enforce serving time
+                    </label>
                     <div className="space-y-2">
                         <Label htmlFor="schedule-date">Date</Label>
                         <Input
@@ -331,6 +344,9 @@ export default function Food({
                     description="Meal schedule and announcements per meet."
                     actions={
                         <div className="flex gap-2">
+                            <Button variant="outline" asChild>
+                                <Link href="/food/distribution">Meal Distribution</Link>
+                            </Button>
                             <Button
                                 variant="outline"
                                 onClick={() => setCreateAnnouncementOpen(true)}

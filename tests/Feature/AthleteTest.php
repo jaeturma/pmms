@@ -14,7 +14,10 @@ use App\Models\FileUpload;
 use App\Models\ManagementTeam;
 use App\Models\ManagementTeamMember;
 use App\Models\Meet;
+use App\Models\MeetSport;
 use App\Models\School;
+use App\Models\Sport;
+use App\Models\SportRosterMember;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -260,9 +263,22 @@ test('viewing an athlete profile is audited', function () {
     expect(AuditLog::query()->where('action', 'athlete.viewed')->exists())->toBeTrue();
 });
 
-test('athlete views show sports coach and delegation', function () {
+test('athlete 380 views use its sport roster membership instead of entries', function () {
     $coach = User::factory()->coach()->create(['name' => 'Coach Maria']);
-    $athlete = Athlete::factory()->create(['registered_by' => $coach->id]);
+    $athlete = Athlete::factory()->create(['id' => 380, 'registered_by' => $coach->id]);
+    $rosterSport = Sport::factory()->create(['name' => 'Basketball']);
+    $meetSport = MeetSport::factory()->create([
+        'meet_id' => $athlete->delegation->meet_id,
+        'sport_id' => $rosterSport->id,
+    ]);
+    SportRosterMember::query()->create([
+        'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $athlete->delegation_id,
+        'athlete_id' => $athlete->id,
+        'level' => 'elementary',
+        'gender' => 'girls',
+    ]);
+    // An entry in another sport must not override the canonical roster sport.
     $entry = Entry::factory()->create([
         'athlete_id' => $athlete->id,
         'delegation_id' => $athlete->delegation_id,
@@ -272,16 +288,42 @@ test('athlete views show sports coach and delegation', function () {
     $this->actingAs($admin)
         ->get('/athletes')
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('athletes.data.0.sports', $entry->event->sport->name)
+            ->where('athletes.data.0.sports', 'Basketball')
             ->where('athletes.data.0.coach', 'Coach Maria')
             ->where('athletes.data.0.delegation', $athlete->delegation->registrantName()));
 
     $this->actingAs($admin)
         ->get("/athletes/{$athlete->id}")
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('athlete.sports', $entry->event->sport->name)
+            ->where('athlete.sports', 'Basketball')
             ->where('athlete.coach', 'Coach Maria')
             ->where('athlete.delegation', $athlete->delegation->registrantName()));
+});
+
+test('athlete sport display lists distinct roster sports and sport filter uses roster membership', function () {
+    $athlete = Athlete::factory()->create();
+    $basketball = Sport::factory()->create(['name' => 'Basketball']);
+    $volleyball = Sport::factory()->create(['name' => 'Volleyball']);
+
+    foreach ([$basketball, $volleyball] as $sport) {
+        $meetSport = MeetSport::factory()->create([
+            'meet_id' => $athlete->delegation->meet_id,
+            'sport_id' => $sport->id,
+        ]);
+        SportRosterMember::query()->create([
+            'meet_sport_id' => $meetSport->id,
+            'delegation_id' => $athlete->delegation_id,
+            'athlete_id' => $athlete->id,
+            'level' => 'elementary',
+            'gender' => 'girls',
+        ]);
+    }
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get("/athletes?sport_id={$basketball->id}")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('athletes.data', 1)
+            ->where('athletes.data.0.sports', 'Basketball, Volleyball'));
 });
 
 test('officers cannot view athletes of other delegations', function () {

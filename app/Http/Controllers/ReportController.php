@@ -124,7 +124,7 @@ class ReportController extends Controller
         foreach ($data['athletes'] as $athlete) {
             $rows[] = [
                 'Athlete', $athlete['last_name'], $athlete['first_name'], $athlete['sex_label'],
-                $athlete['birthdate'], $athlete['age'], $athlete['lrn'], $athlete['grade_level'], '', '',
+                $athlete['birthdate'], $athlete['age'], $athlete['lrn'], $athlete['grade_level'], '', $athlete['sports'],
             ];
         }
 
@@ -473,7 +473,9 @@ class ReportController extends Controller
             'school:id,name',
             'district:id,name',
             'meet:id,name,school_year',
-            'athletes' => fn ($query) => $query->orderBy('last_name')->orderBy('first_name'),
+            'athletes' => fn ($query) => $query
+                ->with('sportRosterMemberships.meetSport.sport:id,name')
+                ->orderBy('last_name')->orderBy('first_name'),
             'personnel' => fn ($query) => $query->with('sports:id,name')->orderBy('last_name')->orderBy('first_name'),
         ]);
 
@@ -495,6 +497,7 @@ class ReportController extends Controller
                 'age' => $athlete->age(),
                 'lrn' => $athlete->lrn,
                 'grade_level' => $athlete->grade_level,
+                'sports' => $athlete->rosterSportNames()->join(', '),
             ])->values()->all(),
             'personnel' => $delegation->personnel->map(fn (Personnel $person): array => [
                 'id' => $person->id,
