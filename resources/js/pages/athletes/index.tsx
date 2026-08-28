@@ -53,6 +53,7 @@ type AthleteRow = {
     school: string;
     district: string;
     delegation: string;
+    coach: string | null;
     photo_url: string | null;
     sports: string;
     accreditation_status: string;
@@ -76,6 +77,13 @@ type SchoolOption = {
     school_district: string;
 };
 
+type CoachEventOption = {
+    id: number;
+    label: string;
+    gender: string;
+    age_division: string;
+};
+
 type Props = {
     athletes: Paginated<AthleteRow>;
     filters: { search: string; municipality_id: number | null; school_district_id: number | null; school_id: number | null; sport_id: number | null; sex: string; accreditation: string };
@@ -83,6 +91,7 @@ type Props = {
     schoolOptionsByDelegation: Record<number, SchoolOption[]>;
     fixedDelegationId: number | null;
     fixedMunicipalityId: number | null;
+    coachEventOptionsByDelegation: Record<number, CoachEventOption[]>;
     municipalities: Array<{ id: number; name: string }>;
     schoolDistricts: Array<{ id: number; district_id: number; name: string }>;
     filterSchools: Array<{ id: number; district_id: number | null; school_district_id: number | null; name: string }>;
@@ -94,6 +103,7 @@ function AthleteFormDialog({
     schoolOptionsByDelegation,
     fixedDelegationId,
     fixedMunicipalityId,
+    coachEventOptionsByDelegation,
     municipalities,
     schoolDistricts,
     open,
@@ -103,6 +113,7 @@ function AthleteFormDialog({
     schoolOptionsByDelegation: Record<number, SchoolOption[]>;
     fixedDelegationId: number | null;
     fixedMunicipalityId: number | null;
+    coachEventOptionsByDelegation: Record<number, CoachEventOption[]>;
     municipalities: Array<{ id: number; name: string }>;
     schoolDistricts: Array<{ id: number; district_id: number; name: string }>;
     open: boolean;
@@ -114,6 +125,7 @@ function AthleteFormDialog({
             school_id: string;
             district_id: string;
             school_district_id: string;
+            event_id: string;
             first_name: string;
             middle_name: string;
             last_name: string;
@@ -138,6 +150,7 @@ function AthleteFormDialog({
             district_id:
                 fixedMunicipalityId === null ? '' : String(fixedMunicipalityId),
             school_district_id: '',
+            event_id: '',
             first_name: '',
             middle_name: '',
             last_name: '',
@@ -169,6 +182,7 @@ function AthleteFormDialog({
             ...current,
             delegation_id: value,
             school_id: options.length === 1 ? String(options[0].id) : '',
+            event_id: '',
         }));
     };
 
@@ -254,6 +268,27 @@ function AthleteFormDialog({
                             />
                             <InputError message={errors.lrn} />
                         </div>
+                        {fixedDelegationId !== null && (
+                            <div className="space-y-2 lg:col-span-3">
+                                <Label htmlFor="athlete-event">Coach sport and event *</Label>
+                                <Select
+                                    value={data.event_id}
+                                    onValueChange={(value) => setData('event_id', value)}
+                                >
+                                    <SelectTrigger id="athlete-event">
+                                        <SelectValue placeholder="Select from your approved sports" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {(coachEventOptionsByDelegation[Number(data.delegation_id)] ?? []).map((event) => (
+                                            <SelectItem key={event.id} value={String(event.id)}>
+                                                {event.label} ({event.age_division}, {event.gender})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <InputError message={errors.event_id} />
+                            </div>
+                        )}
                         {data.delegation_id && (
                             <>
                             {fixedDelegationId !== null && (
@@ -808,6 +843,7 @@ export default function Athletes({
     schoolOptionsByDelegation,
     fixedDelegationId,
     fixedMunicipalityId,
+    coachEventOptionsByDelegation,
     municipalities,
     schoolDistricts,
     filterSchools,
@@ -877,11 +913,12 @@ export default function Athletes({
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Name</TableHead>
-                                        <TableHead>Team / Delegation</TableHead>
+                                        <TableHead>Sports</TableHead>
+                                        <TableHead>Coach</TableHead>
+                                        <TableHead>Delegation</TableHead>
                                         <TableHead>Sex</TableHead>
                                         <TableHead>Age</TableHead>
                                         <TableHead>Grade</TableHead>
-                                        <TableHead>Sport</TableHead>
                                         <TableHead>Eligibility</TableHead>
                                         <TableHead>Accreditation</TableHead>
                                         <TableHead className="text-right">
@@ -913,18 +950,15 @@ export default function Athletes({
                                                     <span>{athlete.name}</span>
                                                 </div>
                                             </TableCell>
-                                            <TableCell>
-                                                {athlete.delegation}
-                                            </TableCell>
+                                            <TableCell>{athlete.sports || 'Not assigned'}</TableCell>
+                                            <TableCell>{athlete.coach || 'Not assigned'}</TableCell>
+                                            <TableCell>{athlete.delegation}</TableCell>
                                             <TableCell>
                                                 {athlete.sex_label}
                                             </TableCell>
                                             <TableCell>{athlete.age}</TableCell>
                                             <TableCell>
                                                 {athlete.grade_level}
-                                            </TableCell>
-                                            <TableCell>
-                                                {athlete.sports || '—'}
                                             </TableCell>
                                             <TableCell>
                                                 {athlete.eligibility_status}
@@ -973,7 +1007,7 @@ export default function Athletes({
                                                                 </Button>
                                                             }
                                                             title="Remove athlete?"
-                                                            description="This removes the athlete from the active roster while retaining the record for audit and recovery."
+                                                            description="This permanently removes the athlete and frees the LRN for registration. This cannot be undone."
                                                             confirmLabel="Remove"
                                                             destructive
                                                             onConfirm={() =>
@@ -1011,6 +1045,7 @@ export default function Athletes({
                 schoolOptionsByDelegation={schoolOptionsByDelegation}
                 fixedDelegationId={fixedDelegationId}
                 fixedMunicipalityId={fixedMunicipalityId}
+                coachEventOptionsByDelegation={coachEventOptionsByDelegation}
                 municipalities={municipalities}
                 schoolDistricts={schoolDistricts}
                 open={createOpen}

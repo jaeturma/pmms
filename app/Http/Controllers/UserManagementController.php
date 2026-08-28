@@ -27,6 +27,7 @@ class UserManagementController extends Controller
             ->with([
                 'person:id,user_id,full_name',
                 'meetSportAssignments.meetSport.meet:id,name',
+                'meetSportAssignments.meetSport.meet.events:id,name,sport_id,sport_category_id',
                 'meetSportAssignments.meetSport.sport:id,name',
                 'meetSportAssignments.sportCategory:id,display_name',
                 'managementTeamMemberships.managementTeam:id,meet_id,name',
@@ -58,6 +59,7 @@ class UserManagementController extends Controller
                     ->merge($user->meetSportAssignments->map(fn ($assignment) => $assignment->role->label()))
                     ->merge($user->managementTeamMemberships->map(fn ($membership) => $membership->managementTeam->name))
                     ->unique()->values(),
+                'role_scopes' => $this->roleScopes($user),
                 'coach_scopes' => $user->hasRole(UserRole::Coach)
                     ? $user->coachAssignmentRequests
                         ->filter(fn ($assignment): bool => $assignment->status === 'approved' && $assignment->ended_at === null)
@@ -70,6 +72,7 @@ class UserManagementController extends Controller
                 'disabled' => $user->disabled_at !== null,
                 'approval_status' => $user->approval_status,
                 'last_updated' => $user->updated_at?->format('M j, Y g:i A'),
+                'can_delete' => $request->user()->isAdmin() && ! $request->user()->is($user),
             ]);
 
         return Inertia::render('system/users', [
@@ -167,6 +170,27 @@ class UserManagementController extends Controller
         return back();
     }
 
+    /**
+     * Remove an account without destroying its assignments or audit history.
+     */
+    public function destroy(Request $request, User $user): RedirectResponse
+    {
+        abort_unless($request->user()->isAdmin(), 403);
+        abort_if($request->user()->is($user), 422, 'You cannot remove your own administrator account.');
+
+        $context = [
+            'name' => $user->name,
+            'role' => $user->role->value,
+        ];
+
+        $this->audit->record('user.removed', $user, $context);
+        $user->delete();
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('User account removed.')]);
+
+        return back();
+    }
+
     public function approve(Request $request, User $user): RedirectResponse
     {
         abort_unless($request->user()->canManageProductionAccounts(), 403);
@@ -210,5 +234,45 @@ class UserManagementController extends Controller
             UserRole::Coach => ['Manage approved team athletes and entries'],
             UserRole::Viewer => ['View published schedules, results and medal tally'],
         };
+    }
+
+    private function roleScopes(User $user): array
+    {
+        $technicalOfficialScopes = $user->meetSportAssignments
+            ->filter(fn ($assignment): bool => $assignment->status->value === 'active'
+                && $assignment->role->value === 'technical_official')
+            ->map(function ($assignment): array {
+                $events = $assignment->meetSport->meet->events
+                    ->where('sport_id', $assignment->meetSport->sport_id)
+                    ->when($assignment->sport_category_id !== null, fn ($items) => $items
+                        ->where('sport_category_id', $assignment->sport_category_id));
+
+                return [
+                    'role' => __('Technical Official'),
+                    'sport' => $assignment->meetSport->sport->name,
+                    'events' => $events->pluck('name')->unique()->sort()->values()->all(),
+                ];
+            });
+
+        $coachScopes = $user->hasRole(UserRole::Coach)
+            ? $user->coachAssignmentRequests
+                ->filter(fn ($assignment): bool => $assignment->status === 'approved' && $assignment->ended_at === null)
+                ->groupBy(fn ($assignment): string => $assignment->meetSport?->sport?->name ?? '')
+                ->filter(fn ($assignments, string $sport): bool => $sport !== '')
+                ->map(fn ($assignments, string $sport): array => [
+                    'role' => __('Coach'),
+                    'sport' => $sport,
+                    'events' => $assignments->pluck('event.name')->filter()->unique()->sort()->values()->all(),
+                ])->values()
+            : collect();
+
+        return $technicalOfficialScopes
+            ->concat($coachScopes)
+            ->groupBy(fn (array $scope): string => $scope['role'].'|'.$scope['sport'])
+            ->map(fn ($scopes): array => [
+                'role' => $scopes->first()['role'],
+                'sport' => $scopes->first()['sport'],
+                'events' => $scopes->pluck('events')->flatten()->unique()->sort()->values()->all(),
+            ])->values()->all();
     }
 }

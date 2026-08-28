@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Enums\EligibilityDocumentType;
 use App\Enums\EligibilityStatus;
-use App\Enums\MedicalClearanceStatus;
 use App\Enums\Permission;
 use App\Enums\RequirementStatus;
 use App\Enums\UserRole;
@@ -44,9 +43,10 @@ class AthleteReadinessController extends Controller
 
         $required = [EligibilityDocumentType::SchoolId, EligibilityDocumentType::BirthCertificate, EligibilityDocumentType::MedicalCertificate, EligibilityDocumentType::ParentalConsent];
         $athletes = $query->get()->map(function (Athlete $athlete) use ($required): array {
-            $documentsComplete = collect($required)->every(fn ($type) => $athlete->eligibilityDocuments->contains(fn ($document) => $document->document_type === $type && $document->status === RequirementStatus::Verified));
+            $documentsComplete = collect($required)->every(fn ($type) => $athlete->eligibilityDocuments->contains(fn ($document) => $document->document_type === $type
+                && ($type === EligibilityDocumentType::MedicalCertificate || $document->status === RequirementStatus::Verified)));
             $dsacApproved = $athlete->eligibilityReview?->status === EligibilityStatus::Approved;
-            $medicalCleared = $athlete->medicalClearance?->status === MedicalClearanceStatus::Cleared;
+            $medicalCleared = $athlete->eligibilityDocuments->contains(fn ($document) => $document->document_type === EligibilityDocumentType::MedicalCertificate);
 
             return ['id' => $athlete->id, 'name' => $athlete->fullName(), 'school' => $athlete->school->name,
                 'school_district' => $athlete->school->schoolDistrict?->name ?? 'Unassigned School District',

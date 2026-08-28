@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -50,7 +51,17 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
 class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable, VerifiesEmail;
+    use HasFactory, Notifiable, PasskeyAuthenticatable, SoftDeletes, TwoFactorAuthenticatable, VerifiesEmail;
+
+    protected static function booted(): void
+    {
+        static::deleted(function (User $user): void {
+            // Soft deletion does not execute the database foreign key's
+            // nullOnDelete action. Preserve the existing audit privacy
+            // contract by removing the deleted account as the log actor.
+            AuditLog::query()->where('user_id', $user->id)->update(['user_id' => null]);
+        });
+    }
 
     /**
      * Get the attributes that should be cast.

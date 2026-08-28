@@ -93,6 +93,6 @@ class AthletePolicy
 
     public function delete(User $user, Athlete $athlete): bool
     {
-        return $this->update($user, $athlete);
+        return $user->isAdmin();
     }
 }

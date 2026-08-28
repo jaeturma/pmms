@@ -1,4 +1,4 @@
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { Search, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { PortalCoachCard } from '@/apps/portal/components/coach-card';
@@ -41,12 +41,16 @@ type Props = {
     meet: PortalMeetSummary;
     team: { id: number; slug: string; name: string; logo_url: string | null };
     sports: PortalSportPersonnel[];
+    sportOptions: Array<{ id: number; name: string }>;
+    selectedSportId: number | null;
 };
 
 export default function PortalTeamPlayersCoaches({
     meet,
     team,
     sports,
+    sportOptions,
+    selectedSportId,
 }: Props) {
     const [query, setQuery] = useState('');
     const [role, setRole] = useState<Role>('all');
@@ -107,7 +111,40 @@ export default function PortalTeamPlayersCoaches({
                     title={`${team.name} — Players & Coaches`}
                 />
 
-                {sports.length === 0 ? (
+                <div className="rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4">
+                    <label className="flex max-w-md flex-col gap-2 text-sm font-semibold">
+                        Select a sport to view athletes and coaches
+                        <PortalSelect
+                            value={selectedSportId?.toString() ?? ''}
+                            options={[
+                                { value: '', label: 'Select a sport' },
+                                ...sportOptions.map((sport) => ({
+                                    value: sport.id.toString(),
+                                    label: sport.name,
+                                })),
+                            ]}
+                            onChange={(event) => {
+                                const sportId = event.target.value;
+                                router.get(
+                                    window.location.pathname,
+                                    sportId ? { sport_id: sportId } : {},
+                                    {
+                                        preserveState: true,
+                                        preserveScroll: true,
+                                        only: ['sports', 'selectedSportId'],
+                                    },
+                                );
+                            }}
+                        />
+                    </label>
+                </div>
+
+                {selectedSportId === null ? (
+                    <PortalEmptyState
+                        icon={Users}
+                        title="Select a sport to load its athletes and coaches."
+                    />
+                ) : sports.length === 0 ? (
                     <PortalEmptyState
                         icon={Users}
                         title="No public athlete records are currently available."

@@ -84,6 +84,7 @@ type VenueRow = {
 type Props = {
     meets: MeetRow[];
     participation: { rows: ParticipationRow[] };
+    overview: Array<{ key: string; label: string; count: number }>;
     operations: OperationsRow[];
     performance: {
         districts: DistrictStandingRow[];
@@ -129,6 +130,7 @@ type Props = {
 export default function ManagementReport({
     meets,
     participation,
+    overview,
     operations,
     performance,
     venues,
@@ -150,6 +152,24 @@ export default function ManagementReport({
                 <p className="text-sm text-muted-foreground">
                     Generated {generatedAt}
                 </p>
+
+                <section className="space-y-3">
+                    <h2 className="text-base font-semibold">
+                        Operational overview
+                    </h2>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        {overview.map((item) => (
+                            <div key={item.key} className="rounded-xl border p-4">
+                                <p className="text-sm text-muted-foreground">
+                                    {item.label}
+                                </p>
+                                <p className="mt-1 text-2xl font-bold tabular-nums">
+                                    {item.count}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                </section>
 
                 <section className="rounded-xl border p-5">
                     <h2 className="text-base font-semibold">

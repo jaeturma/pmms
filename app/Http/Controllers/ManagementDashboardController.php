@@ -6,19 +6,30 @@ use App\Enums\DelegationStatus;
 use App\Enums\EligibilityStatus;
 use App\Enums\IncidentStatus;
 use App\Enums\MeetStatus;
+use App\Enums\PersonnelRole;
 use App\Enums\ProtestStatus;
 use App\Enums\ResultStatus;
 use App\Models\Athlete;
+use App\Models\BilletingAssignment;
 use App\Models\Delegation;
 use App\Models\Division;
 use App\Models\EligibilityReview;
 use App\Models\Entry;
+use App\Models\EmergencyIncident;
+use App\Models\EquipmentItem;
+use App\Models\Event;
 use App\Models\EventResult;
 use App\Models\EventSchedule;
 use App\Models\Incident;
+use App\Models\MealSchedule;
+use App\Models\MedicalClearance;
 use App\Models\Meet;
+use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
 use App\Models\Personnel;
 use App\Models\Protest;
+use App\Models\TransportRequest;
+use App\Models\Venue;
 use App\Services\AuditLogger;
 use App\Services\MedalTallyService;
 use App\Services\MeetProgressService;
@@ -90,6 +101,13 @@ class ManagementDashboardController extends Controller
         ]);
 
         $rows = [];
+
+        $rows[] = ['Operational Overview'];
+        $rows[] = ['Area', 'Total'];
+        foreach ($data['overview'] as $item) {
+            $rows[] = [$item['label'], $item['count']];
+        }
+        $rows[] = [];
 
         $rows[] = ['Meet Progress by Medal Awards'];
         $rows[] = ['Medal', 'Official Awarded', 'Expected', 'Remaining'];
@@ -180,10 +198,54 @@ class ManagementDashboardController extends Controller
                 ])
                 ->values(),
             'participation' => $this->participation($meets),
+            'overview' => $this->operationalOverview($meets),
             'operations' => $this->operationsProgress($meets),
             'performance' => $this->performanceHistory($meets, $tally),
             'venues' => $this->venueUtilization($meets),
         ];
+    }
+
+    /** @return array<int, array{key: string, label: string, count: int}> */
+    private function operationalOverview(Collection $meets): array
+    {
+        $meetIds = $meets->pluck('id');
+        $delegationIds = Delegation::query()->whereIn('meet_id', $meetIds)->pluck('id');
+        $venueIds = Venue::query()
+            ->where(fn ($venues) => $venues
+                ->whereHas('schedules', fn ($schedules) => $schedules->whereIn('meet_id', $meetIds))
+                ->orWhereHas('meetSportAssignments.meetSport', fn ($meetSports) => $meetSports->whereIn('meet_id', $meetIds)))
+            ->pluck('id');
+
+        $counts = [
+            'tournament_officials' => MeetSportAssignment::query()->where('status', 'active')
+                ->whereHas('meetSport', fn ($meetSports) => $meetSports->whereIn('meet_id', $meetIds))
+                ->distinct()->count('user_id'),
+            'coaches' => Personnel::query()->whereIn('delegation_id', $delegationIds)
+                ->whereIn('role', [PersonnelRole::Coach->value, PersonnelRole::AssistantCoach->value])->count(),
+            'athletes' => Athlete::query()->whereIn('delegation_id', $delegationIds)->count(),
+            'sports' => MeetSport::query()->whereIn('meet_id', $meetIds)->where('active', true)->count(),
+            'events' => Event::query()->whereHas('meets', fn ($query) => $query->whereIn('meets.id', $meetIds))->count(),
+            'venues' => $venueIds->count(),
+            'equipment' => (int) EquipmentItem::query()->where(fn ($items) => $items->whereNull('venue_id')->orWhereIn('venue_id', $venueIds))->sum('quantity'),
+            'food' => MealSchedule::query()->whereIn('meet_id', $meetIds)->count(),
+            'billeting' => BilletingAssignment::query()->whereIn('meet_id', $meetIds)->count(),
+            'transport' => TransportRequest::query()->whereIn('meet_id', $meetIds)->count(),
+            'medical' => MedicalClearance::query()->whereIn('meet_id', $meetIds)->count(),
+            'incidents' => Incident::query()->whereIn('meet_id', $meetIds)->count(),
+            'emergencies' => EmergencyIncident::query()->whereIn('meet_id', $meetIds)->count(),
+        ];
+
+        $labels = [
+            'tournament_officials' => __('Tournament Officials'), 'coaches' => __('Coaches'),
+            'athletes' => __('Athletes'), 'sports' => __('Sports'), 'events' => __('Events'),
+            'venues' => __('Venues'), 'equipment' => __('Equipment'), 'food' => __('Foods'),
+            'billeting' => __('Billeting'), 'transport' => __('Transport'), 'medical' => __('Medical'),
+            'incidents' => __('Incidents'), 'emergencies' => __('Emergencies'),
+        ];
+
+        return collect($counts)->map(fn (int $count, string $key): array => [
+            'key' => $key, 'label' => $labels[$key], 'count' => $count,
+        ])->values()->all();
     }
 
     /**

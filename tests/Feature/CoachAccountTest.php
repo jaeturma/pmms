@@ -211,12 +211,12 @@ test('a coach registers an athlete only in an assigned event with photos and acc
     expect($athlete->fresh()->first_name)->toBe('Pedro Updated');
 
     $photoUploadId = $athlete->photo_upload_id;
-    $this->actingAs($coach)->delete("/athletes/{$athlete->id}")->assertRedirect('/athletes');
-    $this->assertSoftDeleted('athletes', ['id' => $athlete->id]);
+    $this->actingAs($coach)->delete("/athletes/{$athlete->id}")->assertForbidden();
+    $this->assertDatabaseHas('athletes', ['id' => $athlete->id, 'deleted_at' => null]);
     $this->assertDatabaseHas('file_uploads', ['id' => $photoUploadId]);
 });
 
-test('a coach with multiple approved events registers an athlete without an automatic entry', function () {
+test('a coach with multiple approved events must select one of their sports for the athlete', function () {
     $delegation = Delegation::factory()->create(['status' => DelegationStatus::Draft]);
     $coach = coachFor($delegation);
     $firstAssignment = $coach->coachAssignmentRequests()->where('delegation_id', $delegation->id)->firstOrFail();
@@ -236,7 +236,7 @@ test('a coach with multiple approved events registers an athlete without an auto
         'status' => 'approved',
     ]);
 
-    $this->actingAs($coach)->post('/athletes', [
+    $payload = [
         ...requiredCoachAthleteFields(),
         'delegation_id' => $delegation->id,
         'school_id' => schoolForDelegation($delegation)->id,
@@ -246,10 +246,20 @@ test('a coach with multiple approved events registers an athlete without an auto
         'birthdate' => now()->subYears(15)->toDateString(),
         'lrn' => '321654987099',
         'grade_level' => 9,
+    ];
+
+    $this->actingAs($coach)->post('/athletes', $payload)
+        ->assertSessionHasErrors('event_id');
+
+    $this->assertDatabaseMissing('athletes', ['lrn' => '321654987099']);
+
+    $this->actingAs($coach)->post('/athletes', [
+        ...$payload,
+        'event_id' => $secondEvent->id,
     ])->assertSessionHasNoErrors();
 
     $athlete = Athlete::query()->where('lrn', '321654987099')->sole();
-    expect($athlete->entries()->count())->toBe(0);
+    expect($athlete->entries()->where('event_id', $secondEvent->id)->exists())->toBeTrue();
 });
 
 test('coach athlete registration synchronizes the submitted school district and municipality', function () {

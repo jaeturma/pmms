@@ -162,11 +162,21 @@ class AthleteRequest extends FormRequest
             if ($this->user()?->role === UserRole::Coach && $event === null && $sex !== null) {
                 $level = $this->integer('grade_level') <= 6 ? 'elementary' : 'secondary';
                 $gender = $sex === Sex::Male ? ['boys', 'mixed'] : ['girls', 'mixed'];
-                $hasMatchingScope = Event::query()
+                $matchingIndividualEvents = Event::query()
                     ->whereIn('id', $this->user()->approvedCoachEventIdsForDelegation($delegation))
-                    ->where('age_division', $level)->whereIn('gender', $gender)->exists();
+                    ->where('age_division', $level)
+                    ->whereIn('gender', $gender)
+                    ->where('is_team_event', false)
+                    ->count();
+                $hasMatchingScope = $matchingIndividualEvents > 0 || Event::query()
+                    ->whereIn('id', $this->user()->approvedCoachEventIdsForDelegation($delegation))
+                    ->where('age_division', $level)
+                    ->whereIn('gender', $gender)
+                    ->exists();
                 if (! $hasMatchingScope) {
                     $validator->errors()->add('event_id', __('Your active Coach assignment does not cover this athlete’s level and gender category.'));
+                } elseif ($matchingIndividualEvents > 1) {
+                    $validator->errors()->add('event_id', __('Select one of your approved sports and events for this athlete.'));
                 }
             }
             if ($event !== null && $sex !== null && ! $event->gender->accepts($sex)) {

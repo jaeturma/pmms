@@ -9,6 +9,7 @@ use App\Models\AuditLog;
 use App\Models\Delegation;
 use App\Models\District;
 use App\Models\EligibilityDocument;
+use App\Models\Entry;
 use App\Models\FileUpload;
 use App\Models\ManagementTeam;
 use App\Models\ManagementTeamMember;
@@ -259,6 +260,30 @@ test('viewing an athlete profile is audited', function () {
     expect(AuditLog::query()->where('action', 'athlete.viewed')->exists())->toBeTrue();
 });
 
+test('athlete views show sports coach and delegation', function () {
+    $coach = User::factory()->coach()->create(['name' => 'Coach Maria']);
+    $athlete = Athlete::factory()->create(['registered_by' => $coach->id]);
+    $entry = Entry::factory()->create([
+        'athlete_id' => $athlete->id,
+        'delegation_id' => $athlete->delegation_id,
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->get('/athletes')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('athletes.data.0.sports', $entry->event->sport->name)
+            ->where('athletes.data.0.coach', 'Coach Maria')
+            ->where('athletes.data.0.delegation', $athlete->delegation->registrantName()));
+
+    $this->actingAs($admin)
+        ->get("/athletes/{$athlete->id}")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('athlete.sports', $entry->event->sport->name)
+            ->where('athlete.coach', 'Coach Maria')
+            ->where('athlete.delegation', $athlete->delegation->registrantName()));
+});
+
 test('officers cannot view athletes of other delegations', function () {
     $athlete = Athlete::factory()->create();
 
@@ -410,7 +435,7 @@ test('the athlete sports photo is served to authorized users only', function () 
         ->assertForbidden();
 });
 
-test('updating an athlete cleans up the replaced sports photo while soft deletion retains evidence', function () {
+test('updating and permanently deleting an athlete cleans up sports photos', function () {
     Storage::fake('local');
     $delegation = Delegation::factory()->create();
     $admin = User::factory()->admin()->create();
@@ -441,11 +466,11 @@ test('updating an athlete cleans up the replaced sports photo while soft deletio
         ->delete("/athletes/{$athlete->id}")
         ->assertRedirect();
 
-    $this->assertSoftDeleted('athletes', ['id' => $athlete->id]);
-    $this->assertDatabaseHas('file_uploads', ['id' => $replacementUpload->id]);
+    $this->assertDatabaseMissing('athletes', ['id' => $athlete->id]);
+    $this->assertDatabaseMissing('file_uploads', ['id' => $replacementUpload->id]);
 });
 
-test('updates and soft deletions are audited and retain accreditation photos', function () {
+test('administrator deletion permanently removes the athlete and frees the lrn', function () {
     Storage::fake('local');
     $delegation = Delegation::factory()->create();
     $admin = User::factory()->admin()->create();
@@ -473,10 +498,17 @@ test('updates and soft deletions are audited and retain accreditation photos', f
         ->delete("/athletes/{$athlete->id}")
         ->assertRedirect();
 
-    $this->assertSoftDeleted('athletes', ['id' => $athlete->id]);
-    $this->assertDatabaseHas('file_uploads', ['id' => $upload->id]);
+    $this->assertDatabaseMissing('athletes', ['id' => $athlete->id]);
+    $this->assertDatabaseMissing('file_uploads', ['id' => $upload->id]);
 
-    expect(AuditLog::query()->where('action', 'athlete.deleted')->exists())->toBeTrue();
+    expect(AuditLog::query()->where('action', 'athlete.permanently_deleted')->exists())->toBeTrue();
+
+    $this->actingAs($admin)->post('/athletes', [
+        ...validAthletePayload($delegation),
+        'first_name' => 'Replacement',
+    ])->assertSessionHasNoErrors();
+
+    expect(Athlete::query()->where('lrn', '123456789012')->value('first_name'))->toBe('Replacement');
 });
 
 test('delegations with athletes cannot be deleted', function () {

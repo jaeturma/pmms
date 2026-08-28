@@ -529,12 +529,14 @@ class EligibilityController extends Controller
         $documents = $review->athlete->eligibilityDocuments->sortByDesc('id');
         $complete = collect(EligibilityDocumentType::qualificationRequirements())->every(
             fn (EligibilityDocumentType $type): bool => $documents->contains(
-                fn (EligibilityDocument $document): bool => $document->document_type === $type && $document->status === RequirementStatus::Verified,
+                fn (EligibilityDocument $document): bool => $document->document_type === $type
+                    && ($type === EligibilityDocumentType::MedicalCertificate
+                        || $document->status === RequirementStatus::Verified),
             ),
         );
         if (! $complete) {
             throw ValidationException::withMessages([
-                'requirements' => __('Athlete History, Form 10, PSA/Birth Certificate, Parents Consent, and Medical Certificate must all be validated before DSAC can qualify the athlete.'),
+                'requirements' => __('Athlete History, Form 10, PSA/Birth Certificate, and Parents Consent must be validated, and a Medical Certificate must be attached before DSAC can qualify the athlete.'),
             ]);
         }
 

@@ -5,12 +5,14 @@ import {
     Pencil,
     Search,
     ShieldCheck,
+    Trash2,
     UserPlus,
     UsersRound,
 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import InputError from '@/components/input-error';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { PageHeader } from '@/components/page-header';
 import { PaginationControls } from '@/components/pagination-controls';
 import type { Paginated } from '@/components/pagination-controls';
@@ -53,8 +55,10 @@ type UserRow = {
     person: string | null;
     roles: string[];
     coach_scopes: string[];
+    role_scopes: Array<{ role: string; sport: string; events: string[] }>;
     disabled: boolean;
     approval_status: string;
+    can_delete: boolean;
 };
 type RoleOption = { value: string; label: string; permissions: string[] };
 
@@ -372,6 +376,9 @@ export default function Users({
 }) {
     const [search, setSearch] = useState(filters.search);
     const [selected, setSelected] = useState<UserRow | null>(null);
+    const [viewedScope, setViewedScope] = useState<
+        UserRow['role_scopes'][number] | null
+    >(null);
     const [creating, setCreating] = useState(false);
     const submitSearch = (event: FormEvent) => {
         event.preventDefault();
@@ -455,30 +462,50 @@ export default function Users({
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex max-w-56 flex-wrap gap-1">
-                                            {user.roles.map((role) => (
-                                                <Badge
-                                                    key={role}
-                                                    variant="secondary"
+                                            {user.roles
+                                                .filter(
+                                                    (role) =>
+                                                        !user.role_scopes.some(
+                                                            (scope) =>
+                                                                scope.role ===
+                                                                role,
+                                                        ),
+                                                )
+                                                .map((role) => (
+                                                    <Badge
+                                                        key={role}
+                                                        variant="secondary"
+                                                    >
+                                                        <ShieldCheck className="mr-1 size-3" />
+                                                        {role}
+                                                    </Badge>
+                                                ))}
+                                            {user.role_scopes.map((scope) => (
+                                                <div
+                                                    key={`${scope.role}-${scope.sport}`}
+                                                    className="flex items-center gap-1"
                                                 >
-                                                    <ShieldCheck className="mr-1 size-3" />
-                                                    {role}
-                                                </Badge>
+                                                    <Badge variant="secondary">
+                                                        <ShieldCheck className="mr-1 size-3" />
+                                                        {scope.role} -{' '}
+                                                        {scope.sport}
+                                                    </Badge>
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="h-6 px-2 text-xs"
+                                                        onClick={() =>
+                                                            setViewedScope(
+                                                                scope,
+                                                            )
+                                                        }
+                                                    >
+                                                        Events
+                                                    </Button>
+                                                </div>
                                             ))}
                                         </div>
-                                        {user.coach_scopes.length > 0 && (
-                                            <div className="mt-2 space-y-1">
-                                                {user.coach_scopes.map(
-                                                    (scope) => (
-                                                        <p
-                                                            key={scope}
-                                                            className="text-xs text-muted-foreground"
-                                                        >
-                                                            {scope}
-                                                        </p>
-                                                    ),
-                                                )}
-                                            </div>
-                                        )}
                                     </TableCell>
                                     <TableCell>
                                         <Badge
@@ -549,6 +576,31 @@ export default function Users({
                                                     Approve
                                                 </Button>
                                             )}
+                                            {user.can_delete && (
+                                                <ConfirmDialog
+                                                    trigger={
+                                                        <Button
+                                                            size="sm"
+                                                            variant="destructive"
+                                                        >
+                                                            <Trash2 className="size-4" />
+                                                            Remove
+                                                        </Button>
+                                                    }
+                                                    title={`Remove ${user.name}?`}
+                                                    description="This removes the account and prevents sign-in while retaining assignments and audit history."
+                                                    confirmLabel="Remove account"
+                                                    destructive
+                                                    onConfirm={() =>
+                                                        router.delete(
+                                                            `/system/users/${user.id}`,
+                                                            {
+                                                                preserveScroll: true,
+                                                            },
+                                                        )
+                                                    }
+                                                />
+                                            )}
                                         </div>
                                     </TableCell>
                                 </TableRow>
@@ -574,6 +626,34 @@ export default function Users({
             {creating && (
                 <NewUser roles={roles} close={() => setCreating(false)} />
             )}
+            <Dialog
+                open={viewedScope !== null}
+                onOpenChange={(open) => !open && setViewedScope(null)}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>
+                            {viewedScope?.role} - {viewedScope?.sport}
+                        </DialogTitle>
+                    </DialogHeader>
+                    {viewedScope?.events.length ? (
+                        <div className="max-h-80 space-y-2 overflow-y-auto">
+                            {viewedScope.events.map((event) => (
+                                <div
+                                    key={event}
+                                    className="rounded-md border px-3 py-2 text-sm"
+                                >
+                                    {event}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">
+                            No events are currently assigned.
+                        </p>
+                    )}
+                </DialogContent>
+            </Dialog>
         </>
     );
 }

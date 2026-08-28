@@ -488,7 +488,7 @@ export function AppSidebar() {
                 icon: UsersRound,
                 items: [
                     {
-                        title: 'Coach Sports Events',
+                        title: 'Coaches',
                         href: '/coach/assignment-requests',
                         icon: UserCog,
                     },
@@ -738,7 +738,7 @@ export function AppSidebar() {
         );
 
         const coachItem: NavItem = {
-            title: 'Coach Sports Events',
+            title: 'Coaches',
             href: '/coach/assignment-requests',
             icon: UserCog,
         };
@@ -749,11 +749,7 @@ export function AppSidebar() {
         };
 
         if (registration) {
-            if (
-                !registration.items.some(
-                    (item) => item.title === 'Coach Sports Events',
-                )
-            ) {
+            if (!registration.items.some((item) => item.title === 'Coaches')) {
                 registration.items.push(coachItem);
             }
 

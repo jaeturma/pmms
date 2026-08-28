@@ -299,6 +299,9 @@ test('admins and organizers can view the management report with the same widgets
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('reports/management')
             ->has('meets', 1)
+            ->has('overview', 13)
+            ->where('overview.0.label', 'Tournament Officials')
+            ->where('overview.12.label', 'Emergencies')
             ->has('participation.rows', 1)
             ->has('operations', 1)
             ->has('performance.districts', 0)
@@ -318,6 +321,9 @@ test('the management dashboard CSV download is audited and carries every section
     $response->assertOk();
 
     expect($response->streamedContent())
+        ->toContain('Operational Overview')
+        ->toContain('Tournament Officials')
+        ->toContain('Emergencies')
         ->toContain('Participation - Delegations by status')
         ->toContain('Participation - Individuals & Entries')
         ->toContain('Operations Progress & Risk')

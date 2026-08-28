@@ -54,7 +54,7 @@ class CoachAssignmentRequestController extends Controller
 
         return Inertia::render('coach/assignments', [
             'registrations' => $this->onboardingRegistrations($user),
-            'requests' => $query->get()->map(fn (CoachAssignmentRequest $item): array => [
+            'requests' => $query->paginate(10, ['*'], 'requests_page')->withQueryString()->through(fn (CoachAssignmentRequest $item): array => [
                 'id' => $item->id, 'coach' => $item->user->name, 'email' => $item->user->email,
                 'sport' => $item->meetSport->sport->name,
                 'event' => $item->event?->name, 'team' => $item->delegation->registrantName(),
@@ -302,7 +302,9 @@ class CoachAssignmentRequestController extends Controller
             ->whereIn('sport_id', $manageableSportIds)
             ->where(fn ($events) => $events->where('active', true)->orWhereIn('id', $selectedEvents->modelKeys()))
             ->with('sport:id,name')
-            ->orderBy('sport_id')->orderBy('display_order')->orderBy('name')->get();
+            ->orderBy('sport_id')->orderBy('display_order')->orderBy('name')
+            ->paginate(15, ['*'], 'events_page')
+            ->withQueryString();
         $coachDelegationIds = $existingAssignments->pluck('delegation_id')->push($coachOnboardingRequest->delegation_id)->filter()->unique();
         $registeredAthletes = Athlete::query()->where('registered_by', $coachOnboardingRequest->user_id)
             ->whereIn('delegation_id', $coachDelegationIds)->with(['school:id,name', 'entries.event:id,name'])
@@ -329,13 +331,12 @@ class CoachAssignmentRequestController extends Controller
                     'photo_url' => $athlete->photo_upload_id ? route('athletes.photo', $athlete) : null,
                 ])->all(),
             ],
-            'events' => $availableEvents
-                ->map(fn (Event $event): array => [
+            'events' => $availableEvents->through(fn (Event $event): array => [
                     'id' => $event->id,
                     'name' => $event->name,
                     'sport' => $event->sport->name,
                     'category' => $event->age_division->label().' / '.$event->gender->label(),
-                ])->all(),
+                ]),
             'selectedEventIds' => $selectedEvents->whereIn('sport_id', $manageableSportIds)->modelKeys(),
             'canApprove' => $this->canReviewOnboarding($request->user(), $coachOnboardingRequest),
         ]);
@@ -592,7 +593,7 @@ class CoachAssignmentRequestController extends Controller
             ->values();
     }
 
-    private function onboardingRegistrations(User $user): array
+    private function onboardingRegistrations(User $user)
     {
         if ($this->isCoachApplicant($user)) {
             $query = CoachOnboardingRequest::query()->where('user_id', $user->id);
@@ -614,7 +615,7 @@ class CoachAssignmentRequestController extends Controller
         }
 
         return $query->with(['user:id,name,email,approval_status', 'district:id,name', 'meetSport.meet:id,name', 'meetSport.sport:id,name', 'delegation.school:id,name', 'delegation.district:id,name', 'school:id,name', 'event.sport:id,name', 'events.sport:id,name', 'profile:id,mime_type', 'certification:id,mime_type'])
-            ->latest()->get()->map(function (CoachOnboardingRequest $item) use ($user): array {
+            ->latest()->paginate(10, ['*'], 'registrations_page')->withQueryString()->through(function (CoachOnboardingRequest $item) use ($user): array {
                 $accreditationNumber = Accreditation::query()
                     ->whereHas('personnel', fn ($personnel) => $personnel->where('user_id', $item->user_id))
                     ->value('number');
@@ -672,8 +673,13 @@ class CoachAssignmentRequestController extends Controller
                         && $item->profile_upload_id !== null
                         && $this->canAccreditOnboarding($user, $item),
                     'accreditation_number' => $accreditationNumber,
+                    'accreditation_label' => $item->status !== 'approved'
+                        ? null
+                        : ($item->certification_upload_id === null
+                            ? __('Accredited (Without Certificate attached)')
+                            : __('Accredited')),
                 ];
-            })->all();
+            });
     }
 
     private function coachPersonnel(CoachOnboardingRequest $request, Delegation $delegation, ?School $school): Personnel

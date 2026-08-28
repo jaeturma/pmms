@@ -13,9 +13,16 @@ type Props = {
     url: string;
     label: string;
     params?: Record<string, string>;
+    pageName?: string;
 };
 
-export function PaginationControls({ page, url, label, params = {} }: Props) {
+export function PaginationControls({
+    page,
+    url,
+    label,
+    params = {},
+    pageName = 'page',
+}: Props) {
     if (page.last_page <= 1) {
         return null;
     }
@@ -23,7 +30,7 @@ export function PaginationControls({ page, url, label, params = {} }: Props) {
     const go = (target: number) => {
         router.get(
             url,
-            { ...params, page: String(target) },
+            { ...params, [pageName]: String(target) },
             { preserveState: true, preserveScroll: true },
         );
     };

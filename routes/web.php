@@ -217,6 +217,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('system/users', [UserManagementController::class, 'index'])->name('system.users.index');
     Route::post('system/users', [UserManagementController::class, 'store'])->name('system.users.store');
     Route::put('system/users/{user}', [UserManagementController::class, 'update'])->name('system.users.update');
+    Route::delete('system/users/{user}', [UserManagementController::class, 'destroy'])->name('system.users.destroy');
     Route::post('system/users/{user}/approve', [UserManagementController::class, 'approve'])->name('system.users.approve');
     Route::post('system/users/{user}/reset-password', [UserManagementController::class, 'resetPassword'])
         ->middleware('throttle:6,1')->name('system.users.reset-password');

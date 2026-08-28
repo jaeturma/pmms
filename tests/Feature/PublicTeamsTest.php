@@ -323,6 +323,12 @@ test('players and coaches are grouped by sport and scoped to the requested munic
     teamsEntry($meet, $otherMunicipality, $event, $otherSchool);
 
     $this->get('/teams/nabunturan/players-coaches')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('sportOptions', 1)
+            ->where('selectedSportId', null)
+            ->has('sports', 0));
+
+    $this->get('/teams/nabunturan/players-coaches?sport_id='.$basketball->id)
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('portal/team-players-coaches')
@@ -351,7 +357,7 @@ test('submitted athletes remain visible with their eligibility status', function
     $entry = teamsEntry($meet, $municipality, $event, $school);
     $entry->update(['status' => 'submitted']);
 
-    $this->get('/teams/mawab/players-coaches')
+    $this->get('/teams/mawab/players-coaches?sport_id='.$sport->id)
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('sports.0.athletes', 1)
@@ -397,7 +403,7 @@ test('approved coach accounts and qualified athletes are visible on the municipa
         'status' => 'approved',
     ]);
 
-    $this->get('/teams/laak/players-coaches')
+    $this->get('/teams/laak/players-coaches?sport_id='.$volleyball->id)
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('sports.0.sport', 'Volleyball')
@@ -419,7 +425,7 @@ test('a paragames sport section is flagged so the frontend can filter on it', fu
 
     teamsEntry($meet, $municipality, $event, $school);
 
-    $this->get('/teams/nabunturan/players-coaches')
+    $this->get('/teams/nabunturan/players-coaches?sport_id='.$paragamesSport->id)
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('sports.0.sport', 'Paragames - Swimming')
             ->where('sports.0.is_paragames', true));
@@ -444,7 +450,7 @@ test('public-safe fields only: no birthdate, LRN, or coach contact details are e
     ]);
     $coach->sports()->attach($basketball->id);
 
-    $response = $this->get('/teams/nabunturan/players-coaches')->assertOk();
+    $response = $this->get('/teams/nabunturan/players-coaches?sport_id='.$basketball->id)->assertOk();
 
     $body = $response->getContent();
 

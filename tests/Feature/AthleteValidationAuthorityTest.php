@@ -53,23 +53,23 @@ test('a municipality team manager monitors its municipality but cannot approve D
     $this->actingAs($manager)->put("/medical-clearances/{$clearance->id}", ['status' => MedicalClearanceStatus::Cleared->value])->assertForbidden();
 });
 
-test('DSAC verifies qualification documents but cannot verify a medical certificate', function () {
+test('DSAC verifies qualification documents including an attached medical certificate', function () {
     $athlete = Athlete::factory()->create();
     $review = EligibilityReview::factory()->create(['athlete_id' => $athlete->id, 'meet_id' => $athlete->delegation->meet_id]);
     $dsac = authorityMember(ManagementTeamType::DivisionScreeningAndAccreditation, $review->meet_id);
     $schoolId = EligibilityDocument::factory()->create(['athlete_id' => $athlete->id, 'document_type' => EligibilityDocumentType::SchoolId]);
     $medical = EligibilityDocument::factory()->create(['athlete_id' => $athlete->id, 'document_type' => EligibilityDocumentType::MedicalCertificate]);
     $this->actingAs($dsac)->patch("/eligibility/documents/{$schoolId->id}/status", ['status' => RequirementStatus::Verified->value])->assertRedirect();
-    $this->actingAs($dsac)->patch("/eligibility/documents/{$medical->id}/status", ['status' => RequirementStatus::Verified->value])->assertForbidden();
-    expect($medical->fresh()->status)->not->toBe(RequirementStatus::Verified);
+    $this->actingAs($dsac)->patch("/eligibility/documents/{$medical->id}/status", ['status' => RequirementStatus::Verified->value])->assertRedirect();
+    expect($medical->fresh()->status)->toBe(RequirementStatus::Verified);
 });
 
-test('Medical Team verifies medical requirements but cannot alter PSA verification', function () {
+test('Medical Team does not decide DSAC eligibility documents', function () {
     $athlete = Athlete::factory()->create();
     EligibilityReview::factory()->create(['athlete_id' => $athlete->id, 'meet_id' => $athlete->delegation->meet_id]);
     $medicalTeam = authorityMember(ManagementTeamType::Medical, $athlete->delegation->meet_id);
     $medical = EligibilityDocument::factory()->create(['athlete_id' => $athlete->id, 'document_type' => EligibilityDocumentType::MedicalCertificate]);
     $psa = EligibilityDocument::factory()->create(['athlete_id' => $athlete->id, 'document_type' => EligibilityDocumentType::BirthCertificate]);
-    $this->actingAs($medicalTeam)->patch("/eligibility/documents/{$medical->id}/status", ['status' => RequirementStatus::Verified->value])->assertRedirect();
+    $this->actingAs($medicalTeam)->patch("/eligibility/documents/{$medical->id}/status", ['status' => RequirementStatus::Verified->value])->assertForbidden();
     $this->actingAs($medicalTeam)->patch("/eligibility/documents/{$psa->id}/status", ['status' => RequirementStatus::Verified->value])->assertForbidden();
 });

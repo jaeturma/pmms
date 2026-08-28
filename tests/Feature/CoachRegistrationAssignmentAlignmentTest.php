@@ -73,8 +73,10 @@ test('tournament ict reviews only its sport and assigns scope during approval', 
     $basketballIct = User::factory()->create();
     MeetSportAssignment::factory()->create(['user_id' => $basketballIct->id, 'meet_sport_id' => $basketballMeetSport->id, 'role' => MeetSportAssignmentRole::TournamentICT, 'status' => MeetSportAssignmentStatus::Active]);
 
-    $this->actingAs($swimmingIct)->get('/coach/assignment-requests')->assertInertia(fn (AssertableInertia $page) => $page->has('registrations', 1));
-    $this->actingAs($basketballIct)->get('/coach/assignment-requests')->assertInertia(fn (AssertableInertia $page) => $page->has('registrations', 0));
+    $this->actingAs($swimmingIct)->get('/coach/assignment-requests')->assertInertia(fn (AssertableInertia $page) => $page
+        ->has('registrations.data', 1)
+        ->where('registrations.per_page', 10));
+    $this->actingAs($basketballIct)->get('/coach/assignment-requests')->assertInertia(fn (AssertableInertia $page) => $page->has('registrations.data', 0));
     $this->actingAs($basketballIct)->patch("/coach/onboarding-requests/{$application->id}", ['status' => 'approved', 'event_ids' => [$events->first()->id]])->assertForbidden();
 
     $this->actingAs($swimmingIct)->patch("/coach/onboarding-requests/{$application->id}", ['status' => 'approved', 'event_ids' => [$events->first()->id]])->assertSessionDoesntHaveErrors();
@@ -133,7 +135,7 @@ test('coach selects events on a separate page and only ict approves the account'
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('coach/manage-assignments')
             ->where('registration.sport', $meetSport->sport->name)
-            ->has('events', 2)->where('canApprove', false));
+            ->has('events.data', 2)->where('canApprove', false));
     $this->actingAs($coach)->put("/coach/onboarding-requests/{$application->id}/assignments", [
         'event_ids' => $events->modelKeys(),
     ])->assertSessionHasNoErrors();
@@ -167,7 +169,7 @@ test('applied sport shows catalog events even when the meet event pivot is missi
     $this->actingAs($coach)->get("/coach/onboarding-requests/{$application->id}/assignments")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('registration.sport', $sport->name)
-            ->has('events', 3));
+            ->has('events.data', 3));
 
     $this->actingAs($coach)->put("/coach/onboarding-requests/{$application->id}/assignments", [
         'event_ids' => [$event->id],
@@ -188,10 +190,10 @@ test('legacy coach registration with only an event derives its sport and repairs
     ]);
     $this->actingAs($coach)->get("/coach/onboarding-requests/{$application->id}/assignments")
         ->assertOk()->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('coach/manage-assignments')
-            ->where('registration.sport', $sport->name)
-            ->where('selectedEventIds', [$events->first()->id])
-            ->has('events', 2));
+        ->component('coach/manage-assignments')
+        ->where('registration.sport', $sport->name)
+        ->where('selectedEventIds', [$events->first()->id])
+        ->has('events.data', 2));
     $this->actingAs($coach)->put("/coach/onboarding-requests/{$application->id}/assignments", [
         'event_ids' => [$events->last()->id],
     ])->assertSessionHasNoErrors();

@@ -98,7 +98,34 @@ test('the users role column includes sports and events for coaches without assig
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('users.data', 1)
             ->where('users.data.0.coach_scopes.0', $meetSport->sport->name.' — Girls Doubles')
+            ->where('users.data.0.role_scopes.0.role', 'Coach')
+            ->where('users.data.0.role_scopes.0.sport', $meetSport->sport->name)
+            ->where('users.data.0.role_scopes.0.events.0', 'Girls Doubles')
             ->missing('users.data.0.assignments'));
+});
+
+test('the users role column includes a technical officials sport and modal events', function () {
+    $admin = User::factory()->admin()->create();
+    $meetSport = MeetSport::factory()->create();
+    $event = Event::factory()->create([
+        'sport_id' => $meetSport->sport_id,
+        'name' => 'Light Flyweight',
+    ]);
+    $meetSport->meet->events()->attach($event);
+    $official = User::factory()->technicalOfficial()->create(['name' => 'Boxing Official']);
+    MeetSportAssignment::factory()->create([
+        'user_id' => $official->id,
+        'meet_sport_id' => $meetSport->id,
+        'role' => MeetSportAssignmentRole::TechnicalOfficial,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($admin)
+        ->get('/system/users?search=Boxing%20Official')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('users.data.0.role_scopes.0.role', 'Technical Official')
+            ->where('users.data.0.role_scopes.0.sport', $meetSport->sport->name)
+            ->where('users.data.0.role_scopes.0.events.0', 'Light Flyweight'));
 });
 
 test('an active ICT team member can manage system users', function () {
@@ -201,4 +228,34 @@ test('ordinary users cannot manage system accounts or reset coach passwords', fu
 
     $this->actingAs($viewer)->get('/system/users')->assertForbidden();
     $this->actingAs($viewer)->post("/system/users/{$target->id}/reset-password")->assertForbidden();
+});
+
+test('a system administrator can remove regular users and coaches', function () {
+    $admin = User::factory()->admin()->create();
+    $user = User::factory()->create();
+    $coach = User::factory()->coach()->create();
+
+    $this->actingAs($admin)->delete("/system/users/{$user->id}")->assertSessionHasNoErrors();
+    $this->actingAs($admin)->delete("/system/users/{$coach->id}")->assertSessionHasNoErrors();
+
+    $this->assertSoftDeleted('users', ['id' => $user->id]);
+    $this->assertSoftDeleted('users', ['id' => $coach->id]);
+});
+
+test('account removal is restricted to system administrators and they cannot remove themselves', function () {
+    $admin = User::factory()->admin()->create();
+    $ict = User::factory()->create();
+    $team = ManagementTeam::factory()->create(['team_type' => ManagementTeamType::ICT]);
+    ManagementTeamMember::factory()->create([
+        'management_team_id' => $team->id,
+        'user_id' => $ict->id,
+        'status' => ManagementTeamMemberStatus::Active,
+    ]);
+    $target = User::factory()->create();
+
+    $this->actingAs($ict)->delete("/system/users/{$target->id}")->assertForbidden();
+    $this->actingAs($admin)->delete("/system/users/{$admin->id}")->assertStatus(422);
+
+    expect($target->fresh())->not->toBeNull()
+        ->and($admin->fresh())->not->toBeNull();
 });

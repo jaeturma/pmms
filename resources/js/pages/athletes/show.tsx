@@ -40,6 +40,8 @@ type Athlete = {
     grade_level: number;
     school: string;
     meet: string;
+    delegation: string;
+    coach: string | null;
     photo_url: string | null;
     sports_photo_url: string | null;
     sports: string;
@@ -91,7 +93,9 @@ export default function AthleteShow({ athlete }: Props) {
         ['Birthdate', `${athlete.birthdate} (age ${athlete.age})`],
         ['LRN', athlete.lrn],
         ['Grade level', `Grade ${athlete.grade_level}`],
-        ['Sport', athlete.sports || 'Not assigned'],
+        ['Sports', athlete.sports || 'Not assigned'],
+        ['Coach', athlete.coach || 'Not assigned'],
+        ['Delegation', athlete.delegation],
         ['Accreditation status', athlete.accreditation_status],
         ['School', athlete.school],
         ['Meet', athlete.meet],

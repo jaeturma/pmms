@@ -19,7 +19,7 @@ enum EligibilityStatus: string
     {
         return match ($this) {
             self::Pending => 'Pending Review',
-            self::Approved => 'Qualified',
+            self::Approved => 'Eligible',
             self::Returned => 'Incomplete / For Submission',
             self::Rejected => 'Rejected',
         };

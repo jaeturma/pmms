@@ -5,7 +5,6 @@ namespace App\Services\Eligibility;
 use App\Enums\EligibilityDocumentType;
 use App\Enums\EligibilityResult;
 use App\Enums\EligibilityStatus;
-use App\Enums\MedicalClearanceStatus;
 use App\Enums\RequirementStatus;
 use App\Models\Athlete;
 use App\Models\Event;
@@ -40,23 +39,24 @@ class AthleteEligibilityChecker
             $ruleStatus = match ($status) {
                 RequirementStatus::Verified => 'passed', RequirementStatus::Rejected, RequirementStatus::Expired => 'failed', default => 'pending',
             };
+            if ($type === EligibilityDocumentType::MedicalCertificate && $document !== null) {
+                $ruleStatus = 'passed';
+            }
             if ($type === EligibilityDocumentType::SchoolId && $status === RequirementStatus::Verified && $document->school_id !== null && $document->school_id !== $athlete->school_id) {
                 $ruleStatus = 'failed';
             }
-            $authority = $type === EligibilityDocumentType::MedicalCertificate ? 'Medical Team' : 'DSAC';
-            $add($type->label(), $authority, 'Required document must be submitted and verified.', 'Verified', $status?->value ?? 'Missing', $ruleStatus, $document?->remarks);
+            $add(
+                $type->label(),
+                'DSAC',
+                $type === EligibilityDocumentType::MedicalCertificate ? 'Medical Certificate must be attached for DSAC qualification.' : 'Required document must be submitted and verified.',
+                $type === EligibilityDocumentType::MedicalCertificate ? 'Attached' : 'Verified',
+                $status?->value ?? 'Missing',
+                $ruleStatus,
+                $document?->remarks,
+            );
         }
 
         $medical = null;
-        $medical = null;
-        if ($meet->medical_clearance_required) {
-            $medical = $athlete->medicalClearance?->status;
-            $add('Medical Clearance', 'Medical Team', 'Athlete must be medically cleared.', 'Cleared', $medical?->value ?? 'Missing', match ($medical) {
-                MedicalClearanceStatus::Cleared => 'passed', MedicalClearanceStatus::Restricted, MedicalClearanceStatus::Referred, MedicalClearanceStatus::NotCleared => 'failed', default => 'pending',
-            });
-        } else {
-            $add('Medical Clearance', 'Medical Team', 'Medical clearance is not required for this meet.', 'Not required', 'Not applicable', 'not_applicable');
-        }
 
         $entryCount = $athlete->entries()->whereHas('delegation', fn ($query) => $query->where('meet_id', $meet->id))->count();
         $limit = $meet->max_events_per_athlete;
@@ -73,11 +73,9 @@ class AthleteEligibilityChecker
 
         $result = match (true) {
             $review?->status === EligibilityStatus::Returned => EligibilityResult::ReturnedByDsac,
-            collect($rules)->contains('status', 'failed') && $medical !== MedicalClearanceStatus::Restricted => EligibilityResult::Ineligible,
-            isset($medical) && $medical === MedicalClearanceStatus::Restricted => EligibilityResult::Restricted,
+            collect($rules)->contains('status', 'failed') => EligibilityResult::Ineligible,
             collect($rules)->contains(fn ($rule) => $rule['status'] === 'pending' && in_array($rule['rule'], ['School ID', 'PSA Birth Certificate', 'Medical Certificate', 'Parental Consent'], true)) => EligibilityResult::PendingRequirements,
             $review === null || $review->status === EligibilityStatus::Pending => EligibilityResult::PendingDsac,
-            isset($medical) && in_array($medical, [null, MedicalClearanceStatus::Pending, MedicalClearanceStatus::ForEvaluation], true) => EligibilityResult::PendingMedical,
             default => EligibilityResult::Eligible,
         };
 

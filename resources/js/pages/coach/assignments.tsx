@@ -5,6 +5,8 @@ import type { FormEvent } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
+import { PaginationControls } from '@/components/pagination-controls';
+import type { Paginated } from '@/components/pagination-controls';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -61,6 +63,7 @@ type RegistrationRow = {
     can_update_attachments: boolean;
     can_accredit: boolean;
     accreditation_number: string | null;
+    accreditation_label: string | null;
     documents_complete: boolean;
     registered_athletes: Array<{
         id: number;
@@ -80,8 +83,8 @@ type Option = {
     label: string;
 };
 type Props = {
-    registrations: RegistrationRow[];
-    requests: RequestRow[];
+    registrations: Paginated<RegistrationRow>;
+    requests: Paginated<RequestRow>;
     options: Option[];
     canRequest: boolean;
     canReview: boolean;
@@ -214,8 +217,8 @@ export default function CoachAssignments({
     canRequest,
     canReview,
 }: Props) {
-    const canAccredit = registrations.some((item) => item.can_accredit);
-    const canManageAny = registrations.some(
+    const canAccredit = registrations.data.some((item) => item.can_accredit);
+    const canManageAny = registrations.data.some(
         (item) => item.can_manage_assignments,
     );
     const [viewedDocument, setViewedDocument] = useState<ViewedDocument | null>(
@@ -250,13 +253,13 @@ export default function CoachAssignments({
 
     return (
         <>
-            <Head title="Coach Sports Events" />
+            <Head title="Coaches" />
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
-                    title="Coach Sports Events"
+                    title="Coaches"
                     description="Approve coach accounts and assign or update the sports events they coach."
                 />
-                {registrations.length > 0 && (
+                {registrations.data.length > 0 && (
                     <div className="space-y-2">
                         <h2 className="text-lg font-semibold">
                             Account registrations
@@ -285,7 +288,7 @@ export default function CoachAssignments({
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {registrations.map((item) => (
+                                    {registrations.data.map((item) => (
                                         <TableRow key={item.id}>
                                             <TableCell>
                                                 <div className="flex items-center gap-3">
@@ -388,11 +391,14 @@ export default function CoachAssignments({
                                                 >
                                                     {item.status}
                                                 </Badge>
-                                                {item.accreditation_number && (
+                                                {item.accreditation_label && (
                                                     <div className="mt-1 text-xs font-medium">
-                                                        {
-                                                            item.accreditation_number
-                                                        }
+                                                        {item.accreditation_label}
+                                                        {item.accreditation_number && (
+                                                            <span className="block text-muted-foreground">
+                                                                {item.accreditation_number}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 )}
                                             </TableCell>
@@ -595,6 +601,12 @@ export default function CoachAssignments({
                                 </TableBody>
                             </Table>
                         </div>
+                        <PaginationControls
+                            page={registrations}
+                            url="/coach/assignment-requests"
+                            pageName="registrations_page"
+                            label="coach registrations"
+                        />
                     </div>
                 )}
                 {false && (
@@ -640,7 +652,7 @@ export default function CoachAssignments({
                                 </Button>
                             </form>
                         )}
-                        {requests.length === 0 ? (
+                        {requests.data.length === 0 ? (
                             <EmptyState
                                 icon={UserCheck}
                                 title="No event enrollment requests"
@@ -663,7 +675,7 @@ export default function CoachAssignments({
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {requests.map((item) => (
+                                        {requests.data.map((item) => (
                                             <TableRow key={item.id}>
                                                 <TableCell>
                                                     <div className="font-medium">
@@ -763,6 +775,12 @@ export default function CoachAssignments({
                                 </Table>
                             </div>
                         )}
+                        <PaginationControls
+                            page={requests}
+                            url="/coach/assignment-requests"
+                            pageName="requests_page"
+                            label="coach assignments"
+                        />
                     </>
                 )}
                 <Dialog
@@ -960,7 +978,5 @@ export default function CoachAssignments({
 }
 
 CoachAssignments.layout = {
-    breadcrumbs: [
-        { title: 'Coach Sports Events', href: '/coach/assignment-requests' },
-    ],
+    breadcrumbs: [{ title: 'Coaches', href: '/coach/assignment-requests' }],
 };
