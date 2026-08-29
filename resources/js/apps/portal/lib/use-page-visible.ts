@@ -4,10 +4,13 @@ import { useEffect, useState } from 'react';
  * `@/hooks/use-page-visible`, so nothing under `apps/portal` depends
  * on a module outside its own tree. */
 export function usePortalPageVisible(): boolean {
-    const [visible, setVisible] = useState(() => document.visibilityState === 'visible');
+    const [visible, setVisible] = useState(
+        () => document.visibilityState === 'visible',
+    );
 
     useEffect(() => {
-        const handler = () => setVisible(document.visibilityState === 'visible');
+        const handler = () =>
+            setVisible(document.visibilityState === 'visible');
 
         document.addEventListener('visibilitychange', handler);
 

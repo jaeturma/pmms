@@ -9,9 +9,19 @@ import type { PortalTechnicalOfficial } from '@/apps/portal/types';
  * sets it yet). Public-safe fields only: name and duty — never phone/
  * email/address/birth date/employee id/medical/account.
  */
-export function PortalTechnicalOfficials({ officials }: { officials: PortalTechnicalOfficial[] }) {
+export function PortalTechnicalOfficials({
+    officials,
+}: {
+    officials: PortalTechnicalOfficial[];
+}) {
     if (officials.length === 0) {
-        return <PortalEmptyState icon={ShieldCheck} title="Not yet assigned" description="Technical officials appear here once assigned." />;
+        return (
+            <PortalEmptyState
+                icon={ShieldCheck}
+                title="Not yet assigned"
+                description="Technical officials appear here once assigned."
+            />
+        );
     }
 
     return (
@@ -25,8 +35,12 @@ export function PortalTechnicalOfficials({ officials }: { officials: PortalTechn
                         <ShieldCheck aria-hidden="true" className="size-5" />
                     </span>
                     <span className="min-w-0">
-                        <span className="block truncate font-medium text-[var(--portal-fg)]">{official.name}</span>
-                        <span className="block text-xs text-[var(--portal-muted-foreground)]">{official.duty ?? 'Technical Official'}</span>
+                        <span className="block truncate font-medium text-[var(--portal-fg)]">
+                            {official.name}
+                        </span>
+                        <span className="block text-xs text-[var(--portal-muted-foreground)]">
+                            {official.duty ?? 'Technical Official'}
+                        </span>
                     </span>
                 </li>
             ))}

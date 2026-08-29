@@ -64,7 +64,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * a fresh game's zeroed state only if `sport_state` is somehow entirely
  * absent (a session that's never had a single count/run event yet). */
 export function readCount(state: SportState): SoftballCount {
-    const fallback: SoftballCount = { inning: 1, half: 'top', outs: 0, balls: 0, strikes: 0, innings: [] };
+    const fallback: SoftballCount = {
+        inning: 1,
+        half: 'top',
+        outs: 0,
+        balls: 0,
+        strikes: 0,
+        innings: [],
+    };
 
     if (!isRecord(state)) {
         return fallback;
@@ -73,12 +80,16 @@ export function readCount(state: SportState): SoftballCount {
     const innings = Array.isArray(state.innings)
         ? state.innings.filter(
               (row): row is SoftballInning =>
-                  isRecord(row) && typeof row.inning === 'number' && typeof row.runs_a === 'number' && typeof row.runs_b === 'number',
+                  isRecord(row) &&
+                  typeof row.inning === 'number' &&
+                  typeof row.runs_a === 'number' &&
+                  typeof row.runs_b === 'number',
           )
         : [];
 
     return {
-        inning: typeof state.inning === 'number' ? state.inning : fallback.inning,
+        inning:
+            typeof state.inning === 'number' ? state.inning : fallback.inning,
         half: state.half === 'bottom' ? 'bottom' : 'top',
         outs: typeof state.outs === 'number' ? state.outs : 0,
         balls: typeof state.balls === 'number' ? state.balls : 0,
@@ -94,14 +105,22 @@ export function readRunners(state: SportState): SoftballRunners | undefined {
 
     const { first, second, third } = state.runners;
 
-    if (typeof first !== 'boolean' || typeof second !== 'boolean' || typeof third !== 'boolean') {
+    if (
+        typeof first !== 'boolean' ||
+        typeof second !== 'boolean' ||
+        typeof third !== 'boolean'
+    ) {
         return undefined;
     }
 
     return { first, second, third };
 }
 
-export function readHitsAndErrors(state: SportState): { hits_a: number; hits_b: number; errors_a: number; errors_b: number } | undefined {
+export function readHitsAndErrors(
+    state: SportState,
+):
+    | { hits_a: number; hits_b: number; errors_a: number; errors_b: number }
+    | undefined {
     if (!isRecord(state)) {
         return undefined;
     }
@@ -138,7 +157,9 @@ function readTeamStatsSide(value: unknown): SoftballTeamStats | undefined {
     return value as unknown as SoftballTeamStats;
 }
 
-export function readTeamStats(state: SportState): { a: SoftballTeamStats; b: SoftballTeamStats } | undefined {
+export function readTeamStats(
+    state: SportState,
+): { a: SoftballTeamStats; b: SoftballTeamStats } | undefined {
     if (!isRecord(state) || !isRecord(state.team_stats)) {
         return undefined;
     }
@@ -156,13 +177,18 @@ function readPerformerList(value: unknown): SoftballPerformer[] | undefined {
 
     const performers = value.filter(
         (performer): performer is SoftballPerformer =>
-            isRecord(performer) && typeof performer.number === 'string' && typeof performer.name === 'string' && typeof performer.line === 'string',
+            isRecord(performer) &&
+            typeof performer.number === 'string' &&
+            typeof performer.name === 'string' &&
+            typeof performer.line === 'string',
     );
 
     return performers.length > 0 ? performers : undefined;
 }
 
-export function readBoxScore(state: SportState): { a: SoftballPerformer[]; b: SoftballPerformer[] } | undefined {
+export function readBoxScore(
+    state: SportState,
+): { a: SoftballPerformer[]; b: SoftballPerformer[] } | undefined {
     if (!isRecord(state) || !isRecord(state.box_score)) {
         return undefined;
     }
@@ -188,7 +214,9 @@ function readPitcher(value: unknown): SoftballPitcher | undefined {
     return value as unknown as SoftballPitcher;
 }
 
-export function readPitchers(state: SportState): { a: SoftballPitcher; b: SoftballPitcher } | undefined {
+export function readPitchers(
+    state: SportState,
+): { a: SoftballPitcher; b: SoftballPitcher } | undefined {
     if (!isRecord(state) || !isRecord(state.pitchers)) {
         return undefined;
     }

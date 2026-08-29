@@ -17,7 +17,13 @@ const toneClasses: Record<PortalEmptyStateTone, string> = {
     maroon: 'bg-[var(--portal-maroon-soft)] text-[var(--portal-maroon)]',
 };
 
-export function PortalEmptyState({ icon: Icon, title, description, tone = 'accent', className }: PortalEmptyStateProps) {
+export function PortalEmptyState({
+    icon: Icon,
+    title,
+    description,
+    tone = 'accent',
+    className,
+}: PortalEmptyStateProps) {
     return (
         <div
             className={cn(
@@ -25,11 +31,19 @@ export function PortalEmptyState({ icon: Icon, title, description, tone = 'accen
                 className,
             )}
         >
-            <span className={cn('portal-icon-badge size-14', toneClasses[tone])}>
+            <span
+                className={cn('portal-icon-badge size-14', toneClasses[tone])}
+            >
                 <Icon aria-hidden="true" className="size-7" />
             </span>
-            <p className="text-sm font-medium text-[var(--portal-fg)]">{title}</p>
-            {description && <p className="text-sm text-[var(--portal-muted-foreground)]">{description}</p>}
+            <p className="text-sm font-medium text-[var(--portal-fg)]">
+                {title}
+            </p>
+            {description && (
+                <p className="text-sm text-[var(--portal-muted-foreground)]">
+                    {description}
+                </p>
+            )}
         </div>
     );
 }

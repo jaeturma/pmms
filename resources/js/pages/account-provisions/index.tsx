@@ -66,8 +66,8 @@ function InviteDialog({
     });
 
     if (!provision) {
-return null;
-}
+        return null;
+    }
 
     const submit = (event: FormEvent) => {
         event.preventDefault();
@@ -214,7 +214,9 @@ export default function AccountProvisions({
                         <SelectContent>
                             <SelectItem value="all">All statuses</SelectItem>
                             <SelectItem value="pending">Pending</SelectItem>
-                            <SelectItem value="provisioned">Provisioned</SelectItem>
+                            <SelectItem value="provisioned">
+                                Provisioned
+                            </SelectItem>
                             <SelectItem value="active">Active</SelectItem>
                             <SelectItem value="invited">Invited</SelectItem>
                             <SelectItem value="activated">Activated</SelectItem>
@@ -279,34 +281,50 @@ export default function AccountProvisions({
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex justify-end gap-2">
-                                        {!provision.has_user && provision.status !== 'activated' && (
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() =>
-                                                    setSelected(provision)
-                                                }
-                                            >
-                                                <Mail className="size-4" />
-                                                {provision.status === 'invited'
-                                                    ? 'Resend'
-                                                    : 'Invite'}
-                                            </Button>
-                                        )}
-                                        {canResetPasswords && provision.has_user && (
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() => {
-                                                    if (window.confirm(`Reset ${provision.person}'s password to the configured initial password?`)) {
-                                                        router.post(`/account-provisions/${provision.id}/reset-password`, {}, { preserveScroll: true });
-                                                    }
-                                                }}
-                                            >
-                                                <KeyRound className="size-4" />
-                                                Reset password
-                                            </Button>
-                                        )}
+                                            {!provision.has_user &&
+                                                provision.status !==
+                                                    'activated' && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() =>
+                                                            setSelected(
+                                                                provision,
+                                                            )
+                                                        }
+                                                    >
+                                                        <Mail className="size-4" />
+                                                        {provision.status ===
+                                                        'invited'
+                                                            ? 'Resend'
+                                                            : 'Invite'}
+                                                    </Button>
+                                                )}
+                                            {canResetPasswords &&
+                                                provision.has_user && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => {
+                                                            if (
+                                                                window.confirm(
+                                                                    `Reset ${provision.person}'s password to the configured initial password?`,
+                                                                )
+                                                            ) {
+                                                                router.post(
+                                                                    `/account-provisions/${provision.id}/reset-password`,
+                                                                    {},
+                                                                    {
+                                                                        preserveScroll: true,
+                                                                    },
+                                                                );
+                                                            }
+                                                        }}
+                                                    >
+                                                        <KeyRound className="size-4" />
+                                                        Reset password
+                                                    </Button>
+                                                )}
                                         </div>
                                     </TableCell>
                                 </TableRow>

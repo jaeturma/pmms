@@ -286,6 +286,7 @@ class AthleteController extends Controller
             'eligibilityDocuments.fileUpload:id,original_name',
             'accreditation:id,athlete_id',
             'sportRosterMemberships.meetSport.sport:id,name',
+            'entries.event.sport:id,name',
             'registrar:id,name,role',
         ]);
 
@@ -338,6 +339,12 @@ class AthleteController extends Controller
                     : route('athletes.photo', $athlete),
                 'sports_photo_url' => $athlete->sportsPhotoUrl(),
                 'sports' => $athlete->rosterSportNames()->join(', '),
+                'events' => $athlete->entries
+                    ->map(fn ($entry): string => $entry->event->sport->name.' — '.$entry->event->name)
+                    ->unique()
+                    ->sort()
+                    ->values()
+                    ->join(', '),
                 'accreditation_status' => $athlete->accreditation !== null
                     ? __('Accredited')
                     : ($athlete->eligibilityReview?->status->label() ?? __('Documents not submitted')),

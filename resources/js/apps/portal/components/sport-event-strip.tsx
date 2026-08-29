@@ -29,13 +29,19 @@ export function PortalSportEventStrip({
             <span className="text-xl font-[900] text-[var(--portal-ink)]">
                 {sportEmoji} {sportName.toUpperCase()}
             </span>
-            <span aria-hidden="true" className="text-[var(--portal-muted-foreground)]">
+            <span
+                aria-hidden="true"
+                className="text-[var(--portal-muted-foreground)]"
+            >
                 ›
             </span>
             <span className="font-[750]">{category}</span>
             {roundLabel && (
                 <>
-                    <span aria-hidden="true" className="text-[var(--portal-muted-foreground)]">
+                    <span
+                        aria-hidden="true"
+                        className="text-[var(--portal-muted-foreground)]"
+                    >
                         ›
                     </span>
                     <span className="font-[750]">{roundLabel}</span>

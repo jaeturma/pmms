@@ -126,9 +126,12 @@ function EventFormDialog({
     const existingConfig = event?.medal_config;
     const [tallyFollowsPhysical, setTallyFollowsPhysical] = useState(
         existingConfig
-            ? existingConfig.gold_physical_quantity === existingConfig.gold_tally_quantity &&
-                  existingConfig.silver_physical_quantity === existingConfig.silver_tally_quantity &&
-                  existingConfig.bronze_physical_quantity === existingConfig.bronze_tally_quantity
+            ? existingConfig.gold_physical_quantity ===
+                  existingConfig.gold_tally_quantity &&
+                  existingConfig.silver_physical_quantity ===
+                      existingConfig.silver_tally_quantity &&
+                  existingConfig.bronze_physical_quantity ===
+                      existingConfig.bronze_tally_quantity
             : true,
     );
     const { data, setData, post, put, processing, errors, reset } = useForm({
@@ -331,9 +334,14 @@ function EventFormDialog({
                     <InputError message={errors.is_team_event} />
                     <div className="space-y-4 border-t pt-4">
                         <div>
-                            <Label className="text-base">Medal configuration</Label>
+                            <Label className="text-base">
+                                Medal configuration
+                            </Label>
                             <p className="text-sm text-muted-foreground">
-                                Physical quantity is the number of actual medal pieces awarded. Official tally quantity is the number credited to the Delegation&apos;s official Gold/Silver/Bronze totals.
+                                Physical quantity is the number of actual medal
+                                pieces awarded. Official tally quantity is the
+                                number credited to the Delegation&apos;s
+                                official Gold/Silver/Bronze totals.
                             </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -359,52 +367,145 @@ function EventFormDialog({
                                             onValueChange={(value) =>
                                                 setData('medal_config', {
                                                     ...data.medal_config,
-                                                    award_type: value as MedalConfig['award_type'],
+                                                    award_type:
+                                                        value as MedalConfig['award_type'],
                                                 })
                                             }
                                         >
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <SelectTrigger>
+                                                <SelectValue />
+                                            </SelectTrigger>
                                             <SelectContent>
-                                                {['INDIVIDUAL', 'PAIR', 'TEAM', 'RELAY', 'GROUP'].map((type) => <SelectItem key={type} value={type}>{type}</SelectItem>)}
+                                                {[
+                                                    'INDIVIDUAL',
+                                                    'PAIR',
+                                                    'TEAM',
+                                                    'RELAY',
+                                                    'GROUP',
+                                                ].map((type) => (
+                                                    <SelectItem
+                                                        key={type}
+                                                        value={type}
+                                                    >
+                                                        {type}
+                                                    </SelectItem>
+                                                ))}
                                             </SelectContent>
                                         </Select>
                                     </div>
                                     <div className="space-y-2">
                                         <Label>Physical quantity mode</Label>
                                         <Select
-                                            value={data.medal_config.physical_quantity_mode}
-                                            onValueChange={(value) => setData('medal_config', { ...data.medal_config, physical_quantity_mode: value as MedalConfig['physical_quantity_mode'] })}
+                                            value={
+                                                data.medal_config
+                                                    .physical_quantity_mode
+                                            }
+                                            onValueChange={(value) =>
+                                                setData('medal_config', {
+                                                    ...data.medal_config,
+                                                    physical_quantity_mode:
+                                                        value as MedalConfig['physical_quantity_mode'],
+                                                })
+                                            }
                                         >
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <SelectTrigger>
+                                                <SelectValue />
+                                            </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="FIXED">Fixed</SelectItem>
-                                                <SelectItem value="TEAM_MEMBER_COUNT">Team member count</SelectItem>
+                                                <SelectItem value="FIXED">
+                                                    Fixed
+                                                </SelectItem>
+                                                <SelectItem value="TEAM_MEMBER_COUNT">
+                                                    Team member count
+                                                </SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
                                 </div>
                                 <div className="grid gap-4 sm:grid-cols-2">
-                                    {(['physical', 'tally'] as const).map((kind) => (
-                                        <div key={kind} className="space-y-3 rounded-lg border p-3">
-                                            <Label>{kind === 'physical' ? 'Physical medal pieces' : 'Official medal tally'}</Label>
-                                            <div className="grid grid-cols-3 gap-2">
-                                                {(['gold', 'silver', 'bronze'] as const).map((medal) => {
-                                                    const key = `${medal}_${kind}_quantity` as keyof typeof data.medal_config;
+                                    {(['physical', 'tally'] as const).map(
+                                        (kind) => (
+                                            <div
+                                                key={kind}
+                                                className="space-y-3 rounded-lg border p-3"
+                                            >
+                                                <Label>
+                                                    {kind === 'physical'
+                                                        ? 'Physical medal pieces'
+                                                        : 'Official medal tally'}
+                                                </Label>
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    {(
+                                                        [
+                                                            'gold',
+                                                            'silver',
+                                                            'bronze',
+                                                        ] as const
+                                                    ).map((medal) => {
+                                                        const key =
+                                                            `${medal}_${kind}_quantity` as keyof typeof data.medal_config;
 
-                                                    return <div key={medal} className="space-y-1"><Label className="capitalize">{medal}</Label><Input type="number" min={0} value={String(data.medal_config[key])} disabled={kind === 'tally' && tallyFollowsPhysical} onChange={(e) => {
-                                                        const next = { ...data.medal_config, [key]: e.target.value };
+                                                        return (
+                                                            <div
+                                                                key={medal}
+                                                                className="space-y-1"
+                                                            >
+                                                                <Label className="capitalize">
+                                                                    {medal}
+                                                                </Label>
+                                                                <Input
+                                                                    type="number"
+                                                                    min={0}
+                                                                    value={String(
+                                                                        data
+                                                                            .medal_config[
+                                                                            key
+                                                                        ],
+                                                                    )}
+                                                                    disabled={
+                                                                        kind ===
+                                                                            'tally' &&
+                                                                        tallyFollowsPhysical
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) => {
+                                                                        const next =
+                                                                            {
+                                                                                ...data.medal_config,
+                                                                                [key]: e
+                                                                                    .target
+                                                                                    .value,
+                                                                            };
 
-                                                        if (kind === 'physical' && tallyFollowsPhysical) {
-                                                            const tallyKey = `${medal}_tally_quantity` as keyof typeof data.medal_config;
-                                                            next[tallyKey] = e.target.value as never;
-                                                        }
+                                                                        if (
+                                                                            kind ===
+                                                                                'physical' &&
+                                                                            tallyFollowsPhysical
+                                                                        ) {
+                                                                            const tallyKey =
+                                                                                `${medal}_tally_quantity` as keyof typeof data.medal_config;
+                                                                            next[
+                                                                                tallyKey
+                                                                            ] =
+                                                                                e
+                                                                                    .target
+                                                                                    .value as never;
+                                                                        }
 
-                                                        setData('medal_config', next);
-                                                    }} /></div>;
-                                                })}
+                                                                        setData(
+                                                                            'medal_config',
+                                                                            next,
+                                                                        );
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        ),
+                                    )}
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <Checkbox
@@ -415,18 +516,35 @@ function EventFormDialog({
                                             setTallyFollowsPhysical(follows);
 
                                             if (follows) {
-setData('medal_config', {
-                                                ...data.medal_config,
-                                                gold_tally_quantity: data.medal_config.gold_physical_quantity,
-                                                silver_tally_quantity: data.medal_config.silver_physical_quantity,
-                                                bronze_tally_quantity: data.medal_config.bronze_physical_quantity,
-                                            });
-}
+                                                setData('medal_config', {
+                                                    ...data.medal_config,
+                                                    gold_tally_quantity:
+                                                        data.medal_config
+                                                            .gold_physical_quantity,
+                                                    silver_tally_quantity:
+                                                        data.medal_config
+                                                            .silver_physical_quantity,
+                                                    bronze_tally_quantity:
+                                                        data.medal_config
+                                                            .bronze_physical_quantity,
+                                                });
+                                            }
                                         }}
                                     />
-                                    <Label htmlFor="tally-follows">Tally follows physical quantity</Label>
+                                    <Label htmlFor="tally-follows">
+                                        Tally follows physical quantity
+                                    </Label>
                                 </div>
-                                <InputError message={(errors as Record<string, string>)['medal_config.gold_physical_quantity'] ?? (errors as Record<string, string>)['medal_config.gold_tally_quantity']} />
+                                <InputError
+                                    message={
+                                        (errors as Record<string, string>)[
+                                            'medal_config.gold_physical_quantity'
+                                        ] ??
+                                        (errors as Record<string, string>)[
+                                            'medal_config.gold_tally_quantity'
+                                        ]
+                                    }
+                                />
                             </>
                         )}
                     </div>
@@ -761,8 +879,26 @@ export default function Events({
                                                 : 'N/A'}
                                         </TableCell>
                                         <TableCell>
-                                            <div>{event.medal_config.awards_medals ? `${event.medal_config.gold_tally_quantity ?? '—'} / ${event.medal_config.silver_tally_quantity ?? '—'} / ${event.medal_config.bronze_tally_quantity ?? '—'}` : 'N/A'}</div>
-                                            <Badge variant={event.medal_config.status === 'MEDAL_CONFIGURATION_REQUIRED' ? 'destructive' : 'outline'}>{event.medal_config.status.replaceAll('_', ' ')}</Badge>
+                                            <div>
+                                                {event.medal_config
+                                                    .awards_medals
+                                                    ? `${event.medal_config.gold_tally_quantity ?? '—'} / ${event.medal_config.silver_tally_quantity ?? '—'} / ${event.medal_config.bronze_tally_quantity ?? '—'}`
+                                                    : 'N/A'}
+                                            </div>
+                                            <Badge
+                                                variant={
+                                                    event.medal_config
+                                                        .status ===
+                                                    'MEDAL_CONFIGURATION_REQUIRED'
+                                                        ? 'destructive'
+                                                        : 'outline'
+                                                }
+                                            >
+                                                {event.medal_config.status.replaceAll(
+                                                    '_',
+                                                    ' ',
+                                                )}
+                                            </Badge>
                                         </TableCell>
                                         <TableCell className="max-w-64 text-sm">
                                             {event.venues.length === 0

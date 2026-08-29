@@ -35,24 +35,24 @@ export function AthletePhotoInput({
     useEffect(
         () => () => {
             if (source) {
-URL.revokeObjectURL(source);
-}
+                URL.revokeObjectURL(source);
+            }
 
             if (preview) {
-URL.revokeObjectURL(preview);
-}
+                URL.revokeObjectURL(preview);
+            }
         },
         [source, preview],
     );
 
     const select = (file?: File) => {
         if (!file) {
-return;
-}
+            return;
+        }
 
         if (source) {
-URL.revokeObjectURL(source);
-}
+            URL.revokeObjectURL(source);
+        }
 
         setSource(URL.createObjectURL(file));
         setZoom(1);
@@ -64,8 +64,8 @@ URL.revokeObjectURL(source);
         const image = imageRef.current;
 
         if (!image) {
-return;
-}
+            return;
+        }
 
         const canvas = document.createElement('canvas');
         canvas.width = 800;
@@ -73,8 +73,8 @@ return;
         const context = canvas.getContext('2d');
 
         if (!context) {
-return;
-}
+            return;
+        }
 
         context.fillStyle = '#fff';
         context.fillRect(0, 0, 800, 1000);
@@ -102,23 +102,23 @@ return;
             );
 
             if (blob && blob.size <= 500 * 1024) {
-break;
-}
+                break;
+            }
 
             quality -= 0.08;
         }
 
         if (!blob) {
-return;
-}
+            return;
+        }
 
         const file = new File([blob], `${id}-${Date.now()}.jpg`, {
             type: 'image/jpeg',
         });
 
         if (preview) {
-URL.revokeObjectURL(preview);
-}
+            URL.revokeObjectURL(preview);
+        }
 
         setPreview(URL.createObjectURL(file));
         onChange(file);

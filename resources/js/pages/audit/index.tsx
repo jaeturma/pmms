@@ -50,7 +50,12 @@ function contextSummary(context: Record<string, unknown> | null): string {
         .join(', ');
 }
 
-export default function AuditLogs({ logs, filters, actionOptions, ownedOnly }: Props) {
+export default function AuditLogs({
+    logs,
+    filters,
+    actionOptions,
+    ownedOnly,
+}: Props) {
     const searchParams: Record<string, string> = filters.search
         ? { search: filters.search }
         : {};

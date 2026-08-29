@@ -5,9 +5,16 @@ type PortalLoadingStateProps = {
     className?: string;
 };
 
-export function PortalLoadingState({ rows = 3, className }: PortalLoadingStateProps) {
+export function PortalLoadingState({
+    rows = 3,
+    className,
+}: PortalLoadingStateProps) {
     return (
-        <div className={cn('space-y-3', className)} role="status" aria-label="Loading">
+        <div
+            className={cn('space-y-3', className)}
+            role="status"
+            aria-label="Loading"
+        >
             {Array.from({ length: rows }, (_, i) => (
                 <div
                     key={i}

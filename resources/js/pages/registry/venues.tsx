@@ -598,72 +598,76 @@ export default function Venues({
                                                     >
                                                         Edit
                                                     </Button>
-                                                    {canArchive && <ConfirmDialog
-                                                        trigger={
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                            >
-                                                                {venue.active
-                                                                    ? 'Archive'
-                                                                    : 'Restore'}
-                                                            </Button>
-                                                        }
-                                                        title={
-                                                            venue.active
-                                                                ? 'Archive venue?'
-                                                                : 'Restore venue?'
-                                                        }
-                                                        description={
-                                                            venue.active
-                                                                ? 'Archived venues stay in records but are hidden from new schedules.'
-                                                                : 'The venue becomes available for scheduling again.'
-                                                        }
-                                                        confirmLabel={
-                                                            venue.active
-                                                                ? 'Archive'
-                                                                : 'Restore'
-                                                        }
-                                                        onConfirm={() =>
-                                                            router.patch(
+                                                    {canArchive && (
+                                                        <ConfirmDialog
+                                                            trigger={
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                >
+                                                                    {venue.active
+                                                                        ? 'Archive'
+                                                                        : 'Restore'}
+                                                                </Button>
+                                                            }
+                                                            title={
                                                                 venue.active
-                                                                    ? archive(
-                                                                          venue.id,
-                                                                      ).url
-                                                                    : restore(
-                                                                          venue.id,
-                                                                      ).url,
-                                                                {},
-                                                                {
-                                                                    preserveScroll: true,
-                                                                },
-                                                            )
-                                                        }
-                                                    />}
-                                                    {canArchive && <ConfirmDialog
-                                                        trigger={
-                                                            <Button
-                                                                variant="destructive"
-                                                                size="sm"
-                                                            >
-                                                                Delete
-                                                            </Button>
-                                                        }
-                                                        title="Delete venue?"
-                                                        description="This permanently removes the venue. Only venues without scheduled events can be deleted."
-                                                        confirmLabel="Delete"
-                                                        destructive
-                                                        onConfirm={() =>
-                                                            router.delete(
-                                                                destroy(
-                                                                    venue.id,
-                                                                ).url,
-                                                                {
-                                                                    preserveScroll: true,
-                                                                },
-                                                            )
-                                                        }
-                                                    />}
+                                                                    ? 'Archive venue?'
+                                                                    : 'Restore venue?'
+                                                            }
+                                                            description={
+                                                                venue.active
+                                                                    ? 'Archived venues stay in records but are hidden from new schedules.'
+                                                                    : 'The venue becomes available for scheduling again.'
+                                                            }
+                                                            confirmLabel={
+                                                                venue.active
+                                                                    ? 'Archive'
+                                                                    : 'Restore'
+                                                            }
+                                                            onConfirm={() =>
+                                                                router.patch(
+                                                                    venue.active
+                                                                        ? archive(
+                                                                              venue.id,
+                                                                          ).url
+                                                                        : restore(
+                                                                              venue.id,
+                                                                          ).url,
+                                                                    {},
+                                                                    {
+                                                                        preserveScroll: true,
+                                                                    },
+                                                                )
+                                                            }
+                                                        />
+                                                    )}
+                                                    {canArchive && (
+                                                        <ConfirmDialog
+                                                            trigger={
+                                                                <Button
+                                                                    variant="destructive"
+                                                                    size="sm"
+                                                                >
+                                                                    Delete
+                                                                </Button>
+                                                            }
+                                                            title="Delete venue?"
+                                                            description="This permanently removes the venue. Only venues without scheduled events can be deleted."
+                                                            confirmLabel="Delete"
+                                                            destructive
+                                                            onConfirm={() =>
+                                                                router.delete(
+                                                                    destroy(
+                                                                        venue.id,
+                                                                    ).url,
+                                                                    {
+                                                                        preserveScroll: true,
+                                                                    },
+                                                                )
+                                                            }
+                                                        />
+                                                    )}
                                                 </div>
                                             </TableCell>
                                         )}

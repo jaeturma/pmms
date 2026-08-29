@@ -123,7 +123,8 @@ export default function DelegationRoster({
                                                 {athlete.grade_level}
                                             </TableCell>
                                             <TableCell>
-                                                {athlete.sports || 'Not assigned'}
+                                                {athlete.sports ||
+                                                    'Not assigned'}
                                             </TableCell>
                                         </TableRow>
                                     ))}

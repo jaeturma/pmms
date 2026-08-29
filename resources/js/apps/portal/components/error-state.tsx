@@ -23,11 +23,23 @@ export function PortalErrorState({
             )}
             role="alert"
         >
-            <AlertTriangle aria-hidden="true" className="size-8 text-[var(--portal-danger)]" />
-            <p className="text-sm font-medium text-[var(--portal-fg)]">{title}</p>
-            <p className="text-sm text-[var(--portal-muted-foreground)]">{description}</p>
+            <AlertTriangle
+                aria-hidden="true"
+                className="size-8 text-[var(--portal-danger)]"
+            />
+            <p className="text-sm font-medium text-[var(--portal-fg)]">
+                {title}
+            </p>
+            <p className="text-sm text-[var(--portal-muted-foreground)]">
+                {description}
+            </p>
             {onRetry && (
-                <PortalButton variant="outline" size="sm" onClick={onRetry} className="mt-2">
+                <PortalButton
+                    variant="outline"
+                    size="sm"
+                    onClick={onRetry}
+                    className="mt-2"
+                >
                     Try again
                 </PortalButton>
             )}

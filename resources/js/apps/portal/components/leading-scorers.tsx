@@ -31,12 +31,19 @@ export function PortalLeadingScorers({ rows }: PortalLeadingScorersProps) {
                     className="flex items-center justify-between gap-3 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] px-3 py-2 text-sm"
                 >
                     <span className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-[var(--portal-muted-foreground)]">{index + 1}</span>
+                        <span className="text-xs font-semibold text-[var(--portal-muted-foreground)]">
+                            {index + 1}
+                        </span>
                         <span>
-                            {row.athlete} <span className="text-[var(--portal-muted-foreground)]">— {row.school}</span>
+                            {row.athlete}{' '}
+                            <span className="text-[var(--portal-muted-foreground)]">
+                                — {row.school}
+                            </span>
                         </span>
                     </span>
-                    <span className="font-semibold tabular-nums">{row.points}</span>
+                    <span className="font-semibold tabular-nums">
+                        {row.points}
+                    </span>
                 </li>
             ))}
         </ol>

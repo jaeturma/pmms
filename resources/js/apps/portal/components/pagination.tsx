@@ -21,7 +21,10 @@ export function PortalPagination({ links }: PortalPaginationProps) {
     }
 
     return (
-        <nav className="flex flex-wrap items-center gap-1" aria-label="Pagination">
+        <nav
+            className="flex flex-wrap items-center gap-1"
+            aria-label="Pagination"
+        >
             {links.map((link, index) =>
                 link.url === null ? (
                     <span

@@ -14,7 +14,11 @@ type PortalNavDropdownProps = {
     trigger?: ReactNode;
 };
 
-export function PortalNavDropdown({ label, items, trigger }: PortalNavDropdownProps) {
+export function PortalNavDropdown({
+    label,
+    items,
+    trigger,
+}: PortalNavDropdownProps) {
     if (items.length === 0) {
         return null;
     }
@@ -44,7 +48,7 @@ export function PortalNavDropdown({ label, items, trigger }: PortalNavDropdownPr
                         <DropdownMenu.Item key={item.href} asChild>
                             <Link
                                 href={item.href}
-                                className="block rounded-[calc(var(--portal-radius)-0.25rem)] px-3 py-1.5 text-sm outline-none transition-colors hover:bg-[oklch(0.95_0.015_90)] data-highlighted:bg-[oklch(0.95_0.015_90)]"
+                                className="block rounded-[calc(var(--portal-radius)-0.25rem)] px-3 py-1.5 text-sm transition-colors outline-none hover:bg-[oklch(0.95_0.015_90)] data-highlighted:bg-[oklch(0.95_0.015_90)]"
                             >
                                 {item.label}
                             </Link>

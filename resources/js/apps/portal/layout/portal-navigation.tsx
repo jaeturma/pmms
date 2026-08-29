@@ -14,9 +14,17 @@ type PortalNavigationProps = {
     onNavigate?: () => void;
 };
 
-export function PortalNavigation({ items, className, itemClassName, onNavigate }: PortalNavigationProps) {
+export function PortalNavigation({
+    items,
+    className,
+    itemClassName,
+    onNavigate,
+}: PortalNavigationProps) {
     return (
-        <nav className={cn('flex items-center gap-1', className)} aria-label="Primary">
+        <nav
+            className={cn('flex items-center gap-1', className)}
+            aria-label="Primary"
+        >
             {items.map((item) => (
                 <Link
                     key={item.href}

@@ -6,9 +6,17 @@ type PortalMedalTotalsRowProps = {
 };
 
 const TILES = [
-    { key: 'gold', bg: 'var(--portal-accent-soft)', fg: 'var(--portal-accent)' },
+    {
+        key: 'gold',
+        bg: 'var(--portal-accent-soft)',
+        fg: 'var(--portal-accent)',
+    },
     { key: 'silver', bg: 'oklch(0.93 0.005 258)', fg: 'oklch(0.5 0.01 258)' },
-    { key: 'bronze', bg: 'var(--portal-maroon-soft)', fg: 'var(--portal-maroon)' },
+    {
+        key: 'bronze',
+        bg: 'var(--portal-maroon-soft)',
+        fg: 'var(--portal-maroon)',
+    },
     { key: 'total', bg: 'var(--portal-ink-soft)', fg: 'var(--portal-ink)' },
 ] as const;
 
@@ -20,11 +28,18 @@ export function PortalMedalTotalsRow({ totals }: PortalMedalTotalsRowProps) {
                     key={key}
                     className="flex flex-col items-center gap-2 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4 text-center"
                 >
-                    <span className="portal-icon-badge size-12" style={{ backgroundColor: bg, color: fg }}>
+                    <span
+                        className="portal-icon-badge size-12"
+                        style={{ backgroundColor: bg, color: fg }}
+                    >
                         <Medal aria-hidden="true" className="size-6" />
                     </span>
-                    <p className="text-2xl font-bold tabular-nums">{totals[key]}</p>
-                    <p className="text-xs text-[var(--portal-muted-foreground)] capitalize">{key}</p>
+                    <p className="text-2xl font-bold tabular-nums">
+                        {totals[key]}
+                    </p>
+                    <p className="text-xs text-[var(--portal-muted-foreground)] capitalize">
+                        {key}
+                    </p>
                 </div>
             ))}
         </section>

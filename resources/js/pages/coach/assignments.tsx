@@ -228,6 +228,7 @@ export default function CoachAssignments({
     const [viewedCoach, setViewedCoach] = useState<RegistrationRow | null>(
         null,
     );
+    const closeViewedCoach = () => setViewedCoach(null);
     const form = useForm({
         option: '',
         meet_sport_id: '',
@@ -428,185 +429,202 @@ export default function CoachAssignments({
                                             {(canReview ||
                                                 item.can_accredit ||
                                                 item.can_manage_assignments) && (
-                                                <TableCell className="space-x-2 text-right whitespace-nowrap">
-                                                    {item.profile_url && (
-                                                        <Button
-                                                            size="sm"
-                                                            variant="outline"
-                                                            onClick={() => {
-                                                                setDocumentZoom(
-                                                                    1,
-                                                                );
-                                                                setViewedDocument(
-                                                                    {
-                                                                        title: `${item.coach} — Profile photo`,
-                                                                        url: item.profile_url!,
-                                                                        mimeType:
-                                                                            item.profile_mime_type,
-                                                                    },
-                                                                );
-                                                            }}
-                                                        >
-                                                            <Eye className="size-4" />
-                                                            Profile photo
-                                                        </Button>
-                                                    )}
-                                                    {item.certification_url && (
-                                                        <Button
-                                                            size="sm"
-                                                            variant="outline"
-                                                            onClick={() => {
-                                                                setDocumentZoom(
-                                                                    1,
-                                                                );
-                                                                setViewedDocument(
-                                                                    {
-                                                                        title: `${item.coach} — Coaching certification`,
-                                                                        url: item.certification_url!,
-                                                                        mimeType:
-                                                                            item.certification_mime_type,
-                                                                    },
-                                                                );
-                                                            }}
-                                                        >
-                                                            <Eye className="size-4" />
-                                                            Certification
-                                                        </Button>
-                                                    )}
-                                                    {item.can_update_attachments && (
-                                                        <>
-                                                            <CoachDocumentUpload
-                                                                registrationId={
-                                                                    item.id
-                                                                }
-                                                                type="profile"
-                                                            />
-                                                            <CoachDocumentUpload
-                                                                registrationId={
-                                                                    item.id
-                                                                }
-                                                                type="certification"
-                                                            />
-                                                        </>
-                                                    )}
-                                                    {item.can_manage_assignments && (
-                                                        <Button
-                                                            size="sm"
-                                                            variant="outline"
-                                                            asChild
-                                                        >
-                                                            <a
-                                                                href={
-                                                                    item.assignment_url
-                                                                }
-                                                            >
-                                                                Manage Coach
-                                                            </a>
-                                                        </Button>
-                                                    )}
-                                                    {canReview &&
-                                                        item.status !==
-                                                            'approved' && (
-                                                            <>
-                                                                <Button
-                                                                    size="sm"
-                                                                    disabled={
-                                                                        !item.events
-                                                                    }
-                                                                    onClick={() =>
-                                                                        router.patch(
-                                                                            `/coach/onboarding-requests/${item.id}`,
-                                                                            {
-                                                                                status: 'approved',
-                                                                            },
-                                                                            {
-                                                                                preserveScroll: true,
-                                                                            },
-                                                                        )
-                                                                    }
-                                                                >
-                                                                    Approve
-                                                                    account
-                                                                </Button>
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    onClick={() =>
-                                                                        router.patch(
-                                                                            `/coach/onboarding-requests/${item.id}`,
-                                                                            {
-                                                                                status: 'returned',
-                                                                            },
-                                                                            {
-                                                                                preserveScroll: true,
-                                                                            },
-                                                                        )
-                                                                    }
-                                                                >
-                                                                    Return
-                                                                </Button>
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="destructive"
-                                                                    onClick={() =>
-                                                                        router.patch(
-                                                                            `/coach/onboarding-requests/${item.id}`,
-                                                                            {
-                                                                                status: 'rejected',
-                                                                            },
-                                                                            {
-                                                                                preserveScroll: true,
-                                                                            },
-                                                                        )
-                                                                    }
-                                                                >
-                                                                    Reject
-                                                                </Button>
-                                                            </>
-                                                        )}
-                                                    {item.can_reset_password && (
-                                                        <Button
-                                                            size="sm"
-                                                            variant="outline"
-                                                            onClick={() => {
-                                                                if (
-                                                                    window.confirm(
-                                                                        `Reset ${item.coach}'s password to DdOPaa2026!?`,
-                                                                    )
-                                                                ) {
-                                                                    router.post(
-                                                                        `/coach/onboarding-requests/${item.id}/reset-password`,
-                                                                        {},
-                                                                        {
-                                                                            preserveScroll: true,
-                                                                        },
-                                                                    );
-                                                                }
-                                                            }}
-                                                        >
-                                                            <KeyRound className="size-4" />
-                                                            Reset password
-                                                        </Button>
-                                                    )}
-                                                    {item.can_accredit &&
-                                                        !item.accreditation_number && (
+                                                <>
+                                                    <TableCell className="hidden">
+                                                        {item.profile_url && (
                                                             <Button
                                                                 size="sm"
-                                                                variant="secondary"
-                                                                onClick={() =>
-                                                                    router.post(
-                                                                        `/coach/onboarding-requests/${item.id}/accredit`,
-                                                                        {},
+                                                                variant="outline"
+                                                                onClick={() => {
+                                                                    setDocumentZoom(
+                                                                        1,
+                                                                    );
+                                                                    setViewedDocument(
                                                                         {
-                                                                            preserveScroll: true,
+                                                                            title: `${item.coach} — Profile photo`,
+                                                                            url: item.profile_url!,
+                                                                            mimeType:
+                                                                                item.profile_mime_type,
                                                                         },
-                                                                    )
-                                                                }
+                                                                    );
+                                                                }}
                                                             >
-                                                                Accredit coach
+                                                                <Eye className="size-4" />
+                                                                Profile photo
                                                             </Button>
                                                         )}
-                                                </TableCell>
+                                                        {item.certification_url && (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => {
+                                                                    setDocumentZoom(
+                                                                        1,
+                                                                    );
+                                                                    setViewedDocument(
+                                                                        {
+                                                                            title: `${item.coach} — Coaching certification`,
+                                                                            url: item.certification_url!,
+                                                                            mimeType:
+                                                                                item.certification_mime_type,
+                                                                        },
+                                                                    );
+                                                                }}
+                                                            >
+                                                                <Eye className="size-4" />
+                                                                Certification
+                                                            </Button>
+                                                        )}
+                                                        {item.can_update_attachments && (
+                                                            <>
+                                                                <CoachDocumentUpload
+                                                                    registrationId={
+                                                                        item.id
+                                                                    }
+                                                                    type="profile"
+                                                                />
+                                                                <CoachDocumentUpload
+                                                                    registrationId={
+                                                                        item.id
+                                                                    }
+                                                                    type="certification"
+                                                                />
+                                                            </>
+                                                        )}
+                                                        {item.can_manage_assignments && (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                asChild
+                                                            >
+                                                                <a
+                                                                    href={
+                                                                        item.assignment_url
+                                                                    }
+                                                                >
+                                                                    Manage Coach
+                                                                </a>
+                                                            </Button>
+                                                        )}
+                                                        {canReview &&
+                                                            item.status !==
+                                                                'approved' && (
+                                                                <>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        disabled={
+                                                                            !item.events
+                                                                        }
+                                                                        onClick={() =>
+                                                                            router.patch(
+                                                                                `/coach/onboarding-requests/${item.id}`,
+                                                                                {
+                                                                                    status: 'approved',
+                                                                                },
+                                                                                {
+                                                                                    preserveScroll: true,
+                                                                                },
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        Approve
+                                                                        account
+                                                                    </Button>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        onClick={() =>
+                                                                            router.patch(
+                                                                                `/coach/onboarding-requests/${item.id}`,
+                                                                                {
+                                                                                    status: 'returned',
+                                                                                },
+                                                                                {
+                                                                                    preserveScroll: true,
+                                                                                },
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        Return
+                                                                    </Button>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="destructive"
+                                                                        onClick={() =>
+                                                                            router.patch(
+                                                                                `/coach/onboarding-requests/${item.id}`,
+                                                                                {
+                                                                                    status: 'rejected',
+                                                                                },
+                                                                                {
+                                                                                    preserveScroll: true,
+                                                                                },
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        Reject
+                                                                    </Button>
+                                                                </>
+                                                            )}
+                                                        {item.can_reset_password && (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => {
+                                                                    if (
+                                                                        window.confirm(
+                                                                            `Reset ${item.coach}'s password to DdOPaa2026!?`,
+                                                                        )
+                                                                    ) {
+                                                                        router.post(
+                                                                            `/coach/onboarding-requests/${item.id}/reset-password`,
+                                                                            {},
+                                                                            {
+                                                                                preserveScroll: true,
+                                                                            },
+                                                                        );
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <KeyRound className="size-4" />
+                                                                Reset password
+                                                            </Button>
+                                                        )}
+                                                        {item.can_accredit &&
+                                                            !item.accreditation_number && (
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="secondary"
+                                                                    onClick={() =>
+                                                                        router.post(
+                                                                            `/coach/onboarding-requests/${item.id}/accredit`,
+                                                                            {},
+                                                                            {
+                                                                                preserveScroll: true,
+                                                                            },
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    Accredit
+                                                                    coach
+                                                                </Button>
+                                                            )}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() =>
+                                                                setViewedCoach(
+                                                                    item,
+                                                                )
+                                                            }
+                                                        >
+                                                            <Eye className="size-4" />
+                                                            View / update
+                                                        </Button>
+                                                    </TableCell>
+                                                </>
                                             )}
                                         </TableRow>
                                     ))}
@@ -860,6 +878,193 @@ export default function CoachAssignments({
                                         </div>
                                     </dl>
                                 </div>
+                                <section className="space-y-3 rounded-lg border p-4">
+                                    <h3 className="font-semibold">
+                                        Coach documents and account
+                                    </h3>
+                                    <div className="flex flex-wrap gap-2">
+                                        {viewedCoach.profile_url && (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => {
+                                                    closeViewedCoach();
+                                                    setDocumentZoom(1);
+                                                    setViewedDocument({
+                                                        title: `${viewedCoach.coach} — Profile photo`,
+                                                        url: viewedCoach.profile_url!,
+                                                        mimeType:
+                                                            viewedCoach.profile_mime_type,
+                                                    });
+                                                }}
+                                            >
+                                                <Eye className="size-4" />
+                                                Profile photo
+                                            </Button>
+                                        )}
+                                        {viewedCoach.certification_url && (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => {
+                                                    closeViewedCoach();
+                                                    setDocumentZoom(1);
+                                                    setViewedDocument({
+                                                        title: `${viewedCoach.coach} — Coaching certification`,
+                                                        url: viewedCoach.certification_url!,
+                                                        mimeType:
+                                                            viewedCoach.certification_mime_type,
+                                                    });
+                                                }}
+                                            >
+                                                <Eye className="size-4" />
+                                                Certificate
+                                            </Button>
+                                        )}
+                                        {viewedCoach.can_update_attachments && (
+                                            <>
+                                                <CoachDocumentUpload
+                                                    registrationId={
+                                                        viewedCoach.id
+                                                    }
+                                                    type="profile"
+                                                />
+                                                <CoachDocumentUpload
+                                                    registrationId={
+                                                        viewedCoach.id
+                                                    }
+                                                    type="certification"
+                                                />
+                                            </>
+                                        )}
+                                        {viewedCoach.can_manage_assignments && (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                asChild
+                                            >
+                                                <a
+                                                    href={
+                                                        viewedCoach.assignment_url
+                                                    }
+                                                >
+                                                    Manage assignments
+                                                </a>
+                                            </Button>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-wrap gap-2 border-t pt-3">
+                                        {canReview &&
+                                            viewedCoach.status !==
+                                                'approved' && (
+                                                <>
+                                                    <Button
+                                                        size="sm"
+                                                        disabled={
+                                                            !viewedCoach.events
+                                                        }
+                                                        onClick={() =>
+                                                            router.patch(
+                                                                `/coach/onboarding-requests/${viewedCoach.id}`,
+                                                                {
+                                                                    status: 'approved',
+                                                                },
+                                                                {
+                                                                    preserveScroll: true,
+                                                                    onSuccess:
+                                                                        closeViewedCoach,
+                                                                },
+                                                            )
+                                                        }
+                                                    >
+                                                        Approve account
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() =>
+                                                            router.patch(
+                                                                `/coach/onboarding-requests/${viewedCoach.id}`,
+                                                                {
+                                                                    status: 'returned',
+                                                                },
+                                                                {
+                                                                    preserveScroll: true,
+                                                                    onSuccess:
+                                                                        closeViewedCoach,
+                                                                },
+                                                            )
+                                                        }
+                                                    >
+                                                        Return
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="destructive"
+                                                        onClick={() =>
+                                                            router.patch(
+                                                                `/coach/onboarding-requests/${viewedCoach.id}`,
+                                                                {
+                                                                    status: 'rejected',
+                                                                },
+                                                                {
+                                                                    preserveScroll: true,
+                                                                    onSuccess:
+                                                                        closeViewedCoach,
+                                                                },
+                                                            )
+                                                        }
+                                                    >
+                                                        Reject
+                                                    </Button>
+                                                </>
+                                            )}
+                                        {viewedCoach.can_reset_password && (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => {
+                                                    if (
+                                                        window.confirm(
+                                                            `Reset ${viewedCoach.coach}'s password to DdOPaa2026!?`,
+                                                        )
+                                                    ) {
+                                                        router.post(
+                                                            `/coach/onboarding-requests/${viewedCoach.id}/reset-password`,
+                                                            {},
+                                                            {
+                                                                preserveScroll: true,
+                                                            },
+                                                        );
+                                                    }
+                                                }}
+                                            >
+                                                <KeyRound className="size-4" />
+                                                Reset password
+                                            </Button>
+                                        )}
+                                        {viewedCoach.can_accredit &&
+                                            !viewedCoach.accreditation_number && (
+                                                <Button
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    onClick={() =>
+                                                        router.post(
+                                                            `/coach/onboarding-requests/${viewedCoach.id}/accredit`,
+                                                            {},
+                                                            {
+                                                                preserveScroll: true,
+                                                                onSuccess:
+                                                                    closeViewedCoach,
+                                                            },
+                                                        )
+                                                    }
+                                                >
+                                                    Accredit coach
+                                                </Button>
+                                            )}
+                                    </div>
+                                </section>
                                 <section className="space-y-2">
                                     <h3 className="font-semibold">
                                         Registered athletes

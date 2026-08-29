@@ -12,7 +12,11 @@ type PortalDaySwitcherProps = {
     baseUrl: string;
 };
 
-export function PortalDaySwitcher({ days, selected, baseUrl }: PortalDaySwitcherProps) {
+export function PortalDaySwitcher({
+    days,
+    selected,
+    baseUrl,
+}: PortalDaySwitcherProps) {
     if (days.length === 0) {
         return null;
     }

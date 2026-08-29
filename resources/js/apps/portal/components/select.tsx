@@ -6,12 +6,20 @@ type PortalSelectOption = {
     label: string;
 };
 
-type PortalSelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'children'> & {
+type PortalSelectProps = Omit<
+    SelectHTMLAttributes<HTMLSelectElement>,
+    'children'
+> & {
     options: PortalSelectOption[];
     placeholder?: string;
 };
 
-export function PortalSelect({ options, placeholder, className, ...props }: PortalSelectProps) {
+export function PortalSelect({
+    options,
+    placeholder,
+    className,
+    ...props
+}: PortalSelectProps) {
     return (
         <select
             className={cn(

@@ -6,9 +6,13 @@ type PortalVenueInformationProps = {
     venues: PortalVenue[];
 };
 
-export function PortalVenueInformation({ venues }: PortalVenueInformationProps) {
+export function PortalVenueInformation({
+    venues,
+}: PortalVenueInformationProps) {
     if (venues.length === 0) {
-        return <PortalEmptyState icon={MapPin} title="No venues scheduled yet" />;
+        return (
+            <PortalEmptyState icon={MapPin} title="No venues scheduled yet" />
+        );
     }
 
     return (
@@ -26,7 +30,11 @@ export function PortalVenueInformation({ venues }: PortalVenueInformationProps) 
                     </span>
                     <span>
                         <span className="block font-medium">{venue.name}</span>
-                        {venue.address && <span className="text-xs text-[var(--portal-muted-foreground)]">{venue.address}</span>}
+                        {venue.address && (
+                            <span className="text-xs text-[var(--portal-muted-foreground)]">
+                                {venue.address}
+                            </span>
+                        )}
                     </span>
                 </a>
             ))}
