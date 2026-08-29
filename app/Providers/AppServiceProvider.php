@@ -53,7 +53,16 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configureDefaults(): void
     {
-        if (Schema::hasTable('system_settings')) {
+        // Route/type generation, migrations, and other ordinary Artisan
+        // commands must be able to boot without a live database connection.
+        // HTTP requests and tests still apply the administrator-configured
+        // timezone; queue workers also need it while processing jobs.
+        $shouldLoadDatabaseTimezone = ! app()->runningInConsole()
+            || app()->runningUnitTests()
+            || app()->runningConsoleCommand('queue:work')
+            || app()->runningConsoleCommand('queue:listen');
+
+        if ($shouldLoadDatabaseTimezone && Schema::hasTable('system_settings')) {
             $timezone = Setting::current()->timezone ?: 'Asia/Manila';
             config(['app.timezone' => $timezone]);
             date_default_timezone_set($timezone);

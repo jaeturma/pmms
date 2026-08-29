@@ -362,7 +362,7 @@ export default function Food({
                     }
                 />
 
-                <Card>
+                <Card id="meal-setup">
                     <CardHeader>
                         <CardTitle>Meal schedule</CardTitle>
                     </CardHeader>

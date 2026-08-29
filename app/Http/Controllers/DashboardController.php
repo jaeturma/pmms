@@ -125,7 +125,8 @@ class DashboardController extends Controller
             $delegationIds = Delegation::query()->where('meet_id', $meet->id)
                 ->whereHas('officers', fn ($officers) => $officers->whereKey($user->id))
                 ->pluck('id');
-        } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer)) {
+        } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer)
+            && ! $user->canManageProductionAccounts()) {
             // Tournament managers, assistants, secretaries, ICT, and
             // technical officials see only events granted by active scopes.
             $eventQuery->whereKey($user->tournamentEventIds($meet->id));
@@ -299,19 +300,25 @@ class DashboardController extends Controller
                 ->with(['venue:id,name', 'event.sport:id,name'])
                 ->orderBy('starts_at')
                 ->get()
-                ->map(fn (EventSchedule $slot): array => [
-                    'id' => $slot->id,
-                    'starts_at' => substr($slot->starts_at, 0, 5),
-                    'ends_at' => substr($slot->ends_at, 0, 5),
-                    'event' => sprintf(
-                        '%s — %s (%s, %s)',
-                        $slot->event->sport->name,
-                        $slot->event->name,
-                        $slot->event->gender->label(),
-                        $slot->event->age_division->label(),
-                    ),
-                    'venue' => $slot->venue->name,
-                ])
+                ->map(function (EventSchedule $slot): array {
+                    $event = $slot->event;
+
+                    return [
+                        'id' => $slot->id,
+                        'starts_at' => substr($slot->starts_at, 0, 5),
+                        'ends_at' => substr($slot->ends_at, 0, 5),
+                        'event' => $event === null
+                            ? __('Event unavailable')
+                            : sprintf(
+                                '%s — %s (%s, %s)',
+                                $event->sport?->name ?? __('Sport unavailable'),
+                                $event->name,
+                                $event->gender->label(),
+                                $event->age_division->label(),
+                            ),
+                        'venue' => $slot->venue?->name ?? __('Venue not assigned'),
+                    ];
+                })
                 ->values()
                 ->all(),
             'tallyTop' => $isTournamentScoped ? [] : array_slice($tally->standings($meet->id)['districts'], 0, 5),

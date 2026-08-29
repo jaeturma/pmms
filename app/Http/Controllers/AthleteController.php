@@ -3,8 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Enums\EligibilityDocumentType;
+use App\Enums\EligibilityStatus;
 use App\Enums\Permission;
-use App\Enums\RequirementStatus;
 use App\Enums\ResultStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\BuildsSchoolOptionsByDelegation;
@@ -19,6 +19,7 @@ use App\Models\Entry;
 use App\Models\Event;
 use App\Models\FileUpload;
 use App\Models\Meet;
+use App\Models\MeetSport;
 use App\Models\ResultPlacement;
 use App\Models\School;
 use App\Models\SchoolDistrict;
@@ -33,6 +34,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
@@ -66,6 +68,7 @@ class AthleteController extends Controller
         $sportId = $request->integer('sport_id') ?: null;
         $sex = $request->string('sex')->value();
         $accreditation = $request->string('accreditation')->value();
+        $deleted = $user->isAdmin() && $request->boolean('deleted');
 
         $query = Athlete::query()
             ->with([
@@ -78,10 +81,15 @@ class AthleteController extends Controller
                 'eligibilityReview:id,athlete_id,status',
                 'accreditation:id,athlete_id',
                 'sportRosterMemberships.meetSport.sport:id,name',
+                'entries.event.sport:id,name',
                 'registrar:id,name,role',
             ])
             ->orderBy('last_name')
             ->orderBy('first_name');
+
+        if ($deleted) {
+            $query->onlyTrashed();
+        }
 
         if ($user->role === UserRole::DelegationOfficer) {
             $query->whereHas(
@@ -126,7 +134,7 @@ class AthleteController extends Controller
             ->when($accreditation === 'not_accredited', fn ($athletes) => $athletes->whereDoesntHave('accreditation'));
 
         if ($accreditation === 'eligible') {
-            $query->whereHas('eligibilityReview', fn ($reviews) => $reviews->where('status', \App\Enums\EligibilityStatus::Approved->value))
+            $query->whereHas('eligibilityReview', fn ($reviews) => $reviews->where('status', EligibilityStatus::Approved->value))
                 ->whereHas('eligibilityDocuments', fn ($documents) => $documents
                     ->where('document_type', EligibilityDocumentType::MedicalCertificate->value));
         }
@@ -172,21 +180,32 @@ class AthleteController extends Controller
                     'coach' => $athlete->registrar?->hasRole(UserRole::Coach)
                         ? $athlete->registrar->name
                         : null,
-                    'photo_url' => $athlete->photo_upload_id === null ? null : route('athletes.photo', $athlete),
+                    'photo_url' => $athlete->photo_upload_id === null || $athlete->trashed()
+                        ? null
+                        : route('athletes.photo', $athlete),
                     'sports' => $athlete->rosterSportNames()->join(', '),
+                    'events' => $athlete->entries->pluck('event.name')->filter()->unique()->sort()->join(', '),
                     'accreditation_status' => $athlete->accreditation !== null
                         ? __('Accredited')
                         : __('Not accredited'),
-                    'eligibility_status' => $athlete->eligibilityReview?->status->label()
-                        ?? __('Documents not submitted'),
-                    'can_update' => $user->can('update', $athlete),
-                    'can_delete' => $user->can('delete', $athlete),
+                    'eligibility_status' => match ($athlete->eligibilityReview?->status?->value) {
+                        'approved' => __('Eligible'),
+                        'pending' => __('Review'),
+                        'returned', 'rejected' => __('Disqualified'),
+                        default => __('Pending'),
+                    },
+                    'deleted' => $athlete->trashed(),
+                    'deleted_at' => $athlete->deleted_at?->toDateTimeString(),
+                    'can_update' => ! $athlete->trashed() && $user->can('update', $athlete),
+                    'can_delete' => ! $athlete->trashed() && $user->can('delete', $athlete),
                 ]),
             'filters' => [
                 'search' => $search, 'municipality_id' => $municipalityId,
                 'school_district_id' => $schoolDistrictId, 'school_id' => $schoolId,
                 'sport_id' => $sportId, 'sex' => $sex, 'accreditation' => $accreditation,
+                'deleted' => $deleted,
             ],
+            'canViewDeleted' => $user->isAdmin(),
             'delegationOptions' => $availableDelegations
                 ->map(fn (Delegation $delegation): array => [
                     'id' => $delegation->id,
@@ -223,6 +242,35 @@ class AthleteController extends Controller
             'schoolDistricts' => SchoolDistrict::query()->where('active', true)->orderBy('name')->get(['id', 'district_id', 'name']),
             'filterSchools' => School::query()->where('active', true)->orderBy('name')->get(['id', 'district_id', 'school_district_id', 'name']),
             'sports' => Sport::query()->where('active', true)->orderBy('name')->get(['id', 'name']),
+        ]);
+    }
+
+    public function edit(Request $request, Athlete $athlete): Response
+    {
+        Gate::authorize('update', $athlete);
+
+        $athlete->loadMissing(['entries:id,athlete_id,event_id', 'sportRosterMemberships:id,athlete_id,meet_sport_id']);
+        $delegations = Delegation::query()->where('meet_id', $athlete->delegation->meet_id)
+            ->with(['school:id,name,district_id', 'district:id,name', 'meet:id,name'])->orderBy('id')->get();
+        $schools = School::query()->where('active', true)->with(['district:id,name', 'schoolDistrict:id,name'])->orderBy('name')->get();
+        $meetSports = MeetSport::query()->where('meet_id', $athlete->delegation->meet_id)->with('sport:id,name')->orderBy('display_order')->get();
+        $events = $athlete->delegation->meet->events()->with('sport:id,name')->orderBy('display_order')->get();
+
+        return Inertia::render('athletes/edit', [
+            'athlete' => [
+                'id' => $athlete->id, 'delegation_id' => $athlete->delegation_id, 'school_id' => $athlete->school_id,
+                'first_name' => $athlete->first_name, 'middle_name' => $athlete->middle_name, 'last_name' => $athlete->last_name,
+                'name_extension' => $athlete->name_extension, 'sex' => $athlete->sex->value,
+                'birthdate' => $athlete->birthdate->toDateString(), 'lrn' => $athlete->lrn, 'grade_level' => $athlete->grade_level,
+                'meet_sport_ids' => $athlete->sportRosterMemberships->pluck('meet_sport_id')->all(),
+                'event_ids' => $athlete->entries->pluck('event_id')->all(),
+                'photo_url' => $athlete->photo_upload_id ? route('athletes.photo', $athlete) : null,
+                'sports_photo_url' => $athlete->sports_photo_upload_id ? route('athletes.sports-photo', $athlete) : null,
+            ],
+            'delegations' => $delegations->map(fn (Delegation $item) => ['id' => $item->id, 'meet_id' => $item->meet_id, 'label' => $item->registrantName().' — '.$item->meet->name]),
+            'schools' => $schools->map(fn (School $item) => ['id' => $item->id, 'name' => $item->name, 'district' => $item->district?->name ?? 'Not assigned', 'district_id' => $item->district_id]),
+            'sports' => $meetSports->map(fn (MeetSport $item) => ['id' => $item->id, 'name' => $item->sport->name]),
+            'events' => $events->map(fn (Event $item) => ['id' => $item->id, 'sport_id' => $item->sport_id, 'name' => $item->sport->name.' — '.$item->name]),
         ]);
     }
 
@@ -455,11 +503,34 @@ class AthleteController extends Controller
     {
         Gate::authorize('update', $athlete);
 
-        $fileFields = ['photo', 'sports_photo', 'athlete_history', 'form_10', 'school_id_document', 'birth_certificate', 'report_card', 'parental_consent', 'medical_certificate'];
-        $athlete->fill($request->safe()->except([...$fileFields, 'delegation_id']));
+        $originalMeetId = $athlete->delegation->meet_id;
+        $fileFields = ['photo', 'sports_photo', 'athlete_history', 'form_10', 'school_id_document', 'birth_certificate', 'report_card', 'parental_consent', 'medical_certificate', 'meet_sport_ids', 'event_ids'];
+        $athlete->fill($request->safe()->except($fileFields));
 
         /** @var User $user */
         $user = $request->user();
+
+        if ($user->isAdmin() || $user->canManageProductionAccounts()) {
+            $delegation = $request->filled('delegation_id')
+                ? Delegation::query()->findOrFail($request->integer('delegation_id'))
+                : $athlete->delegation;
+            $eventIds = collect($request->has('event_ids')
+                ? $request->input('event_ids', [])
+                : $athlete->entries()->pluck('event_id'))
+                ->map(fn ($id) => (int) $id)->unique();
+            $meetSportIds = collect($request->has('meet_sport_ids')
+                ? $request->input('meet_sport_ids', [])
+                : $athlete->sportRosterMemberships()->pluck('meet_sport_id'))
+                ->map(fn ($id) => (int) $id)->unique();
+            if ($delegation->meet_id !== $originalMeetId
+                || Event::query()->whereIn('id', $eventIds)->whereDoesntHave('meets', fn ($query) => $query->whereKey($delegation->meet_id))->exists()
+                || MeetSport::query()->whereIn('id', $meetSportIds)->where('meet_id', '!=', $delegation->meet_id)->exists()) {
+                throw ValidationException::withMessages(['delegation_id' => __('Delegation, sports, and events must belong to the athlete’s meet.')]);
+            }
+            if ($athlete->entries()->whereNotIn('event_id', $eventIds)->whereHas('placements')->exists()) {
+                throw ValidationException::withMessages(['event_ids' => __('An event with recorded results cannot be removed from the athlete.')]);
+            }
+        }
 
         $oldPhoto = null;
         $oldSportsPhoto = null;
@@ -475,6 +546,30 @@ class AthleteController extends Controller
         }
 
         $athlete->save();
+
+        if ($user->isAdmin() || $user->canManageProductionAccounts()) {
+            DB::transaction(function () use ($request, $athlete): void {
+                $eventIds = collect($request->input('event_ids', []))->map(fn ($id) => (int) $id)->unique();
+                $athlete->entries()->whereNotIn('event_id', $eventIds)->whereDoesntHave('placements')->delete();
+                foreach ($eventIds as $eventId) {
+                    Entry::query()->firstOrCreate(['athlete_id' => $athlete->id, 'event_id' => $eventId], ['delegation_id' => $athlete->delegation_id]);
+                }
+                $athlete->entries()->update(['delegation_id' => $athlete->delegation_id]);
+                $sportIds = collect($request->input('meet_sport_ids', []))->map(fn ($id) => (int) $id)->unique();
+                $athlete->sportRosterMemberships()->whereNotIn('meet_sport_id', $sportIds)->delete();
+                foreach ($sportIds as $meetSportId) {
+                    $athlete->sportRosterMemberships()->firstOrCreate(['meet_sport_id' => $meetSportId], [
+                        'delegation_id' => $athlete->delegation_id, 'level' => $athlete->ageDivision(),
+                        'gender' => $athlete->sex->value === 'male' ? 'boys' : 'girls',
+                    ]);
+                }
+                $athlete->sportRosterMemberships()->update([
+                    'delegation_id' => $athlete->delegation_id,
+                    'level' => $athlete->ageDivision(),
+                    'gender' => $athlete->sex->value === 'male' ? 'boys' : 'girls',
+                ]);
+            });
+        }
 
         $documents = [
             'athlete_history' => EligibilityDocumentType::AthleteHistory,
@@ -550,38 +645,20 @@ class AthleteController extends Controller
         return Storage::disk($upload->disk)->response($path, basename($path), ['Content-Type' => 'image/jpeg']);
     }
 
-    /** Permanently remove an athlete and release their LRN for re-registration. */
+    /** Archive an athlete while retaining the record for administrator review. */
     public function destroy(Request $request, Athlete $athlete): RedirectResponse
     {
         Gate::authorize('delete', $athlete);
         abort_unless($request->user()->isAdmin(), 403);
 
         $name = $athlete->fullName();
-        $uploads = collect([$athlete->photo, $athlete->sportsPhoto])
-            ->merge($athlete->eligibilityDocuments()->with('fileUpload')->get()->pluck('fileUpload'))
-            ->filter()
-            ->unique('id')
-            ->values();
+        $athlete->delete();
 
-        DB::transaction(function () use ($athlete): void {
-            $athlete->teamMemberships()->delete();
-            $athlete->sportRosterMemberships()->delete();
-            $athlete->forceDelete();
-        });
-
-        foreach ($uploads as $upload) {
-            if ($upload->id === $athlete->photo_upload_id || $upload->id === $athlete->sports_photo_upload_id) {
-                $this->athletePhotos->delete($upload);
-            } else {
-                $this->uploads->delete($upload);
-            }
-        }
-
-        $this->audit->record('athlete.permanently_deleted', $athlete, ['name' => $name]);
+        $this->audit->record('athlete.deleted', $athlete, ['name' => $name]);
 
         Inertia::flash('toast', [
             'type' => 'success',
-            'message' => __('Athlete permanently removed. The LRN can now be registered again.'),
+            'message' => __('Athlete moved to deleted athletes.'),
         ]);
 
         return redirect()->route('athletes.index');

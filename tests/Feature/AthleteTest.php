@@ -189,6 +189,28 @@ test('active ICT team members can register athletes', function () {
     expect(AuditLog::query()->where('action', 'athlete.created')->exists())->toBeTrue();
 });
 
+test('active ICT team members can open and update the full athlete editor', function () {
+    $delegation = Delegation::factory()->create();
+    $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id, 'school_id' => schoolForDelegation($delegation)->id]);
+    $ict = User::factory()->create();
+    $team = ManagementTeam::factory()->create(['team_type' => ManagementTeamType::ICT]);
+    ManagementTeamMember::factory()->create([
+        'management_team_id' => $team->id, 'user_id' => $ict->id,
+        'status' => ManagementTeamMemberStatus::Active,
+    ]);
+
+    $this->actingAs($ict)->get("/athletes/{$athlete->id}/edit")
+        ->assertOk()->assertInertia(fn (AssertableInertia $page) => $page
+        ->component('athletes/edit')->where('athlete.id', $athlete->id));
+
+    $this->actingAs($ict)->put("/athletes/{$athlete->id}", [
+        ...validAthletePayload($delegation), 'first_name' => 'Updated',
+        'lrn' => $athlete->lrn, 'meet_sport_ids' => [], 'event_ids' => [],
+    ])->assertRedirect()->assertSessionDoesntHaveErrors();
+
+    expect($athlete->refresh()->first_name)->toBe('Updated');
+});
+
 test('athlete registration lists every active school with its school id', function () {
     $delegation = Delegation::factory()->create();
     $school = School::factory()->create([
@@ -289,6 +311,7 @@ test('athlete 380 views use its sport roster membership instead of entries', fun
         ->get('/athletes')
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('athletes.data.0.sports', 'Basketball')
+            ->where('athletes.data.0.events', $entry->event->name)
             ->where('athletes.data.0.coach', 'Coach Maria')
             ->where('athletes.data.0.delegation', $athlete->delegation->registrantName()));
 
@@ -508,11 +531,11 @@ test('updating and permanently deleting an athlete cleans up sports photos', fun
         ->delete("/athletes/{$athlete->id}")
         ->assertRedirect();
 
-    $this->assertDatabaseMissing('athletes', ['id' => $athlete->id]);
-    $this->assertDatabaseMissing('file_uploads', ['id' => $replacementUpload->id]);
+    $this->assertSoftDeleted('athletes', ['id' => $athlete->id]);
+    $this->assertDatabaseHas('file_uploads', ['id' => $replacementUpload->id]);
 });
 
-test('administrator deletion permanently removes the athlete and frees the lrn', function () {
+test('administrator deletion archives the athlete and exposes it through the deleted filter', function () {
     Storage::fake('local');
     $delegation = Delegation::factory()->create();
     $admin = User::factory()->admin()->create();
@@ -540,17 +563,19 @@ test('administrator deletion permanently removes the athlete and frees the lrn',
         ->delete("/athletes/{$athlete->id}")
         ->assertRedirect();
 
-    $this->assertDatabaseMissing('athletes', ['id' => $athlete->id]);
-    $this->assertDatabaseMissing('file_uploads', ['id' => $upload->id]);
+    $this->assertSoftDeleted('athletes', ['id' => $athlete->id]);
+    $this->assertDatabaseHas('file_uploads', ['id' => $upload->id]);
 
-    expect(AuditLog::query()->where('action', 'athlete.permanently_deleted')->exists())->toBeTrue();
+    expect(AuditLog::query()->where('action', 'athlete.deleted')->exists())->toBeTrue();
 
-    $this->actingAs($admin)->post('/athletes', [
-        ...validAthletePayload($delegation),
-        'first_name' => 'Replacement',
-    ])->assertSessionHasNoErrors();
-
-    expect(Athlete::query()->where('lrn', '123456789012')->value('first_name'))->toBe('Replacement');
+    $this->actingAs($admin)
+        ->get('/athletes?deleted=1')
+        ->assertInertia(fn ($page) => $page
+            ->where('filters.deleted', true)
+            ->where('canViewDeleted', true)
+            ->has('athletes.data', 1)
+            ->where('athletes.data.0.id', $athlete->id)
+            ->where('athletes.data.0.deleted', true));
 });
 
 test('delegations with athletes cannot be deleted', function () {

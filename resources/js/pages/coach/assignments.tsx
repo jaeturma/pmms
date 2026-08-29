@@ -257,7 +257,7 @@ export default function CoachAssignments({
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
                     title="Coaches"
-                    description="Approve coach accounts and assign or update the sports events they coach."
+                    description="Review coach accounts and their applied sports."
                 />
                 {registrations.data.length > 0 && (
                     <div className="space-y-2">
@@ -270,11 +270,8 @@ export default function CoachAssignments({
                                     <TableRow>
                                         <TableHead>Coach</TableHead>
                                         <TableHead>Team</TableHead>
-                                        <TableHead>
-                                            Applied sport / assignments
-                                        </TableHead>
+                                        <TableHead>Applied Sports</TableHead>
                                         <TableHead>Status</TableHead>
-                                        <TableHead>Documents</TableHead>
                                         <TableHead className="hidden">
                                             Registered athletes
                                         </TableHead>
@@ -282,7 +279,7 @@ export default function CoachAssignments({
                                             canAccredit ||
                                             canManageAny) && (
                                             <TableHead className="text-right">
-                                                Actions
+                                                Manage Coach
                                             </TableHead>
                                         )}
                                     </TableRow>
@@ -353,16 +350,6 @@ export default function CoachAssignments({
                                                         <div className="text-xs text-muted-foreground">
                                                             {item.email}
                                                         </div>
-                                                        {item.can_update_attachments && (
-                                                            <div className="mt-1">
-                                                                <CoachDocumentUpload
-                                                                    registrationId={
-                                                                        item.id
-                                                                    }
-                                                                    type="profile"
-                                                                />
-                                                            </div>
-                                                        )}
                                                     </div>
                                                 </div>
                                             </TableCell>
@@ -372,12 +359,6 @@ export default function CoachAssignments({
                                             <TableCell className="max-w-md whitespace-normal">
                                                 <div className="font-medium">
                                                     {item.sport}
-                                                </div>
-                                                <div className="text-xs text-muted-foreground">
-                                                    {item.school ?? 'No school'}
-                                                    {item.events
-                                                        ? ` · Assigned: ${item.events}`
-                                                        : ' · Assignment pending'}
                                                 </div>
                                             </TableCell>
                                             <TableCell>
@@ -393,45 +374,17 @@ export default function CoachAssignments({
                                                 </Badge>
                                                 {item.accreditation_label && (
                                                     <div className="mt-1 text-xs font-medium">
-                                                        {item.accreditation_label}
+                                                        {
+                                                            item.accreditation_label
+                                                        }
                                                         {item.accreditation_number && (
                                                             <span className="block text-muted-foreground">
-                                                                {item.accreditation_number}
+                                                                {
+                                                                    item.accreditation_number
+                                                                }
                                                             </span>
                                                         )}
                                                     </div>
-                                                )}
-                                            </TableCell>
-                                            <TableCell className="space-x-2 whitespace-nowrap">
-                                                {!item.certification_url && (
-                                                    <span className="mr-2 text-xs text-muted-foreground">
-                                                        No certificate
-                                                        (optional)
-                                                    </span>
-                                                )}
-                                                {item.certification_url && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={() => {
-                                                            setDocumentZoom(1);
-                                                            setViewedDocument({
-                                                                title: `${item.coach} — Coaching certification`,
-                                                                url: item.certification_url!,
-                                                                mimeType:
-                                                                    item.certification_mime_type,
-                                                            });
-                                                        }}
-                                                    >
-                                                        <Eye className="size-4" />
-                                                        Certification
-                                                    </Button>
-                                                )}
-                                                {item.can_update_attachments && (
-                                                    <CoachDocumentUpload
-                                                        registrationId={item.id}
-                                                        type="certification"
-                                                    />
                                                 )}
                                             </TableCell>
                                             <TableCell className="hidden max-w-sm whitespace-normal">
@@ -476,6 +429,66 @@ export default function CoachAssignments({
                                                 item.can_accredit ||
                                                 item.can_manage_assignments) && (
                                                 <TableCell className="space-x-2 text-right whitespace-nowrap">
+                                                    {item.profile_url && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => {
+                                                                setDocumentZoom(
+                                                                    1,
+                                                                );
+                                                                setViewedDocument(
+                                                                    {
+                                                                        title: `${item.coach} — Profile photo`,
+                                                                        url: item.profile_url!,
+                                                                        mimeType:
+                                                                            item.profile_mime_type,
+                                                                    },
+                                                                );
+                                                            }}
+                                                        >
+                                                            <Eye className="size-4" />
+                                                            Profile photo
+                                                        </Button>
+                                                    )}
+                                                    {item.certification_url && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => {
+                                                                setDocumentZoom(
+                                                                    1,
+                                                                );
+                                                                setViewedDocument(
+                                                                    {
+                                                                        title: `${item.coach} — Coaching certification`,
+                                                                        url: item.certification_url!,
+                                                                        mimeType:
+                                                                            item.certification_mime_type,
+                                                                    },
+                                                                );
+                                                            }}
+                                                        >
+                                                            <Eye className="size-4" />
+                                                            Certification
+                                                        </Button>
+                                                    )}
+                                                    {item.can_update_attachments && (
+                                                        <>
+                                                            <CoachDocumentUpload
+                                                                registrationId={
+                                                                    item.id
+                                                                }
+                                                                type="profile"
+                                                            />
+                                                            <CoachDocumentUpload
+                                                                registrationId={
+                                                                    item.id
+                                                                }
+                                                                type="certification"
+                                                            />
+                                                        </>
+                                                    )}
                                                     {item.can_manage_assignments && (
                                                         <Button
                                                             size="sm"
@@ -487,8 +500,7 @@ export default function CoachAssignments({
                                                                     item.assignment_url
                                                                 }
                                                             >
-                                                                Manage
-                                                                assignments
+                                                                Manage Coach
                                                             </a>
                                                         </Button>
                                                     )}

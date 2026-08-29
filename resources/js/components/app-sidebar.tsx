@@ -419,7 +419,7 @@ export function AppSidebar() {
     const navItems: NavItem[] = byTitle(['Dashboard']);
     if (auth.user?.can_access_meal_stub) {
         navItems.push({
-            title: 'Meal Stub',
+            title: 'Meals',
             href: mealStubShow(),
             icon: Utensils,
         });
@@ -644,7 +644,6 @@ export function AppSidebar() {
         const relevantOperations = managerNavItems.filter(
             (item) =>
                 (item.title === 'Medical' && teamTypes.includes('medical')) ||
-                (item.title === 'Food' && teamTypes.includes('food')) ||
                 (item.title === 'Billeting' &&
                     teamTypes.includes('billeting')) ||
                 (item.title === 'Transport' &&
@@ -680,6 +679,20 @@ export function AppSidebar() {
                 title: 'Assigned operations',
                 icon: LifeBuoy,
                 items: relevantOperations,
+            });
+        }
+
+        if (teamTypes.includes('food')) {
+            navSections.push({
+                title: 'Food Management',
+                icon: Utensils,
+                items: [
+                    { title: 'Dashboard', href: foodIndex(), icon: LayoutGrid },
+                    { title: 'Meal Setup', href: '/food#meal-setup', icon: CalendarDays },
+                    { title: 'Meal Stubs', href: '/food/distribution#meal-stubs', icon: ClipboardList },
+                    { title: 'Distribution', href: '/food/distribution', icon: Utensils },
+                    { title: 'Reports', href: '/food/distribution#reports', icon: BarChart3 },
+                ],
             });
         }
     }

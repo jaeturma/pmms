@@ -77,7 +77,7 @@ class AthletePolicy
 
     public function update(User $user, Athlete $athlete): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->isAdmin() || $user->canManageProductionAccounts()) {
             return true;
         }
 

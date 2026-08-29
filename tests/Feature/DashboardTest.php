@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\ManagementTeamMemberStatus;
+use App\Enums\ManagementTeamType;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
 use App\Models\Athlete;
@@ -7,6 +9,8 @@ use App\Models\CoachAssignmentRequest;
 use App\Models\Delegation;
 use App\Models\Entry;
 use App\Models\Event;
+use App\Models\ManagementTeam;
+use App\Models\ManagementTeamMember;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
@@ -116,3 +120,25 @@ test('tournament personnel dashboard event reports respect active event scope', 
     'ICT' => MeetSportAssignmentRole::TournamentICT,
     'technical official' => MeetSportAssignmentRole::TechnicalOfficial,
 ]);
+
+test('central ICT dashboard receives system-wide sports and event data', function () {
+    $meet = Meet::current();
+    $sport = Sport::factory()->create();
+    $events = Event::factory()->count(2)->create(['sport_id' => $sport->id]);
+    $meet->events()->attach($events);
+    $ict = User::factory()->create();
+    $team = ManagementTeam::factory()->create(['meet_id' => $meet->id, 'team_type' => ManagementTeamType::ICT]);
+    ManagementTeamMember::factory()->create([
+        'management_team_id' => $team->id,
+        'user_id' => $ict->id,
+        'status' => ManagementTeamMemberStatus::Active,
+    ]);
+
+    $this->actingAs($ict)->get(route('dashboard'))->assertInertia(fn (Assert $page) => $page
+        ->component('dashboard')
+        ->has('currentMeet')
+        ->has('stats', 2)
+        ->where('sportsEventReport.events_count', 2)
+        ->has('sportsEventReport.rows', 2)
+        ->has('announcements'));
+});

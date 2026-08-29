@@ -37,6 +37,7 @@ class MealStubController extends Controller
         return Inertia::render('meal-stub/show', [
             'person' => ['name' => $request->user()->name, ...$identity, 'meet' => $meet->name],
             'today' => now()->toDateString(),
+            'todayLabel' => now()->translatedFormat('l, F j, Y'),
             'meals' => $meals->map(fn (MealEntitlement $item) => $this->row($item))->all(),
         ]);
     }
@@ -141,7 +142,7 @@ class MealStubController extends Controller
             if ($locked->status !== 'available') {
                 throw ValidationException::withMessages(['meal' => __('This meal entitlement is not available.')]);
             }
-            if (! $override && $locked->schedule->enforce_serving_time && $this->entitlements->displayState($locked) !== 'available') {
+            if (! $override && $this->entitlements->effectiveStatus($locked) !== 'available') {
                 throw ValidationException::withMessages(['meal' => __('This meal can only be consumed during its configured serving period.')]);
             }
             $locked->forceFill([
@@ -169,7 +170,7 @@ class MealStubController extends Controller
             'id' => $item->id, 'date' => $item->schedule->date->toDateString(),
             'meal' => $item->schedule->meal_type->label(), 'starts_at' => $item->schedule->starts_at,
             'ends_at' => $item->schedule->ends_at, 'venue' => $item->schedule->venue?->name,
-            'status' => $item->status, 'display_status' => $this->entitlements->displayState($item),
+            'status' => $item->status, 'display_status' => $this->entitlements->effectiveStatus($item),
             'consumed_at' => $item->consumed_at?->format('g:i A'),
             'enforce_serving_time' => $item->schedule->enforce_serving_time,
         ];

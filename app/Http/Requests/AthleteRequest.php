@@ -105,6 +105,13 @@ class AthleteRequest extends FormRequest
             $rules['event_id'] = $this->user()?->role === UserRole::Coach
                 ? ['nullable', 'integer', Rule::exists('events', 'id')]
                 : ['nullable', 'integer', Rule::exists('events', 'id')];
+        } elseif ($this->user()?->isAdmin() || $this->user()?->canManageProductionAccounts()) {
+            $rules['delegation_id'] = ['sometimes', 'required', 'integer', Rule::exists('delegations', 'id')];
+            $rules['school_id'] = ['sometimes', 'required', 'integer', Rule::exists('schools', 'id')->where('active', true)];
+            $rules['meet_sport_ids'] = ['sometimes', 'array'];
+            $rules['meet_sport_ids.*'] = ['integer', 'distinct', Rule::exists('meet_sports', 'id')];
+            $rules['event_ids'] = ['sometimes', 'array'];
+            $rules['event_ids.*'] = ['integer', 'distinct', Rule::exists('events', 'id')];
         }
 
         return $rules;

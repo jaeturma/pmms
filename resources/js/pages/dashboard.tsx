@@ -244,7 +244,13 @@ const quickActions: Array<{
         label: 'Encode results',
         href: resultsIndex().url,
         icon: Award,
-        roles: ['admin', 'organizer', 'tournament_manager'],
+        roles: [
+            'admin',
+            'organizer',
+            'tournament_manager',
+            'tournament_ict',
+            'tournament_secretary',
+        ],
     },
     {
         label: 'Medal tally',
@@ -258,14 +264,20 @@ const quickActions: Array<{
             'delegation_officer',
             'coach',
             'viewer',
+            'tournament_ict',
+            'tournament_secretary',
         ],
     },
 ];
 
 function QuickActions({ compact = false }: { compact?: boolean }) {
-    const role = usePage().props.auth.user?.role;
+    const user = usePage().props.auth.user;
+    const role = user?.role;
     const permittedActions = quickActions.filter(
-        (action) => role && action.roles.includes(role),
+        (action) =>
+            (role && action.roles.includes(role)) ||
+            (user?.can_manage_accounts === true &&
+                ['Register athlete', 'Add official'].includes(action.label)),
     );
 
     if (permittedActions.length === 0) return null;

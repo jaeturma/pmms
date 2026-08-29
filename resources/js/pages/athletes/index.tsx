@@ -11,6 +11,7 @@ import { PaginationControls } from '@/components/pagination-controls';
 import type { Paginated } from '@/components/pagination-controls';
 import { SearchBar } from '@/components/search-bar';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogContent,
@@ -56,10 +57,13 @@ type AthleteRow = {
     coach: string | null;
     photo_url: string | null;
     sports: string;
+    events: string;
     accreditation_status: string;
     eligibility_status: string;
     can_update: boolean;
     can_delete: boolean;
+    deleted: boolean;
+    deleted_at: string | null;
 };
 
 type DelegationOption = {
@@ -86,7 +90,17 @@ type CoachEventOption = {
 
 type Props = {
     athletes: Paginated<AthleteRow>;
-    filters: { search: string; municipality_id: number | null; school_district_id: number | null; school_id: number | null; sport_id: number | null; sex: string; accreditation: string };
+    filters: {
+        search: string;
+        municipality_id: number | null;
+        school_district_id: number | null;
+        school_id: number | null;
+        sport_id: number | null;
+        sex: string;
+        accreditation: string;
+        deleted: boolean;
+    };
+    canViewDeleted: boolean;
     delegationOptions: DelegationOption[];
     schoolOptionsByDelegation: Record<number, SchoolOption[]>;
     fixedDelegationId: number | null;
@@ -94,7 +108,12 @@ type Props = {
     coachEventOptionsByDelegation: Record<number, CoachEventOption[]>;
     municipalities: Array<{ id: number; name: string }>;
     schoolDistricts: Array<{ id: number; district_id: number; name: string }>;
-    filterSchools: Array<{ id: number; district_id: number | null; school_district_id: number | null; name: string }>;
+    filterSchools: Array<{
+        id: number;
+        district_id: number | null;
+        school_district_id: number | null;
+        name: string;
+    }>;
     sports: Array<{ id: number; name: string }>;
 };
 
@@ -257,87 +276,167 @@ function AthleteFormDialog({
                             </div>
                         )}
                         <div className="grid gap-4 sm:grid-cols-2 lg:col-span-3 lg:grid-cols-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="athlete-lrn">LRN (12 digits) *</Label>
-                            <Input
-                                id="athlete-lrn"
-                                value={data.lrn}
-                                inputMode="numeric"
-                                maxLength={12}
-                                onChange={(e) => setData('lrn', e.target.value)}
-                            />
-                            <InputError message={errors.lrn} />
-                        </div>
-                        {fixedDelegationId !== null && (
-                            <div className="space-y-2 lg:col-span-3">
-                                <Label htmlFor="athlete-event">Coach sport and event *</Label>
-                                <Select
-                                    value={data.event_id}
-                                    onValueChange={(value) => setData('event_id', value)}
-                                >
-                                    <SelectTrigger id="athlete-event">
-                                        <SelectValue placeholder="Select from your approved sports" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {(coachEventOptionsByDelegation[Number(data.delegation_id)] ?? []).map((event) => (
-                                            <SelectItem key={event.id} value={String(event.id)}>
-                                                {event.label} ({event.age_division}, {event.gender})
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <InputError message={errors.event_id} />
-                            </div>
-                        )}
-                        {data.delegation_id && (
-                            <>
-                            {fixedDelegationId !== null && (
-                                <div className="space-y-2">
-                                    <Label>Municipality *</Label>
-                                    <Select value={data.district_id} disabled>
-                                        <SelectTrigger><SelectValue placeholder="Municipality" /></SelectTrigger>
-                                        <SelectContent>{municipalities.map((municipality) => <SelectItem key={municipality.id} value={String(municipality.id)}>{municipality.name}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                    <InputError message={errors.district_id} />
-                                </div>
-                            )}
-                            {fixedDelegationId !== null && (
-                                <div className="space-y-2">
-                                    <Label>School district *</Label>
-                                    <Select value={data.school_district_id} onValueChange={(value) => setData('school_district_id', value)}>
-                                        <SelectTrigger><SelectValue placeholder="Select school district" /></SelectTrigger>
-                                        <SelectContent>{availableSchoolDistricts.map((district) => <SelectItem key={district.id} value={String(district.id)}>{district.name}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                    <InputError message={errors.school_district_id} />
-                                </div>
-                            )}
                             <div className="space-y-2">
-                                <Label htmlFor="athlete-school">School *</Label>
-                                <Select
-                                    value={data.school_id}
-                                    onValueChange={(value) =>
-                                        setData('school_id', value)
+                                <Label htmlFor="athlete-lrn">
+                                    LRN (12 digits) *
+                                </Label>
+                                <Input
+                                    id="athlete-lrn"
+                                    value={data.lrn}
+                                    inputMode="numeric"
+                                    maxLength={12}
+                                    onChange={(e) =>
+                                        setData('lrn', e.target.value)
                                     }
-                                >
-                                    <SelectTrigger id="athlete-school">
-                                        <SelectValue placeholder="Select a school" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {allSchoolOptions.map((school) => (
-                                            <SelectItem
-                                                key={school.id}
-                                                value={String(school.id)}
-                                            >
-                                                {school.name} -{' '}
-                                                {school.school_id_code}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <InputError message={errors.school_id} />
+                                />
+                                <InputError message={errors.lrn} />
                             </div>
-                            </>
-                        )}
+                            {fixedDelegationId !== null && (
+                                <div className="space-y-2 lg:col-span-3">
+                                    <Label htmlFor="athlete-event">
+                                        Coach sport and event *
+                                    </Label>
+                                    <Select
+                                        value={data.event_id}
+                                        onValueChange={(value) =>
+                                            setData('event_id', value)
+                                        }
+                                    >
+                                        <SelectTrigger id="athlete-event">
+                                            <SelectValue placeholder="Select from your approved sports" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {(
+                                                coachEventOptionsByDelegation[
+                                                    Number(data.delegation_id)
+                                                ] ?? []
+                                            ).map((event) => (
+                                                <SelectItem
+                                                    key={event.id}
+                                                    value={String(event.id)}
+                                                >
+                                                    {event.label} (
+                                                    {event.age_division},{' '}
+                                                    {event.gender})
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <InputError message={errors.event_id} />
+                                </div>
+                            )}
+                            {data.delegation_id && (
+                                <>
+                                    {fixedDelegationId !== null && (
+                                        <div className="space-y-2">
+                                            <Label>Municipality *</Label>
+                                            <Select
+                                                value={data.district_id}
+                                                disabled
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Municipality" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {municipalities.map(
+                                                        (municipality) => (
+                                                            <SelectItem
+                                                                key={
+                                                                    municipality.id
+                                                                }
+                                                                value={String(
+                                                                    municipality.id,
+                                                                )}
+                                                            >
+                                                                {
+                                                                    municipality.name
+                                                                }
+                                                            </SelectItem>
+                                                        ),
+                                                    )}
+                                                </SelectContent>
+                                            </Select>
+                                            <InputError
+                                                message={errors.district_id}
+                                            />
+                                        </div>
+                                    )}
+                                    {fixedDelegationId !== null && (
+                                        <div className="space-y-2">
+                                            <Label>School district *</Label>
+                                            <Select
+                                                value={data.school_district_id}
+                                                onValueChange={(value) =>
+                                                    setData(
+                                                        'school_district_id',
+                                                        value,
+                                                    )
+                                                }
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select school district" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {availableSchoolDistricts.map(
+                                                        (district) => (
+                                                            <SelectItem
+                                                                key={
+                                                                    district.id
+                                                                }
+                                                                value={String(
+                                                                    district.id,
+                                                                )}
+                                                            >
+                                                                {district.name}
+                                                            </SelectItem>
+                                                        ),
+                                                    )}
+                                                </SelectContent>
+                                            </Select>
+                                            <InputError
+                                                message={
+                                                    errors.school_district_id
+                                                }
+                                            />
+                                        </div>
+                                    )}
+                                    <div className="space-y-2">
+                                        <Label htmlFor="athlete-school">
+                                            School *
+                                        </Label>
+                                        <Select
+                                            value={data.school_id}
+                                            onValueChange={(value) =>
+                                                setData('school_id', value)
+                                            }
+                                        >
+                                            <SelectTrigger id="athlete-school">
+                                                <SelectValue placeholder="Select a school" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {allSchoolOptions.map(
+                                                    (school) => (
+                                                        <SelectItem
+                                                            key={school.id}
+                                                            value={String(
+                                                                school.id,
+                                                            )}
+                                                        >
+                                                            {school.name} -{' '}
+                                                            {
+                                                                school.school_id_code
+                                                            }
+                                                        </SelectItem>
+                                                    ),
+                                                )}
+                                            </SelectContent>
+                                        </Select>
+                                        <InputError
+                                            message={errors.school_id}
+                                        />
+                                    </div>
+                                </>
+                            )}
                         </div>
                         <div className="grid gap-4 lg:col-span-3 lg:grid-cols-3">
                             <div className="space-y-2">
@@ -396,7 +495,9 @@ function AthleteFormDialog({
                                             <SelectValue placeholder="Select extension" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="None">None</SelectItem>
+                                            <SelectItem value="None">
+                                                None
+                                            </SelectItem>
                                             {['Jr.', 'Sr.', 'II', 'III'].map(
                                                 (suffix) => (
                                                     <SelectItem
@@ -502,7 +603,9 @@ function AthleteFormDialog({
                             <InputError message={errors.sex} />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="athlete-birthdate">Birthdate *</Label>
+                            <Label htmlFor="athlete-birthdate">
+                                Birthdate *
+                            </Label>
                             <Input
                                 id="athlete-birthdate"
                                 type="date"
@@ -848,6 +951,7 @@ export default function Athletes({
     schoolDistricts,
     filterSchools,
     sports,
+    canViewDeleted,
 }: Props) {
     const [createOpen, setCreateOpen] = useState(false);
     const [editingAthlete, setEditingAthlete] = useState<AthleteRow | null>(
@@ -855,14 +959,26 @@ export default function Athletes({
     );
     const filterParams = {
         ...(filters.search ? { search: filters.search } : {}),
-        ...(filters.municipality_id ? { municipality_id: String(filters.municipality_id) } : {}),
-        ...(filters.school_district_id ? { school_district_id: String(filters.school_district_id) } : {}),
+        ...(filters.municipality_id
+            ? { municipality_id: String(filters.municipality_id) }
+            : {}),
+        ...(filters.school_district_id
+            ? { school_district_id: String(filters.school_district_id) }
+            : {}),
         ...(filters.school_id ? { school_id: String(filters.school_id) } : {}),
         ...(filters.sport_id ? { sport_id: String(filters.sport_id) } : {}),
         ...(filters.sex ? { sex: filters.sex } : {}),
-        ...(filters.accreditation ? { accreditation: filters.accreditation } : {}),
+        ...(filters.accreditation
+            ? { accreditation: filters.accreditation }
+            : {}),
+        ...(filters.deleted ? { deleted: '1' } : {}),
     };
-    const applyFilter = (key: string, value: string) => router.get(index().url, { ...filterParams, [key]: value === 'all' ? undefined : value }, { preserveState: true, preserveScroll: true });
+    const applyFilter = (key: string, value: string) =>
+        router.get(
+            index().url,
+            { ...filterParams, [key]: value === 'all' ? undefined : value },
+            { preserveState: true, preserveScroll: true },
+        );
 
     return (
         <>
@@ -881,19 +997,171 @@ export default function Athletes({
                     }
                 />
 
-                <SearchBar
-                    initial={filters.search}
-                    placeholder="Search name or LRN"
-                    url={index().url}
-                    extraParams={filterParams}
-                />
+                <div className="flex flex-wrap items-center gap-4">
+                    <div className="min-w-64 flex-1">
+                        <SearchBar
+                            initial={filters.search}
+                            placeholder="Search name or LRN"
+                            url={index().url}
+                            extraParams={filterParams}
+                        />
+                    </div>
+                    {canViewDeleted && (
+                        <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                            <Checkbox
+                                checked={filters.deleted}
+                                onCheckedChange={(checked) =>
+                                    applyFilter(
+                                        'deleted',
+                                        checked ? '1' : 'all',
+                                    )
+                                }
+                            />
+                            View deleted athletes
+                        </label>
+                    )}
+                </div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-                    <Select value={String(filters.municipality_id ?? 'all')} onValueChange={(value) => applyFilter('municipality_id', value)}><SelectTrigger><SelectValue placeholder="Municipality" /></SelectTrigger><SelectContent><SelectItem value="all">All municipalities</SelectItem>{municipalities.map((item) => <SelectItem key={item.id} value={String(item.id)}>{item.name}</SelectItem>)}</SelectContent></Select>
-                    <Select value={String(filters.school_district_id ?? 'all')} onValueChange={(value) => applyFilter('school_district_id', value)}><SelectTrigger><SelectValue placeholder="School district" /></SelectTrigger><SelectContent><SelectItem value="all">All school districts</SelectItem>{schoolDistricts.filter((item) => !filters.municipality_id || item.district_id === filters.municipality_id).map((item) => <SelectItem key={item.id} value={String(item.id)}>{item.name}</SelectItem>)}</SelectContent></Select>
-                    <Select value={String(filters.school_id ?? 'all')} onValueChange={(value) => applyFilter('school_id', value)}><SelectTrigger><SelectValue placeholder="School" /></SelectTrigger><SelectContent><SelectItem value="all">All schools</SelectItem>{filterSchools.filter((item) => (!filters.municipality_id || item.district_id === filters.municipality_id) && (!filters.school_district_id || item.school_district_id === filters.school_district_id)).map((item) => <SelectItem key={item.id} value={String(item.id)}>{item.name}</SelectItem>)}</SelectContent></Select>
-                    <Select value={filters.sex || 'all'} onValueChange={(value) => applyFilter('sex', value)}><SelectTrigger><SelectValue placeholder="Sex" /></SelectTrigger><SelectContent><SelectItem value="all">All sexes</SelectItem><SelectItem value="male">Male</SelectItem><SelectItem value="female">Female</SelectItem></SelectContent></Select>
-                    <Select value={String(filters.sport_id ?? 'all')} onValueChange={(value) => applyFilter('sport_id', value)}><SelectTrigger><SelectValue placeholder="Sport" /></SelectTrigger><SelectContent><SelectItem value="all">All sports</SelectItem>{sports.map((sport) => <SelectItem key={sport.id} value={String(sport.id)}>{sport.name}</SelectItem>)}</SelectContent></Select>
-                    <Select value={filters.accreditation || 'all'} onValueChange={(value) => applyFilter('accreditation', value)}><SelectTrigger><SelectValue placeholder="Eligibility" /></SelectTrigger><SelectContent><SelectItem value="all">All eligibility</SelectItem><SelectItem value="eligible">Eligible (documents validated)</SelectItem><SelectItem value="accredited">Accredited</SelectItem><SelectItem value="not_accredited">Not accredited</SelectItem></SelectContent></Select>
+                    <Select
+                        value={String(filters.municipality_id ?? 'all')}
+                        onValueChange={(value) =>
+                            applyFilter('municipality_id', value)
+                        }
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder="Municipality" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">
+                                All municipalities
+                            </SelectItem>
+                            {municipalities.map((item) => (
+                                <SelectItem
+                                    key={item.id}
+                                    value={String(item.id)}
+                                >
+                                    {item.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Select
+                        value={String(filters.school_district_id ?? 'all')}
+                        onValueChange={(value) =>
+                            applyFilter('school_district_id', value)
+                        }
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder="School district" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">
+                                All school districts
+                            </SelectItem>
+                            {schoolDistricts
+                                .filter(
+                                    (item) =>
+                                        !filters.municipality_id ||
+                                        item.district_id ===
+                                            filters.municipality_id,
+                                )
+                                .map((item) => (
+                                    <SelectItem
+                                        key={item.id}
+                                        value={String(item.id)}
+                                    >
+                                        {item.name}
+                                    </SelectItem>
+                                ))}
+                        </SelectContent>
+                    </Select>
+                    <Select
+                        value={String(filters.school_id ?? 'all')}
+                        onValueChange={(value) =>
+                            applyFilter('school_id', value)
+                        }
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder="School" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All schools</SelectItem>
+                            {filterSchools
+                                .filter(
+                                    (item) =>
+                                        (!filters.municipality_id ||
+                                            item.district_id ===
+                                                filters.municipality_id) &&
+                                        (!filters.school_district_id ||
+                                            item.school_district_id ===
+                                                filters.school_district_id),
+                                )
+                                .map((item) => (
+                                    <SelectItem
+                                        key={item.id}
+                                        value={String(item.id)}
+                                    >
+                                        {item.name}
+                                    </SelectItem>
+                                ))}
+                        </SelectContent>
+                    </Select>
+                    <Select
+                        value={filters.sex || 'all'}
+                        onValueChange={(value) => applyFilter('sex', value)}
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder="Sex" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All sexes</SelectItem>
+                            <SelectItem value="male">Male</SelectItem>
+                            <SelectItem value="female">Female</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select
+                        value={String(filters.sport_id ?? 'all')}
+                        onValueChange={(value) =>
+                            applyFilter('sport_id', value)
+                        }
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder="Sport" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All sports</SelectItem>
+                            {sports.map((sport) => (
+                                <SelectItem
+                                    key={sport.id}
+                                    value={String(sport.id)}
+                                >
+                                    {sport.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Select
+                        value={filters.accreditation || 'all'}
+                        onValueChange={(value) =>
+                            applyFilter('accreditation', value)
+                        }
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder="Eligibility" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All eligibility</SelectItem>
+                            <SelectItem value="eligible">
+                                Eligible (documents validated)
+                            </SelectItem>
+                            <SelectItem value="accredited">
+                                Accredited
+                            </SelectItem>
+                            <SelectItem value="not_accredited">
+                                Not accredited
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
                 </div>
 
                 {athletes.data.length === 0 ? (
@@ -916,11 +1184,7 @@ export default function Athletes({
                                         <TableHead>Sports</TableHead>
                                         <TableHead>Coach</TableHead>
                                         <TableHead>Delegation</TableHead>
-                                        <TableHead>Sex</TableHead>
-                                        <TableHead>Age</TableHead>
-                                        <TableHead>Grade</TableHead>
                                         <TableHead>Eligibility</TableHead>
-                                        <TableHead>Accreditation</TableHead>
                                         <TableHead className="text-right">
                                             Actions
                                         </TableHead>
@@ -948,52 +1212,64 @@ export default function Athletes({
                                                         </span>
                                                     )}
                                                     <span>{athlete.name}</span>
+                                                    {athlete.deleted && (
+                                                        <span className="text-xs text-destructive">
+                                                            Deleted
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </TableCell>
-                                            <TableCell>{athlete.sports || 'Not assigned'}</TableCell>
-                                            <TableCell>{athlete.coach || 'Not assigned'}</TableCell>
-                                            <TableCell>{athlete.delegation}</TableCell>
                                             <TableCell>
-                                                {athlete.sex_label}
+                                                <div className="font-medium">
+                                                    {athlete.sports ||
+                                                        'Not assigned'}
+                                                </div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    {athlete.events ||
+                                                        'No events assigned'}
+                                                </div>
                                             </TableCell>
-                                            <TableCell>{athlete.age}</TableCell>
                                             <TableCell>
-                                                {athlete.grade_level}
+                                                {athlete.coach ||
+                                                    'Not assigned'}
+                                            </TableCell>
+                                            <TableCell>
+                                                {athlete.delegation}
                                             </TableCell>
                                             <TableCell>
                                                 {athlete.eligibility_status}
                                             </TableCell>
-                                            <TableCell>
-                                                {athlete.accreditation_status}
-                                            </TableCell>
                                             <TableCell className="text-right">
                                                 <div className="flex justify-end gap-2">
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        asChild
-                                                    >
-                                                        <Link
-                                                            href={
-                                                                show(athlete.id)
-                                                                    .url
-                                                            }
+                                                    {!athlete.deleted && (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            asChild
                                                         >
-                                                            View
-                                                        </Link>
-                                                    </Button>
+                                                            <Link
+                                                                href={
+                                                                    show(
+                                                                        athlete.id,
+                                                                    ).url
+                                                                }
+                                                            >
+                                                                View
+                                                            </Link>
+                                                        </Button>
+                                                    )}
                                                     {athlete.can_update && (
                                                         <Button
                                                             variant="outline"
                                                             size="sm"
-                                                            onClick={() =>
-                                                                setEditingAthlete(
-                                                                    athlete,
-                                                                )
-                                                            }
+                                                            asChild
                                                         >
-                                                            <Pencil />
-                                                            Edit
+                                                            <Link
+                                                                href={`/athletes/${athlete.id}/edit`}
+                                                            >
+                                                                <Pencil />
+                                                                Edit
+                                                            </Link>
                                                         </Button>
                                                     )}
                                                     {athlete.can_delete && (
@@ -1007,7 +1283,7 @@ export default function Athletes({
                                                                 </Button>
                                                             }
                                                             title="Remove athlete?"
-                                                            description="This permanently removes the athlete and frees the LRN for registration. This cannot be undone."
+                                                            description="This moves the athlete to the deleted-athletes view for administrators."
                                                             confirmLabel="Remove"
                                                             destructive
                                                             onConfirm={() =>
