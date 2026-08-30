@@ -133,6 +133,8 @@ class EligibilityController extends Controller
                 'athlete.eligibilityDocuments.fileUpload:id,original_name',
                 'athlete.eligibilityDocuments.verifier:id,name',
                 'athlete.accreditation:id,athlete_id',
+                'athlete.sportRosterMemberships.meetSport.sport:id,name',
+                'athlete.entries.event.sport:id,name',
                 'reviewer:id,name',
             ]);
 
@@ -301,6 +303,10 @@ class EligibilityController extends Controller
             'athlete' => $review->athlete->fullName(),
             'school' => $review->athlete->school->name,
             'meet' => $review->athlete->delegation->meet->name,
+            'sports' => $review->athlete->rosterSportNames()
+                ->whenEmpty(fn () => $review->athlete->entries->pluck('event.sport.name')->filter()->unique()->sort()->values())
+                ->join(', '),
+            'events' => $review->athlete->entries->pluck('event.name')->filter()->unique()->sort()->join(', '),
             'status' => $review->status->value,
             'status_label' => $review->status->label(),
             'remarks' => $review->remarks,

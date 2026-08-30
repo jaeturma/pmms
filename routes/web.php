@@ -282,6 +282,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('athletes', [AthleteController::class, 'store'])->name('athletes.store');
     Route::put('athletes/{athlete}', [AthleteController::class, 'update'])->name('athletes.update');
     Route::delete('athletes/{athlete}', [AthleteController::class, 'destroy'])->name('athletes.destroy');
+    Route::delete('athletes/{athlete}/permanent', [AthleteController::class, 'forceDestroy'])->name('athletes.force-destroy');
 
     Route::get('personnel', [PersonnelController::class, 'index'])->name('personnel.index');
     Route::get('personnel/{personnel}/photo', [PersonnelController::class, 'photo'])->name('personnel.photo');

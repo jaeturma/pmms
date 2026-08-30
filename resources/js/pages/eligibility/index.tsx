@@ -63,6 +63,8 @@ type ReviewRow = {
     athlete_id: number;
     athlete: string;
     school: string;
+    sports: string;
+    events: string;
     meet: string;
     status: string;
     status_label: string;
@@ -675,7 +677,7 @@ export default function Eligibility({
                                     <TableRow>
                                         <TableHead>Athlete</TableHead>
                                         <TableHead>School</TableHead>
-                                        <TableHead>Documents</TableHead>
+                                        <TableHead>Sports &amp; Event</TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead>Remarks</TableHead>
                                         <TableHead className="text-right">
@@ -693,76 +695,12 @@ export default function Eligibility({
                                                 {review.school}
                                             </TableCell>
                                             <TableCell>
-                                                {review.documents.length ===
-                                                0 ? (
-                                                    '—'
-                                                ) : (
-                                                    <ul className="space-y-1.5">
-                                                        {review.documents.map(
-                                                            (doc) => (
-                                                                <li
-                                                                    key={doc.id}
-                                                                    className="flex items-center gap-1.5"
-                                                                >
-                                                                    <FileText
-                                                                        aria-hidden="true"
-                                                                        className="size-3.5 shrink-0 text-muted-foreground"
-                                                                    />
-                                                                    <a
-                                                                        href={
-                                                                            doc.url
-                                                                        }
-                                                                        target="_blank"
-                                                                        rel="noreferrer"
-                                                                        className="text-sm underline underline-offset-2"
-                                                                    >
-                                                                        {
-                                                                            doc.label
-                                                                        }
-                                                                    </a>
-                                                                    {doc.uploaded_at && (
-                                                                        <span className="text-xs text-muted-foreground">
-                                                                            (
-                                                                            {
-                                                                                doc.uploaded_at
-                                                                            }
-                                                                            )
-                                                                        </span>
-                                                                    )}
-                                                                    {doc.can_delete && (
-                                                                        <ConfirmDialog
-                                                                            trigger={
-                                                                                <Button
-                                                                                    variant="ghost"
-                                                                                    size="icon"
-                                                                                    className="size-6"
-                                                                                    aria-label={`Remove ${doc.label}`}
-                                                                                >
-                                                                                    <Trash2 className="size-3" />
-                                                                                </Button>
-                                                                            }
-                                                                            title="Remove document?"
-                                                                            description={`${doc.label} — ${doc.file_name}`}
-                                                                            confirmLabel="Remove"
-                                                                            destructive
-                                                                            onConfirm={() =>
-                                                                                router.delete(
-                                                                                    destroyDocument(
-                                                                                        doc.id,
-                                                                                    )
-                                                                                        .url,
-                                                                                    {
-                                                                                        preserveScroll: true,
-                                                                                    },
-                                                                                )
-                                                                            }
-                                                                        />
-                                                                    )}
-                                                                </li>
-                                                            ),
-                                                        )}
-                                                    </ul>
-                                                )}
+                                                <div className="font-medium">
+                                                    {review.sports || '—'}
+                                                </div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    {review.events || 'No event assigned'}
+                                                </div>
                                             </TableCell>
                                             <TableCell>
                                                 <Badge

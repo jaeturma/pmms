@@ -7,6 +7,7 @@ use App\Enums\EligibilityStatus;
 use App\Enums\Permission;
 use App\Enums\ResultStatus;
 use App\Enums\UserRole;
+use App\Enums\MeetSportAssignmentRole;
 use App\Http\Controllers\Concerns\BuildsSchoolOptionsByDelegation;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\AthleteRequest;
@@ -253,8 +254,14 @@ class AthleteController extends Controller
         $delegations = Delegation::query()->where('meet_id', $athlete->delegation->meet_id)
             ->with(['school:id,name,district_id', 'district:id,name', 'meet:id,name'])->orderBy('id')->get();
         $schools = School::query()->where('active', true)->with(['district:id,name', 'schoolDistrict:id,name'])->orderBy('name')->get();
-        $meetSports = MeetSport::query()->where('meet_id', $athlete->delegation->meet_id)->with('sport:id,name')->orderBy('display_order')->get();
-        $events = $athlete->delegation->meet->events()->with('sport:id,name')->orderBy('display_order')->get();
+        $isTournamentIct = app(CompetitionAccessService::class)->hasAssignmentRole($request->user(), [MeetSportAssignmentRole::TournamentICT->value], $athlete->delegation->meet_id);
+        $allowedEventIds = $isTournamentIct ? app(CompetitionAccessService::class)->eventIds($request->user(), $athlete->delegation->meet_id) : null;
+        $meetSports = MeetSport::query()->where('meet_id', $athlete->delegation->meet_id)
+            ->when($allowedEventIds !== null, fn ($query) => $query->whereIn('sport_id', Event::query()->whereKey($allowedEventIds)->select('sport_id')))
+            ->with('sport:id,name')->orderBy('display_order')->get();
+        $events = $athlete->delegation->meet->events()
+            ->when($allowedEventIds !== null, fn ($query) => $query->whereIn('events.id', $allowedEventIds))
+            ->with('sport:id,name')->orderBy('display_order')->get();
 
         return Inertia::render('athletes/edit', [
             'athlete' => [
@@ -271,6 +278,7 @@ class AthleteController extends Controller
             'schools' => $schools->map(fn (School $item) => ['id' => $item->id, 'name' => $item->name, 'district' => $item->district?->name ?? 'Not assigned', 'district_id' => $item->district_id]),
             'sports' => $meetSports->map(fn (MeetSport $item) => ['id' => $item->id, 'name' => $item->sport->name]),
             'events' => $events->map(fn (Event $item) => ['id' => $item->id, 'sport_id' => $item->sport_id, 'name' => $item->sport->name.' — '.$item->name]),
+            'assignmentsOnly' => $isTournamentIct && ! $request->user()->isAdmin() && ! $request->user()->canManageProductionAccounts(),
         ]);
     }
 
@@ -517,14 +525,16 @@ class AthleteController extends Controller
     {
         Gate::authorize('update', $athlete);
 
-        $originalMeetId = $athlete->delegation->meet_id;
-        $fileFields = ['photo', 'sports_photo', 'athlete_history', 'form_10', 'school_id_document', 'birth_certificate', 'report_card', 'parental_consent', 'medical_certificate', 'meet_sport_ids', 'event_ids'];
-        $athlete->fill($request->safe()->except($fileFields));
-
         /** @var User $user */
         $user = $request->user();
+        $originalMeetId = $athlete->delegation->meet_id;
+        $isTournamentIct = app(CompetitionAccessService::class)->hasAssignmentRole($user, [MeetSportAssignmentRole::TournamentICT->value], $athlete->delegation->meet_id);
+        $fileFields = ['photo', 'sports_photo', 'athlete_history', 'form_10', 'school_id_document', 'birth_certificate', 'report_card', 'parental_consent', 'medical_certificate', 'meet_sport_ids', 'event_ids'];
+        if (! $isTournamentIct || $user->isAdmin() || $user->canManageProductionAccounts()) {
+            $athlete->fill($request->safe()->except($fileFields));
+        }
 
-        if ($user->isAdmin() || $user->canManageProductionAccounts()) {
+        if ($user->isAdmin() || $user->canManageProductionAccounts() || $isTournamentIct) {
             $delegation = $request->filled('delegation_id')
                 ? Delegation::query()->findOrFail($request->integer('delegation_id'))
                 : $athlete->delegation;
@@ -536,6 +546,14 @@ class AthleteController extends Controller
                 ? $request->input('meet_sport_ids', [])
                 : $athlete->sportRosterMemberships()->pluck('meet_sport_id'))
                 ->map(fn ($id) => (int) $id)->unique();
+            if ($isTournamentIct) {
+                $allowedEventIds = app(CompetitionAccessService::class)->eventIds($user, $athlete->delegation->meet_id);
+                $allowedSportIds = Event::query()->whereKey($allowedEventIds)->pluck('sport_id')->unique();
+                if ($eventIds->diff($allowedEventIds)->isNotEmpty()
+                    || MeetSport::query()->whereKey($meetSportIds)->whereNotIn('sport_id', $allowedSportIds)->exists()) {
+                    throw ValidationException::withMessages(['event_ids' => __('Tournament ICT may only assign sports and events within their active scope.')]);
+                }
+            }
             if ($delegation->meet_id !== $originalMeetId
                 || Event::query()->whereIn('id', $eventIds)->whereDoesntHave('meets', fn ($query) => $query->whereKey($delegation->meet_id))->exists()
                 || MeetSport::query()->whereIn('id', $meetSportIds)->where('meet_id', '!=', $delegation->meet_id)->exists()) {
@@ -549,19 +567,19 @@ class AthleteController extends Controller
         $oldPhoto = null;
         $oldSportsPhoto = null;
 
-        if ($request->hasFile('photo')) {
+        if (! $isTournamentIct && $request->hasFile('photo')) {
             $oldPhoto = $athlete->photo;
             $athlete->photo_upload_id = $this->athletePhotos->store($request->file('photo'), $user, 'passport')->id;
         }
 
-        if ($request->hasFile('sports_photo')) {
+        if (! $isTournamentIct && $request->hasFile('sports_photo')) {
             $oldSportsPhoto = $athlete->sportsPhoto;
             $athlete->sports_photo_upload_id = $this->athletePhotos->store($request->file('sports_photo'), $user, 'sports')->id;
         }
 
         $athlete->save();
 
-        if ($user->isAdmin() || $user->canManageProductionAccounts()) {
+        if ($user->isAdmin() || $user->canManageProductionAccounts() || $isTournamentIct) {
             DB::transaction(function () use ($request, $athlete): void {
                 $eventIds = collect($request->input('event_ids', []))->map(fn ($id) => (int) $id)->unique();
                 $athlete->entries()->whereNotIn('event_id', $eventIds)->whereDoesntHave('placements')->delete();
@@ -596,7 +614,7 @@ class AthleteController extends Controller
         ];
 
         foreach ($documents as $field => $type) {
-            if (! $request->hasFile($field)) {
+            if ($isTournamentIct || ! $request->hasFile($field)) {
                 continue;
             }
 
@@ -663,8 +681,6 @@ class AthleteController extends Controller
     public function destroy(Request $request, Athlete $athlete): RedirectResponse
     {
         Gate::authorize('delete', $athlete);
-        abort_unless($request->user()->isAdmin(), 403);
-
         $name = $athlete->fullName();
         $athlete->delete();
 
@@ -676,5 +692,19 @@ class AthleteController extends Controller
         ]);
 
         return redirect()->route('athletes.index');
+    }
+
+    /** Permanently remove an archived athlete after explicit system-admin confirmation. */
+    public function forceDestroy(Request $request, int $athlete): RedirectResponse
+    {
+        abort_unless($request->user()->isAdmin(), 403);
+        $request->validate(['confirm' => ['required', 'accepted']]);
+        $record = Athlete::onlyTrashed()->findOrFail($athlete);
+        $name = $record->fullName();
+        $record->forceDelete();
+        $this->audit->record('athlete.permanently_deleted', null, ['athlete_id' => $athlete, 'name' => $name]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Athlete permanently deleted and may now be encoded again.')]);
+
+        return redirect()->route('athletes.index', ['deleted' => 1]);
     }
 }

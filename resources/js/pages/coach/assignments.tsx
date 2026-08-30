@@ -402,6 +402,10 @@ export default function CoachAssignments({
                                                 <div className="font-medium">
                                                     {item.sport}
                                                 </div>
+                                                <div className="mt-1 text-xs text-muted-foreground">
+                                                    {item.events ||
+                                                        'No events assigned'}
+                                                </div>
                                             </TableCell>
                                             <TableCell>
                                                 <Badge

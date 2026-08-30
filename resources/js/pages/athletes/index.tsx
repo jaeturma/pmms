@@ -1302,6 +1302,28 @@ export default function Athletes({
                                                             }
                                                         />
                                                     )}
+                                                    {athlete.deleted && canViewDeleted && (
+                                                        <ConfirmDialog
+                                                            trigger={
+                                                                <Button variant="destructive" size="sm">
+                                                                    Delete permanently
+                                                                </Button>
+                                                            }
+                                                            title="Permanently delete athlete?"
+                                                            description="This cannot be undone. The athlete's LRN will become available so the athlete can be encoded again."
+                                                            confirmLabel="Delete permanently"
+                                                            destructive
+                                                            onConfirm={() =>
+                                                                router.delete(
+                                                                    `/athletes/${athlete.id}/permanent`,
+                                                                    {
+                                                                        data: { confirm: true },
+                                                                        preserveScroll: true,
+                                                                    },
+                                                                )
+                                                            }
+                                                        />
+                                                    )}
                                                 </div>
                                             </TableCell>
                                         </TableRow>

@@ -9,6 +9,7 @@ use App\Models\Delegation;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\CompetitionAccessService;
+use App\Enums\MeetSportAssignmentRole;
 
 class AthletePolicy
 {
@@ -87,12 +88,40 @@ class AthletePolicy
                 && $athlete->accreditation()->doesntExist();
         }
 
+        if ($this->isAssignedTournamentIct($user, $athlete)) {
+            return true;
+        }
+
         return $athlete->delegation->hasOfficer($user)
             && $athlete->delegation->isEditableByOfficers();
     }
 
     public function delete(User $user, Athlete $athlete): bool
     {
-        return $user->isAdmin();
+        return $user->isAdmin() || $this->isAssignedTournamentIct($user, $athlete);
+    }
+
+    private function isAssignedTournamentIct(User $user, Athlete $athlete): bool
+    {
+        $access = app(CompetitionAccessService::class);
+
+        $hasIctAssignment = $access->hasAssignmentRole(
+            $user,
+            [MeetSportAssignmentRole::TournamentICT->value],
+            $athlete->delegation->meet_id,
+        );
+
+        if (! $hasIctAssignment) {
+            return false;
+        }
+
+        $assignedMeetSportIds = $user->meetSportAssignments()
+            ->where('status', 'active')
+            ->where('role', MeetSportAssignmentRole::TournamentICT->value)
+            ->whereHas('meetSport', fn ($query) => $query->where('meet_id', $athlete->delegation->meet_id))
+            ->pluck('meet_sport_id');
+
+        return $access->canAccessAthlete($user, $athlete)
+            || $athlete->sportRosterMemberships()->whereIn('meet_sport_id', $assignedMeetSportIds)->exists();
     }
 }
