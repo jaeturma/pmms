@@ -69,6 +69,7 @@ type AthleteOption = {
     meet_id: number;
     delegation_id: number;
     label: string;
+    event_ids: number[];
 };
 
 type EventOption = {
@@ -76,6 +77,7 @@ type EventOption = {
     meet_id: number;
     sport: string;
     is_team_event: boolean;
+    delegation_ids: number[];
     label: string;
 };
 
@@ -134,6 +136,7 @@ function SubmitEntryDialog({
         ? eventOptionsByMeet.filter(
               (event) =>
                   event.meet_id === selectedAthlete.meet_id &&
+                  event.delegation_ids.includes(selectedAthlete.delegation_id) &&
                   !event.is_team_event,
           )
         : [];
@@ -153,7 +156,7 @@ function SubmitEntryDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Submit entry</DialogTitle>
+                    <DialogTitle>Add athlete to events</DialogTitle>
                 </DialogHeader>
                 {athleteOptions.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
@@ -190,9 +193,9 @@ function SubmitEntryDialog({
                         <div className="space-y-2">
                             <Label>Events</Label>
                             <p className="text-xs text-muted-foreground">
-                                Select every event this athlete will compete in,
-                                An athlete may be entered in multiple individual
-                                events. Use Team entry for team events.
+                                Select one or more individual events. Existing
+                                entries are marked below. Use Team / Pair entry
+                                for doubles, relays, and team events.
                             </p>
                             <div className="max-h-72 space-y-2 overflow-y-auto rounded-md border p-3">
                                 {!selectedAthlete ? (
@@ -210,9 +213,10 @@ function SubmitEntryDialog({
                                             className="flex cursor-pointer items-start gap-3 rounded p-2 hover:bg-muted/50"
                                         >
                                             <Checkbox
+                                                disabled={selectedAthlete.event_ids.includes(event.id)}
                                                 checked={data.event_ids.includes(
                                                     event.id,
-                                                )}
+                                                ) || selectedAthlete.event_ids.includes(event.id)}
                                                 onCheckedChange={(checked) =>
                                                     setData(
                                                         'event_ids',
@@ -232,8 +236,8 @@ function SubmitEntryDialog({
                                             <span className="text-sm">
                                                 {event.label}
                                                 <span className="ml-2 text-xs text-muted-foreground">
-                                                    {event.is_team_event
-                                                        ? 'Team'
+                                                    {selectedAthlete.event_ids.includes(event.id)
+                                                        ? 'Already entered'
                                                         : 'Individual'}
                                                 </span>
                                             </span>
@@ -286,7 +290,9 @@ function TeamEntryDialog({
     );
     const athletes = selectedEvent
         ? athleteOptions.filter(
-              (athlete) => athlete.meet_id === selectedEvent.meet_id,
+              (athlete) =>
+                  athlete.meet_id === selectedEvent.meet_id &&
+                  selectedEvent.delegation_ids.includes(athlete.delegation_id),
           )
         : [];
 
@@ -294,7 +300,7 @@ function TeamEntryDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-xl">
                 <DialogHeader>
-                    <DialogTitle>Team entry</DialogTitle>
+                    <DialogTitle>Create team / pair entry</DialogTitle>
                 </DialogHeader>
                 <form
                     className="space-y-4"
@@ -310,7 +316,7 @@ function TeamEntryDialog({
                     }}
                 >
                     <div className="space-y-2">
-                        <Label>Team event</Label>
+                        <Label>Team, pair, doubles, or relay event</Label>
                         <Select
                             value={data.event_id}
                             onValueChange={(value) => {
@@ -463,11 +469,11 @@ export default function Entries({
                                         onClick={() => setTeamOpen(true)}
                                     >
                                         <UsersRound />
-                                        Team entry
+                                        Team / Pair entry
                                     </Button>
                                     <Button onClick={() => setSubmitOpen(true)}>
                                         <Plus />
-                                        Individual entry
+                                        Add athlete event(s)
                                     </Button>
                                 </>
                             )}

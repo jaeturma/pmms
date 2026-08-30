@@ -106,10 +106,9 @@ class EntryController extends Controller
                 ->pluck('id');
 
         $athleteScope = Athlete::query()
-            ->with(['school:id,name', 'delegation.meet:id,name'])
+            ->with(['school:id,name', 'delegation.meet:id,name', 'entries:id,athlete_id,event_id,status'])
             ->whereIn('delegation_id', $editableDelegationIds)
             ->when($user->role === UserRole::Coach, fn ($athletes) => $athletes
-                ->ownedBy($user)
                 ->whereHas('eligibilityReview', fn ($review) => $review
                     ->where('status', EligibilityStatus::Approved->value)))
             ->orderBy('last_name');
@@ -176,6 +175,9 @@ class EntryController extends Controller
                     'meet_id' => $athlete->delegation->meet->id,
                     'delegation_id' => $athlete->delegation_id,
                     'label' => "{$athlete->fullName()} — {$athlete->school->name}",
+                    'event_ids' => $athlete->entries
+                        ->where('status', '!=', EntryStatus::Withdrawn)
+                        ->pluck('event_id')->values()->all(),
                 ])
                 ->values(),
             'eventOptionsByMeet' => Event::query()
@@ -190,6 +192,10 @@ class EntryController extends Controller
                     'meet_id' => $meet->id,
                     'sport' => $event->sport->name,
                     'is_team_event' => $event->is_team_event,
+                    'delegation_ids' => $user->role === UserRole::Coach
+                        ? $delegations->filter(fn (Delegation $delegation): bool => $delegation->meet_id === $meet->id
+                            && $user->hasApprovedCoachScope($delegation, $event))->pluck('id')->values()->all()
+                        : $delegations->where('meet_id', $meet->id)->pluck('id')->values()->all(),
                     'label' => sprintf(
                         '%s — %s (%s, %s)',
                         $event->sport->name,

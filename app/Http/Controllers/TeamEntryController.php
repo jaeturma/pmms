@@ -111,9 +111,6 @@ class TeamEntryController extends Controller
                 throw ValidationException::withMessages(['athlete_ids' => __('Every relay swimmer must belong to the matching delegation Swimming roster.')]);
             }
         }
-        if ($user->role === UserRole::Coach && $athletes->contains(fn (Athlete $athlete): bool => ! $athlete->isOwnedBy($user))) {
-            throw ValidationException::withMessages(['athlete_ids' => __('A coach may add only athletes registered under their account.')]);
-        }
         if ($user->role === UserRole::Coach && $athletes->contains(
             fn (Athlete $athlete): bool => $athlete->accreditation()->doesntExist(),
         )) {

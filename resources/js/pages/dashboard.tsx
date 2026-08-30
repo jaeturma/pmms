@@ -135,6 +135,18 @@ type Props = {
     sportsEventReport: SportsEventReport;
     stats: Stat[];
     announcements: Announcement[];
+    readiness: {
+        overall: number;
+        status: 'ready' | 'needs_attention' | 'not_ready';
+        scope: string;
+        issues: number;
+        sports_ready: number;
+        sports_total: number;
+        events_ready: number;
+        events_total: number;
+        athletes_eligible: number;
+        athletes_total: number;
+    } | null;
 };
 
 type SportsEventReport = {
@@ -899,6 +911,7 @@ export default function Dashboard({
     sportsEventReport,
     stats,
     announcements,
+    readiness,
 }: Props) {
     return (
         <>
@@ -1044,6 +1057,38 @@ export default function Dashboard({
                         </Card>
                     )}
                 </div>
+
+                {readiness && (
+                    <Card className="border-primary/20">
+                        <CardHeader className="flex flex-row items-start justify-between gap-4">
+                            <div>
+                                <CardTitle>Provincial Meet Readiness</CardTitle>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    {readiness.scope} · Calculated from your assigned function
+                                </p>
+                            </div>
+                            <Button variant="outline" asChild>
+                                <Link href="/monitoring/readiness">View details</Link>
+                            </Button>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid gap-4 md:grid-cols-[12rem_1fr] md:items-center">
+                                <div>
+                                    <div className="text-4xl font-black">{readiness.overall}%</div>
+                                    <Badge variant={readiness.status === 'not_ready' ? 'destructive' : 'secondary'}>
+                                        {readiness.status.replaceAll('_', ' ').toUpperCase()}
+                                    </Badge>
+                                </div>
+                                <div className="grid gap-3 sm:grid-cols-4">
+                                    <div><div className="text-xs text-muted-foreground">Sports ready</div><b>{readiness.sports_ready}/{readiness.sports_total}</b></div>
+                                    <div><div className="text-xs text-muted-foreground">Events ready</div><b>{readiness.events_ready}/{readiness.events_total}</b></div>
+                                    <div><div className="text-xs text-muted-foreground">Athletes eligible</div><b>{readiness.athletes_eligible}/{readiness.athletes_total}</b></div>
+                                    <div><div className="text-xs text-muted-foreground">Open issues</div><b>{readiness.issues}</b></div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
 
                 {coachDashboard && (
                     <div className="grid auto-rows-min gap-3 sm:grid-cols-2">

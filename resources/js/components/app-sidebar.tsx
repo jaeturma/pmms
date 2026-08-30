@@ -194,6 +194,11 @@ const managerNavItems: NavItem[] = [
         href: managementIndex(),
         icon: BarChart3,
     },
+    {
+        title: 'Readiness',
+        href: '/monitoring/readiness',
+        icon: ListChecks,
+    },
     // Placed in the admin/organizer tier rather than mainNavItems (unlike
     // Management Teams, which is view-open to everyone): SupplyPolicy
     // also grants access to a meet's Supply Team members who aren't
@@ -480,7 +485,7 @@ export function AppSidebar() {
                 title: 'Monitoring',
                 icon: BarChart3,
                 items: managerNavItems.filter(
-                    (item) => item.title === 'Management',
+                    (item) => ['Management', 'Readiness'].includes(item.title),
                 ),
             },
         );
@@ -720,7 +725,7 @@ export function AppSidebar() {
         navSections.push({
             title: 'Monitoring',
             icon: BarChart3,
-            items: byTitle(['Management'], managerNavItems),
+            items: byTitle(['Management', 'Readiness'], managerNavItems),
         });
     }
 

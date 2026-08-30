@@ -89,7 +89,8 @@ type Props = {
     options: Option[];
     canRequest: boolean;
     canReview: boolean;
-    filters: { search: string; status: string };
+    filters: { search: string; status: string; sport_id: number | null };
+    sportOptions: Array<{ id: number; name: string }>;
 };
 
 function CoachDocumentUpload({
@@ -219,6 +220,7 @@ export default function CoachAssignments({
     canRequest,
     canReview,
     filters,
+    sportOptions,
 }: Props) {
     const canAccredit = registrations.data.some((item) => item.can_accredit);
     const canManageAny = registrations.data.some(
@@ -269,7 +271,14 @@ export default function CoachAssignments({
                         placeholder="Search by coach name or email"
                         url="/coach/assignment-requests"
                         extraParams={
-                            filters.status ? { status: filters.status } : {}
+                            {
+                                ...(filters.status
+                                    ? { status: filters.status }
+                                    : {}),
+                                ...(filters.sport_id
+                                    ? { sport_id: filters.sport_id }
+                                    : {}),
+                            }
                         }
                     />
                     <Select
@@ -282,6 +291,9 @@ export default function CoachAssignments({
                                         ? { search: filters.search }
                                         : {}),
                                     ...(status !== 'all' ? { status } : {}),
+                                    ...(filters.sport_id
+                                        ? { sport_id: filters.sport_id }
+                                        : {}),
                                 },
                                 { preserveState: true, replace: true },
                             )
@@ -298,6 +310,32 @@ export default function CoachAssignments({
                             <SelectItem value="pending">Pending</SelectItem>
                             <SelectItem value="approved">Approved</SelectItem>
                             <SelectItem value="rejected">Rejected</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select
+                        value={filters.sport_id ? String(filters.sport_id) : 'all'}
+                        onValueChange={(sportId) =>
+                            router.get(
+                                '/coach/assignment-requests',
+                                {
+                                    ...(filters.search ? { search: filters.search } : {}),
+                                    ...(filters.status ? { status: filters.status } : {}),
+                                    ...(sportId !== 'all' ? { sport_id: sportId } : {}),
+                                },
+                                { preserveState: true, replace: true },
+                            )
+                        }
+                    >
+                        <SelectTrigger className="w-56" aria-label="Filter by sport">
+                            <SelectValue placeholder="All sports" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All sports</SelectItem>
+                            {sportOptions.map((sport) => (
+                                <SelectItem key={sport.id} value={String(sport.id)}>
+                                    {sport.name}
+                                </SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
                 </div>

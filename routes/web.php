@@ -275,6 +275,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('athletes', [AthleteController::class, 'index'])->name('athletes.index');
     Route::get('athletes/eligibility', [EligibilityController::class, 'athleteChecker'])->name('athletes.eligibility');
     Route::get('readiness', AthleteReadinessController::class)->name('readiness.index');
+    Route::get('monitoring/readiness', \App\Http\Controllers\MeetReadinessController::class)->name('monitoring.readiness.index');
     Route::get('athletes/{athlete}/edit', [AthleteController::class, 'edit'])->name('athletes.edit');
     Route::get('athletes/{athlete}', [AthleteController::class, 'show'])->name('athletes.show');
     Route::get('athletes/{athlete}/photo', [AthleteController::class, 'photo'])->name('athletes.photo');

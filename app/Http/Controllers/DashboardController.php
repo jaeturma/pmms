@@ -24,6 +24,7 @@ use App\Models\Personnel;
 use App\Models\Protest;
 use App\Models\User;
 use App\Services\MedalTallyService;
+use App\Services\MeetReadinessService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
@@ -35,11 +36,12 @@ class DashboardController extends Controller
     /**
      * Show the dashboard with its widget data.
      */
-    public function index(Request $request, MedalTallyService $tally): Response
+    public function index(Request $request, MedalTallyService $tally, MeetReadinessService $readiness): Response
     {
         $currentMeet = Meet::current()->loadCount('events');
         /** @var User $user */
         $user = $request->user();
+        $readinessScope = $readiness->scopeFor($user, $currentMeet);
 
         $athletes = Athlete::query();
         $entries = Entry::query();
@@ -79,6 +81,12 @@ class DashboardController extends Controller
             'coachAccreditation' => $this->coachAccreditation($request, $currentMeet),
             'coachDashboard' => $this->coachDashboard($request, $currentMeet),
             'sportsEventReport' => $this->sportsEventReport($user, $currentMeet),
+            'readiness' => $readinessScope === null ? null : (function () use ($readiness, $currentMeet, $readinessScope): array {
+                $data = $readiness->calculate($currentMeet, [...$readinessScope, 'scope_label' => $readinessScope['label']]);
+                return ['overall' => $data['overall'], 'status' => $data['overall_status'], 'scope' => $data['scope_label'], 'issues' => $data['summary']['open_issues'],
+                    'sports_ready' => $data['summary']['sports_ready'], 'sports_total' => $data['summary']['sports_total'], 'events_ready' => $data['summary']['events_ready'], 'events_total' => $data['summary']['events_total'],
+                    'athletes_eligible' => $data['summary']['athletes_eligible'], 'athletes_total' => $data['summary']['athletes_total']];
+            })(),
             'stats' => [
                 [
                     'key' => 'athletes',
