@@ -275,7 +275,7 @@ class AccreditationController extends Controller
             'name' => $accreditation->subjectName(),
             'type_label' => $athlete !== null ? 'Athlete' : ($person?->role->label() ?? ''),
             'detail' => $athlete !== null
-                ? "Grade {$athlete->grade_level} — {$athlete->ageDivision()->label()}"
+                ? "{$athlete->gradeLevelLabel()} — {$athlete->ageDivision()->label()}"
                 : null,
             'school' => $this->subjectSchoolName($accreditation),
             'photo_url' => match (true) {

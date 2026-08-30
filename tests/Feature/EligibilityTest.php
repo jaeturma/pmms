@@ -21,8 +21,8 @@ use App\Models\MeetSportAssignment;
 use App\Models\User;
 use App\Notifications\CoachEligibilityRemarksNotification;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia;
 
 beforeEach(function () {
@@ -59,6 +59,41 @@ function createVerifiedQualificationDocuments(Athlete $athlete, ?EligibilityDocu
         ]);
     }
 }
+
+test('athlete becomes eligible when the final required document is approved', function () {
+    $delegation = Delegation::factory()->create();
+    $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);
+    $review = EligibilityReview::factory()->create([
+        'athlete_id' => $athlete->id,
+        'meet_id' => $delegation->meet_id,
+    ]);
+    createVerifiedQualificationDocuments($athlete, EligibilityDocumentType::MedicalCertificate);
+    $lastDocument = EligibilityDocument::factory()->create([
+        'athlete_id' => $athlete->id,
+        'document_type' => EligibilityDocumentType::MedicalCertificate,
+        'status' => RequirementStatus::Submitted,
+    ]);
+    $team = ManagementTeam::factory()->create([
+        'meet_id' => $delegation->meet_id,
+        'team_type' => ManagementTeamType::DivisionScreeningAndAccreditation,
+    ]);
+    $member = ManagementTeamMember::factory()->create([
+        'management_team_id' => $team->id,
+        'role_title' => 'Member',
+        'status' => ManagementTeamMemberStatus::Active,
+    ])->user;
+
+    $this->actingAs($member)
+        ->patch("/eligibility/documents/{$lastDocument->id}/status", [
+            'status' => RequirementStatus::Verified->value,
+        ])
+        ->assertSessionHasNoErrors();
+
+    $review->refresh();
+    expect($review->status)->toBe(EligibilityStatus::Approved)
+        ->and($review->reviewer_id)->toBe($member->id)
+        ->and($review->decided_at)->not->toBeNull();
+});
 
 test('guests are redirected and viewers are forbidden', function () {
     $this->get('/eligibility')->assertRedirect('/login');

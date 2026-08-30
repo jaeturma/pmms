@@ -33,6 +33,33 @@ function coachApplicationContext(string $sportName = 'Swimming'): array
     return [$meet, $sport, $meetSport, $delegation, $school, $events];
 }
 
+test('coach index searches registrations and filters their status', function () {
+    [, , $meetSport, $delegation, $school] = coachApplicationContext();
+    $matchingCoach = User::factory()->create(['name' => 'Maria Santos']);
+    $otherCoach = User::factory()->create(['name' => 'Pedro Reyes']);
+
+    foreach ([[$matchingCoach, 'approved'], [$otherCoach, 'pending']] as [$coach, $status]) {
+        CoachOnboardingRequest::query()->create([
+            'user_id' => $coach->id,
+            'meet_sport_id' => $meetSport->id,
+            'delegation_id' => $delegation->id,
+            'school_id' => $school->id,
+            'district_id' => $school->district_id,
+            'status' => $status,
+            'submitted_at' => now(),
+        ]);
+    }
+
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin)
+        ->get('/coach/assignment-requests?search=Maria&status=approved')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('registrations.data', 1)
+            ->where('registrations.data.0.coach', 'Maria Santos')
+            ->where('filters.search', 'Maria')
+            ->where('filters.status', 'approved'));
+});
+
 test('coach self registration selects sport only and rejects self assigned event scope', function () {
     Setting::current()->forceFill(['coach_registration_enabled' => true])->save();
     [, , $meetSport, $delegation, $school, $events] = coachApplicationContext();

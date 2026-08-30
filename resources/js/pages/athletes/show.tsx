@@ -93,7 +93,12 @@ export default function AthleteShow({ athlete }: Props) {
         ['Sex', athlete.sex_label],
         ['Birthdate', `${athlete.birthdate} (age ${athlete.age})`],
         ['LRN', athlete.lrn],
-        ['Grade level', `Grade ${athlete.grade_level}`],
+        [
+            'Grade level',
+            athlete.grade_level === 0
+                ? 'Non-Graded'
+                : `Grade ${athlete.grade_level}`,
+        ],
         ['Sports', athlete.sports || 'Not assigned'],
         ['Events', athlete.events || 'Not assigned'],
         ['Coach', athlete.coach || 'Not assigned'],

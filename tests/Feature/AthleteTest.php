@@ -181,11 +181,17 @@ test('active ICT team members can register athletes', function () {
     ]);
 
     $this->actingAs($ict)
-        ->post('/athletes', validAthletePayload($delegation))
+        ->post('/athletes', [
+            ...validAthletePayload($delegation),
+            'grade_level' => 0,
+        ])
         ->assertRedirect()
         ->assertSessionDoesntHaveErrors();
 
-    $this->assertDatabaseHas('athletes', ['lrn' => '123456789012']);
+    $this->assertDatabaseHas('athletes', [
+        'lrn' => '123456789012',
+        'grade_level' => 0,
+    ]);
     expect(AuditLog::query()->where('action', 'athlete.created')->exists())->toBeTrue();
 });
 
@@ -261,6 +267,7 @@ test('athlete validation rejects bad payloads', function (array $overrides, stri
     'short lrn' => [['lrn' => '12345'], 'lrn'],
     'bad sex' => [['sex' => 'other'], 'sex'],
     'bad grade' => [['grade_level' => 13], 'grade_level'],
+    'negative grade' => [['grade_level' => -1], 'grade_level'],
 ]);
 
 test('lrn must be unique', function () {
@@ -321,6 +328,22 @@ test('athlete 380 views use its sport roster membership instead of entries', fun
             ->where('athlete.sports', 'Basketball')
             ->where('athlete.coach', 'Coach Maria')
             ->where('athlete.delegation', $athlete->delegation->registrantName()));
+});
+
+test('athlete profile falls back to entry sport when no roster sport is assigned', function () {
+    $athlete = Athlete::factory()->create();
+    $entry = Entry::factory()->create([
+        'athlete_id' => $athlete->id,
+        'delegation_id' => $athlete->delegation_id,
+    ]);
+    $entry->event->sport->update(['name' => 'Badminton']);
+    $entry->event->update(['name' => 'Secondary Open']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get("/athletes/{$athlete->id}")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('athlete.sports', 'Badminton')
+            ->where('athlete.events', 'Badminton — Secondary Open'));
 });
 
 test('athlete sport display lists distinct roster sports and sport filter uses roster membership', function () {

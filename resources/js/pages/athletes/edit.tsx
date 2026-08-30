@@ -140,6 +140,9 @@ export default function EditAthlete({
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
+                                    <SelectItem value="0">
+                                        Non-Graded
+                                    </SelectItem>
                                     {Array.from(
                                         { length: 12 },
                                         (_, index) => index + 1,

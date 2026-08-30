@@ -7,6 +7,7 @@ import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
 import { PaginationControls } from '@/components/pagination-controls';
 import type { Paginated } from '@/components/pagination-controls';
+import { SearchBar } from '@/components/search-bar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -88,6 +89,7 @@ type Props = {
     options: Option[];
     canRequest: boolean;
     canReview: boolean;
+    filters: { search: string; status: string };
 };
 
 function CoachDocumentUpload({
@@ -216,6 +218,7 @@ export default function CoachAssignments({
     options,
     canRequest,
     canReview,
+    filters,
 }: Props) {
     const canAccredit = registrations.data.some((item) => item.can_accredit);
     const canManageAny = registrations.data.some(
@@ -260,6 +263,44 @@ export default function CoachAssignments({
                     title="Coaches"
                     description="Review coach accounts and their applied sports."
                 />
+                <div className="flex flex-wrap gap-2">
+                    <SearchBar
+                        initial={filters.search}
+                        placeholder="Search by coach name or email"
+                        url="/coach/assignment-requests"
+                        extraParams={
+                            filters.status ? { status: filters.status } : {}
+                        }
+                    />
+                    <Select
+                        value={filters.status || 'all'}
+                        onValueChange={(status) =>
+                            router.get(
+                                '/coach/assignment-requests',
+                                {
+                                    ...(filters.search
+                                        ? { search: filters.search }
+                                        : {}),
+                                    ...(status !== 'all' ? { status } : {}),
+                                },
+                                { preserveState: true, replace: true },
+                            )
+                        }
+                    >
+                        <SelectTrigger
+                            className="w-48"
+                            aria-label="Filter by status"
+                        >
+                            <SelectValue placeholder="All statuses" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All statuses</SelectItem>
+                            <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="approved">Approved</SelectItem>
+                            <SelectItem value="rejected">Rejected</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
                 {registrations.data.length > 0 && (
                     <div className="space-y-2">
                         <h2 className="text-lg font-semibold">

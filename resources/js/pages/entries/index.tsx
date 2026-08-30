@@ -624,7 +624,6 @@ export default function Entries({
                                     <TableRow>
                                         <TableHead>Athlete</TableHead>
                                         <TableHead>Event</TableHead>
-                                        <TableHead>School</TableHead>
                                         <TableHead>Team / Delegation</TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead className="text-right">
@@ -635,19 +634,38 @@ export default function Entries({
                                 <TableBody>
                                     {entries.data.map((entry) => (
                                         <TableRow key={entry.id}>
-                                            <TableCell className="font-medium">
-                                                <span className="flex items-center gap-2">
-                                                    {entry.athlete}
-                                                    {!entry.eligibility_approved && (
-                                                        <Badge variant="outline">
-                                                            Eligibility pending
-                                                        </Badge>
-                                                    )}
-                                                </span>
-                                            </TableCell>
-                                            <TableCell>{entry.event}</TableCell>
                                             <TableCell>
-                                                {entry.school}
+                                                <div className="font-medium">
+                                                    {entry.athlete}
+                                                </div>
+                                                <div className="mt-1">
+                                                    <Badge
+                                                        variant={
+                                                            entry.eligibility_approved
+                                                                ? 'secondary'
+                                                                : 'outline'
+                                                        }
+                                                    >
+                                                        {entry.eligibility_approved
+                                                            ? 'Eligible'
+                                                            : 'Eligibility pending'}
+                                                    </Badge>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="max-w-sm align-top whitespace-normal">
+                                                <div className="font-medium">
+                                                    {
+                                                        entry.event.split(
+                                                            ' — ',
+                                                        )[0]
+                                                    }
+                                                </div>
+                                                <div className="text-sm text-muted-foreground">
+                                                    {entry.event
+                                                        .split(' — ')
+                                                        .slice(1)
+                                                        .join(' — ')}
+                                                </div>
                                             </TableCell>
                                             <TableCell>
                                                 {entry.delegation}

@@ -40,6 +40,9 @@ class CoachAssignmentRequestController extends Controller
         $visibleIds = $this->visibleMeetSportIds($user);
         $canRequest = $this->isCoachApplicant($user);
         abort_unless($canRequest || $visibleIds->isNotEmpty() || $user->canReviewCoachRegistrations(), 403);
+        $search = trim((string) $request->query('search', ''));
+        $status = trim((string) $request->query('status', ''));
+        $status = in_array($status, ['pending', 'approved', 'rejected'], true) ? $status : '';
 
         $query = CoachAssignmentRequest::query()->with([
             'user:id,name,email', 'meetSport.meet:id,name', 'meetSport.sport:id,name',
@@ -52,8 +55,13 @@ class CoachAssignmentRequestController extends Controller
             $query->whereIn('event_id', $user->tournamentEventIds());
         }
 
+        $query->when($search !== '', fn ($items) => $items->whereHas('user', fn ($users) => $users
+            ->where(fn ($names) => $names->where('name', 'like', "%{$search}%")
+                ->orWhere('email', 'like', "%{$search}%"))))
+            ->when($status !== '', fn ($items) => $items->where('status', $status));
+
         return Inertia::render('coach/assignments', [
-            'registrations' => $this->onboardingRegistrations($user),
+            'registrations' => $this->onboardingRegistrations($user, $search, $status),
             'requests' => $query->paginate(10, ['*'], 'requests_page')->withQueryString()->through(fn (CoachAssignmentRequest $item): array => [
                 'id' => $item->id, 'coach' => $item->user->name, 'email' => $item->user->email,
                 'sport' => $item->meetSport->sport->name,
@@ -64,6 +72,7 @@ class CoachAssignmentRequestController extends Controller
             'canRequest' => $canRequest,
             'canReview' => $user->canReviewCoachRegistrations() || $reviewableIds->isNotEmpty(),
             'options' => $canRequest ? $this->requestOptions($user) : [],
+            'filters' => ['search' => $search, 'status' => $status],
         ]);
     }
 
@@ -332,11 +341,11 @@ class CoachAssignmentRequestController extends Controller
                 ])->all(),
             ],
             'events' => $availableEvents->through(fn (Event $event): array => [
-                    'id' => $event->id,
-                    'name' => $event->name,
-                    'sport' => $event->sport->name,
-                    'category' => $event->age_division->label().' / '.$event->gender->label(),
-                ]),
+                'id' => $event->id,
+                'name' => $event->name,
+                'sport' => $event->sport->name,
+                'category' => $event->age_division->label().' / '.$event->gender->label(),
+            ]),
             'selectedEventIds' => $selectedEvents->whereIn('sport_id', $manageableSportIds)->modelKeys(),
             'canApprove' => $this->canReviewOnboarding($request->user(), $coachOnboardingRequest),
         ]);
@@ -593,7 +602,7 @@ class CoachAssignmentRequestController extends Controller
             ->values();
     }
 
-    private function onboardingRegistrations(User $user)
+    private function onboardingRegistrations(User $user, string $search = '', string $status = '')
     {
         if ($this->isCoachApplicant($user)) {
             $query = CoachOnboardingRequest::query()->where('user_id', $user->id);
@@ -613,6 +622,11 @@ class CoachAssignmentRequestController extends Controller
                         ->orWhereIn('event_id', $eventIds);
                 });
         }
+
+        $query->when($search !== '', fn ($items) => $items->whereHas('user', fn ($users) => $users
+            ->where(fn ($names) => $names->where('name', 'like', "%{$search}%")
+                ->orWhere('email', 'like', "%{$search}%"))))
+            ->when($status !== '', fn ($items) => $items->where('status', $status));
 
         return $query->with(['user:id,name,email,approval_status', 'district:id,name', 'meetSport.meet:id,name', 'meetSport.sport:id,name', 'delegation.school:id,name', 'delegation.district:id,name', 'school:id,name', 'event.sport:id,name', 'events.sport:id,name', 'profile:id,mime_type', 'certification:id,mime_type'])
             ->latest()->paginate(10, ['*'], 'registrations_page')->withQueryString()->through(function (CoachOnboardingRequest $item) use ($user): array {

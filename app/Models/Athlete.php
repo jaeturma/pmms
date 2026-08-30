@@ -149,6 +149,11 @@ class Athlete extends Model
         return (int) $this->birthdate->age;
     }
 
+    public function gradeLevelLabel(): string
+    {
+        return $this->grade_level === 0 ? 'Non-Graded' : "Grade {$this->grade_level}";
+    }
+
     /**
      * Grade-derived age division: grades 1–6 elementary, 7–12 secondary.
      */

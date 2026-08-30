@@ -81,7 +81,7 @@ class AthleteRequest extends FormRequest
                 Rule::unique('athletes', 'lrn')
                     ->ignore($athlete instanceof Athlete ? $athlete->id : null),
             ],
-            'grade_level' => ['required', 'integer', 'min:1', 'max:12'],
+            'grade_level' => ['required', 'integer', 'min:0', 'max:12'],
             'photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.config('pmms.athlete_photos.max_upload_kb')],
             'sports_photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.config('pmms.athlete_photos.max_upload_kb')],
             'athlete_history' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],

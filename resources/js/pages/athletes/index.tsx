@@ -569,6 +569,9 @@ function AthleteFormDialog({
                                     <SelectValue placeholder="Select" />
                                 </SelectTrigger>
                                 <SelectContent>
+                                    <SelectItem value="0">
+                                        Non-Graded
+                                    </SelectItem>
                                     {Array.from(
                                         { length: 12 },
                                         (_, i) => i + 1,
@@ -810,6 +813,7 @@ function EditAthleteDialog({
                                 <SelectValue placeholder="Select" />
                             </SelectTrigger>
                             <SelectContent>
+                                <SelectItem value="0">Non-Graded</SelectItem>
                                 {Array.from(
                                     { length: 12 },
                                     (_, i) => i + 1,

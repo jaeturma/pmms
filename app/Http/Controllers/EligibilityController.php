@@ -514,6 +514,29 @@ class EligibilityController extends Controller
             'old_status' => $oldStatus, 'new_status' => $data['status'], 'meet_id' => $review->meet_id,
         ]);
 
+        $latestDocuments = $document->athlete->eligibilityDocuments()
+            ->latest('id')
+            ->get()
+            ->unique(fn (EligibilityDocument $item): string => $item->document_type->value);
+        $allRequirementsApproved = collect(EligibilityDocumentType::qualificationRequirements())->every(
+            fn (EligibilityDocumentType $type): bool => $latestDocuments->contains(
+                fn (EligibilityDocument $item): bool => $item->document_type === $type
+                    && $item->status === RequirementStatus::Verified,
+            ),
+        );
+
+        if ($allRequirementsApproved && $review->status !== EligibilityStatus::Approved) {
+            $review->forceFill([
+                'status' => EligibilityStatus::Approved,
+                'reviewer_id' => $request->user()?->id,
+                'decided_at' => now(),
+            ])->save();
+            $this->audit->record('eligibility.approved', $review, [
+                'athlete' => $document->athlete->fullName(),
+                'source' => 'all_documents_verified',
+            ]);
+        }
+
         return back();
     }
 

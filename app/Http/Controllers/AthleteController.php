@@ -338,7 +338,14 @@ class AthleteController extends Controller
                     ? null
                     : route('athletes.photo', $athlete),
                 'sports_photo_url' => $athlete->sportsPhotoUrl(),
-                'sports' => $athlete->rosterSportNames()->join(', '),
+                'sports' => $athlete->rosterSportNames()
+                    ->whenEmpty(fn () => $athlete->entries
+                        ->pluck('event.sport.name')
+                        ->filter()
+                        ->unique()
+                        ->sort()
+                        ->values())
+                    ->join(', '),
                 'events' => $athlete->entries
                     ->map(fn ($entry): string => $entry->event->sport->name.' — '.$entry->event->name)
                     ->unique()
