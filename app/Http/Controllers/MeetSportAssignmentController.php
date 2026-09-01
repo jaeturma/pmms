@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -40,8 +41,12 @@ class MeetSportAssignmentController extends Controller
     public function index(Request $request): Response
     {
         $search = trim($request->string('search')->toString());
+        $globalManager = $this->isGlobalManager($request);
+        $manageableMeetSportIds = $this->ictManageableMeetSportIds($request);
+        $canManage = $globalManager || $manageableMeetSportIds->isNotEmpty();
         $query = MeetSportAssignment::query()
             ->with(['meetSport.sport:id,name', 'sportCategory:id,display_name', 'user:id,name,email', 'person:id,full_name'])
+            ->when(! $globalManager && $manageableMeetSportIds->isNotEmpty(), fn ($assignments) => $assignments->whereIn('meet_sport_id', $manageableMeetSportIds))
             ->when($search !== '', function ($query) use ($search): void {
                 $roleSearch = str($search)->lower()->replace([' ', '-'], '_')->toString();
 
@@ -78,6 +83,7 @@ class MeetSportAssignmentController extends Controller
             ]),
             'filters' => ['search' => $search],
             'sportOptions' => Sport::query()
+                ->when(! $globalManager && $manageableMeetSportIds->isNotEmpty(), fn ($sports) => $sports->whereIn('id', MeetSport::query()->whereKey($manageableMeetSportIds)->select('sport_id')))
                 ->orderBy('name')
                 ->get(['id', 'name'])
                 ->map(fn (Sport $sport): array => [
@@ -94,7 +100,7 @@ class MeetSportAssignmentController extends Controller
                 ]),
             'roleOptions' => array_map(
                 fn (MeetSportAssignmentRole $role): array => ['value' => $role->value, 'label' => $role->label()],
-                MeetSportAssignmentRole::cases(),
+                $globalManager ? MeetSportAssignmentRole::cases() : $this->ictAssignableRoles(),
             ),
             'statusOptions' => array_map(
                 fn (MeetSportAssignmentStatus $status): array => ['value' => $status->value, 'label' => $status->label()],
@@ -110,7 +116,7 @@ class MeetSportAssignmentController extends Controller
                     'identity' => $user->email ?? $user->username ?? __('No login identifier'),
                     'role' => $user->role->label(),
                 ]),
-            'canManage' => Gate::allows('manage-meet-data') || $request->user()->canManageProductionAccounts(),
+            'canManage' => $canManage,
         ]);
     }
 
@@ -132,6 +138,14 @@ class MeetSportAssignmentController extends Controller
             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
         ]);
 
+        if (! $this->isGlobalManager($request) && isset($validated['sport_id'])) {
+            abort_unless(MeetSport::query()
+                ->whereKey($this->ictManageableMeetSportIds($request))
+                ->where('meet_id', Meet::current()->id)
+                ->where('sport_id', $validated['sport_id'])
+                ->exists(), 403);
+        }
+
         $meetSport = isset($validated['meet_sport_id'])
             ? MeetSport::query()->findOrFail($validated['meet_sport_id'])
             : MeetSport::query()->firstOrCreate(
@@ -139,6 +153,7 @@ class MeetSportAssignmentController extends Controller
                 ['active' => true],
             );
         $validated['meet_sport_id'] = $meetSport->id;
+        $this->authorizeManage($request, $meetSport, MeetSportAssignmentRole::from($validated['role']));
 
         if (isset($validated['sport_category_id'])) {
             $categoryMatchesSport = SportCategory::query()
@@ -198,7 +213,7 @@ class MeetSportAssignmentController extends Controller
      */
     public function updateStatus(Request $request, MeetSportAssignment $meetSportAssignment): RedirectResponse
     {
-        $this->authorizeManage($request);
+        $this->authorizeManage($request, $meetSportAssignment->meetSport, $meetSportAssignment->role);
 
         $validated = $request->validate([
             'status' => ['required', Rule::enum(MeetSportAssignmentStatus::class)],
@@ -227,7 +242,7 @@ class MeetSportAssignmentController extends Controller
      */
     public function destroy(Request $request, MeetSportAssignment $meetSportAssignment): RedirectResponse
     {
-        $this->authorizeManage($request);
+        $this->authorizeManage($request, $meetSportAssignment->meetSport, $meetSportAssignment->role);
 
         $meetSportAssignment->load(['meetSport.meet:id,name', 'meetSport.sport:id,name', 'user:id,name', 'person:id,full_name']);
 
@@ -252,8 +267,40 @@ class MeetSportAssignmentController extends Controller
         return $assignment->user?->name ?? $assignment->person?->full_name ?? __('Unknown person');
     }
 
-    private function authorizeManage(Request $request): void
+    private function authorizeManage(Request $request, ?MeetSport $meetSport = null, ?MeetSportAssignmentRole $role = null): void
     {
-        abort_unless(Gate::allows('manage-meet-data') || $request->user()->canManageProductionAccounts(), 403);
+        if ($this->isGlobalManager($request)) {
+            return;
+        }
+
+        abort_unless($meetSport === null || $this->ictManageableMeetSportIds($request)->contains($meetSport->id), 403);
+        abort_unless($role === null || in_array($role, $this->ictAssignableRoles(), true), 403);
+        abort_unless($this->ictManageableMeetSportIds($request)->isNotEmpty(), 403);
+    }
+
+    private function isGlobalManager(Request $request): bool
+    {
+        return Gate::allows('manage-meet-data') || $request->user()->canManageProductionAccounts();
+    }
+
+    private function ictManageableMeetSportIds(Request $request): Collection
+    {
+        return $request->user()->meetSportAssignments()
+            ->where('status', MeetSportAssignmentStatus::Active->value)
+            ->where('role', MeetSportAssignmentRole::TournamentICT->value)
+            ->pluck('meet_sport_id')
+            ->map(fn ($id): int => (int) $id)
+            ->unique()->values();
+    }
+
+    /** @return list<MeetSportAssignmentRole> */
+    private function ictAssignableRoles(): array
+    {
+        return [
+            MeetSportAssignmentRole::TournamentManager,
+            MeetSportAssignmentRole::TournamentSecretary,
+            MeetSportAssignmentRole::TournamentICT,
+            MeetSportAssignmentRole::TechnicalOfficial,
+        ];
     }
 }

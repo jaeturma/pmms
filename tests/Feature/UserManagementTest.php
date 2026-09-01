@@ -73,6 +73,39 @@ test('an administrator can assign multiple roles including tournament ICT and se
         ->and($user->hasRole(UserRole::TournamentSecretary))->toBeTrue();
 });
 
+test('an administrator can accept a coach from user registration and activate the requested event scope', function () {
+    $admin = User::factory()->admin()->create();
+    $meetSport = MeetSport::factory()->create();
+    $event = Event::factory()->create(['sport_id' => $meetSport->sport_id]);
+    $meetSport->meet->events()->attach($event);
+    $delegation = Delegation::factory()->create(['meet_id' => $meetSport->meet_id]);
+    $coach = User::factory()->create(['approval_status' => 'pending']);
+    $onboarding = CoachOnboardingRequest::query()->create([
+        'user_id' => $coach->id,
+        'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $delegation->id,
+        'school_id' => schoolForDelegation($delegation)->id,
+        'district_id' => $delegation->district_id,
+        'event_id' => $event->id,
+        'status' => 'pending',
+    ]);
+    $onboarding->events()->attach($event);
+
+    $this->actingAs($admin)
+        ->post("/system/users/{$coach->id}/approve")
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect($coach->fresh()->role)->toBe(UserRole::Coach)
+        ->and($coach->fresh()->approval_status)->toBe('approved')
+        ->and($coach->fresh()->approved_by)->toBe($admin->id)
+        ->and($onboarding->fresh()->status)->toBe('approved')
+        ->and(CoachAssignmentRequest::query()
+            ->where('user_id', $coach->id)
+            ->where('event_id', $event->id)
+            ->where('status', 'approved')->exists())->toBeTrue();
+});
+
 test('the users role column includes sports and events for coaches without assignment payloads', function () {
     $admin = User::factory()->admin()->create();
     $meetSport = MeetSport::factory()->create();

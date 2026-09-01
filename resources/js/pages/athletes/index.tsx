@@ -207,11 +207,10 @@ function AthleteFormDialog({
             photo: File | null;
             sports_photo: File | null;
             athlete_history: File | null;
-            athlete_history_page_2: File | null;
             form_10: File | null;
-            school_id_document: File | null;
+            form_10_page_2: File | null;
             birth_certificate: File | null;
-            report_card: File | null;
+            birth_certificate_page_2: File | null;
             parental_consent: File | null;
             medical_certificate: File | null;
         }>({
@@ -234,11 +233,10 @@ function AthleteFormDialog({
             photo: null,
             sports_photo: null,
             athlete_history: null,
-            athlete_history_page_2: null,
             form_10: null,
-            school_id_document: null,
+            form_10_page_2: null,
             birth_certificate: null,
-            report_card: null,
+            birth_certificate_page_2: null,
             parental_consent: null,
             medical_certificate: null,
         });
@@ -583,19 +581,14 @@ function AthleteFormDialog({
                             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                                 {(
                                     [
-                                        [
-                                            'athlete_history',
-                                            'Athlete Record - Page 1',
-                                        ],
-                                        [
-                                            'athlete_history_page_2',
-                                            'Athlete Record - Page 2',
-                                        ],
-                                        ['form_10', 'School Form 10'],
+                                        ['athlete_history', 'Athlete Record'],
+                                        ['form_10', 'School Form 10 - Page 1'],
+                                        ['form_10_page_2', 'School Form 10 - Page 2'],
                                         [
                                             'birth_certificate',
-                                            'PSA / Birth Certificate',
+                                            'PSA / Birth Certificate - Page 1',
                                         ],
+                                        ['birth_certificate_page_2', 'PSA / Birth Certificate - Page 2'],
                                         ['parental_consent', 'Parents Consent'],
                                         [
                                             'medical_certificate',
@@ -758,11 +751,10 @@ function EditAthleteDialog({
         photo: null as File | null,
         sports_photo: null as File | null,
         athlete_history: null as File | null,
-        athlete_history_page_2: null as File | null,
         form_10: null as File | null,
-        school_id_document: null as File | null,
+        form_10_page_2: null as File | null,
         birth_certificate: null as File | null,
-        report_card: null as File | null,
+        birth_certificate_page_2: null as File | null,
         parental_consent: null as File | null,
         medical_certificate: null as File | null,
         _method: 'put',
@@ -957,19 +949,14 @@ function EditAthleteDialog({
                         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                             {(
                                 [
-                                    [
-                                        'athlete_history',
-                                        'Athlete Record - Page 1',
-                                    ],
-                                    [
-                                        'athlete_history_page_2',
-                                        'Athlete Record - Page 2',
-                                    ],
-                                    ['form_10', 'School Form 10'],
+                                    ['athlete_history', 'Athlete Record'],
+                                    ['form_10', 'School Form 10 - Page 1'],
+                                    ['form_10_page_2', 'School Form 10 - Page 2'],
                                     [
                                         'birth_certificate',
-                                        'PSA / Birth Certificate',
+                                        'PSA / Birth Certificate - Page 1',
                                     ],
+                                    ['birth_certificate_page_2', 'PSA / Birth Certificate - Page 2'],
                                     ['parental_consent', 'Parents Consent'],
                                     [
                                         'medical_certificate',

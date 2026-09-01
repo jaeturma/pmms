@@ -10,7 +10,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -194,24 +193,23 @@ class UserManagementController extends Controller
     public function approve(Request $request, User $user): RedirectResponse
     {
         abort_unless($request->user()->canManageProductionAccounts(), 403);
-        if ($user->coachOnboardingRequest()->where('status', 'pending')->exists()) {
-            throw ValidationException::withMessages([
-                'approval' => __('Approve coach accounts from Registration > Coach so their requested sport and event access is activated correctly.'),
+        $coachRequest = $user->coachOnboardingRequest()->where('status', 'pending')->first();
+        if ($coachRequest !== null) {
+            $request->merge([
+                'status' => 'approved',
+                'event_ids' => $coachRequest->events()->pluck('events.id')->all(),
             ]);
+
+            return app(CoachAssignmentRequestController::class)
+                ->reviewOnboarding($request, $coachRequest, $this->audit);
         }
         DB::transaction(function () use ($request, $user): void {
-            $coachRequest = $user->coachOnboardingRequest()->where('status', 'pending')->first();
             $user->forceFill([
-                'role' => $coachRequest === null ? $user->role : UserRole::Coach,
+                'role' => $user->role,
                 'approval_status' => 'approved',
                 'approved_by' => $request->user()->id,
                 'approved_at' => now(),
                 'disabled_at' => null,
-            ])->save();
-            $coachRequest?->forceFill([
-                'status' => 'approved',
-                'reviewed_by' => $request->user()->id,
-                'reviewed_at' => now(),
             ])->save();
         });
         $this->audit->record('user.approved', $user, ['approved_by' => $request->user()->id]);

@@ -467,7 +467,7 @@ class AthleteController extends Controller
 
         Gate::authorize('create', [Athlete::class, $delegation]);
 
-        $fileFields = ['photo', 'sports_photo', 'athlete_history', 'athlete_history_page_2', 'form_10', 'school_id_document', 'birth_certificate', 'report_card', 'parental_consent', 'medical_certificate', 'event_id', 'district_id', 'school_district_id'];
+        $fileFields = ['photo', 'sports_photo', 'athlete_history', 'form_10', 'form_10_page_2', 'birth_certificate', 'birth_certificate_page_2', 'parental_consent', 'medical_certificate', 'event_id', 'district_id', 'school_district_id'];
         $recalled = Athlete::onlyTrashed()->where('lrn', $request->string('lrn')->toString())->first();
         if ($recalled !== null && $recalled->delegation->meet_id !== $delegation->meet_id) {
             throw ValidationException::withMessages([
@@ -512,11 +512,10 @@ class AthleteController extends Controller
 
             $documents = [
                 'athlete_history' => EligibilityDocumentType::AthleteRecord,
-                'athlete_history_page_2' => EligibilityDocumentType::AthleteRecord,
                 'form_10' => EligibilityDocumentType::Form10,
-                'school_id_document' => EligibilityDocumentType::SchoolId,
+                'form_10_page_2' => EligibilityDocumentType::Form10,
                 'birth_certificate' => EligibilityDocumentType::BirthCertificate,
-                'report_card' => EligibilityDocumentType::ReportCard,
+                'birth_certificate_page_2' => EligibilityDocumentType::BirthCertificate,
                 'parental_consent' => EligibilityDocumentType::ParentalConsent,
                 'medical_certificate' => EligibilityDocumentType::MedicalCertificate,
             ];
@@ -600,7 +599,7 @@ class AthleteController extends Controller
         $isTournamentIct = $this->isTournamentIct($user, $athlete);
         $isCoach = $user->role === UserRole::Coach;
         $canManageAssignments = $user->isAdmin() || $user->canManageProductionAccounts() || $isTournamentIct || $isCoach;
-        $fileFields = ['photo', 'sports_photo', 'athlete_history', 'athlete_history_page_2', 'form_10', 'school_id_document', 'birth_certificate', 'report_card', 'parental_consent', 'medical_certificate', 'meet_sport_ids', 'event_ids', 'registered_by'];
+        $fileFields = ['photo', 'sports_photo', 'athlete_history', 'form_10', 'form_10_page_2', 'birth_certificate', 'birth_certificate_page_2', 'parental_consent', 'medical_certificate', 'meet_sport_ids', 'event_ids', 'registered_by'];
         if (! $isTournamentIct || $user->isAdmin() || $user->canManageProductionAccounts()) {
             $athlete->fill($request->safe()->except($fileFields));
         }
@@ -695,23 +694,22 @@ class AthleteController extends Controller
 
         $documents = [
             'athlete_history' => EligibilityDocumentType::AthleteRecord,
-            'athlete_history_page_2' => EligibilityDocumentType::AthleteRecord,
             'form_10' => EligibilityDocumentType::Form10,
-            'school_id_document' => EligibilityDocumentType::SchoolId,
+            'form_10_page_2' => EligibilityDocumentType::Form10,
             'birth_certificate' => EligibilityDocumentType::BirthCertificate,
-            'report_card' => EligibilityDocumentType::ReportCard,
+            'birth_certificate_page_2' => EligibilityDocumentType::BirthCertificate,
             'parental_consent' => EligibilityDocumentType::ParentalConsent,
             'medical_certificate' => EligibilityDocumentType::MedicalCertificate,
         ];
 
-        $athleteRecordReplaced = false;
+        $replacedDocumentTypes = collect();
         foreach ($documents as $field => $type) {
             if ($isTournamentIct || ! $request->hasFile($field)) {
                 continue;
             }
 
             $previousDocuments = collect();
-            if ($type !== EligibilityDocumentType::AthleteRecord || ! $athleteRecordReplaced) {
+            if (! $replacedDocumentTypes->contains($type->value)) {
                 $previousDocuments = $athlete->eligibilityDocuments()
                     ->where('document_type', $type->value)
                     ->with('fileUpload')
@@ -729,9 +727,7 @@ class AthleteController extends Controller
                 $previousDocument->delete();
                 $this->uploads->delete($previousUpload);
             }
-            if ($type === EligibilityDocumentType::AthleteRecord) {
-                $athleteRecordReplaced = true;
-            }
+            $replacedDocumentTypes->push($type->value);
         }
 
         if ($athlete->eligibilityDocuments()->exists()) {

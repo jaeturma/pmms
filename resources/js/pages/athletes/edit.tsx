@@ -122,11 +122,10 @@ export default function EditAthlete({
         photo: null as File | null,
         sports_photo: null as File | null,
         athlete_history: null as File | null,
-        athlete_history_page_2: null as File | null,
         form_10: null as File | null,
-        school_id_document: null as File | null,
-        report_card: null as File | null,
+        form_10_page_2: null as File | null,
         birth_certificate: null as File | null,
+        birth_certificate_page_2: null as File | null,
         parental_consent: null as File | null,
         medical_certificate: null as File | null,
         _method: 'put',
@@ -510,21 +509,14 @@ export default function EditAthlete({
                                 <div className="grid flex-1 gap-3 sm:grid-cols-3 xl:grid-cols-5">
                                     {(
                                         [
-                                            [
-                                                'athlete_history',
-                                                'Athlete Record - Page 1',
-                                            ],
-                                            [
-                                                'athlete_history_page_2',
-                                                'Athlete Record - Page 2',
-                                            ],
-                                            ['form_10', 'School Form 10'],
-                                            ['school_id_document', 'School ID'],
+                                            ['athlete_history', 'Athlete Record'],
+                                            ['form_10', 'School Form 10 - Page 1'],
+                                            ['form_10_page_2', 'School Form 10 - Page 2'],
                                             [
                                                 'birth_certificate',
-                                                'Birth Certificate',
+                                                'Birth Certificate - Page 1',
                                             ],
-                                            ['report_card', 'Report Card'],
+                                            ['birth_certificate_page_2', 'Birth Certificate - Page 2'],
                                             [
                                                 'parental_consent',
                                                 'Parent Consent',

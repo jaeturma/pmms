@@ -2,6 +2,7 @@
 
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
+use App\Enums\UserRole;
 use App\Models\AuditLog;
 use App\Models\Event;
 use App\Models\Meet;
@@ -219,6 +220,64 @@ test('organizers can create an assignment', function () {
     ]);
 
     expect(AuditLog::query()->where('action', 'meet_sport_assignment.created')->exists())->toBeTrue();
+});
+
+test('tournament ICT can manage manager secretary ICT and technical officials only for assigned sports', function () {
+    $assignedMeetSport = MeetSport::factory()->create();
+    $otherMeetSport = MeetSport::factory()->create(['meet_id' => $assignedMeetSport->meet_id]);
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $assignedMeetSport->id,
+        'user_id' => $ict->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($ict)->get('/meet-sport-assignments')->assertInertia(fn (AssertableInertia $page) => $page
+        ->where('canManage', true)
+        ->has('roleOptions', 4)
+        ->where('roleOptions', fn ($roles) => collect($roles)->pluck('value')->sort()->values()->all() === collect([
+            MeetSportAssignmentRole::TournamentManager->value,
+            MeetSportAssignmentRole::TournamentSecretary->value,
+            MeetSportAssignmentRole::TournamentICT->value,
+            MeetSportAssignmentRole::TechnicalOfficial->value,
+        ])->sort()->values()->all())
+        ->where('sportOptions', fn ($sports) => collect($sports)->pluck('id')->all() === [$assignedMeetSport->sport_id]));
+
+    foreach ([
+        MeetSportAssignmentRole::TournamentManager,
+        MeetSportAssignmentRole::TournamentSecretary,
+        MeetSportAssignmentRole::TournamentICT,
+        MeetSportAssignmentRole::TechnicalOfficial,
+    ] as $role) {
+        $this->actingAs($ict)->post('/meet-sport-assignments', [
+            'meet_sport_id' => $assignedMeetSport->id,
+            'user_id' => User::factory()->create()->id,
+            'role' => $role->value,
+        ])->assertSessionHasNoErrors();
+    }
+
+    $outside = MeetSportAssignment::factory()->create(['meet_sport_id' => $otherMeetSport->id]);
+    $this->actingAs($ict)->post('/meet-sport-assignments', [
+        'meet_sport_id' => $otherMeetSport->id,
+        'user_id' => User::factory()->create()->id,
+        'role' => MeetSportAssignmentRole::TechnicalOfficial->value,
+    ])->assertForbidden();
+    $this->actingAs($ict)->post('/meet-sport-assignments', [
+        'meet_sport_id' => $assignedMeetSport->id,
+        'user_id' => User::factory()->create()->id,
+        'role' => MeetSportAssignmentRole::AssistantTournamentManager->value,
+    ])->assertForbidden();
+    $this->actingAs($ict)->delete("/meet-sport-assignments/{$outside->id}")->assertForbidden();
+
+    $managed = MeetSportAssignment::query()
+        ->where('meet_sport_id', $assignedMeetSport->id)
+        ->where('role', MeetSportAssignmentRole::TechnicalOfficial->value)
+        ->latest('id')->firstOrFail();
+    $this->actingAs($ict)->patch("/meet-sport-assignments/{$managed->id}/status", [
+        'status' => MeetSportAssignmentStatus::Active->value,
+    ])->assertSessionHasNoErrors();
+    $this->actingAs($ict)->delete("/meet-sport-assignments/{$managed->id}")->assertSessionHasNoErrors();
 });
 
 test('assigning a catalog sport adds it to the current tournament', function () {

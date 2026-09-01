@@ -267,7 +267,9 @@ test('a coach registers an athlete only in an assigned event with photos and acc
         'sports_photo' => UploadedFile::fake()->image('sports.jpg'),
         'athlete_history' => UploadedFile::fake()->image('athlete-history.jpg'),
         'form_10' => UploadedFile::fake()->image('form-10.png'),
+        'form_10_page_2' => UploadedFile::fake()->image('form-10-page-2.png'),
         'birth_certificate' => UploadedFile::fake()->image('birth-cert.jpg'),
+        'birth_certificate_page_2' => UploadedFile::fake()->image('birth-cert-page-2.jpg'),
         'parental_consent' => UploadedFile::fake()->image('parents-consent.png'),
         'medical_certificate' => UploadedFile::fake()->image('medical-certificate.jpg'),
     ])->assertSessionHasNoErrors();
@@ -277,7 +279,10 @@ test('a coach registers an athlete only in an assigned event with photos and acc
         ->and($athlete->sports_photo_upload_id)->not->toBeNull()
         ->and($athlete->entries()->exists())->toBeFalse()
         ->and($athlete->sportRosterMemberships()->where('meet_sport_id', $assignment->meet_sport_id)->exists())->toBeTrue()
-        ->and($athlete->eligibilityDocuments()->count())->toBe(5)
+        ->and($athlete->eligibilityDocuments()->count())->toBe(7)
+        ->and($athlete->eligibilityDocuments()->where('document_type', 'athlete_history')->count())->toBe(1)
+        ->and($athlete->eligibilityDocuments()->where('document_type', 'form_10')->count())->toBe(2)
+        ->and($athlete->eligibilityDocuments()->where('document_type', 'birth_certificate')->count())->toBe(2)
         ->and($athlete->eligibilityReview?->status)->toBe(EligibilityStatus::Pending);
 
     $otherEvent = Event::factory()->create(['gender' => 'boys', 'age_division' => 'secondary']);

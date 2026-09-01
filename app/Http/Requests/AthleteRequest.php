@@ -90,11 +90,10 @@ class AthleteRequest extends FormRequest
             'photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.config('pmms.athlete_photos.max_upload_kb')],
             'sports_photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.config('pmms.athlete_photos.max_upload_kb')],
             'athlete_history' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
-            'athlete_history_page_2' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
             'form_10' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
-            'school_id_document' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
+            'form_10_page_2' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
             'birth_certificate' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
-            'report_card' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
+            'birth_certificate_page_2' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
             'parental_consent' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
             'medical_certificate' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
         ];
