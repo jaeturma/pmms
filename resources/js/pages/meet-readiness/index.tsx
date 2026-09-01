@@ -63,6 +63,7 @@ type Props = {
         status: Status;
         issues: number;
     }>;
+    teams: Array<{ id: number; team: string; athletes: number }>;
     events: Page<{
         id: number;
         sport: string;
@@ -268,6 +269,29 @@ export default function Readiness(props: Props) {
                             </div>
                         </div>
                     ))}
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Athletes per municipality / team</CardTitle>
+                </CardHeader>
+                <CardContent className="overflow-x-auto">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Municipality / Team</TableHead>
+                                <TableHead className="text-right">Athletes</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {props.teams.map((team) => (
+                                <TableRow key={team.id}>
+                                    <TableCell className="font-medium">{team.team}</TableCell>
+                                    <TableCell className="text-right font-bold">{team.athletes}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
                 </CardContent>
             </Card>
             {!props.print && (

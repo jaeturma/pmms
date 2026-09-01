@@ -7,6 +7,7 @@ use App\Models\EventSchedule;
 use App\Models\EventVenue;
 use App\Models\Meet;
 use App\Models\MeetSport;
+use App\Models\SportRosterMember;
 use App\Models\User;
 use App\Models\Venue;
 use App\Services\MeetReadinessService;
@@ -53,4 +54,28 @@ test('readiness identifies venue entry and schedule prerequisites deterministica
         ->and($second['events']['data'][0]['entries'])->toBe(1)
         ->and($second['events']['data'][0]['schedule'])->toBeTrue()
         ->and($second['overall'])->toBeInt();
+});
+
+test('readiness reports distinct athlete totals by team and sport', function () {
+    [$meet, $event] = readinessFixture();
+    $meetSport = MeetSport::query()->where('meet_id', $meet->id)->firstOrFail();
+    $delegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $athlete = Entry::factory()->create([
+        'delegation_id' => $delegation->id,
+        'event_id' => $event->id,
+    ])->athlete;
+
+    SportRosterMember::query()->create([
+        'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $delegation->id,
+        'athlete_id' => $athlete->id,
+        'level' => $event->age_division->value,
+        'gender' => $event->gender->value,
+    ]);
+
+    $report = app(MeetReadinessService::class)->calculate($meet);
+
+    expect($report['summary']['athletes_total'])->toBe(1)
+        ->and($report['sports'][0]['athletes'])->toBe(1)
+        ->and($report['teams'][0]['athletes'])->toBe(1);
 });

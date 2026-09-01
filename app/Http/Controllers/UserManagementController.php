@@ -21,6 +21,8 @@ class UserManagementController extends Controller
     {
         abort_unless($request->user()->canManageProductionAccounts(), 403);
         $search = trim($request->string('search')->toString());
+        $role = $request->string('role')->toString();
+        $role = UserRole::tryFrom($role)?->value;
 
         $users = User::query()
             ->with([
@@ -40,6 +42,9 @@ class UserManagementController extends Controller
                 $scope->where('name', 'like', "%{$search}%")
                     ->orWhere('username', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%");
+            }))
+            ->when($role !== null, fn ($query) => $query->where(function ($scope) use ($role): void {
+                $scope->where('role', $role)->orWhereJsonContains('additional_roles', $role);
             }))
             ->orderBy('name')
             ->paginate(10)
@@ -76,10 +81,13 @@ class UserManagementController extends Controller
 
         return Inertia::render('system/users', [
             'users' => $users,
-            'filters' => ['search' => $search],
+            'filters' => ['search' => $search, 'role' => $role],
             'roles' => collect(UserRole::cases())->map(fn (UserRole $role) => [
                 'value' => $role->value,
                 'label' => $role->label(),
+                'count' => User::query()->where(fn ($query) => $query
+                    ->where('role', $role->value)
+                    ->orWhereJsonContains('additional_roles', $role->value))->count(),
                 'permissions' => $this->rolePermissions($role),
             ])->values(),
         ]);

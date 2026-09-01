@@ -60,7 +60,12 @@ type UserRow = {
     approval_status: string;
     can_delete: boolean;
 };
-type RoleOption = { value: string; label: string; permissions: string[] };
+type RoleOption = {
+    value: string;
+    label: string;
+    count: number;
+    permissions: string[];
+};
 
 function AdditionalRoles({
     roles,
@@ -371,7 +376,7 @@ export default function Users({
     roles,
 }: {
     users: Paginated<UserRow>;
-    filters: { search: string };
+    filters: { search: string; role: string | null };
     roles: RoleOption[];
 }) {
     const [search, setSearch] = useState(filters.search);
@@ -382,7 +387,11 @@ export default function Users({
     const [creating, setCreating] = useState(false);
     const submitSearch = (event: FormEvent) => {
         event.preventDefault();
-        router.get('/system/users', { search }, { preserveState: true });
+        router.get(
+            '/system/users',
+            { search, role: filters.role ?? undefined },
+            { preserveState: true },
+        );
     };
 
     return (
@@ -424,6 +433,31 @@ export default function Users({
                             Search
                         </Button>
                     </form>
+                    <Select
+                        value={filters.role ?? 'all'}
+                        onValueChange={(role) =>
+                            router.get(
+                                '/system/users',
+                                {
+                                    search: filters.search || undefined,
+                                    role: role === 'all' ? undefined : role,
+                                },
+                                { preserveState: true, replace: true },
+                            )
+                        }
+                    >
+                        <SelectTrigger className="w-64">
+                            <SelectValue placeholder="All roles" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All roles</SelectItem>
+                            {roles.map((role) => (
+                                <SelectItem key={role.value} value={role.value}>
+                                    {role.label} ({role.count})
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                     <Button onClick={() => setCreating(true)}>
                         <UserPlus className="size-4" />
                         Create user
@@ -612,7 +646,10 @@ export default function Users({
                     page={users}
                     url="/system/users"
                     label="users"
-                    params={{ search: filters.search }}
+                    params={{
+                        search: filters.search,
+                        ...(filters.role ? { role: filters.role } : {}),
+                    }}
                 />
             </div>
             {selected && (

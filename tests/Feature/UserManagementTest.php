@@ -73,6 +73,24 @@ test('an administrator can assign multiple roles including tournament ICT and se
         ->and($user->hasRole(UserRole::TournamentSecretary))->toBeTrue();
 });
 
+test('users can be filtered by role and role totals include additional roles', function () {
+    $admin = User::factory()->admin()->create();
+    User::factory()->create(['role' => UserRole::Coach, 'name' => 'Primary Coach']);
+    User::factory()->create([
+        'role' => UserRole::Viewer,
+        'additional_roles' => [UserRole::Coach->value],
+        'name' => 'Additional Coach',
+    ]);
+    User::factory()->create(['role' => UserRole::TournamentICT, 'name' => 'ICT Only']);
+
+    $this->actingAs($admin)
+        ->get('/system/users?role=coach')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('filters.role', 'coach')
+            ->has('users.data', 2)
+            ->where('roles', fn ($roles) => collect($roles)->firstWhere('value', 'coach')['count'] === 2));
+});
+
 test('an administrator can accept a coach from user registration and activate the requested event scope', function () {
     $admin = User::factory()->admin()->create();
     $meetSport = MeetSport::factory()->create();
