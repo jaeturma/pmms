@@ -32,7 +32,7 @@ use Illuminate\Support\Collection;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['delegation_id', 'school_id', 'first_name', 'middle_name', 'last_name', 'name_extension', 'sex', 'birthdate', 'lrn', 'grade_level'])]
+#[Fillable(['delegation_id', 'school_id', 'first_name', 'middle_name', 'last_name', 'name_extension', 'sex', 'birthdate', 'lrn', 'grade_level', 'age_division'])]
 class Athlete extends Model
 {
     /** @use HasFactory<AthleteFactory> */
@@ -49,6 +49,7 @@ class Athlete extends Model
             'sex' => Sex::class,
             'birthdate' => 'date',
             'grade_level' => 'integer',
+            'age_division' => AgeDivision::class,
         ];
     }
 
@@ -159,7 +160,7 @@ class Athlete extends Model
      */
     public function ageDivision(): AgeDivision
     {
-        return $this->grade_level <= 6 ? AgeDivision::Elementary : AgeDivision::Secondary;
+        return $this->age_division ?? ($this->grade_level <= 6 ? AgeDivision::Elementary : AgeDivision::Secondary);
     }
 
     /**

@@ -446,7 +446,7 @@ test('athlete profile lists uploaded documents with review status labels', funct
     $athlete->eligibilityReview()->create(['meet_id' => $athlete->delegation->meet_id]);
 
     foreach ([
-        [EligibilityDocumentType::AthleteHistory, RequirementStatus::Submitted, 'Profile / History', 'Pending'],
+        [EligibilityDocumentType::AthleteRecord, RequirementStatus::Submitted, 'Athlete Record', 'Pending'],
         [EligibilityDocumentType::Form10, RequirementStatus::UnderReview, 'School Form 10', 'Review'],
         [EligibilityDocumentType::BirthCertificate, RequirementStatus::Verified, 'PSA Birth Certificate', 'Approved'],
         [EligibilityDocumentType::MedicalCertificate, RequirementStatus::Rejected, 'Medical Certificate', 'Rejected'],
@@ -463,7 +463,7 @@ test('athlete profile lists uploaded documents with review status labels', funct
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('athlete.documents', 4)
-            ->where('athlete.documents.0.document', 'Profile / History')
+            ->where('athlete.documents.0.document', 'Athlete Record')
             ->where('athlete.documents.0.status_label', 'Pending')
             ->where('athlete.documents.1.document', 'School Form 10')
             ->where('athlete.documents.1.status_label', 'Review')

@@ -38,6 +38,51 @@ import {
 } from '@/components/ui/table';
 import { destroy, index, show, store, update } from '@/routes/athletes';
 
+const athleteDivisions = [
+    ['elementary', 'Elementary'],
+    ['secondary', 'Secondary'],
+    [
+        'paragames_intellectual_disability',
+        'Paragames Division Intellectual Disability',
+    ],
+    [
+        'paragames_intellectual_disability_youth_15_below',
+        'Intellectual Disability - Youth 15 below',
+    ],
+    [
+        'paragames_intellectual_disability_junior_16_up',
+        'Intellectual Disability - Junior 16 up',
+    ],
+    ['paragames_visually_impaired', 'Visually Impaired'],
+    ['paragames_ortho', 'Ortho'],
+    ['paragames_others', 'Others'],
+] as const;
+
+function DivisionSelect({
+    id,
+    value,
+    onChange,
+}: {
+    id: string;
+    value: string;
+    onChange: (value: string) => void;
+}) {
+    return (
+        <Select value={value} onValueChange={onChange}>
+            <SelectTrigger id={id}>
+                <SelectValue placeholder="Select division" />
+            </SelectTrigger>
+            <SelectContent>
+                {athleteDivisions.map(([division, label]) => (
+                    <SelectItem key={division} value={division}>
+                        {label}
+                    </SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+    );
+}
+
 type AthleteRow = {
     id: number;
     name: string;
@@ -51,6 +96,7 @@ type AthleteRow = {
     sex_label: string;
     age: number;
     grade_level: number;
+    age_division: string;
     school: string;
     district: string;
     delegation: string;
@@ -62,6 +108,8 @@ type AthleteRow = {
     eligibility_status: string;
     can_update: boolean;
     can_delete: boolean;
+    deletion_pending: boolean;
+    can_confirm_deletion: boolean;
     deleted: boolean;
     deleted_at: string | null;
 };
@@ -153,9 +201,11 @@ function AthleteFormDialog({
             birthdate: string;
             lrn: string;
             grade_level: string;
+            age_division: string;
             photo: File | null;
             sports_photo: File | null;
             athlete_history: File | null;
+            athlete_history_page_2: File | null;
             form_10: File | null;
             school_id_document: File | null;
             birth_certificate: File | null;
@@ -178,9 +228,11 @@ function AthleteFormDialog({
             birthdate: '',
             lrn: '',
             grade_level: '',
+            age_division: '',
             photo: null,
             sports_photo: null,
             athlete_history: null,
+            athlete_history_page_2: null,
             form_10: null,
             school_id_document: null,
             birth_certificate: null,
@@ -250,7 +302,7 @@ function AthleteFormDialog({
                             </div>
                         )}
                         {fixedDelegationId === null && (
-                            <div className="space-y-2">
+                            <div className="space-y-2 lg:col-span-3">
                                 <Label htmlFor="athlete-delegation">
                                     Delegation
                                 </Label>
@@ -275,7 +327,7 @@ function AthleteFormDialog({
                                 <InputError message={errors.delegation_id} />
                             </div>
                         )}
-                        <div className="grid gap-4 sm:grid-cols-2 lg:col-span-3 lg:grid-cols-4">
+                        <div className="grid gap-4 sm:grid-cols-2 lg:col-span-3 lg:grid-cols-3">
                             <div className="space-y-2">
                                 <Label htmlFor="athlete-lrn">
                                     LRN (12 digits) *
@@ -526,10 +578,17 @@ function AthleteFormDialog({
                                     submitted for eligibility review.
                                 </p>
                             </div>
-                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                                 {(
                                     [
-                                        ['athlete_history', 'Athlete History'],
+                                        [
+                                            'athlete_history',
+                                            'Athlete Record - Page 1',
+                                        ],
+                                        [
+                                            'athlete_history_page_2',
+                                            'Athlete Record - Page 2',
+                                        ],
                                         ['form_10', 'School Form 10'],
                                         [
                                             'birth_certificate',
@@ -586,6 +645,17 @@ function AthleteFormDialog({
                                 </SelectContent>
                             </Select>
                             <InputError message={errors.grade_level} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="athlete-division">Division *</Label>
+                            <DivisionSelect
+                                id="athlete-division"
+                                value={data.age_division}
+                                onChange={(value) =>
+                                    setData('age_division', value)
+                                }
+                            />
+                            <InputError message={errors.age_division} />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="athlete-sex">Sex *</Label>
@@ -682,9 +752,11 @@ function EditAthleteDialog({
         birthdate: athlete?.birthdate ?? '',
         lrn: athlete?.lrn ?? '',
         grade_level: String(athlete?.grade_level ?? ''),
+        age_division: athlete?.age_division ?? '',
         photo: null as File | null,
         sports_photo: null as File | null,
         athlete_history: null as File | null,
+        athlete_history_page_2: null as File | null,
         form_10: null as File | null,
         school_id_document: null as File | null,
         birth_certificate: null as File | null,
@@ -846,6 +918,17 @@ function EditAthleteDialog({
                         <InputError message={errors.sex} />
                     </div>
                     <div className="space-y-2">
+                        <Label htmlFor="edit-athlete-division">Division</Label>
+                        <DivisionSelect
+                            id="edit-athlete-division"
+                            value={data.age_division}
+                            onChange={(value) =>
+                                setData('age_division', value)
+                            }
+                        />
+                        <InputError message={errors.age_division} />
+                    </div>
+                    <div className="space-y-2">
                         <Label htmlFor="edit-athlete-birthdate">
                             Birthdate
                         </Label>
@@ -869,10 +952,17 @@ function EditAthleteDialog({
                                 document.
                             </p>
                         </div>
-                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                             {(
                                 [
-                                    ['athlete_history', 'Athlete History'],
+                                    [
+                                        'athlete_history',
+                                        'Athlete Record - Page 1',
+                                    ],
+                                    [
+                                        'athlete_history_page_2',
+                                        'Athlete Record - Page 2',
+                                    ],
                                     ['form_10', 'School Form 10'],
                                     [
                                         'birth_certificate',
@@ -1216,6 +1306,12 @@ export default function Athletes({
                                                         </span>
                                                     )}
                                                     <span>{athlete.name}</span>
+                                                    {athlete.deletion_pending &&
+                                                        !athlete.deleted && (
+                                                            <span className="text-xs text-amber-600">
+                                                                Deletion pending
+                                                            </span>
+                                                        )}
                                                     {athlete.deleted && (
                                                         <span className="text-xs text-destructive">
                                                             Deleted
@@ -1283,12 +1379,28 @@ export default function Athletes({
                                                                     variant="destructive"
                                                                     size="sm"
                                                                 >
-                                                                    Remove
+                                                                    {athlete.can_confirm_deletion
+                                                                        ? 'Confirm deletion'
+                                                                        : athlete.deletion_pending
+                                                                          ? 'Deletion requested'
+                                                                          : 'Request deletion'}
                                                                 </Button>
                                                             }
-                                                            title="Remove athlete?"
-                                                            description="This moves the athlete to the deleted-athletes view for administrators."
-                                                            confirmLabel="Remove"
+                                                            title={
+                                                                athlete.can_confirm_deletion
+                                                                    ? 'Confirm athlete deletion?'
+                                                                    : 'Request athlete deletion?'
+                                                            }
+                                                            description={
+                                                                athlete.can_confirm_deletion
+                                                                    ? 'Tournament ICT confirmation will move this athlete to deleted athletes.'
+                                                                    : 'The assigned Tournament ICT must confirm before the athlete is deleted.'
+                                                            }
+                                                            confirmLabel={
+                                                                athlete.can_confirm_deletion
+                                                                    ? 'Confirm deletion'
+                                                                    : 'Send request'
+                                                            }
                                                             destructive
                                                             onConfirm={() =>
                                                                 router.delete(

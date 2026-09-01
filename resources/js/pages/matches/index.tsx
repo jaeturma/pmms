@@ -154,7 +154,7 @@ function MatchFormDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-3xl">
                 <DialogHeader>
                     <DialogTitle>
                         {match ? 'Edit match' : 'Add match'}
@@ -327,7 +327,7 @@ function ParticipantsDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-4xl">
                 <DialogHeader>
                     <DialogTitle>
                         Participants — {match.round_label}

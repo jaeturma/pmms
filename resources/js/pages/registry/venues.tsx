@@ -107,7 +107,7 @@ function VenueDetailsDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+            <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-5xl">
                 <DialogHeader>
                     <DialogTitle>{venue.name}</DialogTitle>
                 </DialogHeader>
@@ -131,6 +131,26 @@ function VenueDetailsDialog({
                             <Badge className="mt-1" variant="outline">
                                 {venue.readiness_status.replaceAll('_', ' ')}
                             </Badge>
+                        </div>
+
+                        <div>
+                            <p className="text-sm font-medium">
+                                Competition areas
+                            </p>
+                            {venue.competition_areas.length > 0 ? (
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                    {venue.competition_areas.map((area) => (
+                                        <Badge key={area} variant="secondary">
+                                            {area}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    No courts, tables, boards, or other areas
+                                    configured.
+                                </p>
+                            )}
                         </div>
 
                         {mapsUrl ? (
@@ -254,6 +274,9 @@ function VenueFormDialog({
         internal_notes: venue?.internal_notes ?? '',
         readiness_status: venue?.readiness_status ?? 'planned',
         notes: venue?.notes ?? '',
+        competition_area_type: '',
+        competition_area_label: '',
+        competition_area_count: '',
     });
 
     const submit = (e: FormEvent) => {
@@ -276,7 +299,7 @@ function VenueFormDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+            <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-5xl">
                 <DialogHeader>
                     <DialogTitle>
                         {venue ? 'Edit venue' : 'Add venue'}
@@ -431,6 +454,82 @@ function VenueFormDialog({
                         />
                         <InputError message={errors.notes} />
                     </div>
+                    <div className="space-y-2 sm:col-span-2">
+                        <p className="text-sm font-medium">
+                            Add competition areas
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                            Create numbered courts, tables, boards, triangles,
+                            fields, or another custom area within this venue.
+                        </p>
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="venue-area-type">Area type</Label>
+                        <Select
+                            value={data.competition_area_type || 'none'}
+                            onValueChange={(value) =>
+                                setData(
+                                    'competition_area_type',
+                                    value === 'none' ? '' : value,
+                                )
+                            }
+                        >
+                            <SelectTrigger id="venue-area-type">
+                                <SelectValue placeholder="No areas to add" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">None</SelectItem>
+                                <SelectItem value="court">Court</SelectItem>
+                                <SelectItem value="table">Table</SelectItem>
+                                <SelectItem value="board">Board</SelectItem>
+                                <SelectItem value="triangle">
+                                    Triangle
+                                </SelectItem>
+                                <SelectItem value="field">Field</SelectItem>
+                                <SelectItem value="custom">Custom</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <InputError message={errors.competition_area_type} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="venue-area-count">
+                            Total numbered areas
+                        </Label>
+                        <Input
+                            id="venue-area-count"
+                            type="number"
+                            min={1}
+                            max={100}
+                            disabled={!data.competition_area_type}
+                            value={data.competition_area_count}
+                            onChange={(e) =>
+                                setData('competition_area_count', e.target.value)
+                            }
+                            placeholder="e.g. 3"
+                        />
+                        <InputError message={errors.competition_area_count} />
+                    </div>
+                    {data.competition_area_type === 'custom' && (
+                        <div className="space-y-2 sm:col-span-2">
+                            <Label htmlFor="venue-area-label">
+                                Custom area label
+                            </Label>
+                            <Input
+                                id="venue-area-label"
+                                value={data.competition_area_label}
+                                onChange={(e) =>
+                                    setData(
+                                        'competition_area_label',
+                                        e.target.value,
+                                    )
+                                }
+                                placeholder="e.g. Diamond, Mat, Lane"
+                            />
+                            <InputError
+                                message={errors.competition_area_label}
+                            />
+                        </div>
+                    )}
                     <div className="space-y-2">
                         <Label htmlFor="venue-public-notes">Public notes</Label>
                         <Textarea

@@ -4,6 +4,7 @@ use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\UserRole;
 use App\Models\AuditLog;
+use App\Models\CompetitionArea;
 use App\Models\GameCoordinatorAssignment;
 use App\Models\Meet;
 use App\Models\MeetSport;
@@ -86,6 +87,29 @@ test('organizers can create venues', function () {
     ]);
 
     expect(AuditLog::query()->where('action', 'venue.created')->exists())->toBeTrue();
+});
+
+test('venues can create numbered courts tables boards and custom competition areas', function () {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->post('/venues', [
+        'name' => 'DDOSC Gym',
+        'competition_area_type' => 'court',
+        'competition_area_count' => 3,
+    ])->assertSessionHasNoErrors();
+
+    $venue = Venue::query()->where('name', 'DDOSC Gym')->firstOrFail();
+    expect($venue->competitionAreas()->pluck('name')->all())
+        ->toBe(['Court 1', 'Court 2', 'Court 3']);
+
+    $this->actingAs($admin)->put("/venues/{$venue->id}", [
+        'name' => 'DDOSC Gym',
+        'competition_area_type' => 'board',
+        'competition_area_count' => 2,
+    ])->assertSessionHasNoErrors();
+
+    expect(CompetitionArea::query()->where('venue_id', $venue->id)->pluck('name')->all())
+        ->toContain('Board 1', 'Board 2');
 });
 
 test('google maps coordinates and URLs are accepted and persisted', function (string $location) {

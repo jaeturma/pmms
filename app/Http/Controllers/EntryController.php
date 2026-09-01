@@ -278,15 +278,12 @@ class EntryController extends Controller
                 ]);
             }
 
-            if ($event->sport()->where('code', 'SWIMMING')->exists()) {
-                $meetSportId = MeetSport::query()->where('meet_id', $delegation->meet_id)
-                    ->where('sport_id', $event->sport_id)->value('id');
-                if ($meetSportId === null || ! SportRosterMember::query()
-                    ->where('meet_sport_id', $meetSportId)->where('delegation_id', $delegation->id)
-                    ->where('athlete_id', $athlete->id)->where('level', $event->age_division->value)
-                    ->where('gender', $event->gender->value)->exists()) {
-                    throw ValidationException::withMessages([$errorKey => __('Add this swimmer to the matching Swimming roster before assigning events.')]);
-                }
+            $meetSportId = MeetSport::query()->where('meet_id', $delegation->meet_id)
+                ->where('sport_id', $event->sport_id)->value('id');
+            if ($meetSportId === null || ! SportRosterMember::query()
+                ->where('meet_sport_id', $meetSportId)->where('delegation_id', $delegation->id)
+                ->where('athlete_id', $athlete->id)->exists()) {
+                throw ValidationException::withMessages([$errorKey => __('Add this athlete to the applicable Sport roster before assigning Events.')]);
             }
 
             if (! $delegation->meet->events()->whereKey($event->id)->exists()) {
@@ -297,6 +294,13 @@ class EntryController extends Controller
             }
             if ($event->age_division !== $athlete->ageDivision()) {
                 throw ValidationException::withMessages([$errorKey => __('The athlete\'s grade level does not match :event.', ['event' => $event->name])]);
+            }
+            if ($athlete->eligibilityReview?->status !== EligibilityStatus::Approved) {
+                throw ValidationException::withMessages([$errorKey => __('Only DSAC-eligible athletes may be submitted to a Sports Event.')]);
+            }
+            if ($delegation->meet->medical_clearance_required
+                && $athlete->medicalClearance?->status !== MedicalClearanceStatus::Cleared) {
+                throw ValidationException::withMessages([$errorKey => __('The athlete must be medically cleared before Event submission.')]);
             }
             if (Entry::query()->where('athlete_id', $athlete->id)->where('event_id', $event->id)->exists()) {
                 if ($request->user()?->role === UserRole::Coach && $eventIds->count() === 1) {

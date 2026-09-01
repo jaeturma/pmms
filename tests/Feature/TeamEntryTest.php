@@ -10,6 +10,8 @@ use App\Models\EligibilityReview;
 use App\Models\Event;
 use App\Models\EventResult;
 use App\Models\MedicalClearance;
+use App\Models\MeetSport;
+use App\Models\SportRosterMember;
 use App\Models\TeamEntry;
 use App\Models\User;
 use App\Services\MedalTallyService;
@@ -27,8 +29,9 @@ function teamEntryContext(int $teamSize = 2, bool $medicalRequired = false): arr
         'team_size' => $teamSize,
     ]);
     $delegation->meet->events()->attach($event);
+    $meetSport = MeetSport::factory()->create(['meet_id' => $delegation->meet_id, 'sport_id' => $event->sport_id]);
 
-    $athletes = collect(range(1, $teamSize))->map(function () use ($delegation, $medicalRequired): Athlete {
+    $athletes = collect(range(1, $teamSize))->map(function () use ($delegation, $medicalRequired, $meetSport): Athlete {
         $athlete = Athlete::factory()->create([
             'delegation_id' => $delegation->id,
             'school_id' => $delegation->school_id,
@@ -47,6 +50,10 @@ function teamEntryContext(int $teamSize = 2, bool $medicalRequired = false): arr
                 'status' => MedicalClearanceStatus::Cleared,
             ]);
         }
+        SportRosterMember::query()->create([
+            'meet_sport_id' => $meetSport->id, 'delegation_id' => $delegation->id,
+            'athlete_id' => $athlete->id, 'level' => 'secondary', 'gender' => 'boys',
+        ]);
 
         return $athlete;
     });

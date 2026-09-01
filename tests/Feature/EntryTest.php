@@ -14,6 +14,7 @@ use App\Models\Event;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
+use App\Models\SportRosterMember;
 use App\Models\School;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
@@ -26,7 +27,7 @@ use Inertia\Testing\AssertableInertia;
  */
 function entrySetup(array $eventOverrides = []): array
 {
-    $meet = Meet::factory()->registrationOpen()->create();
+    $meet = Meet::factory()->registrationOpen()->create(['medical_clearance_required' => false]);
     $delegation = Delegation::factory()->create(['meet_id' => $meet->id]);
     $athlete = Athlete::factory()->create([
         'delegation_id' => $delegation->id,
@@ -40,6 +41,11 @@ function entrySetup(array $eventOverrides = []): array
         ...$eventOverrides,
     ]);
     $meet->events()->attach($event);
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $event->sport_id]);
+    SportRosterMember::query()->create([
+        'meet_sport_id' => $meetSport->id, 'delegation_id' => $delegation->id,
+        'athlete_id' => $athlete->id, 'level' => 'elementary', 'gender' => 'boys',
+    ]);
     EligibilityReview::factory()->approved()->create([
         'athlete_id' => $athlete->id,
         'meet_id' => $meet->id,
@@ -113,7 +119,6 @@ test('sex mismatches are rejected', function () {
         'sex' => 'female',
         'grade_level' => 5,
     ]);
-
     $this->actingAs(User::factory()->admin()->create())
         ->post('/entries', ['athlete_id' => $girl->id, 'event_id' => $event->id])
         ->assertSessionHasErrors('event_id');
@@ -134,6 +139,12 @@ test('mixed events accept both sexes', function () {
         'sex' => 'female',
         'grade_level' => 4,
     ]);
+    $mixedMeetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $mixedEvent->sport_id]);
+    SportRosterMember::query()->create([
+        'meet_sport_id' => $mixedMeetSport->id, 'delegation_id' => $delegation->id,
+        'athlete_id' => $girl->id, 'level' => 'elementary', 'gender' => 'girls',
+    ]);
+    EligibilityReview::factory()->approved()->create(['athlete_id' => $girl->id, 'meet_id' => $meet->id]);
 
     $this->actingAs(User::factory()->admin()->create())
         ->post('/entries', ['athlete_id' => $girl->id, 'event_id' => $mixedEvent->id])
@@ -183,8 +194,8 @@ test('one athlete can enter multiple individual events without duplicate athlete
 
     $events = collect([
         $firstEvent,
-        Event::factory()->create(['name' => 'Vault', 'gender' => 'boys', 'age_division' => 'elementary', 'is_team_event' => false]),
-        Event::factory()->create(['name' => 'Individual All-Around', 'gender' => 'boys', 'age_division' => 'elementary', 'is_team_event' => false]),
+        Event::factory()->create(['sport_id' => $firstEvent->sport_id, 'name' => 'Vault', 'gender' => 'boys', 'age_division' => 'elementary', 'is_team_event' => false]),
+        Event::factory()->create(['sport_id' => $firstEvent->sport_id, 'name' => 'Individual All-Around', 'gender' => 'boys', 'age_division' => 'elementary', 'is_team_event' => false]),
     ]);
     $eventIds = $events->pluck('id')->all();
     $meet->events()->syncWithoutDetaching($eventIds);
@@ -235,6 +246,11 @@ test('the per-delegation entry cap is enforced and withdrawn entries free it', f
         'sex' => 'male',
         'grade_level' => 6,
     ]);
+    SportRosterMember::query()->create([
+        'meet_sport_id' => MeetSport::query()->where('meet_id', $delegation->meet_id)->where('sport_id', $event->sport_id)->value('id'),
+        'delegation_id' => $delegation->id, 'athlete_id' => $second->id, 'level' => 'elementary', 'gender' => 'boys',
+    ]);
+    EligibilityReview::factory()->approved()->create(['athlete_id' => $second->id, 'meet_id' => $delegation->meet_id]);
 
     $this->actingAs($admin)
         ->post('/entries', ['athlete_id' => $second->id, 'event_id' => $event->id])
@@ -308,10 +324,7 @@ test('an entry cannot be confirmed before DSAC approves athlete eligibility', fu
 
 test('assigned tournament leaders can confirm eligible entries for their sport', function (MeetSportAssignmentRole $role) {
     [$meet, $delegation, $athlete, $event] = entrySetup();
-    $meetSport = MeetSport::factory()->create([
-        'meet_id' => $meet->id,
-        'sport_id' => $event->sport_id,
-    ]);
+    $meetSport = MeetSport::query()->where('meet_id', $meet->id)->where('sport_id', $event->sport_id)->sole();
     $user = User::factory()->create();
     MeetSportAssignment::factory()->create([
         'meet_sport_id' => $meetSport->id,

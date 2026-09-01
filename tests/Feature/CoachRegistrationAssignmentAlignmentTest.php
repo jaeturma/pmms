@@ -162,7 +162,7 @@ test('coach selects events on a separate page and only ict approves the account'
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('coach/manage-assignments')
             ->where('registration.sport', $meetSport->sport->name)
-            ->has('events.data', 2)->where('canApprove', false));
+            ->has('events', 2)->where('canApprove', false));
     $this->actingAs($coach)->put("/coach/onboarding-requests/{$application->id}/assignments", [
         'event_ids' => $events->modelKeys(),
     ])->assertSessionHasNoErrors();
@@ -178,12 +178,13 @@ test('coach selects events on a separate page and only ict approves the account'
 test('applied sport shows catalog events even when the meet event pivot is missing', function () {
     [$meet, $sport, $meetSport, $delegation] = coachApplicationContext();
     $meet->events()->detach();
-    $event = Event::factory()->create([
+    $additionalEvents = Event::factory()->count(18)->create([
         'sport_id' => $sport->id,
         'gender' => 'boys',
         'age_division' => 'secondary',
         'active' => true,
     ]);
+    $event = $additionalEvents->first();
     $coach = User::factory()->create(['role' => UserRole::Viewer, 'approval_status' => 'pending']);
     $application = CoachOnboardingRequest::query()->create([
         'user_id' => $coach->id,
@@ -196,7 +197,7 @@ test('applied sport shows catalog events even when the meet event pivot is missi
     $this->actingAs($coach)->get("/coach/onboarding-requests/{$application->id}/assignments")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('registration.sport', $sport->name)
-            ->has('events.data', 3));
+            ->has('events', 20));
 
     $this->actingAs($coach)->put("/coach/onboarding-requests/{$application->id}/assignments", [
         'event_ids' => [$event->id],
@@ -220,7 +221,7 @@ test('legacy coach registration with only an event derives its sport and repairs
         ->component('coach/manage-assignments')
         ->where('registration.sport', $sport->name)
         ->where('selectedEventIds', [$events->first()->id])
-        ->has('events.data', 2));
+        ->has('events', 2));
     $this->actingAs($coach)->put("/coach/onboarding-requests/{$application->id}/assignments", [
         'event_ids' => [$events->last()->id],
     ])->assertSessionHasNoErrors();

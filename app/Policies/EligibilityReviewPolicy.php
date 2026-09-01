@@ -52,7 +52,10 @@ class EligibilityReviewPolicy
             return true;
         }
 
-        return $review->athlete->delegation->hasOfficer($user) || $user->hasApprovedCoachScope($review->athlete->delegation);
+        return $review->athlete->delegation->hasOfficer($user)
+            || ($user->role === UserRole::Coach
+                && $user->hasApprovedCoachScope($review->athlete->delegation)
+                && $review->athlete->isOwnedBy($user));
     }
 
     /**

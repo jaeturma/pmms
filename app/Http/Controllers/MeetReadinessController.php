@@ -18,7 +18,7 @@ class MeetReadinessController extends Controller
         $meet = Meet::query()->find($request->integer('meet_id')) ?? Meet::current();
         $scope = $this->readiness->scopeFor($request->user(), $meet);
         abort_if($scope === null, 403);
-        $filters = [...$request->only(['sport_id', 'event_id', 'delegation_id', 'status', 'issue_type']), ...$scope, 'scope_label' => $scope['label']];
+        $filters = [...$request->only(['sport_id', 'event_id', 'delegation_id', 'status', 'issue_type', 'search', 'events_page', 'issues_page']), ...$scope, 'scope_label' => $scope['label']];
         $key = 'meet-readiness:'.$meet->id.':'.md5(json_encode($filters));
         if ($request->boolean('refresh')) Cache::forget($key);
         $data = Cache::remember($key, now()->addSeconds(45), fn () => $this->readiness->calculate($meet, $filters));

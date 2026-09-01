@@ -318,8 +318,7 @@ class CoachAssignmentRequestController extends Controller
             ->where(fn ($events) => $events->where('active', true)->orWhereIn('id', $selectedEvents->modelKeys()))
             ->with('sport:id,name')
             ->orderBy('sport_id')->orderBy('display_order')->orderBy('name')
-            ->paginate(15, ['*'], 'events_page')
-            ->withQueryString();
+            ->get();
         $coachDelegationIds = $existingAssignments->pluck('delegation_id')->push($coachOnboardingRequest->delegation_id)->filter()->unique();
         $registeredAthletes = Athlete::query()->where('registered_by', $coachOnboardingRequest->user_id)
             ->whereIn('delegation_id', $coachDelegationIds)->with(['school:id,name', 'entries.event:id,name'])
@@ -346,7 +345,7 @@ class CoachAssignmentRequestController extends Controller
                     'photo_url' => $athlete->photo_upload_id ? route('athletes.photo', $athlete) : null,
                 ])->all(),
             ],
-            'events' => $availableEvents->through(fn (Event $event): array => [
+            'events' => $availableEvents->map(fn (Event $event): array => [
                 'id' => $event->id,
                 'name' => $event->name,
                 'sport' => $event->sport->name,
@@ -500,21 +499,8 @@ class CoachAssignmentRequestController extends Controller
         FileUploadService $uploads,
     ): RedirectResponse {
         $user = $request->user();
-        $ownsRegistration = $coachOnboardingRequest->user_id === $user->id;
-        abort_unless($ownsRegistration
-            || $this->canReviewOnboarding($user, $coachOnboardingRequest)
-            || $this->canAccreditOnboarding($user, $coachOnboardingRequest), 403);
+        abort_unless($this->canUpdateOnboardingDocuments($user, $coachOnboardingRequest), 403);
         abort_unless(in_array($type, ['profile', 'certification'], true), 404);
-
-        $isAccredited = Accreditation::query()
-            ->whereHas('personnel', fn ($personnel) => $personnel
-                ->where('user_id', $coachOnboardingRequest->user_id))
-            ->exists();
-        if ($coachOnboardingRequest->status === 'approved' && $isAccredited) {
-            throw ValidationException::withMessages([
-                'document' => __('Coach attachments can no longer be updated after approval and accreditation.'),
-            ]);
-        }
 
         $rules = $type === 'profile'
             ? ['document' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120']]
@@ -644,9 +630,7 @@ class CoachAssignmentRequestController extends Controller
                 $accreditationNumber = Accreditation::query()
                     ->whereHas('personnel', fn ($personnel) => $personnel->where('user_id', $item->user_id))
                     ->value('number');
-                $canManageDocuments = $item->user_id === $user->id
-                    || $this->canReviewOnboarding($user, $item)
-                    || $this->canAccreditOnboarding($user, $item);
+                $canManageDocuments = $this->canUpdateOnboardingDocuments($user, $item);
                 $coachDelegationIds = CoachAssignmentRequest::query()
                     ->where('user_id', $item->user_id)
                     ->where('status', 'approved')
@@ -692,8 +676,7 @@ class CoachAssignmentRequestController extends Controller
                     'assignment_url' => route('coach.onboarding-assignments.edit', $item),
                     'can_manage_assignments' => $this->canManageOnboardingAssignments($user, $item),
                     'can_reset_password' => $this->canResetOnboardingPassword($user, $item),
-                    'can_update_attachments' => $canManageDocuments
-                        && ! ($item->status === 'approved' && $accreditationNumber !== null),
+                    'can_update_attachments' => $canManageDocuments,
                     'can_accredit' => $item->status === 'approved'
                         && $item->profile_upload_id !== null
                         && $this->canAccreditOnboarding($user, $item),
@@ -864,6 +847,35 @@ class CoachAssignmentRequestController extends Controller
     private function canResetOnboardingPassword(User $user, CoachOnboardingRequest $request): bool
     {
         if ($user->canManageProductionAccounts()) {
+            return true;
+        }
+
+        $ictMeetSports = $user->meetSportAssignments()
+            ->where('status', 'active')
+            ->where('role', MeetSportAssignmentRole::TournamentICT->value)
+            ->with('meetSport:id,meet_id,sport_id')
+            ->get()
+            ->pluck('meetSport')
+            ->filter();
+
+        if ($request->meet_sport_id !== null) {
+            return $ictMeetSports->contains('id', $request->meet_sport_id);
+        }
+
+        $eventIds = $request->events()->pluck('events.id')
+            ->when($request->event_id !== null, fn (Collection $ids) => $ids->push($request->event_id))
+            ->unique();
+
+        return $ictMeetSports->contains(fn (MeetSport $meetSport): bool => Event::query()
+            ->whereKey($eventIds)
+            ->where('sport_id', $meetSport->sport_id)
+            ->whereHas('meets', fn ($meets) => $meets->whereKey($meetSport->meet_id))
+            ->exists());
+    }
+
+    private function canUpdateOnboardingDocuments(User $user, CoachOnboardingRequest $request): bool
+    {
+        if ($request->user_id === $user->id || $user->isAdmin()) {
             return true;
         }
 

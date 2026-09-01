@@ -96,18 +96,25 @@ class TeamEntryController extends Controller
         if ($athletes->pluck('delegation_id')->unique()->count() !== 1) {
             throw ValidationException::withMessages(['athlete_ids' => __('All team members must belong to the same delegation.')]);
         }
+        $delegation = $athletes->first()->delegation;
+        $meetSportId = MeetSport::query()->where('meet_id', $delegation->meet_id)
+            ->where('sport_id', $event->sport_id)->value('id');
+        $rosterCount = $meetSportId === null ? 0 : SportRosterMember::query()
+            ->where('meet_sport_id', $meetSportId)
+            ->where('delegation_id', $delegation->id)
+            ->whereIn('athlete_id', $athletes->pluck('id'))->count();
+        if ($rosterCount !== $athletes->count()) {
+            throw ValidationException::withMessages(['athlete_ids' => __('Every team member must belong to the applicable Sport roster.')]);
+        }
         if ($event->event_type === 'RELAY') {
             $required = $event->relay_legs ?? 4;
             if ($athletes->count() !== $required) {
                 throw ValidationException::withMessages(['athlete_ids' => __('This relay requires exactly :count swimmers.', ['count' => $required])]);
             }
-            $delegation = $athletes->first()->delegation;
-            $meetSportId = MeetSport::query()->where('meet_id', $delegation->meet_id)
-                ->where('sport_id', $event->sport_id)->value('id');
-            $rosterCount = SportRosterMember::query()->where('meet_sport_id', $meetSportId)
+            $matchingRosterCount = SportRosterMember::query()->where('meet_sport_id', $meetSportId)
                 ->where('delegation_id', $delegation->id)->where('level', $event->age_division->value)
                 ->where('gender', $event->gender->value)->whereIn('athlete_id', $athletes->pluck('id'))->count();
-            if ($rosterCount !== $required) {
+            if ($matchingRosterCount !== $required) {
                 throw ValidationException::withMessages(['athlete_ids' => __('Every relay swimmer must belong to the matching delegation Swimming roster.')]);
             }
         }
@@ -124,7 +131,7 @@ class TeamEntryController extends Controller
                 throw ValidationException::withMessages(['event_id' => __('The team event is not part of the athletes’ meet.')]);
             }
             if (! $event->gender->accepts($athlete->sex) || $event->age_division !== $athlete->ageDivision()) {
-                throw ValidationException::withMessages(['athlete_ids' => __('Every member must match the event category.')]);
+                throw ValidationException::withMessages(['athlete_ids' => __('Every member must match the Event requirements.')]);
             }
             if ($athlete->delegation->meet->medical_clearance_required && $athlete->medicalClearance?->status !== MedicalClearanceStatus::Cleared) {
                 throw ValidationException::withMessages(['athlete_ids' => __('Every team member must be medically cleared.')]);

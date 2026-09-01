@@ -22,6 +22,7 @@ use App\Models\User;
 use App\Notifications\CoachEligibilityRemarksNotification;
 use App\Services\AthletePhotoService;
 use App\Services\AuditLogger;
+use App\Services\CompetitionAccessService;
 use App\Services\Eligibility\AthleteEligibilityChecker;
 use App\Services\Eligibility\TechnicalOfficialEligibilityChecker;
 use App\Services\FileUploadService;
@@ -144,11 +145,14 @@ class EligibilityController extends Controller
                 fn ($officers) => $officers->whereKey($user->getKey()),
             );
         } elseif ($user->role === UserRole::Coach) {
-            $base->whereHas('athlete.delegation', fn ($delegation) => $delegation->whereIn(
-                'id', $user->coachAssignmentRequests()->where('status', 'approved')->select('delegation_id'),
-            ));
+            $base->whereHas('athlete', fn ($athletes) => $athletes
+                ->ownedBy($user)
+                ->whereHas('delegation', fn ($delegation) => $delegation->whereIn(
+                    'id', $user->coachAssignmentRequests()->where('status', 'approved')->select('delegation_id'),
+                )));
         } elseif ($user->tournamentEventIds()->isNotEmpty()) {
-            $base->whereHas('athlete.entries', fn ($entries) => $entries->whereIn('event_id', $user->tournamentEventIds()));
+            $base->whereHas('athlete', fn ($athletes) => app(CompetitionAccessService::class)
+                ->scopeAthletes($athletes, $user, Meet::current()->id));
         } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer) && ! $user->hasPermission(Permission::AthleteEligibilityReview)) {
             $assignments = $user->athleteOversightAssignments()->where('active', true)->get();
             $base->whereHas('athlete.school', function ($school) use ($assignments): void {
@@ -180,7 +184,7 @@ class EligibilityController extends Controller
             $query->where('status', $status);
         }
 
-        $this->applySearch($query, $search, ['athlete.first_name', 'athlete.last_name']);
+        $this->applySearch($query, $search, ['athlete.first_name', 'athlete.last_name', 'athlete.lrn']);
 
         $delegationScope = Delegation::query()->with(['school:id,name', 'district:id,name', 'meet:id,name']);
 
@@ -194,6 +198,19 @@ class EligibilityController extends Controller
         $uploadableDelegations = $delegationScope->get()
             ->filter(fn (Delegation $delegation): bool => $user->can('upload', [EligibilityReview::class, $delegation]));
 
+        $athleteOptions = Athlete::query()
+            ->with('school:id,name')
+            ->whereIn('delegation_id', $uploadableDelegations->pluck('id'))
+            ->when($user->role === UserRole::Coach, fn ($athletes) => $athletes->ownedBy($user))
+            ->orderBy('last_name')
+            ->limit(50)
+            ->get()
+            ->map(fn (Athlete $athlete): array => [
+                'id' => $athlete->id,
+                'label' => "{$athlete->fullName()} — {$athlete->school->name}",
+            ])
+            ->values();
+
         return Inertia::render('eligibility/index', [
             'reviews' => $query->paginate($this->registryPageSize)->withQueryString()
                 ->through(fn (EligibilityReview $review): array => $this->reviewRow($review, $user)),
@@ -202,16 +219,7 @@ class EligibilityController extends Controller
                 'status' => EligibilityStatus::tryFrom($status)?->value,
                 'search' => $search !== '' ? $search : null,
             ],
-            'athleteOptions' => Athlete::query()
-                ->with('school:id,name')
-                ->whereIn('delegation_id', $uploadableDelegations->pluck('id'))
-                ->orderBy('last_name')
-                ->get()
-                ->map(fn (Athlete $athlete): array => [
-                    'id' => $athlete->id,
-                    'label' => "{$athlete->fullName()} — {$athlete->school->name}",
-                ])
-                ->values(),
+            'athleteOptions' => $athleteOptions,
             'documentTypeOptions' => array_map(
                 fn (EligibilityDocumentType $type): array => [
                     'value' => $type->value,
@@ -374,6 +382,9 @@ class EligibilityController extends Controller
             ->findOrFail($request->integer('athlete_id'));
 
         Gate::authorize('upload', [EligibilityReview::class, $athlete->delegation]);
+        if ($request->user()?->role === UserRole::Coach && ! $athlete->isOwnedBy($request->user())) {
+            abort(403);
+        }
 
         $review = EligibilityReview::query()->firstOrCreate([
             'athlete_id' => $athlete->id,
@@ -473,12 +484,15 @@ class EligibilityController extends Controller
      * locks it (approved or rejected — both terminal, see `documentRow()`'s
      * matching `can_delete` computation).
      */
-    public function destroyDocument(EligibilityDocument $document): RedirectResponse
+    public function destroyDocument(Request $request, EligibilityDocument $document): RedirectResponse
     {
         $athlete = $document->athlete;
         $review = $athlete->eligibilityReview;
 
         Gate::authorize('upload', [EligibilityReview::class, $athlete->delegation]);
+        if ($request->user()?->role === UserRole::Coach && ! $athlete->isOwnedBy($request->user())) {
+            abort(403);
+        }
 
         if ($review !== null && in_array($review->status, [EligibilityStatus::Approved, EligibilityStatus::Rejected], true)) {
             Inertia::flash('toast', [
@@ -565,7 +579,7 @@ class EligibilityController extends Controller
         );
         if (! $complete) {
             throw ValidationException::withMessages([
-                'requirements' => __('Athlete History, Form 10, PSA/Birth Certificate, and Parents Consent must be validated, and a Medical Certificate must be attached before DSAC can qualify the athlete.'),
+                'requirements' => __('Athlete Record, Form 10, PSA/Birth Certificate, and Parents Consent must be validated, and a Medical Certificate must be attached before DSAC can qualify the athlete.'),
             ]);
         }
 

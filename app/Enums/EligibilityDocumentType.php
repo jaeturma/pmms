@@ -4,7 +4,7 @@ namespace App\Enums;
 
 enum EligibilityDocumentType: string
 {
-    case AthleteHistory = 'athlete_history';
+    case AthleteRecord = 'athlete_history';
     case Form10 = 'form_10';
     case SchoolId = 'school_id';
     case BirthCertificate = 'birth_certificate';
@@ -17,7 +17,7 @@ enum EligibilityDocumentType: string
     public function label(): string
     {
         return match ($this) {
-            self::AthleteHistory => 'Athlete History',
+            self::AthleteRecord => 'Athlete Record',
             self::Form10 => 'School Form 10',
             self::SchoolId => 'School ID',
             self::BirthCertificate => 'PSA Birth Certificate',
@@ -38,7 +38,7 @@ enum EligibilityDocumentType: string
     public static function qualificationRequirements(): array
     {
         return [
-            self::AthleteHistory,
+            self::AthleteRecord,
             self::Form10,
             self::BirthCertificate,
             self::ParentalConsent,

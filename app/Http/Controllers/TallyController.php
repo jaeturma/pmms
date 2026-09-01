@@ -7,7 +7,6 @@ use App\Models\Meet;
 use App\Models\Sport;
 use App\Services\MedalTallyService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -65,9 +64,7 @@ class TallyController extends Controller
             ],
             'sportOptions' => Sport::query()->orderBy('name')->get(['id', 'name'])
                 ->map(fn (Sport $sport): array => ['id' => $sport->id, 'label' => $sport->name]),
-            'ageDivisionOptions' => Collection::make(AgeDivision::cases())
-                ->map(fn (AgeDivision $division): array => ['id' => $division->value, 'label' => $division->label()])
-                ->all(),
+            'ageDivisionOptions' => $this->tally->ageDivisionOptions($meetId, $sportId > 0 ? $sportId : null),
             'generatedAt' => now()->toDayDateTimeString(),
         ]);
     }

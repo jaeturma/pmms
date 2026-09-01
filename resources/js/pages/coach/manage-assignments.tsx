@@ -3,8 +3,6 @@ import { ArrowLeft, Eye } from 'lucide-react';
 import { useState } from 'react';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
-import { PaginationControls } from '@/components/pagination-controls';
-import type { Paginated } from '@/components/pagination-controls';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -50,7 +48,7 @@ export default function ManageCoachAssignments({
     canApprove,
 }: {
     registration: Registration;
-    events: Paginated<EventOption>;
+    events: EventOption[];
     selectedEventIds: number[];
     canApprove: boolean;
 }) {
@@ -64,7 +62,7 @@ export default function ManageCoachAssignments({
                 ? [...form.data.event_ids, id]
                 : form.data.event_ids.filter((eventId) => eventId !== id),
         );
-    const eventsBySport = events.data.reduce<Record<string, EventOption[]>>(
+    const eventsBySport = events.reduce<Record<string, EventOption[]>>(
         (groups, event) => {
             (groups[event.sport] ??= []).push(event);
 
@@ -278,11 +276,6 @@ export default function ManageCoachAssignments({
                         )}
                     </div>
                     <InputError message={form.errors.event_ids} />
-                    <PaginationControls
-                        page={events}
-                        url={`/coach/onboarding-requests/${registration.id}/assignments`}
-                        label="sports events"
-                    />
                     <div className="flex items-center gap-3">
                         <Button
                             disabled={

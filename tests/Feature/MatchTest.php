@@ -3,6 +3,7 @@
 use App\Enums\MatchStatus;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
+use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
@@ -105,12 +106,12 @@ test('a tournament manager only sees matches for their managed sport, and can ma
     expect($otherSportMatch->id)->not->toBe($ownSportMatch->id);
 });
 
-test('assigned tournament management staff can create and update matches for their sport', function (MeetSportAssignmentRole $role) {
+test('assigned tournament management staff can create update and delete matches for their sport', function (MeetSportAssignmentRole $role, UserRole $userRole) {
     $meet = Meet::factory()->active()->create();
     $event = Event::factory()->create();
     $meet->events()->attach($event);
     $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $event->sport_id]);
-    $user = User::factory()->tournamentManager()->create();
+    $user = User::factory()->create(['role' => $userRole]);
     MeetSportAssignment::factory()->create([
         'meet_sport_id' => $meetSport->id,
         'user_id' => $user->id,
@@ -136,11 +137,14 @@ test('assigned tournament management staff can create and update matches for the
     ])->assertSessionHasNoErrors();
 
     expect($match->fresh()->round_label)->toBe('Semifinal');
+
+    $this->actingAs($user)->delete("/matches/{$match->id}")
+        ->assertRedirect();
+    $this->assertDatabaseMissing('matches', ['id' => $match->id]);
 })->with([
-    'Tournament Manager' => MeetSportAssignmentRole::TournamentManager,
-    'Assistant Tournament Manager' => MeetSportAssignmentRole::AssistantTournamentManager,
-    'Tournament Secretary' => MeetSportAssignmentRole::TournamentSecretary,
-    'Tournament ICT' => MeetSportAssignmentRole::TournamentICT,
+    'Tournament Manager' => [MeetSportAssignmentRole::TournamentManager, UserRole::TournamentManager],
+    'Tournament Secretary' => [MeetSportAssignmentRole::TournamentSecretary, UserRole::TournamentSecretary],
+    'Tournament ICT' => [MeetSportAssignmentRole::TournamentICT, UserRole::TournamentICT],
 ]);
 
 test('a tournament manager can create, update, participants, status, and delete a match in their managed sport', function () {

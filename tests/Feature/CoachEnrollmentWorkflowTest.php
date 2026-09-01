@@ -1,7 +1,6 @@
 <?php
 
 use App\Enums\DelegationStatus;
-use App\Enums\EntryStatus;
 use App\Enums\ManagementTeamMemberStatus;
 use App\Enums\ManagementTeamType;
 use App\Enums\MeetSportAssignmentRole;
@@ -30,7 +29,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
 test('approved coach scope limits registration and DSAC accreditation confirms the official entry', function () {
-    $meet = Meet::factory()->registrationOpen()->create();
+    $meet = Meet::factory()->registrationOpen()->create(['medical_clearance_required' => false]);
     $sport = Sport::factory()->create();
     $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $sport->id]);
     $event = Event::factory()->create(['sport_id' => $sport->id, 'gender' => 'boys', 'age_division' => 'secondary']);
@@ -59,7 +58,8 @@ test('approved coach scope limits registration and DSAC accreditation confirms t
     ];
     $this->actingAs($coach)->post('/athletes', $athletePayload)->assertSessionHasNoErrors();
     $athlete = Athlete::query()->sole();
-    expect(Entry::query()->sole()->status)->toBe(EntryStatus::Submitted);
+    expect(Entry::query()->doesntExist())->toBeTrue()
+        ->and($athlete->sportRosterMemberships()->where('meet_sport_id', $meetSport->id)->exists())->toBeTrue();
 
     $delegation->forceFill(['status' => DelegationStatus::Approved])->save();
     $athlete->eligibilityReview()->update([
@@ -74,9 +74,11 @@ test('approved coach scope limits registration and DSAC accreditation confirms t
         'status' => ManagementTeamMemberStatus::Active,
     ])->user;
     $this->actingAs($dsac)->post('/accreditations', ['athlete_id' => $athlete->id])->assertSessionHasNoErrors();
+    $this->actingAs($coach)->post('/entries', ['athlete_id' => $athlete->id, 'event_id' => $event->id])
+        ->assertSessionHasNoErrors();
 
     expect($athlete->accreditation()->exists())->toBeTrue()
-        ->and(Entry::query()->sole()->fresh()->status)->toBe(EntryStatus::Submitted);
+        ->and(Entry::query()->sole()->status->value)->toBe('submitted');
 });
 
 test('an active ICT team member can review and approve a coach registration', function () {
@@ -194,7 +196,7 @@ test('a documented municipality coach can be accredited without a school or pre-
         ->and($person->accreditation()->exists())->toBeTrue();
 });
 
-test('a coach may replace only attachments until approval and accreditation are both complete', function () {
+test('a coach may replace attachments after approval and accreditation', function () {
     Storage::fake('local');
     $delegation = Delegation::factory()->approved()->create();
     $coach = User::factory()->coach()->create();
@@ -227,9 +229,54 @@ test('a coach may replace only attachments until approval and accreditation are 
 
     $this->actingAs($coach)->post("/coach/onboarding-requests/{$onboarding->id}/documents/profile", [
         'document' => UploadedFile::fake()->image('replacement.jpg'),
-    ])->assertSessionHasErrors('document');
+    ])->assertSessionDoesntHaveErrors();
 
-    expect($onboarding->fresh()->profile_upload_id)->toBe($profileId);
+    expect($onboarding->fresh()->profile_upload_id)->not->toBe($profileId);
+});
+
+test('only assigned sport ICT and administrators may replace another coach attachments', function () {
+    Storage::fake('local');
+    $meet = Meet::factory()->registrationOpen()->create();
+    $sport = Sport::factory()->create();
+    $otherSport = Sport::factory()->create();
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $sport->id]);
+    $otherMeetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $otherSport->id]);
+    $coach = User::factory()->coach()->create();
+    $onboarding = CoachOnboardingRequest::query()->create([
+        'user_id' => $coach->id,
+        'district_id' => District::factory()->create()->id,
+        'meet_sport_id' => $meetSport->id,
+        'status' => 'approved',
+    ]);
+    $assignedIct = User::factory()->create();
+    $otherIct = User::factory()->create();
+    MeetSportAssignment::factory()->create([
+        'user_id' => $assignedIct->id,
+        'meet_sport_id' => $meetSport->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+    MeetSportAssignment::factory()->create([
+        'user_id' => $otherIct->id,
+        'meet_sport_id' => $otherMeetSport->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($assignedIct)->post("/coach/onboarding-requests/{$onboarding->id}/documents/certification", [
+        'document' => UploadedFile::fake()->create('certificate.pdf', 100, 'application/pdf'),
+    ])->assertSessionDoesntHaveErrors();
+    $ictUploadId = $onboarding->fresh()->certification_upload_id;
+
+    $this->actingAs($otherIct)->post("/coach/onboarding-requests/{$onboarding->id}/documents/certification", [
+        'document' => UploadedFile::fake()->create('wrong-sport.pdf', 100, 'application/pdf'),
+    ])->assertForbidden();
+    expect($onboarding->fresh()->certification_upload_id)->toBe($ictUploadId);
+
+    $this->actingAs(User::factory()->admin()->create())->post("/coach/onboarding-requests/{$onboarding->id}/documents/certification", [
+        'document' => UploadedFile::fake()->create('admin-replacement.pdf', 100, 'application/pdf'),
+    ])->assertSessionDoesntHaveErrors();
+    expect($onboarding->fresh()->certification_upload_id)->not->toBe($ictUploadId);
 });
 
 test('an inactive ICT team membership cannot approve a coach registration', function () {

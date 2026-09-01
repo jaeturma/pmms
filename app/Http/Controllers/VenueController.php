@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\MeetSportAssignmentRole;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\VenueRequest;
+use App\Models\CompetitionArea;
 use App\Models\District;
 use App\Models\Meet;
 use App\Models\MeetSport;
@@ -106,6 +107,8 @@ class VenueController extends Controller
             ], ['status' => 'active']);
         }
 
+        $this->addCompetitionAreas($request, $venue);
+
         $this->audit->record('venue.created', $venue, ['name' => $venue->name]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Venue created.')]);
@@ -120,6 +123,7 @@ class VenueController extends Controller
     {
         $this->authorizeVenue($request->user(), $venue);
         $venue->update($request->venueData());
+        $this->addCompetitionAreas($request, $venue);
 
         $this->audit->record('venue.updated', $venue, ['name' => $venue->name]);
 
@@ -182,6 +186,35 @@ class VenueController extends Controller
     private function authorizeSport(User $user, int $sportId): void
     {
         abort_unless($user->isAdmin() || ($sportId > 0 && $this->manageableSportIds($user)->contains($sportId)), 403);
+    }
+
+    private function addCompetitionAreas(VenueRequest $request, Venue $venue): void
+    {
+        if (! $request->filled('competition_area_type')) {
+            return;
+        }
+
+        $type = $request->string('competition_area_type')->toString();
+        $label = $type === 'custom'
+            ? trim($request->string('competition_area_label')->toString())
+            : ucfirst($type);
+        $count = $request->integer('competition_area_count');
+        $nextOrder = (int) $venue->competitionAreas()->max('display_order');
+
+        for ($number = 1; $number <= $count; $number++) {
+            CompetitionArea::query()->firstOrCreate([
+                'venue_id' => $venue->id,
+                'name' => $label.' '.$number,
+            ], [
+                'area_type' => $type === 'custom' ? 'playing_area' : $type,
+                'display_order' => ++$nextOrder,
+                'status' => 'active',
+            ]);
+        }
+
+        $venue->meetSportAssignments()->update([
+            'expected_area_count' => $venue->competitionAreas()->count(),
+        ]);
     }
 
     private function authorizeVenue(User $user, Venue $venue): void

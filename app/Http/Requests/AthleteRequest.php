@@ -2,12 +2,11 @@
 
 namespace App\Http\Requests;
 
-use App\Enums\EntryStatus;
 use App\Enums\Sex;
+use App\Enums\AgeDivision;
 use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\Delegation;
-use App\Models\Entry;
 use App\Models\Event;
 use App\Models\School;
 use App\Models\SchoolDistrict;
@@ -33,6 +32,10 @@ class AthleteRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        if (! $this->filled('age_division') && $this->filled('grade_level')) {
+            $this->merge(['age_division' => $this->integer('grade_level') <= 6 ? 'elementary' : 'secondary']);
+        }
+
         if ($this->route('athlete') !== null || $this->filled('event_id') || $this->user()?->role !== UserRole::Coach) {
             return;
         }
@@ -79,12 +82,15 @@ class AthleteRequest extends FormRequest
                 'required',
                 'digits:12',
                 Rule::unique('athletes', 'lrn')
+                    ->whereNull('deleted_at')
                     ->ignore($athlete instanceof Athlete ? $athlete->id : null),
             ],
             'grade_level' => ['required', 'integer', 'min:0', 'max:12'],
+            'age_division' => ['required', Rule::enum(AgeDivision::class)],
             'photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.config('pmms.athlete_photos.max_upload_kb')],
             'sports_photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.config('pmms.athlete_photos.max_upload_kb')],
             'athlete_history' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
+            'athlete_history_page_2' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
             'form_10' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
             'school_id_document' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
             'birth_certificate' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
@@ -113,6 +119,7 @@ class AthleteRequest extends FormRequest
             $rules['meet_sport_ids.*'] = ['integer', 'distinct', Rule::exists('meet_sports', 'id')];
             $rules['event_ids'] = ['sometimes', 'array'];
             $rules['event_ids.*'] = ['integer', 'distinct', Rule::exists('events', 'id')];
+            $rules['registered_by'] = ['sometimes', 'nullable', 'integer', Rule::exists('users', 'id')];
         }
 
         return $rules;
@@ -158,10 +165,6 @@ class AthleteRequest extends FormRequest
                 $validator->errors()->add('event_id', __('You may only register athletes for your approved sport and event assignment.'));
             }
 
-            if ($this->user()?->role === UserRole::Coach && $event?->is_team_event) {
-                $validator->errors()->add('event_id', __('Team and group events must be entered through team roster management.'));
-            }
-
             if ($event !== null && ! $delegation->meet->events()->whereKey($event->id)->exists()) {
                 $validator->errors()->add('event_id', __('That event is not part of the athlete\'s meet.'));
             }
@@ -182,26 +185,19 @@ class AthleteRequest extends FormRequest
                     ->whereIn('gender', $gender)
                     ->exists();
                 if (! $hasMatchingScope) {
-                    $validator->errors()->add('event_id', __('Your active Coach assignment does not cover this athlete’s level and gender category.'));
+                    $validator->errors()->add('event_id', __('Your active Coach assignment does not cover this athlete’s level and Event requirements.'));
                 } elseif ($matchingIndividualEvents > 1) {
                     $validator->errors()->add('event_id', __('Select one of your approved sports and events for this athlete.'));
                 }
             }
             if ($event !== null && $sex !== null && ! $event->gender->accepts($sex)) {
-                $validator->errors()->add('event_id', __('The athlete\'s sex does not match this event\'s gender category.'));
+                $validator->errors()->add('event_id', __('The athlete\'s sex does not match this Event.'));
             }
 
             $grade = $this->integer('grade_level');
-            if ($event !== null && $grade > 0 && $event->age_division->value !== ($grade <= 6 ? 'elementary' : 'secondary')) {
+            $selectedDivision = AgeDivision::tryFrom((string) $this->input('age_division'));
+            if ($event !== null && $selectedDivision !== null && $event->age_division !== $selectedDivision) {
                 $validator->errors()->add('event_id', __('The athlete\'s grade level does not match this event\'s age division.'));
-            }
-
-            if ($event !== null && Entry::query()
-                ->where('delegation_id', $delegation->id)
-                ->where('event_id', $event->id)
-                ->where('status', '!=', EntryStatus::Withdrawn->value)
-                ->count() >= $event->max_entries_per_delegation) {
-                $validator->errors()->add('event_id', __('The delegation has reached the entry limit for the coach\'s assigned event.'));
             }
 
         });

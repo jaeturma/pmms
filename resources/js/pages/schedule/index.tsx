@@ -66,7 +66,7 @@ type EventOption = Option & { sport_id: number };
 type VenueOption = Option & {
     event_id: number;
     sport_category_id: number | null;
-    playing_area_type: 'venue' | 'court' | 'table';
+    playing_area_type: string;
     playing_area_count: number;
     competition_area_ids: number[];
 };
@@ -172,7 +172,7 @@ function SlotFormDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-3xl">
                 <DialogHeader>
                     <DialogTitle>
                         {slot ? 'Edit schedule slot' : 'Add schedule slot'}
@@ -271,7 +271,7 @@ function SlotFormDialog({
                     {needsArea && (
                         <div className="space-y-2">
                             <Label htmlFor="slot-area">
-                                {selectedVenue?.playing_area_type === 'table' ? 'Table' : 'Court'}
+                                Competition area
                             </Label>
                             <Select
                                 value={data.competition_area_id}
@@ -282,12 +282,15 @@ function SlotFormDialog({
                             >
                                 <SelectTrigger id="slot-area">
                                     <SelectValue
-                                        placeholder={`Select a ${selectedVenue?.playing_area_type}`}
+                                        placeholder="Select a competition area"
                                     />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {areaOptions.map((option) => (
-                                        <SelectItem key={option.id} value={String(option.id)}>
+                                        <SelectItem
+                                            key={option.id}
+                                            value={String(option.id)}
+                                        >
                                             {option.label}
                                         </SelectItem>
                                     ))}

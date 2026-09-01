@@ -38,10 +38,10 @@ test('readiness identifies venue entry and schedule prerequisites deterministica
     [$meet, $event] = readinessFixture();
     $service = app(MeetReadinessService::class);
     $first = $service->calculate($meet);
-    expect($first['events'][0]['venue'])->toBeFalse()
-        ->and($first['events'][0]['entries'])->toBe(0)
-        ->and($first['events'][0]['schedule'])->toBeFalse()
-        ->and($first['events'][0]['status'])->toBe('not_ready');
+    expect($first['events']['data'][0]['venue'])->toBeFalse()
+        ->and($first['events']['data'][0]['entries'])->toBe(0)
+        ->and($first['events']['data'][0]['schedule'])->toBeFalse()
+        ->and($first['events']['data'][0]['status'])->toBe('not_ready');
 
     $venue = Venue::factory()->create();
     EventVenue::query()->create(['event_id' => $event->id, 'venue_id' => $venue->id]);
@@ -49,8 +49,8 @@ test('readiness identifies venue entry and schedule prerequisites deterministica
     $delegation = Delegation::factory()->create(['meet_id' => $meet->id]);
     Entry::factory()->create(['delegation_id' => $delegation->id, 'event_id' => $event->id]);
     $second = $service->calculate($meet);
-    expect($second['events'][0]['venue'])->toBeTrue()
-        ->and($second['events'][0]['entries'])->toBe(1)
-        ->and($second['events'][0]['schedule'])->toBeTrue()
+    expect($second['events']['data'][0]['venue'])->toBeTrue()
+        ->and($second['events']['data'][0]['entries'])->toBe(1)
+        ->and($second['events']['data'][0]['schedule'])->toBeTrue()
         ->and($second['overall'])->toBeInt();
 });

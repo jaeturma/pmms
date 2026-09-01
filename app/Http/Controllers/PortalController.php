@@ -317,10 +317,7 @@ class PortalController extends Controller
                 'age_division' => $ageDivision,
             ],
             'sportOptions' => $this->validatedSportOptions($meet),
-            'ageDivisionOptions' => array_map(
-                fn (AgeDivision $division): array => ['id' => $division->value, 'label' => $division->label()],
-                AgeDivision::cases(),
-            ),
+            'ageDivisionOptions' => $tally->ageDivisionOptions($meet->id, $sportId > 0 ? $sportId : null),
             'generatedAt' => now()->toDayDateTimeString(),
             'medalTallyOfficial' => Setting::current()->medalTallyIsOfficial(),
         ]);

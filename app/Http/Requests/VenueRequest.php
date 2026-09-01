@@ -72,6 +72,9 @@ class VenueRequest extends FormRequest
             'internal_notes' => ['nullable', 'string', 'max:5000'],
             'readiness_status' => ['required', Rule::in(['planned', 'for_validation', 'ready', 'needs_attention', 'unavailable'])],
             'notes' => ['nullable', 'string', 'max:500'],
+            'competition_area_type' => ['nullable', Rule::in(['court', 'table', 'board', 'triangle', 'field', 'custom'])],
+            'competition_area_label' => ['nullable', 'string', 'max:40', Rule::requiredIf($this->input('competition_area_type') === 'custom')],
+            'competition_area_count' => ['nullable', 'integer', 'min:1', 'max:100', Rule::requiredIf($this->filled('competition_area_type'))],
         ];
     }
 
@@ -83,7 +86,10 @@ class VenueRequest extends FormRequest
      */
     public function venueData(): array
     {
-        $data = $this->safe()->except(['gps_location', 'sport_id']);
+        $data = $this->safe()->except([
+            'gps_location', 'sport_id', 'competition_area_type',
+            'competition_area_label', 'competition_area_count',
+        ]);
 
         if ($this->has('gps_location')) {
             $data['latitude'] = $this->parsedGpsCoordinates[0] ?? null;

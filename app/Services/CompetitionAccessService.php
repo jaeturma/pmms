@@ -22,18 +22,32 @@ class CompetitionAccessService
     public function scopeAthletes(Builder $query, User $user, ?int $meetId = null): Builder
     {
         $eventIds = $this->eventIds($user, $meetId);
+        $sportIds = Event::query()->whereKey($eventIds)->pluck('sport_id')->unique();
 
-        return $query->whereHas(
-            'entries',
-            fn (Builder $entries): Builder => $entries->whereIn('event_id', $eventIds),
-        );
+        return $query->where(fn (Builder $athletes): Builder => $athletes
+            ->whereHas(
+                'entries',
+                fn (Builder $entries): Builder => $entries->whereIn('event_id', $eventIds),
+            )
+            ->orWhereHas(
+                'sportRosterMemberships.meetSport',
+                fn (Builder $meetSports): Builder => $meetSports
+                    ->whereIn('sport_id', $sportIds)
+                    ->when($meetId !== null, fn (Builder $scope): Builder => $scope->where('meet_id', $meetId)),
+            ));
     }
 
     public function canAccessAthlete(User $user, Athlete $athlete): bool
     {
-        return $athlete->entries()
-            ->whereIn('event_id', $this->eventIds($user, $athlete->delegation->meet_id))
-            ->exists();
+        $eventIds = $this->eventIds($user, $athlete->delegation->meet_id);
+        $sportIds = Event::query()->whereKey($eventIds)->pluck('sport_id')->unique();
+
+        return $athlete->entries()->whereIn('event_id', $eventIds)->exists()
+            || $athlete->sportRosterMemberships()
+                ->whereHas('meetSport', fn (Builder $meetSport): Builder => $meetSport
+                    ->where('meet_id', $athlete->delegation->meet_id)
+                    ->whereIn('sport_id', $sportIds))
+                ->exists();
     }
 
     /** @return list<string> */

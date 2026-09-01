@@ -106,6 +106,15 @@ const genderLabels: Record<string, string> = {
 const divisionLabels: Record<string, string> = {
     elementary: 'Elementary',
     secondary: 'Secondary',
+    paragames_intellectual_disability:
+        'Paragames Division Intellectual Disability',
+    paragames_intellectual_disability_youth_15_below:
+        'Intellectual Disability - Youth 15 below',
+    paragames_intellectual_disability_junior_16_up:
+        'Intellectual Disability - Junior 16 up',
+    paragames_visually_impaired: 'Visually Impaired',
+    paragames_ortho: 'Ortho',
+    paragames_others: 'Others',
 };
 
 function EventFormDialog({

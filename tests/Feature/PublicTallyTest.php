@@ -228,7 +228,25 @@ test('the public tally can be filtered by age division', function () {
             ->has('schools', 1)
             ->where('schools.0.school', 'Elementary School')
             ->where('filters.age_division', 'elementary')
-            ->has('ageDivisionOptions', 2));
+            ->has('ageDivisionOptions', 2)
+            ->where('ageDivisionOptions.0.id', 'elementary')
+            ->where('ageDivisionOptions.1.id', 'secondary'));
+});
+
+test('public tally division options are unique and come from official event results', function () {
+    $meet = Meet::factory()->active()->published()->create();
+    $elementaryBoys = Event::factory()->create(['gender' => 'boys', 'age_division' => AgeDivision::Elementary]);
+    $elementaryGirls = Event::factory()->create(['gender' => 'girls', 'age_division' => AgeDivision::Elementary]);
+    $paragames = Event::factory()->create(['age_division' => AgeDivision::ParagamesOrtho]);
+    EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $elementaryBoys->id]);
+    EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $elementaryGirls->id]);
+    EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $paragames->id]);
+
+    $this->get("/meets/{$meet->id}/tally")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('ageDivisionOptions', 2)
+            ->where('ageDivisionOptions.0.id', 'elementary')
+            ->where('ageDivisionOptions.1.id', 'paragames_ortho'));
 });
 
 test('top medalists rank individual athletes by gold, then silver, then bronze, then name, aggregating across sports', function () {

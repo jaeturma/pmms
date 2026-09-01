@@ -433,9 +433,9 @@ test('a tournament manager gets a page-level manage flag and per-row scoping to 
             ->has('schedules.data', 0));
 });
 
-test('an assigned tournament or assistant manager can only view and manage schedules in their sport', function (MeetSportAssignmentRole $assignmentRole) {
+test('assigned tournament staff can create update and delete schedules only in their sport', function (MeetSportAssignmentRole $assignmentRole, UserRole $userRole) {
     $meet = Meet::current();
-    $manager = User::factory()->tournamentManager()->create();
+    $manager = User::factory()->create(['role' => $userRole]);
     $ownEvent = Event::factory()->create();
     $otherEvent = Event::factory()->create();
     $meet->events()->attach([$ownEvent->id, $otherEvent->id]);
@@ -484,11 +484,18 @@ test('an assigned tournament or assistant manager can only view and manage sched
         ...$payload,
         'event_id' => $otherEvent->id,
     ])->assertForbidden();
+
+    $this->actingAs($manager)->delete("/schedule/{$ownSlot->id}")
+        ->assertRedirect();
+    $this->assertDatabaseMissing('event_schedules', ['id' => $ownSlot->id]);
+
+    $this->actingAs($manager)->delete("/schedule/{$otherSlot->id}")
+        ->assertForbidden();
+    $this->assertDatabaseHas('event_schedules', ['id' => $otherSlot->id]);
 })->with([
-    'tournament manager' => MeetSportAssignmentRole::TournamentManager,
-    'assistant tournament manager' => MeetSportAssignmentRole::AssistantTournamentManager,
-    'tournament secretary' => MeetSportAssignmentRole::TournamentSecretary,
-    'tournament ICT' => MeetSportAssignmentRole::TournamentICT,
+    'tournament manager' => [MeetSportAssignmentRole::TournamentManager, UserRole::TournamentManager],
+    'tournament secretary' => [MeetSportAssignmentRole::TournamentSecretary, UserRole::TournamentSecretary],
+    'tournament ICT' => [MeetSportAssignmentRole::TournamentICT, UserRole::TournamentICT],
 ]);
 
 test('viewers and delegation officers cannot manage the schedule', function (User $user) {

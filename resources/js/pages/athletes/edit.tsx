@@ -16,6 +16,49 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 
+const athleteDivisions = [
+    ['elementary', 'Elementary'],
+    ['secondary', 'Secondary'],
+    [
+        'paragames_intellectual_disability',
+        'Paragames Division Intellectual Disability',
+    ],
+    [
+        'paragames_intellectual_disability_youth_15_below',
+        'Intellectual Disability - Youth 15 below',
+    ],
+    [
+        'paragames_intellectual_disability_junior_16_up',
+        'Intellectual Disability - Junior 16 up',
+    ],
+    ['paragames_visually_impaired', 'Visually Impaired'],
+    ['paragames_ortho', 'Ortho'],
+    ['paragames_others', 'Others'],
+] as const;
+
+function DivisionSelect({
+    value,
+    onChange,
+}: {
+    value: string;
+    onChange: (value: string) => void;
+}) {
+    return (
+        <Select value={value} onValueChange={onChange}>
+            <SelectTrigger>
+                <SelectValue placeholder="Select division" />
+            </SelectTrigger>
+            <SelectContent>
+                {athleteDivisions.map(([division, label]) => (
+                    <SelectItem key={division} value={division}>
+                        {label}
+                    </SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+    );
+}
+
 type Athlete = {
     id: number;
     delegation_id: number;
@@ -28,10 +71,12 @@ type Athlete = {
     birthdate: string;
     lrn: string;
     grade_level: number;
+    age_division: string;
     meet_sport_ids: number[];
     event_ids: number[];
     photo_url: string | null;
     sports_photo_url: string | null;
+    registered_by: number | null;
 };
 type Props = {
     athlete: Athlete;
@@ -45,6 +90,7 @@ type Props = {
     sports: Array<{ id: number; name: string }>;
     events: Array<{ id: number; sport_id: number; name: string }>;
     assignmentsOnly: boolean;
+    coachOptions: Array<{ id: number; name: string }>;
 };
 
 export default function EditAthlete({
@@ -54,6 +100,7 @@ export default function EditAthlete({
     sports,
     events,
     assignmentsOnly,
+    coachOptions,
 }: Props) {
     const form = useForm({
         delegation_id: String(athlete.delegation_id),
@@ -66,11 +113,16 @@ export default function EditAthlete({
         birthdate: athlete.birthdate,
         lrn: athlete.lrn,
         grade_level: String(athlete.grade_level),
+        age_division: athlete.age_division,
         meet_sport_ids: athlete.meet_sport_ids,
         event_ids: athlete.event_ids,
+        registered_by: athlete.registered_by
+            ? String(athlete.registered_by)
+            : '',
         photo: null as File | null,
         sports_photo: null as File | null,
         athlete_history: null as File | null,
+        athlete_history_page_2: null as File | null,
         form_10: null as File | null,
         school_id_document: null as File | null,
         report_card: null as File | null,
@@ -166,6 +218,17 @@ export default function EditAthlete({
                                         ))}
                                     </SelectContent>
                                 </Select>
+                            </Field>
+                            <Field
+                                label="Division"
+                                error={form.errors.age_division}
+                            >
+                                <DivisionSelect
+                                    value={form.data.age_division}
+                                    onChange={(value) =>
+                                        form.setData('age_division', value)
+                                    }
+                                />
                             </Field>
                             <Field
                                 label="Last name"
@@ -279,6 +342,33 @@ export default function EditAthlete({
                     )}
 
                     <section className="content-start space-y-3 rounded-xl border p-4">
+                        {assignmentsOnly && (
+                            <Field
+                                label="Coach"
+                                error={form.errors.registered_by}
+                            >
+                                <Select
+                                    value={form.data.registered_by}
+                                    onValueChange={(value) =>
+                                        form.setData('registered_by', value)
+                                    }
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select coach" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {coachOptions.map((coach) => (
+                                            <SelectItem
+                                                key={coach.id}
+                                                value={String(coach.id)}
+                                            >
+                                                {coach.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </Field>
+                        )}
                         {!assignmentsOnly && (
                             <>
                                 <h2 className="font-semibold">
@@ -422,7 +512,11 @@ export default function EditAthlete({
                                         [
                                             [
                                                 'athlete_history',
-                                                'Athlete History',
+                                                'Athlete Record - Page 1',
+                                            ],
+                                            [
+                                                'athlete_history_page_2',
+                                                'Athlete Record - Page 2',
                                             ],
                                             ['form_10', 'School Form 10'],
                                             ['school_id_document', 'School ID'],

@@ -55,7 +55,9 @@ class AthletePolicy
         }
 
         return $athlete->delegation->hasOfficer($user)
-            || ($user->hasApprovedCoachScope($athlete->delegation) && $athlete->isOwnedBy($user));
+            || ($user->role === UserRole::Coach
+                && $user->hasApprovedCoachScope($athlete->delegation)
+                && $athlete->isOwnedBy($user));
     }
 
     /**
@@ -85,11 +87,11 @@ class AthletePolicy
         if ($user->role === UserRole::Coach) {
             return $athlete->isOwnedBy($user)
                 && $user->hasApprovedCoachScope($athlete->delegation)
-                && $athlete->accreditation()->doesntExist();
+                && $this->isNotEligible($athlete);
         }
 
         if ($this->isAssignedTournamentIct($user, $athlete)) {
-            return true;
+            return $this->isNotEligible($athlete);
         }
 
         return $athlete->delegation->hasOfficer($user)
@@ -98,7 +100,23 @@ class AthletePolicy
 
     public function delete(User $user, Athlete $athlete): bool
     {
-        return $user->isAdmin() || $this->isAssignedTournamentIct($user, $athlete);
+        if ($user->isAdmin()) {
+            return true;
+        }
+
+        if (! $this->isNotEligible($athlete)) {
+            return false;
+        }
+
+        return $this->isAssignedTournamentIct($user, $athlete)
+            || ($user->role === UserRole::Coach
+                && $athlete->isOwnedBy($user)
+                && $user->hasApprovedCoachScope($athlete->delegation));
+    }
+
+    private function isNotEligible(Athlete $athlete): bool
+    {
+        return $athlete->eligibilityReview()->where('status', 'approved')->doesntExist();
     }
 
     private function isAssignedTournamentIct(User $user, Athlete $athlete): bool

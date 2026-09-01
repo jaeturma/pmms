@@ -6,6 +6,7 @@ use App\Enums\AgeDivision;
 use App\Enums\DelegationStatus;
 use App\Enums\ResultStatus;
 use App\Models\Delegation;
+use App\Models\EventResult;
 use App\Models\ResultPlacement;
 use App\Models\School;
 use App\Models\SchoolDistrict;
@@ -33,6 +34,32 @@ class MedalTallyService
     private const SILVER_POINTS = 2;
 
     private const BRONZE_POINTS = 1;
+
+    /**
+     * Divisions represented by official results in the selected tally scope.
+     * Event configuration is authoritative; gender and legacy sport categories
+     * must not create additional division options.
+     *
+     * @return array<int, array{id: string, label: string}>
+     */
+    public function ageDivisionOptions(int $meetId, ?int $sportId = null): array
+    {
+        $values = EventResult::query()
+            ->where('meet_id', $meetId)
+            ->where('status', ResultStatus::Official->value)
+            ->when($sportId !== null, fn ($query) => $query->whereHas('event', fn ($events) => $events->where('sport_id', $sportId)))
+            ->with('event:id,age_division')
+            ->get()
+            ->pluck('event.age_division')
+            ->map(fn (AgeDivision $division): string => $division->value)
+            ->unique();
+
+        return collect(AgeDivision::cases())
+            ->filter(fn (AgeDivision $division): bool => $values->contains($division->value))
+            ->map(fn (AgeDivision $division): array => ['id' => $division->value, 'label' => $division->label()])
+            ->values()
+            ->all();
+    }
 
     /**
      * District rows are the official standings — school rows are grouped
