@@ -9,12 +9,16 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Throwable;
 
 class AppServiceProvider extends ServiceProvider
 {
+    private bool $settingsLookupAttempted = false;
+
+    private ?Setting $settings = null;
+
     /**
      * Register any application services.
      */
@@ -62,8 +66,8 @@ class AppServiceProvider extends ServiceProvider
             || app()->runningConsoleCommand('queue:work')
             || app()->runningConsoleCommand('queue:listen');
 
-        if ($shouldLoadDatabaseTimezone && Schema::hasTable('system_settings')) {
-            $timezone = Setting::current()->timezone ?: 'Asia/Manila';
+        if ($shouldLoadDatabaseTimezone && ($settings = $this->systemSettings()) !== null) {
+            $timezone = $settings->timezone ?: 'Asia/Manila';
             config(['app.timezone' => $timezone]);
             date_default_timezone_set($timezone);
         }
@@ -93,10 +97,9 @@ class AppServiceProvider extends ServiceProvider
      * fallback (`config/mail.php` untouched) for local development and
      * for the moment before an admin has saved anything here yet.
      *
-     * Guarded by `Schema::hasTable()`, not just a try/catch: this runs on
-     * every request/command, including `php artisan migrate` itself
-     * before this table exists — a plain query here would break every
-     * artisan command on a fresh clone, not just fail silently.
+     * The shared boot-settings lookup checks the configured connection's
+     * schema and fails open. This runs on requests and queue workers, including
+     * fresh deployments where the table may not exist yet.
      */
     private function configureMail(): void
     {
@@ -112,13 +115,9 @@ class AppServiceProvider extends ServiceProvider
             }
         }
 
-        if (! Schema::hasTable('system_settings')) {
-            return;
-        }
+        $settings = $this->systemSettings();
 
-        $settings = Setting::current();
-
-        if (! $settings->smtpReady()) {
+        if ($settings === null || ! $settings->smtpReady()) {
             return;
         }
 
@@ -138,5 +137,32 @@ class AppServiceProvider extends ServiceProvider
             'mail.from.address' => $settings->smtp_from_address,
             'mail.from.name' => $settings->smtp_from_name ?: config('mail.from.name'),
         ]);
+    }
+
+    /**
+     * Read boot-time settings once from Laravel's configured default
+     * connection. Boot must remain possible before migrations and while the
+     * database is temporarily unavailable, so this lookup is deliberately
+     * read-only and failure tolerant.
+     */
+    private function systemSettings(): ?Setting
+    {
+        if ($this->settingsLookupAttempted) {
+            return $this->settings;
+        }
+
+        $this->settingsLookupAttempted = true;
+
+        try {
+            $connection = DB::connection();
+
+            if (! $connection->getSchemaBuilder()->hasTable('system_settings')) {
+                return null;
+            }
+
+            return $this->settings = Setting::query()->first();
+        } catch (Throwable) {
+            return null;
+        }
     }
 }

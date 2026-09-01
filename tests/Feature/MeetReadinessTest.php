@@ -11,6 +11,7 @@ use App\Models\SportRosterMember;
 use App\Models\User;
 use App\Models\Venue;
 use App\Services\MeetReadinessService;
+use Illuminate\Database\Eloquent\Model;
 
 function readinessFixture(): array
 {
@@ -78,4 +79,33 @@ test('readiness reports distinct athlete totals by team and sport', function () 
     expect($report['summary']['athletes_total'])->toBe(1)
         ->and($report['sports'][0]['athletes'])->toBe(1)
         ->and($report['teams'][0]['athletes'])->toBe(1);
+});
+
+test('readiness returns a bounded data payload without lazy loading or model serialization', function () {
+    [$meet] = readinessFixture();
+    Model::preventLazyLoading();
+
+    try {
+        $report = app(MeetReadinessService::class)->calculate($meet);
+    } finally {
+        Model::preventLazyLoading(false);
+    }
+
+    $containsModel = function (mixed $value) use (&$containsModel): bool {
+        if ($value instanceof Model) {
+            return true;
+        }
+
+        foreach (is_iterable($value) ? $value : [] as $child) {
+            if ($containsModel($child)) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    expect($containsModel($report))->toBeFalse()
+        ->and($report['events']['per_page'])->toBe(10)
+        ->and($report['issues']['per_page'])->toBe(10);
 });

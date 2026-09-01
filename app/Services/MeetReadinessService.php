@@ -78,28 +78,42 @@ class MeetReadinessService
         })->get(['id', 'user_id']);
         $accreditedCoachUserIds = Personnel::query()->whereIn('user_id', $coachRequests->pluck('user_id'))->whereHas('accreditation')->pluck('user_id')->filter()->unique();
 
-        $eventRows = $events->map(function (Event $event) use ($entries, $schedules, $assignments, $coachAssignments, $rosterMembers, $meetSports, $delegations, $meet): array {
-            $eventEntries = $entries->where('event_id', $event->id);
+        // Index the production-sized collections once. Repeated Collection::where()
+        // calls inside the event loop made readiness O(events x rows), which was
+        // expensive enough to time out the authenticated dashboard.
+        $entriesByEvent = $entries->groupBy('event_id');
+        $schedulesByEvent = $schedules->keyBy('event_id');
+        $assignmentsByMeetSport = $assignments->groupBy('meet_sport_id');
+        $rosterByMeetSport = $rosterMembers->groupBy('meet_sport_id');
+        $rosterByDelegation = $rosterMembers->groupBy('delegation_id');
+        $meetSportsBySport = $meetSports->keyBy('sport_id');
+        $directCoachAssignmentsByEvent = $coachAssignments->whereNotNull('event_id')->groupBy('event_id');
+        $sportCoachAssignmentsByMeetSport = $coachAssignments->whereNull('event_id')->groupBy('meet_sport_id');
+
+        $eventRows = $events->map(function (Event $event) use ($entriesByEvent, $schedulesByEvent, $assignmentsByMeetSport, $rosterByMeetSport, $meetSportsBySport, $directCoachAssignmentsByEvent, $sportCoachAssignmentsByMeetSport, $delegations, $meet): array {
+            $eventEntries = $entriesByEvent->get($event->id, collect());
             $athletes = $eventEntries->pluck('athlete')->filter()->unique('id');
-            $meetSportId = $meetSports->firstWhere('sport_id', $event->sport_id)?->id;
-            $eventRoster = $rosterMembers->where('meet_sport_id', $meetSportId)
+            $meetSportId = $meetSportsBySport->get($event->sport_id)?->id;
+            $eventRoster = $rosterByMeetSport->get($meetSportId, collect())
                 ->filter(fn (SportRosterMember $member): bool => $event->age_division->accepts($member->level)
                     && ($event->gender->value === 'mixed' || $member->gender === $event->gender));
             $rosterAthletes = $eventRoster->pluck('athlete')->filter()->unique('id');
-            $roles = $assignments->where('meet_sport_id', $meetSportId)->pluck('role')->map(fn ($role) => $role->value)->unique();
+            $roles = $assignmentsByMeetSport->get($meetSportId, collect())->pluck('role')->map(fn ($role) => $role->value)->unique();
             $requiredRoles = [MeetSportAssignmentRole::TournamentManager->value, MeetSportAssignmentRole::TournamentSecretary->value, MeetSportAssignmentRole::TournamentICT->value];
             $missingRoles = collect($requiredRoles)->diff($roles)->values();
             $venueReady = $event->venueAssignments->isNotEmpty();
             $entryReady = $eventEntries->isNotEmpty();
-            $scheduleReady = $schedules->contains('event_id', $event->id);
+            $scheduleReady = $schedulesByEvent->has($event->id);
             $eligible = $athletes->filter(fn (Athlete $a) => $a->eligibilityReview?->status === EligibilityStatus::Approved)->count();
             $medical = $athletes->filter(fn (Athlete $a) => ! $meet->medical_clearance_required || $a->medicalClearance?->status === MedicalClearanceStatus::Cleared)->count();
             $accredited = $athletes->filter(fn (Athlete $a) => $a->accreditation !== null)->count();
             $medalReady = ! $event->is_medal_event || ($event->medalConfig !== null && $event->medalConfig->isComplete());
             $entryDelegations = $eventEntries->pluck('delegation_id')->unique();
-            $eventCoachAssignments = $coachAssignments->filter(fn (CoachAssignmentRequest $assignment): bool => $assignment->event_id === $event->id
-                || ($assignment->event_id === null && $assignment->meet_sport_id === $meetSportId
-                    && ($assignment->sport_category_id === null || $assignment->sport_category_id === $event->sport_category_id)));
+            $eventCoachAssignments = $directCoachAssignmentsByEvent->get($event->id, collect())
+                ->concat($sportCoachAssignmentsByMeetSport->get($meetSportId, collect())->filter(
+                    fn (CoachAssignmentRequest $assignment): bool => $assignment->sport_category_id === null
+                        || $assignment->sport_category_id === $event->sport_category_id,
+                ));
             $coachDelegations = $eventCoachAssignments->pluck('delegation_id')->unique();
             $missingCoachDelegations = $entryDelegations->diff($coachDelegations);
             $critical = collect();
@@ -150,15 +164,16 @@ class MeetReadinessService
                 'status' => $status, 'reasons' => $critical->merge($attention)->values()->all()];
         });
 
-        $sportRows = $meetSports->map(function (MeetSport $meetSport) use ($eventRows, $rosterMembers): array {
-            $rows = $eventRows->where('sport_id', $meetSport->sport_id);
+        $eventRowsBySport = $eventRows->groupBy('sport_id');
+        $sportRows = $meetSports->map(function (MeetSport $meetSport) use ($eventRowsBySport, $rosterByMeetSport): array {
+            $rows = $eventRowsBySport->get($meetSport->sport_id, collect());
             $status = $rows->contains('status', 'not_ready') ? 'not_ready' : ($rows->contains('status', 'needs_attention') ? 'needs_attention' : 'ready');
 
             return ['id' => $meetSport->sport_id, 'sport' => $meetSport->sport->name, 'events' => $rows->count(),
                 'ready_events' => $rows->where('status', 'ready')->count(), 'attention_events' => $rows->where('status', 'needs_attention')->count(),
                 'not_ready_events' => $rows->where('status', 'not_ready')->count(), 'venues' => $rows->where('venue', true)->count(),
                 'entries' => $rows->where('entries', '>', 0)->count(), 'coaches' => $rows->sum('coaches'),
-                'athletes' => $rosterMembers->where('meet_sport_id', $meetSport->id)->pluck('athlete_id')->unique()->count(),
+                'athletes' => $rosterByMeetSport->get($meetSport->id, collect())->pluck('athlete_id')->unique()->count(),
                 'schedules' => $rows->where('schedule', true)->count(), 'status' => $status, 'issues' => $rows->sum(fn ($r) => count($r['reasons']))];
         });
 
@@ -187,11 +202,11 @@ class MeetReadinessService
             ->when($filters['event_id'] ?? null, fn ($rows, $id) => $rows->where('event_id', (int) $id))
             ->when($filters['issue_type'] ?? null, fn ($rows, $type) => $rows->where('severity', $type))
             ->when($filters['search'] ?? null, fn ($rows, $search) => $rows->filter(fn ($row) => str($row['sport'].' '.$row['event'].' '.$row['message'])->contains((string) $search, true)))->values();
-        $teamAthletes = $delegations->map(function (Delegation $delegation) use ($rosterMembers): array {
+        $teamAthletes = $delegations->map(function (Delegation $delegation) use ($rosterByDelegation): array {
             return [
                 'id' => $delegation->id,
                 'team' => $delegation->registrantName(),
-                'athletes' => $rosterMembers->where('delegation_id', $delegation->id)->pluck('athlete_id')->unique()->count(),
+                'athletes' => $rosterByDelegation->get($delegation->id, collect())->pluck('athlete_id')->unique()->count(),
             ];
         })->filter(fn (array $row): bool => $row['athletes'] > 0)->sortByDesc('athletes')->values();
 
