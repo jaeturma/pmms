@@ -15,6 +15,7 @@ use App\Models\ManagementTeam;
 use App\Models\ManagementTeamMember;
 use App\Models\Meet;
 use App\Models\MeetSport;
+use App\Models\Personnel;
 use App\Models\School;
 use App\Models\Sport;
 use App\Models\SportRosterMember;
@@ -55,6 +56,29 @@ test('viewers have no access to athlete data', function () {
     $this->actingAs(User::factory()->create())
         ->get('/athletes')
         ->assertForbidden();
+});
+
+test('athlete and coach names display in uppercase everywhere', function () {
+    $athlete = Athlete::factory()->create([
+        'first_name' => 'Ana Maria',
+        'middle_name' => 'Dela Cruz',
+        'last_name' => 'Reyes',
+        'name_extension' => 'Jr.',
+    ]);
+    $coach = User::factory()->coach()->create(['name' => 'Coach Maria Santos']);
+    $viewer = User::factory()->create(['name' => 'Regular Viewer']);
+    $personnel = Personnel::factory()->coach()->create([
+        'first_name' => 'Juan',
+        'last_name' => 'Coach',
+    ]);
+
+    expect($athlete->first_name)->toBe('ANA MARIA')
+        ->and($athlete->middle_name)->toBe('DELA CRUZ')
+        ->and($athlete->last_name)->toBe('REYES')
+        ->and($athlete->fullName())->toBe('ANA MARIA DELA CRUZ REYES JR.')
+        ->and($coach->name)->toBe('COACH MARIA SANTOS')
+        ->and($personnel->fullName())->toBe('JUAN COACH')
+        ->and($viewer->name)->toBe('Regular Viewer');
 });
 
 test('officers see only their own athletes while managers see all', function () {
@@ -112,13 +136,13 @@ test('the registry can be searched by name and lrn', function () {
         ->get('/athletes?search=Reyes')
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('athletes.data', 1)
-            ->where('athletes.data.0.name', 'Ana Reyes'));
+            ->where('athletes.data.0.name', 'ANA REYES'));
 
     $this->actingAs($admin)
         ->get('/athletes?search=999888')
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('athletes.data', 1)
-            ->where('athletes.data.0.name', 'Ben Cruz'));
+            ->where('athletes.data.0.name', 'BEN CRUZ'));
 });
 
 test('a delegation officer cannot register an athlete', function () {
@@ -214,7 +238,7 @@ test('active ICT team members can open and update the full athlete editor', func
         'lrn' => $athlete->lrn, 'meet_sport_ids' => [], 'event_ids' => [],
     ])->assertRedirect()->assertSessionDoesntHaveErrors();
 
-    expect($athlete->refresh()->first_name)->toBe('Updated');
+    expect($athlete->refresh()->first_name)->toBe('UPDATED');
 });
 
 test('athlete registration lists every active school with its school id', function () {
@@ -319,14 +343,14 @@ test('athlete 380 views use its sport roster membership instead of entries', fun
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('athletes.data.0.sports', 'Basketball')
             ->where('athletes.data.0.events', $entry->event->name)
-            ->where('athletes.data.0.coach', 'Coach Maria')
+            ->where('athletes.data.0.coach', 'COACH MARIA')
             ->where('athletes.data.0.delegation', $athlete->delegation->registrantName()));
 
     $this->actingAs($admin)
         ->get("/athletes/{$athlete->id}")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('athlete.sports', 'Basketball')
-            ->where('athlete.coach', 'Coach Maria')
+            ->where('athlete.coach', 'COACH MARIA')
             ->where('athlete.delegation', $athlete->delegation->registrantName()));
 });
 
@@ -577,7 +601,7 @@ test('administrator deletion archives the athlete and exposes it through the del
         ])
         ->assertRedirect();
 
-    expect($athlete->refresh()->first_name)->toBe('Renamed')
+    expect($athlete->refresh()->first_name)->toBe('RENAMED')
         ->and(AuditLog::query()->where('action', 'athlete.updated')->exists())->toBeTrue();
 
     $upload = FileUpload::query()->sole();

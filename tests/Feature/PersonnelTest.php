@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\PersonnelRole;
 use App\Models\AuditLog;
 use App\Models\Delegation;
 use App\Models\FileUpload;
@@ -62,14 +63,14 @@ test('officers see only their own personnel while managers see all', function ()
 });
 
 test('the registry can be searched by name', function () {
-    Personnel::factory()->create(['first_name' => 'Pedro', 'last_name' => 'Santos']);
+    Personnel::factory()->create(['first_name' => 'Pedro', 'last_name' => 'Santos', 'role' => PersonnelRole::Coach]);
     Personnel::factory()->create(['first_name' => 'Liza', 'last_name' => 'Cruz']);
 
     $this->actingAs(User::factory()->admin()->create())
         ->get('/personnel?search=Santos')
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('personnel.data', 1)
-            ->where('personnel.data.0.name', 'Pedro Santos'));
+            ->where('personnel.data.0.name', 'PEDRO SANTOS'));
 });
 
 test('an officer cannot register personnel for their open draft delegation', function () {
@@ -223,7 +224,7 @@ test('updates and deletions are audited and clean up photos', function () {
         ])
         ->assertRedirect();
 
-    expect($person->refresh()->first_name)->toBe('Renamed')
+    expect($person->refresh()->first_name)->toBe('RENAMED')
         ->and(AuditLog::query()->where('action', 'personnel.updated')->exists())->toBeTrue();
 
     $this->actingAs($admin)

@@ -243,7 +243,7 @@ test('a coach can edit an assigned athlete until accreditation is approved', fun
         ])
         ->assertForbidden();
 
-    expect($athlete->fresh()->first_name)->toBe('Before');
+    expect($athlete->fresh()->first_name)->toBe('BEFORE');
 });
 
 test('a coach registers an athlete only in an assigned event with photos and accreditation documents', function () {
@@ -300,13 +300,13 @@ test('a coach registers an athlete only in an assigned event with photos and acc
             'birthdate' => now()->subYears(15)->toDateString(), 'lrn' => $athlete->lrn, 'grade_level' => 9,
         ])->assertSessionHasNoErrors();
 
-    expect($athlete->fresh()->first_name)->toBe('Admin Updated');
+    expect($athlete->fresh()->first_name)->toBe('ADMIN UPDATED');
 
     $this->actingAs($coach)->put("/athletes/{$athlete->id}", [
         'first_name' => 'Pedro Updated', 'last_name' => 'Santos', 'sex' => 'male',
         'birthdate' => now()->subYears(15)->toDateString(), 'lrn' => $athlete->lrn, 'grade_level' => 9,
     ])->assertSessionHasNoErrors();
-    expect($athlete->fresh()->first_name)->toBe('Pedro Updated');
+    expect($athlete->fresh()->first_name)->toBe('PEDRO UPDATED');
 
     $photoUploadId = $athlete->photo_upload_id;
     $this->actingAs($coach)->delete("/athletes/{$athlete->id}")

@@ -290,7 +290,7 @@ test('top medalists rank individual athletes by gold, then silver, then bronze, 
     $this->get("/meets/{$meet->id}/tally")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('topMedalists', 2)
-            ->where('topMedalists.0.athlete', 'Ana Cruz')
+            ->where('topMedalists.0.athlete', 'ANA CRUZ')
             ->where('topMedalists.0.grade_level', 10)
             ->where('topMedalists.0.sport', 'Basketball, Chess')
             ->where('topMedalists.0.school', 'Champion School')

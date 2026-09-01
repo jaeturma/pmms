@@ -123,7 +123,7 @@ test('search finds validated result placements by athlete name or school name', 
     $this->get("/meets/{$meet->id}/search?q=dela cruz")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('placements', 1)
-            ->where('placements.0.athlete', 'Juan Dela Cruz')
+            ->where('placements.0.athlete', 'JUAN DELA CRUZ')
             ->where('placements.0.school', 'Nabunturan Central School'));
 
     $this->get("/meets/{$meet->id}/search?q=nabunturan")

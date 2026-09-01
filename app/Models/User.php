@@ -16,6 +16,7 @@ use Illuminate\Auth\MustVerifyEmail as VerifiesEmail;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -81,6 +82,21 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             'approved_at' => 'datetime',
             'two_factor_confirmed_at' => 'datetime',
         ];
+    }
+
+    protected function name(): Attribute
+    {
+        return Attribute::make(get: function (?string $value, array $attributes): ?string {
+            if ($value === null) {
+                return null;
+            }
+
+            $additionalRoles = json_decode($attributes['additional_roles'] ?? '[]', true) ?: [];
+            $isCoach = ($attributes['role'] ?? null) === UserRole::Coach->value
+                || in_array(UserRole::Coach->value, $additionalRoles, true);
+
+            return $isCoach ? mb_strtoupper($value) : $value;
+        });
     }
 
     public function hasRole(UserRole ...$roles): bool

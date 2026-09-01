@@ -78,7 +78,7 @@ test('the roster csv downloads and is audited as a sensitive export', function (
 
     $response->assertOk();
 
-    expect($response->streamedContent())->toContain('Cordero')
+    expect($response->streamedContent())->toContain('CORDERO')
         ->and(AuditLog::query()->where('action', 'report.roster_exported')->count())->toBe(1);
 });
 
@@ -134,7 +134,7 @@ test('the event entry csv is officer-scoped and audited', function () {
 
     $response->assertOk();
 
-    expect($response->streamedContent())->toContain('Villanueva')
+    expect($response->streamedContent())->toContain('VILLANUEVA')
         ->not->toContain('Zabala')
         ->and(AuditLog::query()->where('action', 'report.event_entries_exported')->count())->toBe(1);
 });

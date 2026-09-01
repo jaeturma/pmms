@@ -13,6 +13,7 @@ use App\Models\Delegation;
 use App\Models\EligibilityDocument;
 use App\Models\EligibilityReview;
 use App\Models\Entry;
+use App\Models\Event;
 use App\Models\ManagementTeam;
 use App\Models\ManagementTeamMember;
 use App\Models\Meet;
@@ -27,6 +28,37 @@ use Inertia\Testing\AssertableInertia;
 
 beforeEach(function () {
     Storage::fake('local');
+});
+
+test('coaches and tournament ICT cannot approve athlete eligibility', function () {
+    $meet = Meet::factory()->registrationOpen()->create();
+    $delegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);
+    $review = EligibilityReview::factory()->create(['athlete_id' => $athlete->id, 'meet_id' => $meet->id]);
+    $event = Event::factory()->create();
+    $meet->events()->attach($event);
+    Entry::factory()->create([
+        'athlete_id' => $athlete->id,
+        'delegation_id' => $delegation->id,
+        'event_id' => $event->id,
+    ]);
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $event->sport_id]);
+    $ict = User::factory()->create();
+    MeetSportAssignment::factory()->create([
+        'user_id' => $ict->id,
+        'meet_sport_id' => $meetSport->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+    $coach = User::factory()->coach()->create();
+
+    $this->actingAs($ict)->get('/eligibility')->assertInertia(fn (AssertableInertia $page) => $page
+        ->where('reviews.data.0.id', $review->id)
+        ->where('reviews.data.0.can_decide', false));
+    $this->actingAs($ict)->patch("/eligibility/reviews/{$review->id}/approve")->assertForbidden();
+    $this->actingAs($coach)->patch("/eligibility/reviews/{$review->id}/approve")->assertForbidden();
+
+    expect($review->fresh()->status)->toBe(EligibilityStatus::Pending);
 });
 
 function eligibilityOfficerFor(Delegation $delegation): User
@@ -569,7 +601,7 @@ test('the queue can be searched by athlete name', function () {
         ->get('/eligibility?search=Dela+Cruz')
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('reviews.data', 1)
-            ->where('reviews.data.0.athlete', 'Juan Dela Cruz')
+            ->where('reviews.data.0.athlete', 'JUAN DELA CRUZ')
             ->where('filters.search', 'Dela Cruz'));
 });
 

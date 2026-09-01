@@ -439,7 +439,7 @@ test('Athletics/Swimming events use real schedule/result data, never a fabricate
             ->where('upcomingGames.0.side_a', null)
             ->where('upcomingGames.0.side_b', null)
             ->has('completedGames', 1)
-            ->where('completedGames.0.side_a', '1st: Juan Dela Cruz (Nabunturan Central School)')
+            ->where('completedGames.0.side_a', '1st: JUAN DELA CRUZ (Nabunturan Central School)')
             ->where('completedGames.0.side_b', null)
             ->where('completedGames.0.mark', '10.45s')
             ->where('completedGames.0.score_a', null));

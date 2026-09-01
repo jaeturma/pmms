@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\PersonnelRole;
 use Database\Factories\PersonnelFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -47,6 +48,22 @@ class Personnel extends Model
         return [
             'role' => PersonnelRole::class,
         ];
+    }
+
+    protected function firstName(): Attribute
+    {
+        return Attribute::make(get: fn (?string $value, array $attributes): ?string =>
+            $value !== null && ($attributes['role'] ?? null) === PersonnelRole::Coach->value
+                ? mb_strtoupper($value)
+                : $value);
+    }
+
+    protected function lastName(): Attribute
+    {
+        return Attribute::make(get: fn (?string $value, array $attributes): ?string =>
+            $value !== null && ($attributes['role'] ?? null) === PersonnelRole::Coach->value
+                ? mb_strtoupper($value)
+                : $value);
     }
 
     /**

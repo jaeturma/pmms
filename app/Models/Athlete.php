@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -51,6 +52,21 @@ class Athlete extends Model
             'grade_level' => 'integer',
             'age_division' => AgeDivision::class,
         ];
+    }
+
+    protected function firstName(): Attribute
+    {
+        return Attribute::make(get: fn (?string $value): ?string => $value === null ? null : mb_strtoupper($value));
+    }
+
+    protected function middleName(): Attribute
+    {
+        return Attribute::make(get: fn (?string $value): ?string => $value === null ? null : mb_strtoupper($value));
+    }
+
+    protected function lastName(): Attribute
+    {
+        return Attribute::make(get: fn (?string $value): ?string => $value === null ? null : mb_strtoupper($value));
     }
 
     /**
@@ -140,9 +156,9 @@ class Athlete extends Model
 
     public function fullName(): string
     {
-        return collect([$this->first_name, $this->middle_name, $this->last_name, $this->name_extension])
+        return mb_strtoupper(collect([$this->first_name, $this->middle_name, $this->last_name, $this->name_extension])
             ->filter(fn (?string $part): bool => filled($part) && ! in_array(strtolower(trim($part)), ['n/a', 'none'], true))
-            ->join(' ');
+            ->join(' '));
     }
 
     public function age(): int
