@@ -115,24 +115,24 @@ export default function BatchPrint({
                                         <img
                                             src={branding.logoUrl}
                                             alt="Application logo"
-                                            className="mx-auto size-[6mm] object-contain"
+                                            className="mx-auto size-[9mm] object-contain"
                                         />
                                     ) : (
                                         <AppLogoIcon
-                                            className="mx-auto size-[6mm] fill-black"
+                                            className="mx-auto size-[9mm] fill-black"
                                             aria-label="Application logo"
                                         />
                                     )}
-                                    <p className="mt-0.5 text-[7px] leading-none font-bold">
-                                        DdO PAA 2026
+                                    <p className="mt-0.5 text-[9px] leading-none font-bold">
+                                        DdO PAA Meet 2026
                                     </p>
                                 </div>
-                                <p className="line-clamp-2 text-[9px] leading-tight font-black uppercase">
+                                <p className="line-clamp-2 text-[11px] leading-tight font-black uppercase">
                                     {person.name}
                                 </p>
                                 <div className="my-1 border-y border-black py-1">
                                     <p
-                                        className="text-[14px] leading-none uppercase"
+                                        className="text-[16px] leading-none uppercase"
                                         style={{
                                             fontFamily:
                                                 'Arial Black, Arial, sans-serif',
@@ -141,15 +141,15 @@ export default function BatchPrint({
                                     >
                                         {meal.meal}
                                     </p>
-                                    <p className="mt-1 text-[12px] font-black uppercase">
+                                    <p className="mt-1 text-[14px] font-black uppercase">
                                         {dateLabel(meal.date)}
                                     </p>
                                 </div>
-                                <div className="text-[8px] leading-tight">
-                                    <p className="font-black uppercase">
+                                <div className="leading-tight">
+                                    <p className="text-[8px] font-black uppercase">
                                         CHAIRPERSON
                                     </p>
-                                    <p className="mt-0.5 line-clamp-1 uppercase">
+                                    <p className="mt-0.5 line-clamp-1 text-[10px] uppercase">
                                         {person.sport ?? person.twg_group ?? person.role}
                                     </p>
                                 </div>

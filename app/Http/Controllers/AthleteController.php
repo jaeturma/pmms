@@ -28,6 +28,7 @@ use App\Models\Sport;
 use App\Models\SportRosterMember;
 use App\Models\User;
 use App\Services\AthletePhotoService;
+use App\Services\AthleteDeletionService;
 use App\Services\AuditLogger;
 use App\Services\CompetitionAccessService;
 use App\Services\FileUploadService;
@@ -50,6 +51,7 @@ class AthleteController extends Controller
         private readonly AuditLogger $audit,
         private readonly FileUploadService $uploads,
         private readonly AthletePhotoService $athletePhotos,
+        private readonly AthleteDeletionService $athleteDeletion,
     ) {}
 
     /**
@@ -825,7 +827,7 @@ class AthleteController extends Controller
         $request->validate(['confirm' => ['required', 'accepted']]);
         $record = Athlete::onlyTrashed()->findOrFail($athlete);
         $name = $record->fullName();
-        $record->forceDelete();
+        $this->athleteDeletion->permanentlyDelete($record);
         $this->audit->record('athlete.permanently_deleted', null, ['athlete_id' => $athlete, 'name' => $name]);
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Athlete permanently deleted and may now be encoded again.')]);
 

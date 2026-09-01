@@ -89,13 +89,13 @@ class AthleteRequest extends FormRequest
             'age_division' => ['required', Rule::enum(AgeDivision::class)],
             'photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.config('pmms.athlete_photos.max_upload_kb')],
             'sports_photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.config('pmms.athlete_photos.max_upload_kb')],
-            'athlete_history' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
-            'form_10' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
-            'form_10_page_2' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
-            'birth_certificate' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
-            'birth_certificate_page_2' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
-            'parental_consent' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
-            'medical_certificate' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
+            'athlete_history' => $this->documentRules(),
+            'form_10' => $this->documentRules(),
+            'form_10_page_2' => $this->documentRules(),
+            'birth_certificate' => $this->documentRules(),
+            'birth_certificate_page_2' => $this->documentRules(),
+            'parental_consent' => $this->documentRules(),
+            'medical_certificate' => $this->documentRules(),
         ];
 
         if ($athlete === null) {
@@ -131,6 +131,25 @@ class AthleteRequest extends FormRequest
      * attributed to a school outside where their delegation actually
      * registered.
      */
+    /** @return array<int, string> */
+    private function documentRules(): array
+    {
+        return ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:'.config('pmms.athlete_documents.max_upload_kb')];
+    }
+
+    public function messages(): array
+    {
+        $documentFields = ['athlete_history', 'form_10', 'form_10_page_2', 'birth_certificate', 'birth_certificate_page_2', 'parental_consent', 'medical_certificate'];
+        $messages = [];
+        foreach ($documentFields as $field) {
+            $messages["{$field}.max"] = __('The selected document is too large. Maximum upload size is 8 MB per file.');
+            $messages["{$field}.image"] = __('This file type is not supported. Please upload a JPG or PNG document image.');
+            $messages["{$field}.mimes"] = __('This file type is not supported. Please upload a JPG or PNG document image.');
+        }
+
+        return $messages;
+    }
+
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {

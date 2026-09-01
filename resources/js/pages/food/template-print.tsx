@@ -78,21 +78,21 @@ export default function TemplatePrint({
                                 <img
                                     src={branding.logoUrl}
                                     alt="Application logo"
-                                    className="mx-auto size-[7mm] object-contain"
+                                    className="mx-auto size-[9mm] object-contain"
                                 />
                             ) : (
                                 <AppLogoIcon
-                                    className="mx-auto size-[7mm] fill-black"
+                                    className="mx-auto size-[9mm] fill-black"
                                     aria-label="Application logo"
                                 />
                             )}
-                            <p className="mt-0.5 text-[7px] leading-none font-bold">
-                                DdO PAA 2026
+                            <p className="mt-0.5 text-[9px] leading-none font-bold">
+                                DdO PAA Meet 2026
                             </p>
                         </div>
                         <div className="my-1 border-y border-black py-1">
                             <p
-                                className="text-[14px] leading-none uppercase"
+                                className="text-[16px] leading-none uppercase"
                                 style={{
                                     fontFamily: 'Arial Black, Arial, sans-serif',
                                     fontWeight: 900,
@@ -100,7 +100,7 @@ export default function TemplatePrint({
                             >
                                 {meal.meal}
                             </p>
-                            <p className="mt-1 text-[12px] font-black uppercase">
+                            <p className="mt-1 text-[14px] font-black uppercase">
                                 {dateLabel(meal.date)}
                             </p>
                         </div>

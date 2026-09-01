@@ -6,16 +6,19 @@ use App\Enums\ManagementTeamType;
 use App\Enums\RequirementStatus;
 use App\Models\Athlete;
 use App\Models\AuditLog;
+use App\Models\Accreditation;
 use App\Models\Delegation;
 use App\Models\District;
 use App\Models\EligibilityDocument;
 use App\Models\Entry;
+use App\Models\EventResult;
 use App\Models\FileUpload;
 use App\Models\ManagementTeam;
 use App\Models\ManagementTeamMember;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\Personnel;
+use App\Models\ResultPlacement;
 use App\Models\School;
 use App\Models\Sport;
 use App\Models\SportRosterMember;
@@ -526,6 +529,67 @@ test('replacing an athlete document removes its previous record and stored file'
     Storage::disk('local')->assertMissing($oldUpload->path);
 });
 
+test('athlete documents accept files up to eight megabytes and store an optimized image', function () {
+    Storage::fake('local');
+    $delegation = Delegation::factory()->create();
+    $document = UploadedFile::fake()->image('phone-scan.jpg', 3200, 4200)->size(7 * 1024);
+
+    $this->actingAs(User::factory()->admin()->create())->post('/athletes', [
+        ...validAthletePayload($delegation),
+        'athlete_history' => $document,
+    ])->assertSessionHasNoErrors();
+
+    $upload = EligibilityDocument::query()->sole()->fileUpload;
+    $stored = Storage::disk('local')->get($upload->path);
+    $dimensions = getimagesizefromstring($stored);
+
+    expect(strlen($stored))->toBeLessThan(1024 * 1024)
+        ->and(max($dimensions[0], $dimensions[1]))->toBeLessThanOrEqual(2200)
+        ->and(round($dimensions[0] / $dimensions[1], 2))->toBe(round(3200 / 4200, 2));
+});
+
+test('athlete documents over eight megabytes receive a friendly validation error', function () {
+    $delegation = Delegation::factory()->create();
+
+    $this->actingAs(User::factory()->admin()->create())->post('/athletes', [
+        ...validAthletePayload($delegation),
+        'medical_certificate' => UploadedFile::fake()->image('medical.jpg')->size(8193),
+    ])->assertSessionHasErrors([
+        'medical_certificate' => 'The selected document is too large. Maximum upload size is 8 MB per file.',
+    ]);
+});
+
+test('spoofed athlete document images are rejected without replacing an existing document', function () {
+    Storage::fake('local');
+    $athlete = Athlete::factory()->create();
+    $existing = EligibilityDocument::factory()->create(['athlete_id' => $athlete->id]);
+
+    $this->actingAs(User::factory()->admin()->create())->put("/athletes/{$athlete->id}", [
+        ...validAthletePayload($athlete->delegation),
+        'athlete_history' => UploadedFile::fake()->createWithContent('spoofed.jpg', 'not an image'),
+    ])->assertSessionHasErrors('athlete_history');
+
+    $this->assertDatabaseHas('eligibility_documents', ['id' => $existing->id]);
+});
+
+test('two page document uploads preserve page order and process each page independently', function () {
+    Storage::fake('local');
+    $delegation = Delegation::factory()->create();
+
+    $this->actingAs(User::factory()->admin()->create())->post('/athletes', [
+        ...validAthletePayload($delegation),
+        'form_10' => UploadedFile::fake()->image('page-1.jpg', 1800, 2400),
+        'form_10_page_2' => UploadedFile::fake()->image('page-2.jpg', 2000, 2600),
+    ])->assertSessionHasNoErrors();
+
+    $documents = EligibilityDocument::query()->orderBy('id')->with('fileUpload')->get();
+    expect($documents)->toHaveCount(2)
+        ->and($documents[0]->document_type)->toBe(EligibilityDocumentType::Form10)
+        ->and($documents[1]->document_type)->toBe(EligibilityDocumentType::Form10)
+        ->and($documents[0]->file_upload_id)->not->toBe($documents[1]->file_upload_id)
+        ->and($documents->every(fn ($document) => $document->fileUpload->size < 1024 * 1024))->toBeTrue();
+});
+
 test('the athlete sports photo is served to authorized users only', function () {
     Storage::fake('local');
     $delegation = Delegation::factory()->create();
@@ -623,6 +687,125 @@ test('administrator deletion archives the athlete and exposes it through the del
             ->has('athletes.data', 1)
             ->where('athletes.data.0.id', $athlete->id)
             ->where('athletes.data.0.deleted', true));
+});
+
+test('administrator can permanently delete an archived athlete without dependencies', function () {
+    $athlete = Athlete::factory()->create();
+    $athlete->delete();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->delete("/athletes/{$athlete->id}/permanent", ['confirm' => true])
+        ->assertRedirect('/athletes?deleted=1')
+        ->assertSessionHasNoErrors();
+
+    $this->assertDatabaseMissing('athletes', ['id' => $athlete->id]);
+});
+
+test('permanent deletion removes sport roster membership without a foreign key error', function () {
+    $athlete = Athlete::factory()->create();
+    $membership = SportRosterMember::query()->create([
+        'meet_sport_id' => MeetSport::factory()->create([
+            'meet_id' => $athlete->delegation->meet_id,
+        ])->id,
+        'delegation_id' => $athlete->delegation_id,
+        'athlete_id' => $athlete->id,
+        'level' => $athlete->ageDivision()->value,
+        'gender' => $athlete->sex->value === 'female' ? 'girls' : 'boys',
+    ]);
+    $athlete->delete();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->delete("/athletes/{$athlete->id}/permanent", ['confirm' => true])
+        ->assertSessionHasNoErrors();
+
+    $this->assertDatabaseMissing('sport_roster_members', ['id' => $membership->id]);
+    $this->assertDatabaseMissing('athletes', ['id' => $athlete->id]);
+});
+
+test('normal athlete deletion preserves roster membership and registration history', function () {
+    $athlete = Athlete::factory()->create();
+    $entry = Entry::factory()->create(['athlete_id' => $athlete->id, 'delegation_id' => $athlete->delegation_id]);
+    $membership = SportRosterMember::query()->create([
+        'meet_sport_id' => MeetSport::factory()->create(['meet_id' => $athlete->delegation->meet_id])->id,
+        'delegation_id' => $athlete->delegation_id, 'athlete_id' => $athlete->id,
+        'level' => $athlete->ageDivision()->value, 'gender' => $athlete->sex->value === 'female' ? 'girls' : 'boys',
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())->delete("/athletes/{$athlete->id}");
+
+    $this->assertSoftDeleted('athletes', ['id' => $athlete->id]);
+    $this->assertDatabaseHas('entries', ['id' => $entry->id]);
+    $this->assertDatabaseHas('sport_roster_members', ['id' => $membership->id]);
+});
+
+test('accreditation or official results block permanent deletion without partial cleanup', function (string $history) {
+    $athlete = Athlete::factory()->create();
+    $entry = Entry::factory()->create(['athlete_id' => $athlete->id, 'delegation_id' => $athlete->delegation_id]);
+    $membership = SportRosterMember::query()->create([
+        'meet_sport_id' => MeetSport::factory()->create(['meet_id' => $athlete->delegation->meet_id])->id,
+        'delegation_id' => $athlete->delegation_id, 'athlete_id' => $athlete->id,
+        'level' => $athlete->ageDivision()->value, 'gender' => $athlete->sex->value === 'female' ? 'girls' : 'boys',
+    ]);
+
+    if ($history === 'accreditation') {
+        Accreditation::factory()->create(['athlete_id' => $athlete->id, 'personnel_id' => null, 'delegation_id' => $athlete->delegation_id]);
+    } else {
+        $result = EventResult::factory()->create(['event_id' => $entry->event_id, 'meet_id' => $athlete->delegation->meet_id]);
+        ResultPlacement::factory()->create(['event_result_id' => $result->id, 'entry_id' => $entry->id]);
+    }
+    $athlete->delete();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->delete("/athletes/{$athlete->id}/permanent", ['confirm' => true])
+        ->assertSessionHasErrors('confirm');
+
+    $this->assertSoftDeleted('athletes', ['id' => $athlete->id]);
+    $this->assertDatabaseHas('entries', ['id' => $entry->id]);
+    $this->assertDatabaseHas('sport_roster_members', ['id' => $membership->id]);
+})->with(['accreditation', 'result']);
+
+test('non administrators cannot permanently delete an athlete', function () {
+    $athlete = Athlete::factory()->create();
+    $athlete->delete();
+
+    $this->actingAs(User::factory()->create())
+        ->delete("/athletes/{$athlete->id}/permanent", ['confirm' => true])
+        ->assertForbidden();
+
+    $this->assertSoftDeleted('athletes', ['id' => $athlete->id]);
+});
+
+test('athlete files are cleaned only after permanent deletion succeeds', function () {
+    Storage::fake('local');
+    $athlete = Athlete::factory()->create();
+    $upload = FileUpload::factory()->create(['disk' => 'local', 'path' => 'athletes/profile.jpg']);
+    Storage::disk('local')->put($upload->path, 'image');
+    $athlete->forceFill(['photo_upload_id' => $upload->id])->save();
+    $athlete->delete();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->delete("/athletes/{$athlete->id}/permanent", ['confirm' => true])
+        ->assertSessionHasNoErrors();
+
+    $this->assertDatabaseMissing('file_uploads', ['id' => $upload->id]);
+    Storage::disk('local')->assertMissing($upload->path);
+});
+
+test('blocked permanent deletion retains athlete files', function () {
+    Storage::fake('local');
+    $athlete = Athlete::factory()->create();
+    $upload = FileUpload::factory()->create(['disk' => 'local', 'path' => 'athletes/protected.jpg']);
+    Storage::disk('local')->put($upload->path, 'image');
+    $athlete->forceFill(['photo_upload_id' => $upload->id])->save();
+    Accreditation::factory()->create(['athlete_id' => $athlete->id, 'personnel_id' => null, 'delegation_id' => $athlete->delegation_id]);
+    $athlete->delete();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->delete("/athletes/{$athlete->id}/permanent", ['confirm' => true])
+        ->assertSessionHasErrors('confirm');
+
+    $this->assertDatabaseHas('file_uploads', ['id' => $upload->id]);
+    Storage::disk('local')->assertExists($upload->path);
 });
 
 test('delegations with athletes cannot be deleted', function () {

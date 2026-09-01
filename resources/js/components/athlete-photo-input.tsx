@@ -17,12 +17,14 @@ export function AthletePhotoInput({
     guidance,
     onChange,
     accept = 'image/jpeg,image/png,image/webp',
+    document = false,
 }: {
     id: string;
     label: string;
     guidance: string;
     onChange: (file: File | null) => void;
     accept?: string;
+    document?: boolean;
 }) {
     const [source, setSource] = useState<string | null>(null);
     const [preview, setPreview] = useState<string | null>(null);
@@ -30,6 +32,7 @@ export function AthletePhotoInput({
     const [offsetX, setOffsetX] = useState(0);
     const [offsetY, setOffsetY] = useState(0);
     const [rotation, setRotation] = useState(0);
+    const [fileMessage, setFileMessage] = useState<string | null>(null);
     const imageRef = useRef<HTMLImageElement>(null);
 
     useEffect(
@@ -47,6 +50,42 @@ export function AthletePhotoInput({
 
     const select = (file?: File) => {
         if (!file) {
+            return;
+        }
+
+        if (document && file.size > 8 * 1024 * 1024) {
+            setFileMessage('This document is too large. Maximum upload size is 8 MB per file.');
+            onChange(null);
+            return;
+        }
+
+        setFileMessage(document ? `${(file.size / 1024 / 1024).toFixed(1)} MB selected • Will be optimized` : null);
+        if (document) {
+            onChange(file);
+            return;
+        }
+
+        if (document && file.size > 8 * 1024 * 1024) {
+            setFileMessage('This document is too large. Maximum upload size is 8 MB per file.');
+            onChange(null);
+            return;
+        }
+
+        setFileMessage(document ? `${(file.size / 1024 / 1024).toFixed(1)} MB selected • Will be optimized` : null);
+        if (document) {
+            onChange(file);
+            return;
+        }
+
+        if (document && file.size > 8 * 1024 * 1024) {
+            setFileMessage('This document is too large. Maximum upload size is 8 MB per file.');
+            onChange(null);
+            return;
+        }
+
+        setFileMessage(document ? `${(file.size / 1024 / 1024).toFixed(1)} MB selected • Will be optimized` : null);
+        if (document) {
+            onChange(file);
             return;
         }
 
@@ -135,6 +174,30 @@ export function AthletePhotoInput({
                 accept={accept}
                 onChange={(event) => select(event.target.files?.[0])}
             />
+            {document && (
+                <p className="text-xs text-muted-foreground">
+                    Maximum 8 MB • Automatically optimized for storage
+                </p>
+            )}
+            {fileMessage && (
+                <p className="text-xs text-muted-foreground">{fileMessage}</p>
+            )}
+            {document && (
+                <p className="text-xs text-muted-foreground">
+                    Maximum 8 MB • Automatically optimized for storage
+                </p>
+            )}
+            {fileMessage && (
+                <p className="text-xs text-muted-foreground">{fileMessage}</p>
+            )}
+            {document && (
+                <p className="text-xs text-muted-foreground">
+                    Maximum 8 MB • Automatically optimized for storage
+                </p>
+            )}
+            {fileMessage && (
+                <p className="text-xs text-muted-foreground">{fileMessage}</p>
+            )}
             <div className="flex items-center gap-3">
                 {preview && (
                     <img

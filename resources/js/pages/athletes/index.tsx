@@ -603,6 +603,7 @@ function AthleteFormDialog({
                                             label={label}
                                             guidance="Crop or rotate the image before upload. It will be reduced automatically."
                                             accept="image/jpeg,image/png"
+                                            document
                                             onChange={(file) =>
                                                 setData(field, file)
                                             }
@@ -971,6 +972,7 @@ function EditAthleteDialog({
                                         label={label}
                                         guidance="Crop or rotate the image before upload. It will be reduced automatically."
                                         accept="image/jpeg,image/png"
+                                        document
                                         onChange={(file) =>
                                             setData(field, file)
                                         }

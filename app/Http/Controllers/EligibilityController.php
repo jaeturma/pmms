@@ -374,7 +374,11 @@ class EligibilityController extends Controller
         $request->validate([
             'athlete_id' => ['required', 'integer', Rule::exists('athletes', 'id')],
             'document_type' => ['required', Rule::enum(EligibilityDocumentType::class)],
-            'file' => ['required', 'image', 'mimes:jpg,jpeg,png', 'max:10240'],
+            'file' => ['required', 'image', 'mimes:jpg,jpeg,png', 'max:'.config('pmms.athlete_documents.max_upload_kb')],
+        ], [
+            'file.max' => __('The selected document is too large. Maximum upload size is 8 MB per file.'),
+            'file.image' => __('This file type is not supported. Please upload a JPG or PNG document image.'),
+            'file.mimes' => __('This file type is not supported. Please upload a JPG or PNG document image.'),
         ]);
 
         $athlete = Athlete::query()

@@ -255,6 +255,8 @@ class DashboardController extends Controller
                 ->whereIn('delegation_id', $delegationIds)
                 ->where('status', EntryStatus::Submitted->value)
                 ->whereHas('delegation', fn ($delegation) => $delegation->where('meet_id', $meet->id))
+                ->whereHas('athlete')
+                ->whereHas('event.sport')
                 ->with([
                     'athlete:id,first_name,last_name',
                     'event:id,sport_id,name',

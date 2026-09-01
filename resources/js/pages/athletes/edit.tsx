@@ -546,6 +546,7 @@ export default function EditAthlete({
                                             label={label}
                                             guidance="Upload only to replace."
                                             accept="image/jpeg,image/png"
+                                            document
                                             onChange={(file) =>
                                                 form.setData(field, file)
                                             }

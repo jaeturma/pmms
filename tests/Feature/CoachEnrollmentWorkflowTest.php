@@ -196,6 +196,20 @@ test('a documented municipality coach can be accredited without a school or pre-
         ->and($person->accreditation()->exists())->toBeTrue();
 });
 
+test('coach registration management renders archived user history without a null relationship error', function () {
+    $coach = User::factory()->coach()->create(['name' => 'Archived Coach']);
+    CoachOnboardingRequest::query()->create([
+        'user_id' => $coach->id,
+        'status' => 'pending',
+    ]);
+    $coach->delete();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get('/coach/assignment-requests')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('registrations.data.0.coach', 'Archived Coach'));
+});
+
 test('a coach may replace attachments after approval and accreditation', function () {
     Storage::fake('local');
     $delegation = Delegation::factory()->approved()->create();

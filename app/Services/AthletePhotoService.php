@@ -70,9 +70,10 @@ class AthletePhotoService
     {
         try {
             $source = $this->orient($this->decode($file), $file);
-            $target = $this->fitWithin($source, 1600, 2000);
+            $maxEdge = (int) config('pmms.athlete_documents.max_long_edge');
+            $target = $this->fitWithin($source, $maxEdge, $maxEdge);
             imagedestroy($source);
-            $encoded = $this->encodeWithinLimit($target, 1000 * 1024, $field);
+            $encoded = $this->encodeDocument($target);
             imagedestroy($target);
 
             $temporary = tempnam(sys_get_temp_dir(), 'pmms-document-');
@@ -91,8 +92,50 @@ class AthletePhotoService
             throw $exception;
         } catch (Throwable) {
             throw ValidationException::withMessages([
-                $field => __('We could not process this document. Please use a valid JPG or PNG image.'),
+                $field => __("We couldn't process this document. Please try another copy or reduce the image size."),
             ]);
+        }
+    }
+
+    private function encodeDocument(GdImage $image): string
+    {
+        $limit = (int) config('pmms.athlete_documents.preferred_stored_kb') * 1024;
+        $minEdge = (int) config('pmms.athlete_documents.min_long_edge');
+        $current = $image;
+        $ownsCurrent = false;
+        $best = '';
+
+        try {
+            while (true) {
+                foreach ([88, 84, 80, 76, 72, 68, 64] as $quality) {
+                    ob_start();
+                    imagejpeg($current, null, $quality);
+                    $best = (string) ob_get_clean();
+                    if (strlen($best) <= $limit) {
+                        return $best;
+                    }
+                }
+
+                $longEdge = max(imagesx($current), imagesy($current));
+                if ($longEdge <= $minEdge) {
+                    return $best;
+                }
+
+                $scale = max($minEdge / $longEdge, 0.9);
+                $next = imagescale($current, (int) round(imagesx($current) * $scale), (int) round(imagesy($current) * $scale));
+                if (! $next instanceof GdImage) {
+                    return $best;
+                }
+                if ($ownsCurrent) {
+                    imagedestroy($current);
+                }
+                $current = $next;
+                $ownsCurrent = true;
+            }
+        } finally {
+            if ($ownsCurrent) {
+                imagedestroy($current);
+            }
         }
     }
 

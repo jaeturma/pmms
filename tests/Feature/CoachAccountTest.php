@@ -696,6 +696,25 @@ test('coach dashboard hides another delegation submitted entries', function () {
             ->has('coachDashboard.submitted_entries', 0));
 });
 
+test('coach dashboard ignores legacy entries whose athlete is archived', function () {
+    $meet = Meet::current();
+    $delegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $coach = coachFor($delegation);
+    $assignment = $coach->coachAssignmentRequests()->where('status', 'approved')->firstOrFail();
+    $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id, 'registered_by' => $coach->id]);
+    Entry::factory()->create([
+        'delegation_id' => $delegation->id,
+        'athlete_id' => $athlete->id,
+        'event_id' => $assignment->event_id,
+        'status' => EntryStatus::Submitted,
+    ]);
+    $athlete->delete();
+
+    $this->actingAs($coach)->get('/dashboard')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->has('coachDashboard.submitted_entries', 0));
+});
+
 test('a coach cannot submit an athlete whose eligibility is not approved', function () {
     $meet = Meet::factory()->registrationOpen()->create();
     $delegation = Delegation::factory()->create(['meet_id' => $meet->id]);

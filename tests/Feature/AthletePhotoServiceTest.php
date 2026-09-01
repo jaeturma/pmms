@@ -44,8 +44,8 @@ test('eligibility document images are resized and compressed before storage', fu
     expect($upload->mime_type)->toBe('image/jpeg')
         ->and(Storage::disk('local')->size($upload->path))->toBeLessThanOrEqual(1000 * 1024);
     [$width, $height] = getimagesizefromstring(Storage::disk('local')->get($upload->path));
-    expect($width)->toBeLessThanOrEqual(1600)
-        ->and($height)->toBeLessThanOrEqual(2000);
+    expect(max($width, $height))->toBeLessThanOrEqual(2200)
+        ->and(round($width / $height, 2))->toBe(round(3200 / 4400, 2));
 });
 
 test('deleting an athlete photo removes the main file and every derivative', function () {

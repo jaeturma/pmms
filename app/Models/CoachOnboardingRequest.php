@@ -17,7 +17,9 @@ class CoachOnboardingRequest extends Model
 
     public function user(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        // Onboarding requests are historical and remain visible after their
+        // account is archived, so the relationship must not become null.
+        return $this->belongsTo(User::class)->withTrashed();
     }
 
     public function district(): BelongsTo
