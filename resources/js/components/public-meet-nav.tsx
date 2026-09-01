@@ -16,7 +16,7 @@ type Props = {
  */
 export function PublicMeetNav({ meetId, active }: Props) {
     const items = [
-        { key: 'schedule', label: 'Schedule', href: publicMeet(meetId) },
+        { key: 'schedule', label: 'Schedule of Events', href: publicMeet(meetId) },
         { key: 'results', label: 'Results', href: publicResults(meetId) },
         { key: 'tally', label: 'Medal tally', href: publicTally(meetId) },
     ] as const;

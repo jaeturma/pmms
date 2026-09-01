@@ -25,6 +25,7 @@ declare module '@inertiajs/core' {
                 name: string;
                 areaLabel: string;
                 logoUrl: string | null;
+                heroLogoUrl: string | null;
             };
             currentMeet: {
                 name: string;

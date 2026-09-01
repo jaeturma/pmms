@@ -618,7 +618,9 @@ function MeetOperations({ operations }: { operations: Operations }) {
                         </CardTitle>
                         <div className="flex gap-2">
                             <Button variant="outline" size="sm" asChild>
-                                <Link href={scheduleIndex()}>Schedule</Link>
+                                <Link href={scheduleIndex()}>
+                                    Schedule of Events
+                                </Link>
                             </Button>
                             <Button variant="outline" size="sm" asChild>
                                 <Link href={scheduleSheet()}>Daily sheet</Link>

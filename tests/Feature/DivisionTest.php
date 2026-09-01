@@ -200,13 +200,13 @@ test('admins can remove the hero icon back to the default mark', function () {
     $this->get('/division/hero-icon')->assertNotFound();
 });
 
-test('the hero icon url is shared on every page once uploaded, null otherwise', function () {
+test('the hero logo url is shared on every page once uploaded, null otherwise', function () {
     Storage::fake('local');
     Division::factory()->province()->create();
 
     $this->actingAs(User::factory()->create())
         ->get('/dashboard')
-        ->assertInertia(fn (AssertableInertia $page) => $page->where('division.heroIconUrl', null));
+        ->assertInertia(fn (AssertableInertia $page) => $page->where('division.heroLogoUrl', null));
 
     $this->actingAs(User::factory()->admin()->create())->patch('/division', [
         'name' => 'Davao de Oro',
@@ -216,5 +216,5 @@ test('the hero icon url is shared on every page once uploaded, null otherwise', 
 
     $this->actingAs(User::factory()->create())
         ->get('/dashboard')
-        ->assertInertia(fn (AssertableInertia $page) => $page->where('division.heroIconUrl', route('division.hero-icon')));
+        ->assertInertia(fn (AssertableInertia $page) => $page->where('division.heroLogoUrl', route('division.hero-icon')));
 });

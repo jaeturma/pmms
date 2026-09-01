@@ -32,7 +32,7 @@ type Props = {
 export default function PublicContact({ meet }: Props) {
     const quickLinks = [
         {
-            label: 'Schedule',
+            label: 'Schedule of Events',
             href: publicMeet(meet.id).url,
             icon: CalendarDays,
         },

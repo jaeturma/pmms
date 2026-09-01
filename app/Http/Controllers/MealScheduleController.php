@@ -75,6 +75,7 @@ class MealScheduleController extends Controller
                 'starts_at' => $schedule->starts_at,
                 'ends_at' => $schedule->ends_at,
                 'enforce_serving_time' => $schedule->enforce_serving_time,
+                'venue_id' => $schedule->venue_id,
                 'venue' => $schedule->venue?->name,
                 'notes' => $schedule->notes,
             ])->values(),
@@ -118,9 +119,10 @@ class MealScheduleController extends Controller
             ->where('meet_id', $validated['meet_id'])
             ->where('meal_type', $validated['meal_type'])
             ->whereDate('date', $validated['date'])
+            ->where('starts_at', $validated['starts_at'] ?? null)
             ->exists()) {
             throw ValidationException::withMessages([
-                'meal_type' => __('This meet already has a schedule entry for that meal on that date.'),
+                'meal_type' => __('This meet already has that meal period at the same start time.'),
             ]);
         }
 

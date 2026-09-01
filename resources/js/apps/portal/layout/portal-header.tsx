@@ -39,7 +39,7 @@ export function PortalHeader({ activePath }: PortalHeaderProps) {
     if (nav) {
         items.push(
             {
-                label: 'Schedule',
+                label: 'Schedule of Events',
                 href: publicMeet(nav.meetId).url,
                 active: activePath === publicMeet(nav.meetId).url,
             },

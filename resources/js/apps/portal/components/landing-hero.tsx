@@ -15,10 +15,8 @@ type PortalLandingHeroProps = {
      * elapsed (meet already underway) both simply skip the countdown —
      * `PortalCountdown`'s own `onElapsed="hide"` handles the latter. */
     startsAtIso?: string;
-    /** Replaces the default `PortalTorchIcon` SVG mark when the division
-     * has uploaded one (`Division::heroIcon`, admin-configurable via the
-     * Division settings page) — never both at once. */
-    heroIconUrl?: string | null;
+    /** Dedicated rectangular logo used only by the main landing hero. */
+    heroLogoUrl?: string | null;
     /** Rendered below the countdown as a card grid spanning 90% of the
      * hero's width — 3 columns on mobile, 4 from `sm:` (~640px, tablet),
      * 6 from `md:` (~768px), then from `lg:` (~1024px, laptop/desktop) a
@@ -55,7 +53,7 @@ export function PortalLandingHero({
     description,
     meta,
     startsAtIso,
-    heroIconUrl,
+    heroLogoUrl,
     municipalities,
     className,
 }: PortalLandingHeroProps) {
@@ -69,11 +67,11 @@ export function PortalLandingHero({
             <PortalHeroBackground />
 
             <div className="portal-hero-in relative mx-auto flex w-full max-w-4xl flex-col items-center gap-5 text-center">
-                {heroIconUrl ? (
+                {heroLogoUrl ? (
                     <img
-                        src={heroIconUrl}
-                        alt=""
-                        className="h-24 w-48 max-w-[90vw] object-contain sm:h-[7.2rem] sm:w-[14.4rem]"
+                        src={heroLogoUrl}
+                        alt="Meet hero logo"
+                        className="aspect-[670/165] w-[min(670px,90vw)] object-contain"
                     />
                 ) : (
                     <PortalTorchIcon className="h-24 w-auto text-[var(--portal-ink-foreground)] sm:h-[7.2rem]" />

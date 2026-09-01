@@ -61,7 +61,11 @@ type ScheduleSlot = {
 
 type Option = { id: number; label: string };
 
-type EventOption = Option & { sport_id: number };
+type EventOption = Option & {
+    sport_id: number;
+    sport_category_id: number | null;
+    venue_id: number | null;
+};
 
 type VenueOption = Option & {
     event_id: number;
@@ -71,11 +75,11 @@ type VenueOption = Option & {
     competition_area_ids: number[];
 };
 
-type SportCategoryOption = Option & { sport_id: number };
 type CompetitionAreaOption = Option & {
     venue_id: number;
     area_type: string;
 };
+type SportCategoryOption = Option & { sport_id: number };
 
 type Props = {
     schedules: Paginated<ScheduleSlot>;
@@ -98,7 +102,6 @@ function SlotFormDialog({
     eventOptions,
     venueOptions,
     competitionAreaOptions,
-    sportCategoryOptions,
     open,
     onOpenChange,
 }: {
@@ -106,7 +109,6 @@ function SlotFormDialog({
     eventOptions: EventOption[];
     venueOptions: VenueOption[];
     competitionAreaOptions: CompetitionAreaOption[];
-    sportCategoryOptions: SportCategoryOption[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
@@ -125,18 +127,8 @@ function SlotFormDialog({
         note: slot?.note ?? '',
     });
 
-    const selectedEventSportId = eventOptions.find(
-        (option) => String(option.id) === data.event_id,
-    )?.sport_id;
-
-    const categoryOptions = sportCategoryOptions.filter(
-        (option) => option.sport_id === selectedEventSportId,
-    );
     const eventVenueOptions = venueOptions.filter(
-        (option) =>
-            String(option.event_id) === data.event_id &&
-            (option.sport_category_id === null ||
-                String(option.sport_category_id) === data.sport_category_id),
+        (option) => String(option.event_id) === data.event_id,
     );
     const selectedVenue = eventVenueOptions.find(
         (option) => String(option.id) === data.venue_id,
@@ -175,7 +167,9 @@ function SlotFormDialog({
             <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-3xl">
                 <DialogHeader>
                     <DialogTitle>
-                        {slot ? 'Edit schedule slot' : 'Add schedule slot'}
+                        {slot
+                            ? 'Edit Schedule of Events'
+                            : 'Add Schedule of Events'}
                     </DialogTitle>
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
@@ -184,9 +178,22 @@ function SlotFormDialog({
                         <Select
                             value={data.event_id}
                             onValueChange={(value) => {
+                                const event = eventOptions.find(
+                                    (option) => String(option.id) === value,
+                                );
                                 setData('event_id', value);
-                                setData('sport_category_id', '');
-                                setData('venue_id', '');
+                                setData(
+                                    'sport_category_id',
+                                    event?.sport_category_id
+                                        ? String(event.sport_category_id)
+                                        : '',
+                                );
+                                setData(
+                                    'venue_id',
+                                    event?.venue_id
+                                        ? String(event.venue_id)
+                                        : '',
+                                );
                                 setData('competition_area_id', '');
                             }}
                         >
@@ -205,68 +212,6 @@ function SlotFormDialog({
                             </SelectContent>
                         </Select>
                         <InputError message={errors.event_id} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="slot-category">Sport category</Label>
-                        <Select
-                            value={data.sport_category_id || 'none'}
-                            onValueChange={(value) => {
-                                setData('sport_category_id', value === 'none' ? '' : value);
-                                setData('venue_id', '');
-                                setData('competition_area_id', '');
-                            }}
-                            disabled={!data.event_id || (venueOptions.some(
-                                (option) => String(option.event_id) === data.event_id && option.sport_category_id !== null,
-                            ) && !data.sport_category_id)}
-                        >
-                            <SelectTrigger id="slot-category">
-                                <SelectValue
-                                    placeholder={
-                                        data.event_id
-                                            ? 'None'
-                                            : 'Select an event first'
-                                    }
-                                />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="none">None</SelectItem>
-                                {categoryOptions.map((option) => (
-                                    <SelectItem
-                                        key={option.id}
-                                        value={String(option.id)}
-                                    >
-                                        {option.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <InputError message={errors.sport_category_id} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="slot-venue">Venue</Label>
-                        <Select
-                            value={data.venue_id}
-                            onValueChange={(value) => {
-                                setData('venue_id', value);
-                                setData('competition_area_id', '');
-                            }}
-                            disabled={!data.event_id}
-                        >
-                            <SelectTrigger id="slot-venue">
-                                <SelectValue placeholder="Select a venue" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {eventVenueOptions.map((option) => (
-                                    <SelectItem
-                                        key={option.id}
-                                        value={String(option.id)}
-                                    >
-                                        {option.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <InputError message={errors.venue_id} />
                     </div>
                     {needsArea && (
                         <div className="space-y-2">
@@ -366,7 +311,6 @@ export default function Schedule({
     eventOptions,
     venueOptions,
     competitionAreaOptions,
-    sportCategoryOptions,
     canManage,
 }: Props) {
     const [formOpen, setFormOpen] = useState(false);
@@ -421,10 +365,10 @@ export default function Schedule({
 
     return (
         <>
-            <Head title="Schedule" />
+            <Head title="Schedule of Events" />
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
-                    title="Schedule"
+                    title="Schedule of Events"
                     description="When and where each event is played."
                     actions={
                         <>
@@ -445,7 +389,7 @@ export default function Schedule({
                             {canManage && meetIsSchedulable && (
                                 <Button onClick={openCreate}>
                                     <Plus />
-                                    Add slot
+                                    Add Schedule of Events
                                 </Button>
                             )}
                         </>
@@ -495,12 +439,14 @@ export default function Schedule({
                 {schedules.data.length === 0 ? (
                     <EmptyState
                         icon={CalendarDays}
-                        title="No schedule slots found"
+                        title="No scheduled events found"
                         description="Scheduled events with their venues will appear here."
                         action={
                             canManage &&
                             meetIsSchedulable && (
-                                <Button onClick={openCreate}>Add slot</Button>
+                                <Button onClick={openCreate}>
+                                    Add Schedule of Events
+                                </Button>
                             )
                         }
                     />
@@ -653,7 +599,6 @@ export default function Schedule({
                 eventOptions={eventOptions}
                 venueOptions={venueOptions}
                 competitionAreaOptions={competitionAreaOptions}
-                sportCategoryOptions={sportCategoryOptions}
                 open={formOpen}
                 onOpenChange={setFormOpen}
             />
@@ -664,7 +609,7 @@ export default function Schedule({
 Schedule.layout = {
     breadcrumbs: [
         {
-            title: 'Schedule',
+            title: 'Schedule of Events',
             href: index(),
         },
     ],

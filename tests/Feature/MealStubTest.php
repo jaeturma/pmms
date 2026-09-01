@@ -124,8 +124,29 @@ test('meal display status is derived from the configured serving window', functi
 })->with([
     'not yet available' => ['13:00', '14:00', 'upcoming'],
     'available' => ['11:00', '13:00', 'available'],
-    'expired' => ['10:00', '11:00', 'expired'],
+    'elapsed meals are automatically consumed' => ['10:00', '11:00', 'consumed'],
 ]);
+
+test('elapsed meal entitlements are persisted as automatically consumed', function () {
+    config(['app.timezone' => 'Asia/Manila']);
+    $this->travelTo(Carbon::parse('2026-09-05 12:00:00', 'Asia/Manila'));
+    MealSchedule::factory()->create([
+        'meet_id' => Meet::current()->id,
+        'date' => '2026-09-05',
+        'starts_at' => '09:00',
+        'ends_at' => '11:00',
+    ]);
+    $user = mealEligibleUser();
+
+    $this->actingAs($user)->get('/meal-stub')->assertOk();
+
+    $entitlement = MealEntitlement::query()->where('user_id', $user->id)->sole();
+    expect($entitlement->status)->toBe('consumed')
+        ->and($entitlement->consumption_method)->toBe('automatic')
+        ->and($entitlement->consumed_at?->format('Y-m-d H:i'))->toBe('2026-09-05 11:00');
+
+    $this->travelBack();
+});
 
 test('consumed remains the effective status after the serving window ends', function () {
     config(['app.timezone' => 'Asia/Manila']);
@@ -209,6 +230,131 @@ test('food staff can search and consume an eligible persons meal', function () {
             ->where('summary.remaining', 1));
 
     $this->travelBack();
+});
+
+test('admin and food staff can filter meal stub personnel by sport and twg group', function () {
+    currentMeal();
+    $twgPerson = mealEligibleUser(ManagementTeamType::ICT);
+    $foodStaff = mealEligibleUser(ManagementTeamType::Food);
+    $sportPerson = User::factory()->create();
+    $meetSport = MeetSport::factory()->create(['meet_id' => Meet::current()->id]);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $sportPerson->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+    $twgGroupId = $twgPerson->managementTeamMemberships()->firstOrFail()->management_team_id;
+
+    $this->actingAs($foodStaff)
+        ->get('/food/distribution?sport_id='.$meetSport->sport_id)
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('personnel.data', 1)
+            ->where('personnel.data.0.id', $sportPerson->id));
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get('/food/distribution?twg_group_id='.$twgGroupId)
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('personnel.data', 1)
+            ->where('personnel.data.0.id', $twgPerson->id));
+});
+
+test('meal distribution does not load personnel until a sport or twg group is selected', function () {
+    currentMeal();
+    mealEligibleUser(ManagementTeamType::ICT);
+    $foodStaff = mealEligibleUser(ManagementTeamType::Food);
+
+    $this->actingAs($foodStaff)
+        ->get('/food/distribution')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('personnel.total', 0)
+            ->has('personnel.data', 0)
+            ->where('personnelFilters.has_group_filter', false));
+});
+
+test('admin and food staff can batch print filtered personnel but ordinary users cannot', function () {
+    $this->withoutVite();
+    MealSchedule::factory()->create([
+        'meet_id' => Meet::current()->id,
+        'date' => '2026-08-29',
+        'meal_type' => MealType::Lunch,
+        'starts_at' => '11:00',
+    ]);
+    MealSchedule::factory()->create([
+        'meet_id' => Meet::current()->id,
+        'date' => '2026-09-03',
+        'meal_type' => MealType::Lunch,
+        'starts_at' => '11:00',
+    ]);
+    $person = mealEligibleUser(ManagementTeamType::ICT);
+    $foodStaff = mealEligibleUser(ManagementTeamType::Food);
+    $groupId = $person->managementTeamMemberships()->firstOrFail()->management_team_id;
+
+    foreach ([$foodStaff, User::factory()->admin()->create()] as $authorized) {
+        $this->actingAs($authorized)
+            ->get('/food/meal-stubs/print?twg_group_id='.$groupId)
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('food/batch-print')
+                ->has('personnel', 1)
+                ->where('personnel.0.id', $person->id)
+                ->has('personnel.0.meals', 1));
+    }
+
+    $this->actingAs(User::factory()->create())
+        ->get('/food/meal-stubs/print')
+        ->assertForbidden();
+});
+
+test('batch printing requires a sport or twg group before personnel are loaded', function () {
+    $this->actingAs(User::factory()->admin()->create())
+        ->get('/food/meal-stubs/print')
+        ->assertStatus(422);
+});
+
+test('admin and food staff can print one personnel meal stub page for reproduction', function () {
+    $this->withoutVite();
+    MealSchedule::factory()->create([
+        'meet_id' => Meet::current()->id,
+        'date' => '2026-09-03',
+        'meal_type' => MealType::Lunch,
+        'starts_at' => '11:00',
+        'ends_at' => '14:00',
+    ]);
+    $person = mealEligibleUser(ManagementTeamType::ICT);
+
+    foreach ([User::factory()->admin()->create(), mealEligibleUser(ManagementTeamType::Food)] as $printer) {
+        $this->actingAs($printer)
+            ->get('/food/meal-stubs/print?personnel_id='.$person->id)
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('food/batch-print')
+                ->has('personnel', 1)
+                ->where('personnel.0.id', $person->id)
+                ->has('personnel.0.meals', 1));
+    }
+});
+
+test('admin and food staff can open a single blank meal stub reproduction page', function () {
+    $this->withoutVite();
+    MealSchedule::factory()->create([
+        'meet_id' => Meet::current()->id,
+        'date' => '2026-09-03',
+        'meal_type' => MealType::Lunch,
+        'starts_at' => '11:00',
+        'ends_at' => '14:00',
+    ]);
+
+    foreach ([User::factory()->admin()->create(), mealEligibleUser(ManagementTeamType::Food)] as $printer) {
+        $this->actingAs($printer)
+            ->get('/food/meal-stubs/template')
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('food/template-print')
+                ->has('meals', 1)
+                ->where('meals.0.meal', 'Lunch'));
+    }
+
+    $this->actingAs(User::factory()->create())
+        ->get('/food/meal-stubs/template')
+        ->assertForbidden();
 });
 
 test('one person with multiple eligible roles receives one entitlement per meal', function () {

@@ -22,7 +22,7 @@ class CompetitionAccessService
     public function scopeAthletes(Builder $query, User $user, ?int $meetId = null): Builder
     {
         $eventIds = $this->eventIds($user, $meetId);
-        $sportIds = Event::query()->whereKey($eventIds)->pluck('sport_id')->unique();
+        $sportIds = $this->sportIds($user, $meetId);
 
         return $query->where(fn (Builder $athletes): Builder => $athletes
             ->whereHas(
@@ -40,7 +40,7 @@ class CompetitionAccessService
     public function canAccessAthlete(User $user, Athlete $athlete): bool
     {
         $eventIds = $this->eventIds($user, $athlete->delegation->meet_id);
-        $sportIds = Event::query()->whereKey($eventIds)->pluck('sport_id')->unique();
+        $sportIds = $this->sportIds($user, $athlete->delegation->meet_id);
 
         return $athlete->entries()->whereIn('event_id', $eventIds)->exists()
             || $athlete->sportRosterMemberships()
@@ -152,6 +152,23 @@ class CompetitionAccessService
             ->whereHas('meets', fn ($meets) => $meets->whereKey($meetId)));
 
         return $events->distinct()->pluck('events.id');
+    }
+
+    /** @return Collection<int, int> */
+    public function sportIds(User $user, ?int $meetId = null): Collection
+    {
+        $sportIds = $this->assignments($user, $meetId)
+            ->pluck('meetSport.sport_id')
+            ->filter()
+            ->map(fn ($id): int => (int) $id);
+
+        if ($user->role === UserRole::TechnicalOfficial) {
+            $sportIds = $sportIds->merge($user->sports()->pluck('sports.id'));
+        } elseif ($user->role === UserRole::TournamentManager && $user->managedSport !== null) {
+            $sportIds->push($user->managedSport->id);
+        }
+
+        return $sportIds->unique()->values();
     }
 
     public function canAccessEvent(User $user, Event $event, ?int $meetId = null): bool

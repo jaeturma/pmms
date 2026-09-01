@@ -65,7 +65,7 @@ export default function PublicLayout({ children }: PropsWithChildren) {
     const topNavItems = publicNav
         ? [
               { label: 'Home', href: home().url },
-              { label: 'Schedule', href: publicMeet(publicNav.meetId).url },
+              { label: 'Schedule of Events', href: publicMeet(publicNav.meetId).url },
               { label: 'Results', href: publicResults(publicNav.meetId).url },
               { label: 'Medal Tally', href: publicTally(publicNav.meetId).url },
               { label: 'Rankings', href: publicRankings(publicNav.meetId).url },
@@ -86,7 +86,7 @@ export default function PublicLayout({ children }: PropsWithChildren) {
         ? [
               { label: 'Home', href: home().url, icon: HomeIcon },
               {
-                  label: 'Schedule',
+                  label: 'Schedule of Events',
                   href: publicMeet(publicNav.meetId).url,
                   icon: CalendarDays,
               },

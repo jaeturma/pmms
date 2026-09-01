@@ -127,7 +127,7 @@ const mainNavItems: NavItem[] = [
         icon: MapPin,
     },
     {
-        title: 'Schedule',
+        title: 'Schedule of Events',
         href: scheduleIndex(),
         icon: CalendarDays,
     },
@@ -316,7 +316,7 @@ const tournamentManagerNavItems: NavItem[] = [
         icon: ListChecks,
     },
     {
-        title: 'Schedule',
+        title: 'Schedule of Events',
         href: scheduleIndex(),
         icon: CalendarDays,
     },
@@ -379,7 +379,7 @@ export function AppSidebar() {
                 ? mainNavItems.filter((item) =>
                       [
                           'Dashboard',
-                          'Schedule',
+                          'Schedule of Events',
                           'Results',
                           'Medal tally',
                           'Delegations',
@@ -393,7 +393,7 @@ export function AppSidebar() {
                   ? mainNavItems.filter((item) =>
                         [
                             'Dashboard',
-                            'Schedule',
+                            'Schedule of Events',
                             'Results',
                             'Medal tally',
                             'Athletes',
@@ -404,7 +404,7 @@ export function AppSidebar() {
                     ? mainNavItems.filter((item) =>
                           [
                               'Dashboard',
-                              'Schedule',
+                              'Schedule of Events',
                               'Results',
                               'Medal tally',
                           ].includes(item.title),
@@ -455,7 +455,7 @@ export function AppSidebar() {
                 title: 'Competition',
                 icon: Trophy,
                 items: byTitle([
-                    'Schedule',
+                    'Schedule of Events',
                     'Matches',
                     'Results',
                     'Medal tally',
@@ -512,7 +512,7 @@ export function AppSidebar() {
                 title: 'Competition',
                 icon: Trophy,
                 items: byTitle(
-                    ['Schedule', 'Matches', 'Results', 'Medal tally'],
+                    ['Schedule of Events', 'Matches', 'Results', 'Medal tally'],
                     mainNavItems,
                 ),
             },
@@ -536,7 +536,7 @@ export function AppSidebar() {
                 title: 'Competition',
                 icon: Trophy,
                 items: byTitle([
-                    'Schedule',
+                    'Schedule of Events',
                     'Matches',
                     'Results',
                     'Medal tally',
@@ -598,7 +598,7 @@ export function AppSidebar() {
                 role === 'technical_official' || role === 'tournament_manager'
                     ? labeledItems.filter((item) => item.title !== 'Dashboard')
                     : byTitle(
-                          ['Schedule', 'Matches', 'Results', 'Medal tally'],
+                          ['Schedule of Events', 'Matches', 'Results', 'Medal tally'],
                           mainNavItems,
                       ),
         });
@@ -625,7 +625,7 @@ export function AppSidebar() {
                 title: 'Competition',
                 icon: Trophy,
                 items: byTitle([
-                    'Schedule',
+                    'Schedule of Events',
                     'Results',
                     'Medal tally',
                     ...(canFileProtest ? ['Protests'] : []),
@@ -642,7 +642,7 @@ export function AppSidebar() {
             {
                 title: 'Competition',
                 icon: Trophy,
-                items: byTitle(['Schedule', 'Results', 'Medal tally']),
+                items: byTitle(['Schedule of Events', 'Results', 'Medal tally']),
             },
         );
     } else {
@@ -660,7 +660,7 @@ export function AppSidebar() {
         navSections.push({
             title: 'Competition',
             icon: Trophy,
-            items: byTitle(['Schedule', 'Results', 'Medal tally']),
+            items: byTitle(['Schedule of Events', 'Results', 'Medal tally']),
         });
 
         if (auth.user?.can_manage_school_master_data) {
@@ -687,7 +687,7 @@ export function AppSidebar() {
             });
         }
 
-        if (teamTypes.includes('food')) {
+        if (role === 'admin' || teamTypes.includes('food')) {
             navSections.push({
                 title: 'Food Management',
                 icon: Utensils,

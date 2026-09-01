@@ -6,6 +6,7 @@ enum AgeDivision: string
 {
     case Elementary = 'elementary';
     case Secondary = 'secondary';
+    case Mixed = 'mixed';
     case ElementaryAndSecondary = 'elementary_secondary';
     case ParagamesIntellectualDisability = 'paragames_intellectual_disability';
     case ParagamesIntellectualDisabilityYouth15Below = 'paragames_intellectual_disability_youth_15_below';
@@ -19,6 +20,7 @@ enum AgeDivision: string
         return match ($this) {
             self::Elementary => 'Elementary',
             self::Secondary => 'Secondary',
+            self::Mixed => 'Mixed',
             self::ElementaryAndSecondary => 'Elementary & Secondary',
             self::ParagamesIntellectualDisability => 'Paragames Division Intellectual Disability',
             self::ParagamesIntellectualDisabilityYouth15Below => 'Intellectual Disability - Youth 15 below',

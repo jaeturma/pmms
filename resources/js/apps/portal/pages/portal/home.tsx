@@ -57,7 +57,7 @@ export default function PortalHome({
     closingSummary,
 }: Props) {
     const { props } = usePage<{
-        division: { name: string; heroIconUrl: string | null };
+        division: { name: string; heroLogoUrl: string | null };
     }>();
 
     if (meet === null) {
@@ -81,7 +81,7 @@ export default function PortalHome({
 
     const quickNavItems: PortalQuickNavItem[] = [
         {
-            label: 'Schedule',
+            label: 'Schedule of Events',
             href: publicMeet(meet.id).url,
             icon: CalendarDays,
             tone: 'accent',
@@ -131,7 +131,7 @@ export default function PortalHome({
                     title={meet.name}
                     description={`Department of Education\nSchools Division of ${props.division.name}`}
                     startsAtIso={meet.starts_at_iso}
-                    heroIconUrl={props.division.heroIconUrl}
+                    heroLogoUrl={props.division.heroLogoUrl}
                     municipalities={municipalities}
                     meta={
                         <>

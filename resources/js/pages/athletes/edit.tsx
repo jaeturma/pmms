@@ -19,6 +19,7 @@ import {
 const athleteDivisions = [
     ['elementary', 'Elementary'],
     ['secondary', 'Secondary'],
+    ['mixed', 'Mixed'],
     [
         'paragames_intellectual_disability',
         'Paragames Division Intellectual Disability',
@@ -509,14 +510,26 @@ export default function EditAthlete({
                                 <div className="grid flex-1 gap-3 sm:grid-cols-3 xl:grid-cols-5">
                                     {(
                                         [
-                                            ['athlete_history', 'Athlete Record'],
-                                            ['form_10', 'School Form 10 - Page 1'],
-                                            ['form_10_page_2', 'School Form 10 - Page 2'],
+                                            [
+                                                'athlete_history',
+                                                'Athlete Record',
+                                            ],
+                                            [
+                                                'form_10',
+                                                'School Form 10 - Page 1',
+                                            ],
+                                            [
+                                                'form_10_page_2',
+                                                'School Form 10 - Page 2',
+                                            ],
                                             [
                                                 'birth_certificate',
                                                 'Birth Certificate - Page 1',
                                             ],
-                                            ['birth_certificate_page_2', 'Birth Certificate - Page 2'],
+                                            [
+                                                'birth_certificate_page_2',
+                                                'Birth Certificate - Page 2',
+                                            ],
                                             [
                                                 'parental_consent',
                                                 'Parent Consent',

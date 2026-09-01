@@ -16,6 +16,7 @@ class DdOPAA2026FinalSeeder extends Seeder
             DdOPAA2026DSCSeeder::class,
             DdOPAA2026SportPersonnelSeeder::class,
             DdOPAA2026VenueSeeder::class,
+            DdOPAA2026FoodSeeder::class,
             DdOPAA2026AccountProvisionSeeder::class,
         ]);
     }

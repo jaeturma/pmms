@@ -28,7 +28,7 @@ export function PortalFooter() {
                                 href={publicMeet(nav.meetId).url}
                                 className="text-[var(--portal-ink-foreground)]/70 hover:text-[var(--portal-ink-foreground)]"
                             >
-                                Schedule
+                                Schedule of Events
                             </Link>
                             <Link
                                 href={publicResults(nav.meetId).url}

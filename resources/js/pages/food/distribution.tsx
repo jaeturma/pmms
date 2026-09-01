@@ -1,5 +1,5 @@
 import { Head, router } from '@inertiajs/react';
-import { Search } from 'lucide-react';
+import { Printer, Search } from 'lucide-react';
 import { useState } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { PageHeader } from '@/components/page-header';
@@ -37,6 +37,14 @@ type ReportRow = {
     consumed: number;
     not_claimed: number;
 };
+type PersonnelRow = {
+    id: number;
+    name: string;
+    code: string | null;
+    role: string;
+    sport: string | null;
+    twg_group: string | null;
+};
 
 export default function Distribution({
     entitlements,
@@ -45,6 +53,10 @@ export default function Distribution({
     schedules,
     can_override,
     report,
+    personnel,
+    personnelFilters,
+    sportOptions,
+    twgGroupOptions,
 }: {
     entitlements: Paginated<Row>;
     summary: { expected: number; consumed: number; remaining: number };
@@ -52,8 +64,20 @@ export default function Distribution({
     schedules: Array<{ id: number; label: string }>;
     can_override: boolean;
     report: ReportRow[];
+    personnel: Paginated<PersonnelRow>;
+    personnelFilters: {
+        search: string;
+        sport_id: number | null;
+        twg_group_id: number | null;
+        has_group_filter: boolean;
+    };
+    sportOptions: Array<{ id: number; label: string }>;
+    twgGroupOptions: Array<{ id: number; label: string }>;
 }) {
     const [search, setSearch] = useState(filters.search);
+    const [personnelSearch, setPersonnelSearch] = useState(
+        personnelFilters.search,
+    );
     const params = {
         ...(filters.search ? { search: filters.search } : {}),
         ...(filters.meal_schedule_id
@@ -63,6 +87,21 @@ export default function Distribution({
     const percentage = summary.expected
         ? Math.round((summary.consumed / summary.expected) * 1000) / 10
         : 0;
+    const personnelParams = {
+        ...(personnelFilters.search
+            ? { personnel_search: personnelFilters.search }
+            : {}),
+        ...(personnelFilters.sport_id
+            ? { sport_id: String(personnelFilters.sport_id) }
+            : {}),
+        ...(personnelFilters.twg_group_id
+            ? { twg_group_id: String(personnelFilters.twg_group_id) }
+            : {}),
+    };
+    const batchPrintUrl = `/food/meal-stubs/print?${new URLSearchParams(personnelParams).toString()}`;
+    const canLoadBatch = Boolean(
+        personnelFilters.sport_id || personnelFilters.twg_group_id,
+    );
     const consume = (row: Row, override = false) => {
         const reason = override
             ? window.prompt('Reason for serving-time override:')
@@ -98,6 +137,210 @@ export default function Distribution({
                         </div>
                     ))}
                 </div>
+                <section id="personnel-stubs" className="space-y-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                            <h2 className="text-lg font-semibold">
+                                Meal Stub Personnel
+                            </h2>
+                            <p className="text-sm text-muted-foreground">
+                                Select a Sport or TWG Group to load eligible
+                                personnel, then print their meal stubs as one A4
+                                page per person.
+                            </p>
+                        </div>
+                        {canLoadBatch ? (
+                            <Button asChild>
+                                <a href={batchPrintUrl} target="_blank" rel="noreferrer">
+                                    <Printer />
+                                    Print Filtered Batch ({personnel.total})
+                                </a>
+                            </Button>
+                        ) : (
+                            <Button disabled title="Select a sport or TWG group first">
+                                <Printer />
+                                Select Sport or TWG to Print
+                            </Button>
+                        )}
+                    </div>
+                    <div className="grid gap-2 lg:grid-cols-[minmax(15rem,1fr)_15rem_15rem_auto]">
+                        <form
+                            className="flex gap-2"
+                            onSubmit={(event) => {
+                                event.preventDefault();
+                                router.get('/food/distribution', {
+                                    ...personnelParams,
+                                    personnel_search:
+                                        personnelSearch || undefined,
+                                });
+                            }}
+                        >
+                            <Input
+                                value={personnelSearch}
+                                onChange={(event) =>
+                                    setPersonnelSearch(event.target.value)
+                                }
+                                placeholder="Search personnel"
+                            />
+                            <Button type="submit" variant="outline">
+                                <Search />
+                            </Button>
+                        </form>
+                        <Select
+                            value={String(
+                                personnelFilters.sport_id ?? 'all',
+                            )}
+                            onValueChange={(value) =>
+                                router.get('/food/distribution', {
+                                    ...personnelParams,
+                                    sport_id:
+                                        value === 'all' ? undefined : value,
+                                    personnel_page: undefined,
+                                })
+                            }
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder="All sports" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All sports</SelectItem>
+                                {sportOptions.map((option) => (
+                                    <SelectItem
+                                        key={option.id}
+                                        value={String(option.id)}
+                                    >
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Select
+                            value={String(
+                                personnelFilters.twg_group_id ?? 'all',
+                            )}
+                            onValueChange={(value) =>
+                                router.get('/food/distribution', {
+                                    ...personnelParams,
+                                    twg_group_id:
+                                        value === 'all' ? undefined : value,
+                                    personnel_page: undefined,
+                                })
+                            }
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder="All TWG groups" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">
+                                    All TWG groups
+                                </SelectItem>
+                                {twgGroupOptions.map((option) => (
+                                    <SelectItem
+                                        key={option.id}
+                                        value={String(option.id)}
+                                    >
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => router.get('/food/distribution')}
+                        >
+                            Clear
+                        </Button>
+                    </div>
+                    <div className="overflow-x-auto rounded-xl border">
+                        <table className="w-full text-sm">
+                            <thead className="bg-muted/50 text-left">
+                                <tr>
+                                    <th className="px-3 py-2 font-medium">
+                                        Personnel
+                                    </th>
+                                    <th className="px-3 py-2 font-medium">
+                                        Role
+                                    </th>
+                                    <th className="px-3 py-2 font-medium">
+                                        Sport
+                                    </th>
+                                    <th className="px-3 py-2 font-medium">
+                                        TWG Group
+                                    </th>
+                                    <th className="px-3 py-2 text-right font-medium">
+                                        Print
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {personnel.data.map((person) => (
+                                    <tr key={person.id} className="border-t">
+                                        <td className="px-3 py-2">
+                                            <p className="font-semibold uppercase">
+                                                {person.name}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {person.code}
+                                            </p>
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            {person.role}
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            {person.sport ?? '—'}
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            {person.twg_group ?? '—'}
+                                        </td>
+                                        <td className="px-3 py-2 text-right">
+                                            <Button size="sm" variant="outline" asChild>
+                                                <a
+                                                    href={`/food/meal-stubs/print?personnel_id=${person.id}`}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                >
+                                                    <Printer />
+                                                    Print 1 Page
+                                                </a>
+                                            </Button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {!personnelFilters.has_group_filter && (
+                                    <tr>
+                                        <td
+                                            colSpan={5}
+                                            className="px-3 py-8 text-center text-muted-foreground"
+                                        >
+                                            Select a Sport or TWG Group to load
+                                            personnel.
+                                        </td>
+                                    </tr>
+                                )}
+                                {personnelFilters.has_group_filter &&
+                                    personnel.data.length === 0 && (
+                                    <tr>
+                                        <td
+                                            colSpan={5}
+                                            className="px-3 py-8 text-center text-muted-foreground"
+                                        >
+                                            No eligible personnel match the
+                                            selected filters.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                    <PaginationControls
+                        page={personnel}
+                        url="/food/distribution"
+                        label="personnel"
+                        params={personnelParams}
+                        pageName="personnel_page"
+                    />
+                </section>
                 <div className="flex flex-col gap-3 sm:flex-row">
                     <form
                         className="flex flex-1 gap-2"

@@ -79,6 +79,38 @@ class MealEntitlementService
                 ]);
             }
         }
+
+        $this->markElapsedMealsAsConsumed($meet);
+    }
+
+    public function markElapsedMealsAsConsumed(Meet $meet, ?Carbon $now = null): void
+    {
+        $timezone = (string) config('app.timezone', 'Asia/Manila');
+        $now = ($now ?? now())->copy()->setTimezone($timezone);
+
+        MealSchedule::query()
+            ->where('meet_id', $meet->id)
+            ->get()
+            ->each(function (MealSchedule $schedule) use ($now, $timezone): void {
+                $end = Carbon::parse(
+                    $schedule->date->toDateString().' '.($schedule->ends_at ?: '23:59:59'),
+                    $timezone,
+                );
+
+                if ($now->lte($end)) {
+                    return;
+                }
+
+                MealEntitlement::query()
+                    ->where('meal_schedule_id', $schedule->id)
+                    ->where('status', 'available')
+                    ->update([
+                        'status' => 'consumed',
+                        'consumed_at' => $end,
+                        'consumption_method' => 'automatic',
+                        'updated_at' => now(),
+                    ]);
+            });
     }
 
     /** @return array{role: string, sport: ?string} */
@@ -111,7 +143,7 @@ class MealEntitlementService
         $start = Carbon::parse($date.' '.($schedule->starts_at ?: '00:00:00'), $timezone);
         $end = Carbon::parse($date.' '.($schedule->ends_at ?: '23:59:59'), $timezone);
 
-        return $now->lt($start) ? 'upcoming' : ($now->gt($end) ? 'expired' : 'available');
+        return $now->lt($start) ? 'upcoming' : ($now->gt($end) ? 'consumed' : 'available');
     }
 
     /** Backward-compatible name for existing controller consumers. */

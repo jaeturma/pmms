@@ -27,7 +27,7 @@ type Props = {
         name: string;
         areaLabel: string;
         logo_url: string | null;
-        hero_icon_url: string | null;
+        hero_logo_url: string | null;
     };
     typeLocked: boolean;
 };
@@ -195,14 +195,14 @@ export default function DivisionEdit({ division, typeLocked }: Props) {
 
                         <div className="space-y-2">
                             <Label htmlFor="division-hero-icon">
-                                Public landing hero icon (optional, max 2MB)
+                                Hero logo (optional, max 2MB)
                             </Label>
-                            {division.hero_icon_url && !data.hero_icon && !data.remove_hero_icon && (
+                            {division.hero_logo_url && !data.hero_icon && !data.remove_hero_icon && (
                                 <div className="flex items-center gap-3">
                                     <img
-                                        src={division.hero_icon_url}
+                                        src={division.hero_logo_url}
                                         alt=""
-                                        className="size-12 rounded-full border object-cover"
+                                        className="aspect-[670/165] w-full max-w-sm rounded border object-contain"
                                     />
                                     <Button
                                         type="button"
@@ -218,7 +218,7 @@ export default function DivisionEdit({ division, typeLocked }: Props) {
                             )}
                             {data.remove_hero_icon && (
                                 <p className="text-sm text-muted-foreground">
-                                    The current hero icon will be removed on
+                                    The current hero logo will be removed on
                                     save.{' '}
                                     <button
                                         type="button"
@@ -239,7 +239,7 @@ export default function DivisionEdit({ division, typeLocked }: Props) {
                                     const file = e.target.files?.[0] ?? null;
 
                                     if (file && file.size > MAX_LOGO_SIZE_BYTES) {
-                                        setError('hero_icon', 'The hero icon must not be larger than 2MB.');
+                                        setError('hero_icon', 'The hero logo must not be larger than 2MB.');
                                         e.target.value = '';
 
                                         return;
@@ -255,8 +255,8 @@ export default function DivisionEdit({ division, typeLocked }: Props) {
                             />
                             <InputError message={errors.hero_icon} />
                             <p className="text-sm text-muted-foreground">
-                                Shown on the public landing page's hero
-                                section in place of the default torch mark.
+                                Used only in the main landing-page hero section.
+                                Recommended rectangular size: 670 × 165 px.
                             </p>
                         </div>
 

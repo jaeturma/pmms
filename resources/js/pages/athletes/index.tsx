@@ -41,6 +41,7 @@ import { destroy, index, show, store, update } from '@/routes/athletes';
 const athleteDivisions = [
     ['elementary', 'Elementary'],
     ['secondary', 'Secondary'],
+    ['mixed', 'Mixed'],
     [
         'paragames_intellectual_disability',
         'Paragames Division Intellectual Disability',

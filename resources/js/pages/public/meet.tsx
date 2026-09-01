@@ -115,7 +115,7 @@ export default function PublicMeet({
                 <PublicLiveMatches meetId={meet.id} matches={liveMatches} />
 
                 <section className="flex flex-col gap-3">
-                    <Heading variant="small" title="Schedule" />
+                    <Heading variant="small" title="Schedule of Events" />
 
                     {days.length === 0 ? (
                         <EmptyState

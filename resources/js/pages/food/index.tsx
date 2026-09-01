@@ -1,5 +1,5 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { Plus, Trash2, Utensils } from 'lucide-react';
+import { Pencil, Plus, Printer, Trash2, Utensils } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -35,6 +35,7 @@ import {
 import {
     destroy as destroySchedule,
     store as storeSchedule,
+    update as updateSchedule,
 } from '@/routes/meal-schedules';
 
 type Schedule = {
@@ -47,6 +48,7 @@ type Schedule = {
     starts_at: string | null;
     ends_at: string | null;
     enforce_serving_time: boolean;
+    venue_id: number | null;
     venue: string | null;
     notes: string | null;
 };
@@ -325,6 +327,81 @@ reset();
     );
 }
 
+function EditScheduleDialog({
+    schedule,
+    onOpenChange,
+    venueOptions,
+}: {
+    schedule: Schedule | null;
+    onOpenChange: (open: boolean) => void;
+    venueOptions: Option[];
+}) {
+    const { data, setData, put, processing, errors } = useForm({
+        starts_at: schedule?.starts_at?.slice(0, 5) ?? '',
+        ends_at: schedule?.ends_at?.slice(0, 5) ?? '',
+        enforce_serving_time: schedule?.enforce_serving_time ?? true,
+        venue_id: schedule?.venue_id ? String(schedule.venue_id) : '',
+        notes: schedule?.notes ?? '',
+    });
+
+    const submit = (event: FormEvent) => {
+        event.preventDefault();
+        if (!schedule) return;
+
+        put(updateSchedule(schedule.id).url, {
+            preserveScroll: true,
+            onSuccess: () => onOpenChange(false),
+        });
+    };
+
+    return (
+        <Dialog open={schedule !== null} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-xl">
+                <DialogHeader>
+                    <DialogTitle>
+                        Edit {schedule?.meal_type_label} · {schedule?.date}
+                    </DialogTitle>
+                </DialogHeader>
+                <form onSubmit={submit} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="edit-schedule-starts">Starts</Label>
+                            <Input id="edit-schedule-starts" type="time" value={data.starts_at} onChange={(event) => setData('starts_at', event.target.value)} />
+                            <InputError message={errors.starts_at} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="edit-schedule-ends">Ends</Label>
+                            <Input id="edit-schedule-ends" type="time" value={data.ends_at} onChange={(event) => setData('ends_at', event.target.value)} />
+                            <InputError message={errors.ends_at} />
+                        </div>
+                    </div>
+                    <label className="flex items-center gap-2 text-sm">
+                        <Checkbox checked={data.enforce_serving_time} onCheckedChange={(checked) => setData('enforce_serving_time', checked === true)} />
+                        Enforce serving time
+                    </label>
+                    <div className="space-y-2">
+                        <Label htmlFor="edit-schedule-venue">Venue</Label>
+                        <Select value={data.venue_id || 'none'} onValueChange={(value) => setData('venue_id', value === 'none' ? '' : value)}>
+                            <SelectTrigger id="edit-schedule-venue"><SelectValue placeholder="Select a venue" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">No venue</SelectItem>
+                                {venueOptions.map((venue) => <SelectItem key={venue.id} value={String(venue.id)}>{venue.label}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                        <InputError message={errors.venue_id} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="edit-schedule-notes">Notes</Label>
+                        <Textarea id="edit-schedule-notes" value={data.notes} onChange={(event) => setData('notes', event.target.value)} />
+                        <InputError message={errors.notes} />
+                    </div>
+                    <DialogFooter><Button type="submit" disabled={processing}>Save changes</Button></DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 export default function Food({
     schedules,
     announcements,
@@ -334,6 +411,7 @@ export default function Food({
 }: Props) {
     const [createScheduleOpen, setCreateScheduleOpen] = useState(false);
     const [createAnnouncementOpen, setCreateAnnouncementOpen] = useState(false);
+    const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
 
     return (
         <>
@@ -344,6 +422,16 @@ export default function Food({
                     description="Meal schedule and announcements per meet."
                     actions={
                         <div className="flex gap-2">
+                            <Button variant="outline" asChild>
+                                <a
+                                    href="/food/meal-stubs/template"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                >
+                                    <Printer aria-hidden="true" />
+                                    Print Blank Meal Stubs
+                                </a>
+                            </Button>
                             <Button variant="outline" asChild>
                                 <Link href="/food/distribution">Meal Distribution</Link>
                             </Button>
@@ -361,6 +449,23 @@ export default function Food({
                         </div>
                     }
                 />
+
+                <nav className="flex flex-wrap gap-2" aria-label="Food management tabs">
+                    <Button variant="default" asChild>
+                        <Link href="/food#meal-setup">Meal Setup</Link>
+                    </Button>
+                    <Button variant="outline" asChild>
+                        <Link href="/food/distribution#personnel-stubs">
+                            <Printer /> Meal Stubs & Print
+                        </Link>
+                    </Button>
+                    <Button variant="outline" asChild>
+                        <Link href="/food/distribution">Distribution</Link>
+                    </Button>
+                    <Button variant="outline" asChild>
+                        <Link href="/food/distribution#reports">Reports</Link>
+                    </Button>
+                </nav>
 
                 <Card id="meal-setup">
                     <CardHeader>
@@ -399,6 +504,15 @@ export default function Food({
                                                 </p>
                                             )}
                                         </div>
+                                        <div className="flex items-center gap-1">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                aria-label="Edit schedule entry"
+                                                onClick={() => setEditingSchedule(schedule)}
+                                            >
+                                                <Pencil className="size-4" />
+                                            </Button>
                                         <ConfirmDialog
                                             trigger={
                                                 <Button
@@ -423,6 +537,7 @@ export default function Food({
                                                 )
                                             }
                                         />
+                                        </div>
                                     </li>
                                 ))}
                             </ul>
@@ -503,6 +618,14 @@ export default function Food({
                 open={createAnnouncementOpen}
                 onOpenChange={setCreateAnnouncementOpen}
                 meetOptions={meetOptions}
+            />
+            <EditScheduleDialog
+                key={editingSchedule?.id ?? 'closed'}
+                schedule={editingSchedule}
+                onOpenChange={(open) => {
+                    if (!open) setEditingSchedule(null);
+                }}
+                venueOptions={venueOptions}
             />
         </>
     );

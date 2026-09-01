@@ -1,4 +1,4 @@
-import { Head, usePage } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import {
     Award,
     Flame,
@@ -21,10 +21,6 @@ type Props = {
     municipalityCount: number;
     schoolCount: number;
     sportCount: number;
-};
-
-type PortalAboutPageProps = {
-    division: { name: string; areaLabel: string; heroIconUrl: string | null };
 };
 
 const values: { label: string; icon: LucideIcon }[] = [
@@ -70,8 +66,7 @@ export default function PortalAbout({
     schoolCount,
     sportCount,
 }: Props) {
-    const { props } = usePage<PortalAboutPageProps>();
-    const emblemUrl = props.division.heroIconUrl;
+    const emblemUrl = null;
 
     return (
         <>

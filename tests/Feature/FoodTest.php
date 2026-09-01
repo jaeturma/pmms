@@ -39,12 +39,27 @@ test('a meet has many meal schedules', function () {
     expect($meet->mealSchedules()->first()->id)->toBe($schedule->id);
 });
 
-test('a meet cannot have two schedule entries for the same meal on the same date', function () {
+test('a meet cannot have duplicate meal periods at the same start time', function () {
     $meet = Meet::factory()->create();
-    MealSchedule::factory()->create(['meet_id' => $meet->id, 'meal_type' => MealType::Lunch, 'date' => '2026-09-01']);
+    $period = ['meet_id' => $meet->id, 'meal_type' => MealType::Lunch, 'date' => '2026-09-01', 'starts_at' => '11:00'];
+    MealSchedule::factory()->create($period);
 
-    expect(fn () => MealSchedule::factory()->create(['meet_id' => $meet->id, 'meal_type' => MealType::Lunch, 'date' => '2026-09-01']))
+    expect(fn () => MealSchedule::factory()->create($period))
         ->toThrow(QueryException::class);
+});
+
+test('a meet can have morning and afternoon snack periods on the same date', function () {
+    $meet = Meet::factory()->create();
+    $attributes = ['meet_id' => $meet->id, 'meal_type' => MealType::Snack, 'date' => '2026-09-04'];
+
+    MealSchedule::factory()->create([...$attributes, 'starts_at' => '09:00']);
+    MealSchedule::factory()->create([...$attributes, 'starts_at' => '14:30']);
+
+    expect(MealSchedule::query()
+        ->where('meet_id', $meet->id)
+        ->where('meal_type', MealType::Snack->value)
+        ->whereDate('date', '2026-09-04')
+        ->count())->toBe(2);
 });
 
 // --- MealScheduleController ---
@@ -147,6 +162,28 @@ test('organizers can update and remove a schedule entry', function () {
     expect($schedule->fresh()->notes)->toBe('Served buffet-style.');
 
     $this->actingAs(User::factory()->admin()->create())
+        ->delete("/meal-schedules/{$schedule->id}")
+        ->assertSessionHasNoErrors();
+
+    expect(MealSchedule::query()->whereKey($schedule->id)->exists())->toBeFalse();
+});
+
+test('active food personnel can update and remove their meets meal schedules', function () {
+    $meet = Meet::factory()->create();
+    $foodPersonnel = foodMember($meet);
+    $schedule = MealSchedule::factory()->create(['meet_id' => $meet->id]);
+
+    $this->actingAs($foodPersonnel)
+        ->put("/meal-schedules/{$schedule->id}", [
+            'starts_at' => '09:00',
+            'ends_at' => '10:00',
+            'notes' => 'Updated by Food Team',
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect($schedule->fresh()->notes)->toBe('Updated by Food Team');
+
+    $this->actingAs($foodPersonnel)
         ->delete("/meal-schedules/{$schedule->id}")
         ->assertSessionHasNoErrors();
 

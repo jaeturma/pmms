@@ -159,7 +159,7 @@ test('the venue picker falls back to venues assigned to the event sport', functi
             ->where('venueOptions.0.playing_area_count', 2));
 });
 
-test('an event cannot be scheduled at an unassigned venue', function () {
+test('a configured events assigned venue overrides a submitted venue', function () {
     $input = validSlotInput();
     $assigned = Venue::factory()->create();
     EventVenue::create([
@@ -171,7 +171,12 @@ test('an event cannot be scheduled at an unassigned venue', function () {
 
     $this->actingAs(User::factory()->admin()->create())
         ->post('/schedule', $input)
-        ->assertSessionHasErrors('venue_id');
+        ->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('event_schedules', [
+        'event_id' => $input['event_id'],
+        'venue_id' => $assigned->id,
+    ]);
 });
 
 test('a court or table must be selected when an event has multiple playing areas', function () {

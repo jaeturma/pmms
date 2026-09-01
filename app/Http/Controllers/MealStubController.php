@@ -10,6 +10,8 @@ use App\Services\AuditLogger;
 use App\Services\MealEntitlementService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -32,7 +34,9 @@ class MealStubController extends Controller
 
         $meals = MealEntitlement::query()->where('user_id', $request->user()->id)
             ->whereHas('schedule', fn ($schedules) => $schedules->where('meet_id', $meet->id))
-            ->with('schedule.venue:id,name')->get()->sortBy('schedule.date')->values();
+            ->with('schedule.venue:id,name')->get()
+            ->sortBy(fn (MealEntitlement $meal): string => $meal->schedule->date->toDateString().' '.($meal->schedule->starts_at ?? ''))
+            ->values();
 
         return Inertia::render('meal-stub/show', [
             'person' => ['name' => $request->user()->name, ...$identity, 'meet' => $meet->name],
@@ -58,6 +62,24 @@ class MealStubController extends Controller
         $this->entitlements->sync($meet);
         $search = trim($request->string('search')->toString());
         $scheduleId = $request->integer('meal_schedule_id') ?: null;
+        $hasPersonnelFilter = $request->integer('sport_id') > 0
+            || $request->integer('twg_group_id') > 0;
+        $personnel = $hasPersonnelFilter
+            ? $this->filteredPersonnel($request, $meet)
+            : collect();
+        $personnelPage = max(1, $request->integer('personnel_page', 1));
+        $personnelPerPage = 20;
+        $personnelPaginator = new LengthAwarePaginator(
+            $personnel->forPage($personnelPage, $personnelPerPage)->values(),
+            $personnel->count(),
+            $personnelPerPage,
+            $personnelPage,
+            [
+                'path' => route('food.distribution'),
+                'pageName' => 'personnel_page',
+                'query' => $request->query(),
+            ],
+        );
 
         $query = MealEntitlement::query()->whereHas('schedule', fn ($schedules) => $schedules
             ->where('meet_id', $meet->id)->whereDate('date', now()->toDateString()))
@@ -109,11 +131,84 @@ class MealStubController extends Controller
             'entitlements' => $items,
             'summary' => ['expected' => $expected, 'consumed' => $consumed, 'remaining' => $expected - $consumed],
             'filters' => ['search' => $search, 'meal_schedule_id' => $scheduleId],
+            'personnel' => $personnelPaginator,
+            'personnelFilters' => [
+                'search' => trim($request->string('personnel_search')->toString()),
+                'sport_id' => $request->integer('sport_id') ?: null,
+                'twg_group_id' => $request->integer('twg_group_id') ?: null,
+                'has_group_filter' => $hasPersonnelFilter,
+            ],
+            'sportOptions' => $meet->meetSports()->with('sport:id,name')->get()
+                ->sortBy('sport.name')->values()
+                ->map(fn ($meetSport): array => ['id' => $meetSport->sport_id, 'label' => $meetSport->sport->name]),
+            'twgGroupOptions' => $meet->managementTeams()->orderBy('name')->get(['id', 'name'])
+                ->map(fn ($team): array => ['id' => $team->id, 'label' => $team->name]),
             'schedules' => MealSchedule::query()->where('meet_id', $meet->id)
                 ->whereDate('date', now()->toDateString())->with('venue:id,name')->get()
                 ->map(fn ($schedule) => ['id' => $schedule->id, 'label' => $schedule->meal_type->label().' · '.($schedule->starts_at ?: '')]),
             'can_override' => $request->user()->isAdmin(),
             'report' => $report,
+        ]);
+    }
+
+    public function batchPrint(Request $request): Response
+    {
+        $meet = Meet::current();
+        abort_unless($this->foodPolicy->viewAny($request->user()), 403);
+        abort_unless(
+            $request->integer('sport_id') > 0
+                || $request->integer('twg_group_id') > 0
+                || $request->integer('personnel_id') > 0,
+            422,
+            'Select a sport, TWG group, or personnel before loading meal stubs.',
+        );
+        $this->entitlements->sync($meet);
+
+        $personnel = $this->filteredPersonnel($request, $meet);
+        $entitlements = MealEntitlement::query()
+            ->whereIn('user_id', $personnel->pluck('id'))
+            ->whereHas('schedule', fn ($schedules) => $schedules
+                ->where('meet_id', $meet->id)
+                ->whereBetween('date', ['2026-09-03', '2026-09-08']))
+            ->with('schedule:id,meet_id,meal_type,date,starts_at,ends_at,venue_id')
+            ->get()
+            ->groupBy('user_id');
+
+        return Inertia::render('food/batch-print', [
+            'meet' => $meet->name,
+            'personnel' => $personnel->map(function (array $person) use ($entitlements): array {
+                $meals = $entitlements->get($person['id'], collect())
+                    ->sortBy(fn (MealEntitlement $meal): string => $meal->schedule->date->toDateString().' '.($meal->schedule->starts_at ?? ''))
+                    ->values()
+                    ->map(fn (MealEntitlement $meal): array => $this->row($meal));
+
+                return [...$person, 'meals' => $meals];
+            })->values(),
+        ]);
+    }
+
+    public function templatePrint(Request $request): Response
+    {
+        $meet = Meet::current();
+        abort_unless($this->foodPolicy->viewAny($request->user()), 403);
+
+        $meals = MealSchedule::query()
+            ->where('meet_id', $meet->id)
+            ->whereBetween('date', ['2026-09-03', '2026-09-08'])
+            ->orderBy('date')
+            ->orderBy('starts_at')
+            ->get()
+            ->map(fn (MealSchedule $schedule): array => [
+                'id' => $schedule->id,
+                'date' => $schedule->date->toDateString(),
+                'meal' => $schedule->meal_type->label(),
+                'starts_at' => $schedule->starts_at,
+                'ends_at' => $schedule->ends_at,
+            ]);
+
+        return Inertia::render('food/template-print', [
+            'meet' => $meet->name,
+            'meals' => $meals,
         ]);
     }
 
@@ -174,5 +269,52 @@ class MealStubController extends Controller
             'consumed_at' => $item->consumed_at?->format('g:i A'),
             'enforce_serving_time' => $item->schedule->enforce_serving_time,
         ];
+    }
+
+    /** @return Collection<int, array<string, mixed>> */
+    private function filteredPersonnel(Request $request, Meet $meet): Collection
+    {
+        $search = mb_strtolower(trim($request->string('personnel_search')->toString()));
+        $sportId = $request->integer('sport_id') ?: null;
+        $twgGroupId = $request->integer('twg_group_id') ?: null;
+        $personnelId = $request->integer('personnel_id') ?: null;
+
+        return $this->entitlements->eligibleUsers($meet)
+            ->map(function ($user) use ($meet): array {
+                $assignments = $user->meetSportAssignments()
+                    ->where('status', 'active')
+                    ->whereHas('meetSport', fn ($sports) => $sports->where('meet_id', $meet->id))
+                    ->with('meetSport.sport:id,name')
+                    ->get();
+                $memberships = $user->managementTeamMemberships()
+                    ->where('status', 'active')
+                    ->whereHas('managementTeam', fn ($teams) => $teams->where('meet_id', $meet->id))
+                    ->with('managementTeam:id,name')
+                    ->get();
+                $identity = $this->entitlements->identity($user, $meet);
+
+                return [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'code' => $user->username ?? $user->email,
+                    'role' => $identity['role'],
+                    'sport' => $assignments->pluck('meetSport.sport.name')->filter()->unique()->join(', ') ?: null,
+                    'twg_group' => $memberships->pluck('managementTeam.name')->filter()->unique()->join(', ') ?: null,
+                    'sport_ids' => $assignments->pluck('meetSport.sport_id')->unique()->values()->all(),
+                    'twg_group_ids' => $memberships->pluck('management_team_id')->unique()->values()->all(),
+                ];
+            })
+            ->filter(fn (array $person): bool => $search === ''
+                || str_contains(mb_strtolower($person['name'].' '.$person['code']), $search))
+            ->filter(fn (array $person): bool => $sportId === null || in_array($sportId, $person['sport_ids'], true))
+            ->filter(fn (array $person): bool => $twgGroupId === null || in_array($twgGroupId, $person['twg_group_ids'], true))
+            ->filter(fn (array $person): bool => $personnelId === null || $person['id'] === $personnelId)
+            ->map(function (array $person): array {
+                unset($person['sport_ids'], $person['twg_group_ids']);
+
+                return $person;
+            })
+            ->sortBy('name')
+            ->values();
     }
 }

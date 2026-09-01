@@ -16,6 +16,52 @@ use Illuminate\Validation\Validator;
 
 class ScheduleRequest extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        $event = Event::query()->find($this->integer('event_id'));
+        if ($event === null) {
+            return;
+        }
+
+        $categoryId = $event->sport_category_id;
+        $venueId = EventVenue::query()
+            ->where('event_id', $event->id)
+            ->orderBy('id')
+            ->value('venue_id');
+
+        if ($venueId === null && $categoryId !== null) {
+            $venueId = SportCategoryCompetitionArea::query()
+                ->where('sport_category_id', $categoryId)
+                ->where('status', 'active')
+                ->whereHas('meetSport', fn ($meetSports) => $meetSports
+                    ->where('meet_id', Meet::current()->id)
+                    ->where('sport_id', $event->sport_id)
+                    ->where('active', true))
+                ->orderBy('id')
+                ->value('venue_id');
+        }
+
+        if ($venueId === null) {
+            $venueId = MeetSportVenue::query()
+                ->whereHas('meetSport', fn ($meetSports) => $meetSports
+                    ->where('meet_id', Meet::current()->id)
+                    ->where('sport_id', $event->sport_id)
+                    ->where('active', true))
+                ->orderBy('id')
+                ->value('venue_id');
+        }
+
+        $derived = [];
+        if ($categoryId !== null) {
+            $derived['sport_category_id'] = $categoryId;
+        }
+        if ($venueId !== null) {
+            $derived['venue_id'] = $venueId;
+        }
+
+        $this->merge($derived);
+    }
+
     public function authorize(): bool
     {
         $user = $this->user();

@@ -254,6 +254,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('meal-stub', [MealStubController::class, 'show'])->name('meal-stub.show');
     Route::post('meal-stub/{mealEntitlement}/consume', [MealStubController::class, 'consumeOwn'])->name('meal-stub.consume');
     Route::get('food/distribution', [MealStubController::class, 'distribution'])->name('food.distribution');
+    Route::get('food/meal-stubs/print', [MealStubController::class, 'batchPrint'])->name('food.meal-stubs.print');
+    Route::get('food/meal-stubs/template', [MealStubController::class, 'templatePrint'])->name('food.meal-stubs.template');
     Route::post('food/distribution/{mealEntitlement}/consume', [MealStubController::class, 'consumeStaff'])->name('food.distribution.consume');
     Route::get('billeting', [BilletingVenueController::class, 'index'])->name('billeting.index');
     Route::get('transport', [VehicleController::class, 'index'])->name('transport.index');

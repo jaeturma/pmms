@@ -40,7 +40,7 @@ type Props = {
 export default function ScheduleSheet({ date, venues, generatedAt }: Props) {
     return (
         <>
-            <Head title={`Schedule — ${date}`} />
+            <Head title={`Schedule of Events — ${date}`} />
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
                     title="Daily schedule"
@@ -125,7 +125,7 @@ export default function ScheduleSheet({ date, venues, generatedAt }: Props) {
 ScheduleSheet.layout = {
     breadcrumbs: [
         {
-            title: 'Schedule',
+            title: 'Schedule of Events',
             href: scheduleIndex(),
         },
     ],

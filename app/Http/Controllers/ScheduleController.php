@@ -226,6 +226,8 @@ class ScheduleController extends Controller
                 ->map(fn (Event $event): array => [
                     'id' => $event->id,
                     'sport_id' => $event->sport_id,
+                    'sport_category_id' => $event->sport_category_id,
+                    'venue_id' => $venueOptions->firstWhere('event_id', $event->id)['id'] ?? null,
                     'label' => sprintf(
                         '%s — %s (%s, %s)',
                         $event->sport->name,
@@ -280,7 +282,7 @@ class ScheduleController extends Controller
 
         $this->audit->record('schedule.created', $schedule, $this->context($schedule));
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Schedule slot created.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Schedule of Events entry created.')]);
 
         return back();
     }
@@ -304,7 +306,7 @@ class ScheduleController extends Controller
 
         $this->audit->record('schedule.updated', $schedule, $this->context($schedule));
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Schedule slot updated.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Schedule of Events entry updated.')]);
 
         return back();
     }
@@ -334,7 +336,7 @@ class ScheduleController extends Controller
 
         $this->audit->record('schedule.deleted', $schedule, $context);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Schedule slot deleted.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Schedule of Events entry deleted.')]);
 
         return back();
     }

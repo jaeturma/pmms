@@ -41,7 +41,7 @@ class DivisionController extends Controller
                 'name' => $division->name,
                 'areaLabel' => $division->areaLabel(),
                 'logo_url' => $division->logo_upload_id === null ? null : route('division.logo'),
-                'hero_icon_url' => $division->hero_icon_upload_id === null ? null : route('division.hero-icon'),
+                'hero_logo_url' => $division->hero_icon_upload_id === null ? null : route('division.hero-icon'),
             ],
             'typeLocked' => $division->typeIsLocked(),
         ]);
