@@ -3,6 +3,9 @@
 use App\Enums\DelegationStatus;
 use App\Enums\EligibilityStatus;
 use App\Enums\EntryStatus;
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
+use App\Enums\UserRole;
 use App\Models\Accreditation;
 use App\Models\Athlete;
 use App\Models\CoachAssignmentRequest;
@@ -15,6 +18,7 @@ use App\Models\Event;
 use App\Models\EventResult;
 use App\Models\Meet;
 use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
 use App\Models\Personnel;
 use App\Models\School;
 use App\Models\SchoolDistrict;
@@ -62,6 +66,53 @@ function coachFor(Delegation $delegation): User
 
     return $coach;
 }
+
+test('coaches and tournament ICT can recover non-listed athletes by assigning sport and coach', function () {
+    $delegation = Delegation::factory()->create(['status' => DelegationStatus::Draft]);
+    $coach = coachFor($delegation);
+    $assignment = $coach->coachAssignmentRequests()->with('meetSport')->where('delegation_id', $delegation->id)->firstOrFail();
+    $athlete = Athlete::factory()->create([
+        'delegation_id' => $delegation->id,
+        'school_id' => schoolForDelegation($delegation)->id,
+        'registered_by' => $coach->id,
+        'sex' => 'male',
+        'grade_level' => 9,
+    ]);
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+    MeetSportAssignment::factory()->create([
+        'user_id' => $ict->id,
+        'meet_sport_id' => $assignment->meet_sport_id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($coach)->get('/athletes')->assertInertia(fn ($page) => $page
+        ->where('canViewUnassigned', false)
+        ->has('athletes.data', 1)
+        ->where('athletes.data.0.id', $athlete->id));
+    $this->actingAs($ict)->get('/athletes?unassigned=1')->assertInertia(fn ($page) => $page
+        ->has('athletes.data', 1)
+        ->where('athletes.data.0.can_update', true));
+
+    $this->actingAs($ict)->put("/athletes/{$athlete->id}", [
+        'first_name' => $athlete->first_name,
+        'last_name' => $athlete->last_name,
+        'sex' => $athlete->sex->value,
+        'birthdate' => $athlete->birthdate->toDateString(),
+        'lrn' => $athlete->lrn,
+        'grade_level' => $athlete->grade_level,
+        'meet_sport_ids' => [$assignment->meet_sport_id],
+        'event_ids' => [],
+        'registered_by' => $coach->id,
+    ])->assertRedirect('/athletes')->assertSessionDoesntHaveErrors();
+
+    expect($athlete->sportRosterMemberships()->where('meet_sport_id', $assignment->meet_sport_id)->exists())->toBeTrue()
+        ->and($athlete->fresh()->registered_by)->toBe($coach->id);
+    $this->actingAs($ict)->get('/athletes?unassigned=1')->assertInertia(fn ($page) => $page->has('athletes.data', 0));
+    $this->actingAs($ict)->get('/athletes')->assertInertia(fn ($page) => $page
+        ->has('athletes.data', 1)
+        ->where('athletes.data.0.id', $athlete->id));
+});
 
 function requiredCoachAthleteFields(): array
 {
@@ -415,7 +466,7 @@ test('a coach cannot view or register athletes for another delegation', function
         ->assertForbidden();
 });
 
-test('a coach sees only owned athletes within the assigned event scope', function () {
+test('a coach sees all owned athletes regardless of sport or event scope', function () {
     $delegation = Delegation::factory()->create(['status' => DelegationStatus::Draft]);
     $coach = coachFor($delegation);
     $owned = Athlete::factory()->create([
@@ -438,8 +489,18 @@ test('a coach sees only owned athletes within the assigned event scope', functio
     $this->actingAs($coach)
         ->get('/athletes')
         ->assertInertia(fn ($page) => $page
-            ->has('athletes.data', 1)
-            ->where('athletes.data.0.id', $owned->id));
+            ->has('athletes.data', 2)
+            ->where('athletes.data', fn ($athletes) => collect($athletes)->pluck('id')->sort()->values()->all()
+                === collect([$owned->id, $outsideScope->id])->sort()->values()->all()));
+
+    $this->actingAs($coach)
+        ->get('/athletes?unassigned=1')
+        ->assertInertia(fn ($page) => $page
+            ->where('filters.unassigned', false)
+            ->where('canViewUnassigned', false)
+            ->has('athletes.data', 2)
+            ->where('athletes.data', fn ($athletes) => collect($athletes)->pluck('id')->sort()->values()->all()
+                === collect([$owned->id, $outsideScope->id])->sort()->values()->all()));
 
     $this->actingAs($coach)
         ->get("/athletes/{$unowned->id}")

@@ -524,7 +524,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::patch('events/{event}/archive', [EventController::class, 'archive'])->name('events.archive');
         Route::patch('events/{event}/restore', [EventController::class, 'restore'])->name('events.restore');
-        Route::delete('events/{event}', [EventController::class, 'destroy'])->name('events.destroy');
 
         Route::patch('venues/{venue}/archive', [VenueController::class, 'archive'])->name('venues.archive');
         Route::patch('venues/{venue}/restore', [VenueController::class, 'restore'])->name('venues.restore');
@@ -562,6 +561,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware('role:admin,organizer,technical_official,tournament_ict,tournament_secretary')->group(function () {
         Route::post('events', [EventController::class, 'store'])->name('events.store');
         Route::put('events/{event}', [EventController::class, 'update'])->name('events.update');
+        Route::delete('events/{event}', [EventController::class, 'destroy'])->name('events.destroy');
         Route::post('venues', [VenueController::class, 'store'])->name('venues.store');
         Route::put('venues/{venue}', [VenueController::class, 'update'])->name('venues.update');
     });

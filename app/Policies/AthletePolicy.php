@@ -46,6 +46,10 @@ class AthletePolicy
             return true;
         }
 
+        if ($this->isAssignedTournamentIct($user, $athlete)) {
+            return true;
+        }
+
         if ($user->athleteOversightAssignments()->where('active', true)->where('meet_id', $athlete->delegation->meet_id)
             ->where(function ($query) use ($athlete) {
                 $query->where(fn ($scope) => $scope->where('authority_type', 'district_sports_coordinator')->where('school_district_id', $athlete->school->school_district_id))
@@ -131,6 +135,10 @@ class AthletePolicy
 
         if (! $hasIctAssignment) {
             return false;
+        }
+
+        if ($athlete->sportRosterMemberships()->doesntExist()) {
+            return true;
         }
 
         $assignedMeetSportIds = $user->meetSportAssignments()

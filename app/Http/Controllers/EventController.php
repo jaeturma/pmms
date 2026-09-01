@@ -169,8 +169,10 @@ class EventController extends Controller
     /**
      * Delete an event that no meet references.
      */
-    public function destroy(Event $event): RedirectResponse
+    public function destroy(Request $request, Event $event): RedirectResponse
     {
+        $this->authorizeSport($request->user(), $event->sport_id);
+
         if ($event->meets()->exists()) {
             Inertia::flash('toast', [
                 'type' => 'error',

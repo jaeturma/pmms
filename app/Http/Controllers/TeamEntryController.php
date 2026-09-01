@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AgeDivision;
 use App\Enums\EligibilityStatus;
 use App\Enums\EntryStatus;
 use App\Enums\MedicalClearanceStatus;
@@ -112,7 +113,10 @@ class TeamEntryController extends Controller
                 throw ValidationException::withMessages(['athlete_ids' => __('This relay requires exactly :count swimmers.', ['count' => $required])]);
             }
             $matchingRosterCount = SportRosterMember::query()->where('meet_sport_id', $meetSportId)
-                ->where('delegation_id', $delegation->id)->where('level', $event->age_division->value)
+                ->where('delegation_id', $delegation->id)
+                ->whereIn('level', $event->age_division === AgeDivision::ElementaryAndSecondary
+                    ? [AgeDivision::Elementary->value, AgeDivision::Secondary->value]
+                    : [$event->age_division->value])
                 ->where('gender', $event->gender->value)->whereIn('athlete_id', $athletes->pluck('id'))->count();
             if ($matchingRosterCount !== $required) {
                 throw ValidationException::withMessages(['athlete_ids' => __('Every relay swimmer must belong to the matching delegation Swimming roster.')]);
@@ -130,7 +134,7 @@ class TeamEntryController extends Controller
             if (! $event->meets->contains('id', $athlete->delegation->meet_id)) {
                 throw ValidationException::withMessages(['event_id' => __('The team event is not part of the athletes’ meet.')]);
             }
-            if (! $event->gender->accepts($athlete->sex) || $event->age_division !== $athlete->ageDivision()) {
+            if (! $event->gender->accepts($athlete->sex) || ! $event->age_division->accepts($athlete->ageDivision())) {
                 throw ValidationException::withMessages(['athlete_ids' => __('Every member must match the Event requirements.')]);
             }
             if ($athlete->delegation->meet->medical_clearance_required && $athlete->medicalClearance?->status !== MedicalClearanceStatus::Cleared) {

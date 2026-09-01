@@ -72,7 +72,7 @@ class MeetReadinessService
             $athletes = $eventEntries->pluck('athlete')->filter()->unique('id');
             $meetSportId = $meetSports->firstWhere('sport_id', $event->sport_id)?->id;
             $eventRoster = $rosterMembers->where('meet_sport_id', $meetSportId)
-                ->filter(fn (SportRosterMember $member): bool => $member->level === $event->age_division
+                ->filter(fn (SportRosterMember $member): bool => $event->age_division->accepts($member->level)
                     && ($event->gender->value === 'mixed' || $member->gender === $event->gender));
             $rosterAthletes = $eventRoster->pluck('athlete')->filter()->unique('id');
             $roles = $assignments->where('meet_sport_id', $meetSportId)->pluck('role')->map(fn ($role) => $role->value)->unique();

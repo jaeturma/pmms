@@ -71,6 +71,13 @@ class AthleteController extends Controller
         $sex = $request->string('sex')->value();
         $accreditation = $request->string('accreditation')->value();
         $deleted = $user->isAdmin() && $request->boolean('deleted');
+        $ictMeetIds = $user->meetSportAssignments()
+            ->where('status', 'active')
+            ->where('role', MeetSportAssignmentRole::TournamentICT->value)
+            ->with('meetSport:id,meet_id')
+            ->get()->pluck('meetSport.meet_id')->filter()->unique()->values();
+        $canViewUnassigned = $ictMeetIds->isNotEmpty();
+        $unassigned = $canViewUnassigned && $request->boolean('unassigned');
 
         $query = Athlete::query()
             ->with([
@@ -99,17 +106,17 @@ class AthleteController extends Controller
                 fn ($officers) => $officers->whereKey($user->getKey()),
             );
         } elseif ($user->role === UserRole::Coach) {
-            $assignedEventIds = $user->approvedCoachEventIds();
             $query->whereHas('delegation.personnel', fn ($personnel) => $personnel->where('user_id', $user->id))
-                ->ownedBy($user)
-                ->where(fn ($athletes) => $athletes
-                    ->whereDoesntHave('entries')
-                    ->orWhereHas('entries', fn ($entries) => $entries->whereIn('event_id', $assignedEventIds)));
+                ->ownedBy($user);
         } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer)
             && $user->hasPermission(Permission::AthleteEligibilityReview, Meet::current())) {
             $query->whereHas('delegation', fn ($delegation) => $delegation->where('meet_id', Meet::current()->id));
         } elseif (! $user->canManageProductionAccounts() && $user->tournamentMeetIds()->isNotEmpty()) {
-            app(CompetitionAccessService::class)->scopeAthletes($query, $user);
+            if ($unassigned && $ictMeetIds->isNotEmpty()) {
+                $query->whereHas('delegation', fn ($delegations) => $delegations->whereIn('meet_id', $ictMeetIds));
+            } else {
+                app(CompetitionAccessService::class)->scopeAthletes($query, $user);
+            }
         } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer) && ! $user->canManageProductionAccounts()) {
             $assignments = $user->athleteOversightAssignments()->where('active', true)->get();
             $query->whereHas('school', function ($school) use ($assignments): void {
@@ -121,6 +128,12 @@ class AthleteController extends Controller
                     }
                 });
             });
+        }
+
+        if ($unassigned) {
+            $query->whereDoesntHave('sportRosterMemberships');
+        } elseif ($ictMeetIds->isNotEmpty() && $user->role !== UserRole::Coach && ! $deleted) {
+            $query->whereHas('sportRosterMemberships');
         }
 
         $query
@@ -209,8 +222,10 @@ class AthleteController extends Controller
                 'school_district_id' => $schoolDistrictId, 'school_id' => $schoolId,
                 'sport_id' => $sportId, 'sex' => $sex, 'accreditation' => $accreditation,
                 'deleted' => $deleted,
+                'unassigned' => $unassigned,
             ],
             'canViewDeleted' => $user->isAdmin(),
+            'canViewUnassigned' => $canViewUnassigned,
             'delegationOptions' => $availableDelegations
                 ->map(fn (Delegation $delegation): array => [
                     'id' => $delegation->id,
@@ -577,6 +592,7 @@ class AthleteController extends Controller
     public function update(AthleteRequest $request, Athlete $athlete): RedirectResponse
     {
         Gate::authorize('update', $athlete);
+        $wasUnassigned = $athlete->sportRosterMemberships()->doesntExist();
 
         /** @var User $user */
         $user = $request->user();
@@ -610,7 +626,11 @@ class AthleteController extends Controller
                 }
                 if ($request->filled('registered_by')) {
                     $coach = User::query()->where('role', UserRole::Coach->value)->findOrFail($request->integer('registered_by'));
-                    if ($eventIds->intersect($coach->approvedCoachEventIdsForDelegation($athlete->delegation))->isEmpty()) {
+                    $coachEventIds = $coach->approvedCoachEventIdsForDelegation($athlete->delegation);
+                    $coachSportIds = Event::query()->whereKey($coachEventIds)->pluck('sport_id')->unique();
+                    $selectedSportIds = MeetSport::query()->whereKey($meetSportIds)->pluck('sport_id')->unique();
+                    if ($eventIds->diff($coachEventIds)->isNotEmpty()
+                        || $selectedSportIds->diff($coachSportIds)->isNotEmpty()) {
                         throw ValidationException::withMessages(['registered_by' => __('The selected Coach is not approved for this athlete’s assigned events.')]);
                     }
                     $athlete->registered_by = $coach->id;
@@ -738,6 +758,10 @@ class AthleteController extends Controller
         $this->audit->record('athlete.updated', $athlete, ['name' => $athlete->fullName()]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Athlete updated.')]);
+
+        if ($wasUnassigned && $athlete->sportRosterMemberships()->exists()) {
+            return redirect()->route('athletes.index');
+        }
 
         return back();
     }

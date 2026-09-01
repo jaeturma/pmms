@@ -292,7 +292,7 @@ class EntryController extends Controller
             if (! $event->gender->accepts($athlete->sex)) {
                 throw ValidationException::withMessages([$errorKey => __('The athlete\'s sex does not match :event.', ['event' => $event->name])]);
             }
-            if ($event->age_division !== $athlete->ageDivision()) {
+            if (! $event->age_division->accepts($athlete->ageDivision())) {
                 throw ValidationException::withMessages([$errorKey => __('The athlete\'s grade level does not match :event.', ['event' => $event->name])]);
             }
             if ($athlete->eligibilityReview?->status !== EligibilityStatus::Approved) {

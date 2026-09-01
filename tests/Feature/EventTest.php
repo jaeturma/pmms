@@ -140,7 +140,7 @@ test('admins can update an event', function () {
         ->and(AuditLog::query()->where('action', 'event.updated')->exists())->toBeTrue();
 });
 
-test('tournament ICT and secretaries can create and update events only for assigned sports', function (MeetSportAssignmentRole $role, UserRole $userRole) {
+test('tournament ICT and secretaries can create update and delete events only for assigned sports', function (MeetSportAssignmentRole $role, UserRole $userRole) {
     $meet = Meet::current();
     $assignedSport = Sport::factory()->create();
     $otherSport = Sport::factory()->create();
@@ -152,7 +152,7 @@ test('tournament ICT and secretaries can create and update events only for assig
         'role' => $role,
         'status' => MeetSportAssignmentStatus::Active,
     ]);
-    Event::factory()->create(['sport_id' => $otherSport->id]);
+    $outsideEvent = Event::factory()->create(['sport_id' => $otherSport->id]);
 
     $this->actingAs($user)->get('/events')->assertInertia(fn (AssertableInertia $page) => $page
         ->where('canManage', true)
@@ -165,14 +165,32 @@ test('tournament ICT and secretaries can create and update events only for assig
 
     $event = Event::factory()->create(['sport_id' => $assignedSport->id]);
     $this->actingAs($user)->put("/events/{$event->id}", [...validEventPayload($assignedSport), 'name' => 'Allowed Update'])->assertSessionHasNoErrors();
-    $this->actingAs($user)->patch("/events/{$event->id}/archive")->assertForbidden();
-    $this->actingAs($user)->delete("/events/{$event->id}")->assertForbidden();
-
     expect($event->fresh()->name)->toBe('Allowed Update');
+    $this->actingAs($user)->patch("/events/{$event->id}/archive")->assertForbidden();
+    $this->actingAs($user)->delete("/events/{$outsideEvent->id}")->assertForbidden();
+    $this->actingAs($user)->delete("/events/{$event->id}")->assertSessionHasNoErrors();
+
+    $this->assertDatabaseMissing('events', ['id' => $event->id]);
+    $this->assertDatabaseHas('events', ['id' => $outsideEvent->id]);
 })->with([
     'Tournament ICT' => [MeetSportAssignmentRole::TournamentICT, UserRole::TournamentICT],
     'Tournament Secretary' => [MeetSportAssignmentRole::TournamentSecretary, UserRole::TournamentSecretary],
 ]);
+
+test('events support a combined elementary and secondary division', function () {
+    $sport = Sport::factory()->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/events', [
+            ...validEventPayload($sport),
+            'name' => 'Combined Division Event',
+            'age_division' => AgeDivision::ElementaryAndSecondary->value,
+        ])
+        ->assertSessionDoesntHaveErrors();
+
+    expect(Event::query()->where('name', 'Combined Division Event')->sole()->age_division)
+        ->toBe(AgeDivision::ElementaryAndSecondary);
+});
 
 test('archiving and restoring an event toggles active', function () {
     $event = Event::factory()->create();

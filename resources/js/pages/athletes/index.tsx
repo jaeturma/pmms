@@ -147,8 +147,10 @@ type Props = {
         sex: string;
         accreditation: string;
         deleted: boolean;
+        unassigned: boolean;
     };
     canViewDeleted: boolean;
+    canViewUnassigned: boolean;
     delegationOptions: DelegationOption[];
     schoolOptionsByDelegation: Record<number, SchoolOption[]>;
     fixedDelegationId: number | null;
@@ -1046,6 +1048,7 @@ export default function Athletes({
     filterSchools,
     sports,
     canViewDeleted,
+    canViewUnassigned,
 }: Props) {
     const [createOpen, setCreateOpen] = useState(false);
     const [editingAthlete, setEditingAthlete] = useState<AthleteRow | null>(
@@ -1066,6 +1069,7 @@ export default function Athletes({
             ? { accreditation: filters.accreditation }
             : {}),
         ...(filters.deleted ? { deleted: '1' } : {}),
+        ...(filters.unassigned ? { unassigned: '1' } : {}),
     };
     const applyFilter = (key: string, value: string) =>
         router.get(
@@ -1079,15 +1083,41 @@ export default function Athletes({
             <Head title="Athletes" />
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
-                    title="Athletes"
-                    description="Registered athletes per delegation. Access is restricted and audited."
+                    title={filters.unassigned ? 'Non-Listed Athletes' : 'Athletes'}
+                    description={
+                        filters.unassigned
+                            ? 'Registered athletes that need a Sport and Coach assignment.'
+                            : 'Registered athletes per delegation. Access is restricted and audited.'
+                    }
                     actions={
-                        delegationOptions.length > 0 && (
-                            <Button onClick={() => setCreateOpen(true)}>
-                                <Plus />
-                                Register athlete
-                            </Button>
-                        )
+                        <div className="flex flex-wrap gap-2">
+                            {canViewUnassigned && (
+                                <Button
+                                    variant="outline"
+                                    onClick={() =>
+                                        router.get(
+                                            index().url,
+                                            filters.unassigned
+                                                ? {}
+                                                : { unassigned: '1' },
+                                        )
+                                    }
+                                >
+                                    {filters.unassigned
+                                        ? 'Back to Athletes'
+                                        : 'View Non-Listed Athletes'}
+                                </Button>
+                            )}
+                            {!filters.unassigned &&
+                                delegationOptions.length > 0 && (
+                                    <Button
+                                        onClick={() => setCreateOpen(true)}
+                                    >
+                                        <Plus />
+                                        Register athlete
+                                    </Button>
+                                )}
+                        </div>
                     }
                 />
 
@@ -1368,7 +1398,9 @@ export default function Athletes({
                                                                 href={`/athletes/${athlete.id}/edit`}
                                                             >
                                                                 <Pencil />
-                                                                Edit
+                                                                {filters.unassigned
+                                                                    ? 'Assign Sport & Coach'
+                                                                    : 'Edit'}
                                                             </Link>
                                                         </Button>
                                                     )}

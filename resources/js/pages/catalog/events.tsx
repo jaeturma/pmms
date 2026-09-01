@@ -106,6 +106,7 @@ const genderLabels: Record<string, string> = {
 const divisionLabels: Record<string, string> = {
     elementary: 'Elementary',
     secondary: 'Secondary',
+    elementary_secondary: 'Elementary & Secondary',
     paragames_intellectual_disability:
         'Paragames Division Intellectual Disability',
     paragames_intellectual_disability_youth_15_below:
@@ -988,7 +989,7 @@ export default function Events({
                                                             }
                                                         />
                                                     )}
-                                                    {canArchive && (
+                                                    {canManage && (
                                                         <ConfirmDialog
                                                             trigger={
                                                                 <Button

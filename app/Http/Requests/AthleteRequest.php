@@ -175,13 +175,13 @@ class AthleteRequest extends FormRequest
                 $gender = $sex === Sex::Male ? ['boys', 'mixed'] : ['girls', 'mixed'];
                 $matchingIndividualEvents = Event::query()
                     ->whereIn('id', $this->user()->approvedCoachEventIdsForDelegation($delegation))
-                    ->where('age_division', $level)
+                    ->whereIn('age_division', [$level, AgeDivision::ElementaryAndSecondary->value])
                     ->whereIn('gender', $gender)
                     ->where('is_team_event', false)
                     ->count();
                 $hasMatchingScope = $matchingIndividualEvents > 0 || Event::query()
                     ->whereIn('id', $this->user()->approvedCoachEventIdsForDelegation($delegation))
-                    ->where('age_division', $level)
+                    ->whereIn('age_division', [$level, AgeDivision::ElementaryAndSecondary->value])
                     ->whereIn('gender', $gender)
                     ->exists();
                 if (! $hasMatchingScope) {
@@ -196,7 +196,7 @@ class AthleteRequest extends FormRequest
 
             $grade = $this->integer('grade_level');
             $selectedDivision = AgeDivision::tryFrom((string) $this->input('age_division'));
-            if ($event !== null && $selectedDivision !== null && $event->age_division !== $selectedDivision) {
+            if ($event !== null && $selectedDivision !== null && ! $event->age_division->accepts($selectedDivision)) {
                 $validator->errors()->add('event_id', __('The athlete\'s grade level does not match this event\'s age division.'));
             }
 

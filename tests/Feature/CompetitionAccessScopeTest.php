@@ -70,7 +70,9 @@ test('a category assignment sees its event across delegations but not sibling or
     ]);
 
     $this->actingAs($official)->get('/athletes')->assertInertia(fn (AssertableInertia $page) => $page
-        ->has('athletes.data', 3));
+        ->has('athletes.data', 0));
+    $this->actingAs($official)->get('/athletes?unassigned=1')->assertInertia(fn (AssertableInertia $page) => $page
+        ->has('athletes.data', 4));
 
     MeetSportAssignment::factory()->create([
         'meet_sport_id' => $meetSport->id,
@@ -80,6 +82,6 @@ test('a category assignment sees its event across delegations but not sibling or
         'status' => MeetSportAssignmentStatus::Active,
     ]);
 
-    $this->actingAs($official)->get('/athletes')->assertInertia(fn (AssertableInertia $page) => $page
-        ->has('athletes.data', 3));
+    $this->actingAs($official)->get('/athletes?unassigned=1')->assertInertia(fn (AssertableInertia $page) => $page
+        ->has('athletes.data', 4));
 });

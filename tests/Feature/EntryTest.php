@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\AgeDivision;
 use App\Enums\EntryStatus;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
@@ -162,6 +163,35 @@ test('age division mismatches are rejected', function () {
     $this->actingAs(User::factory()->admin()->create())
         ->post('/entries', ['athlete_id' => $secondary->id, 'event_id' => $event->id])
         ->assertSessionHasErrors('event_id');
+});
+
+test('combined division events accept both elementary and secondary athletes', function () {
+    [$meet, $delegation, $elementary, $event] = entrySetup([
+        'age_division' => AgeDivision::ElementaryAndSecondary,
+        'max_entries_per_delegation' => 2,
+    ]);
+    $meetSport = MeetSport::query()->where('meet_id', $meet->id)->where('sport_id', $event->sport_id)->sole();
+    $secondary = Athlete::factory()->create([
+        'delegation_id' => $delegation->id,
+        'sex' => 'male',
+        'grade_level' => 9,
+    ]);
+    SportRosterMember::query()->create([
+        'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $delegation->id,
+        'athlete_id' => $secondary->id,
+        'level' => AgeDivision::Secondary,
+        'gender' => 'boys',
+    ]);
+    EligibilityReview::factory()->approved()->create(['athlete_id' => $secondary->id, 'meet_id' => $meet->id]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->post('/entries', ['athlete_id' => $elementary->id, 'event_id' => $event->id])
+        ->assertSessionDoesntHaveErrors();
+    $this->actingAs($admin)->post('/entries', ['athlete_id' => $secondary->id, 'event_id' => $event->id])
+        ->assertSessionDoesntHaveErrors();
+
+    expect($event->entries()->count())->toBe(2);
 });
 
 test('events outside the athlete\'s meet are rejected', function () {
