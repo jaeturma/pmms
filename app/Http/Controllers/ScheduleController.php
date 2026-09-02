@@ -296,7 +296,11 @@ class ScheduleController extends Controller
         $user = $request->user();
 
         $schedule->loadMissing('event');
-        abort_unless($this->canManageSlot($user, $schedule->event), 403);
+        if (! $this->canManageSlot($user, $schedule->event)) {
+            throw ValidationException::withMessages([
+                'event_id' => __('You may change only Events within your assigned competition scope.'),
+            ]);
+        }
 
         $data = $request->slotData();
 
@@ -373,7 +377,11 @@ class ScheduleController extends Controller
             ]);
         }
 
-        abort_unless($event !== null && $this->canManageSlot($user, $event), 403);
+        if ($event === null || ! $this->canManageSlot($user, $event)) {
+            throw ValidationException::withMessages([
+                'event_id' => __('You may schedule only Events within your assigned competition scope.'),
+            ]);
+        }
 
         $conflict = EventSchedule::query()
             ->where('venue_id', $data['venue_id'])

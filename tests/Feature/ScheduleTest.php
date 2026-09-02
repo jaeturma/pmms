@@ -332,6 +332,24 @@ test('back-to-back slots and other venues do not conflict', function () {
     expect(EventSchedule::query()->count())->toBe(3);
 });
 
+test('a venue can hold more than thirty one sequential schedule slots', function () {
+    $admin = User::factory()->admin()->create();
+    $input = validSlotInput();
+
+    for ($index = 0; $index < 32; $index++) {
+        $startMinutes = $index * 10;
+        $endMinutes = $startMinutes + 10;
+
+        $this->actingAs($admin)->post('/schedule', [
+            ...$input,
+            'starts_at' => sprintf('%02d:%02d', intdiv($startMinutes, 60), $startMinutes % 60),
+            'ends_at' => sprintf('%02d:%02d', intdiv($endMinutes, 60), $endMinutes % 60),
+        ])->assertSessionHasNoErrors();
+    }
+
+    expect(EventSchedule::query()->where('venue_id', $input['venue_id'])->count())->toBe(32);
+});
+
 test('a tournament manager can schedule a slot for their managed sport but not another sport', function () {
     $meet = Meet::current();
     $ownEvent = Event::factory()->create();
@@ -358,7 +376,7 @@ test('a tournament manager can schedule a slot for their managed sport but not a
 
     $this->actingAs($manager)
         ->post('/schedule', $otherInput)
-        ->assertForbidden();
+        ->assertSessionHasErrors('event_id');
 
     $this->assertDatabaseMissing('event_schedules', ['event_id' => $otherEvent->id]);
 });
@@ -406,7 +424,7 @@ test('a tournament manager can update and delete a slot in their managed sport b
             'ends_at' => '11:00',
             'note' => null,
         ])
-        ->assertForbidden();
+        ->assertSessionHasErrors('event_id');
 
     $this->actingAs($manager)
         ->delete("/schedule/{$otherSlot->id}")
@@ -476,7 +494,7 @@ test('assigned tournament staff can create update and delete schedules only in t
     ];
     $this->actingAs($manager)->post('/schedule', $payload)->assertRedirect()->assertSessionHasNoErrors();
 
-    $this->actingAs($manager)->post('/schedule', [...$payload, 'event_id' => $otherEvent->id])->assertForbidden();
+    $this->actingAs($manager)->post('/schedule', [...$payload, 'event_id' => $otherEvent->id])->assertSessionHasErrors('event_id');
 
     $this->actingAs($manager)->put("/schedule/{$ownSlot->id}", [
         ...$payload,
@@ -488,7 +506,7 @@ test('assigned tournament staff can create update and delete schedules only in t
     $this->actingAs($manager)->put("/schedule/{$otherSlot->id}", [
         ...$payload,
         'event_id' => $otherEvent->id,
-    ])->assertForbidden();
+    ])->assertSessionHasErrors('event_id');
 
     $this->actingAs($manager)->delete("/schedule/{$ownSlot->id}")
         ->assertRedirect();
