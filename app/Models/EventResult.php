@@ -26,7 +26,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['meet_id', 'event_id', 'match_id', 'event_schedule_id', 'scoring_session_id', 'result_source'])]
+#[Fillable(['meet_id', 'event_id', 'match_id', 'event_schedule_id', 'scoring_session_id', 'result_source', 'result_scope'])]
 class EventResult extends Model
 {
     /** @use HasFactory<EventResultFactory> */
@@ -52,6 +52,10 @@ class EventResult extends Model
             'official_at' => 'datetime',
         ];
     }
+
+    public function scopeReal($query) { return $query->whereNull('demo_scenario_id'); }
+    public function scopeDemo($query) { return $query->whereNotNull('demo_scenario_id'); }
+    public function demoScenario(): BelongsTo { return $this->belongsTo(DemoScenario::class); }
 
     /**
      * @return BelongsTo<Meet, $this>
@@ -113,6 +117,11 @@ class EventResult extends Model
         return $this->belongsTo(User::class, 'validated_by');
     }
 
+    public function officialBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'official_by');
+    }
+
     public function tmConfirmedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'tm_confirmed_by');
@@ -143,6 +152,11 @@ class EventResult extends Model
     public function isLocked(): bool
     {
         return $this->status === ResultStatus::Official;
+    }
+
+    public function isFinalEventResult(): bool
+    {
+        return $this->result_scope === 'event';
     }
 
     public function isValidated(): bool

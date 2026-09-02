@@ -120,7 +120,7 @@ class DashboardController extends Controller
     /** @return array{sports_count: int, events_count: int, rows: array<int, array<string, mixed>>} */
     private function sportsEventReport(User $user, Meet $meet): array
     {
-        $eventQuery = Event::query()
+        $eventQuery = Event::query()->real()
             ->whereHas('meets', fn ($meets) => $meets->whereKey($meet->id))
             ->with('sport:id,name')
             ->orderBy('sport_id')->orderBy('display_order')->orderBy('name');
@@ -303,7 +303,7 @@ class DashboardController extends Controller
 
         return [
             'meet' => ['id' => $meet->id, 'name' => $meet->name],
-            'todaySlots' => EventSchedule::query()
+            'todaySlots' => EventSchedule::query()->real()
                 ->where('meet_id', $meet->id)
                 ->when($isTournamentScoped, fn ($query) => $query->whereIn('event_id', $scopedEventIds))
                 ->whereDate('scheduled_date', today())
@@ -334,7 +334,7 @@ class DashboardController extends Controller
             'tallyTop' => $isTournamentScoped ? [] : array_slice($tally->standings($meet->id)['districts'], 0, 5),
             'eventsOverview' => $this->eventsOverview($meet, $isTournamentScoped ? $scopedEventIds : null),
             'queues' => $canManage ? [
-                'pending_results' => EventResult::query()
+                'pending_results' => EventResult::query()->real()
                     ->where('meet_id', $meet->id)
                     ->where('status', ResultStatus::Encoded->value)
                     ->whereNull('tm_confirmed_at')
@@ -395,14 +395,14 @@ class DashboardController extends Controller
     {
         $total = $meet->events()->when($eventIds !== null, fn ($query) => $query->whereKey($eventIds))->count();
 
-        $completedEventIds = EventResult::query()
+        $completedEventIds = EventResult::query()->real()
             ->where('meet_id', $meet->id)
             ->when($eventIds !== null, fn ($query) => $query->whereIn('event_id', $eventIds))
             ->where('status', ResultStatus::Validated->value)
             ->pluck('event_id')
             ->unique();
 
-        $ongoing = EventSchedule::query()
+        $ongoing = EventSchedule::query()->real()
             ->where('meet_id', $meet->id)
             ->when($eventIds !== null, fn ($query) => $query->whereIn('event_id', $eventIds))
             ->whereDate('scheduled_date', today())

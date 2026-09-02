@@ -59,6 +59,7 @@ type Result = {
     meet_id: number;
     event_id: number;
     match_id: number | null;
+    result_scope: 'match' | 'event';
     meet: string;
     event: string;
     status: string;
@@ -71,6 +72,7 @@ type Result = {
     reference: string;
     can_form: boolean;
     can_review: boolean;
+    can_officialize: boolean;
     form_generated: boolean;
     tm_confirmed: boolean;
     can_tm_confirm: boolean;
@@ -90,6 +92,7 @@ type EventOption = Option & { meet_id: number };
 
 type EntryOption = Option & { meet_id: number; event_id: number };
 type CompetitionOption = Option & {
+    meet_id: number;
     event_id: number;
     context: string;
     entries: Option[];
@@ -127,15 +130,20 @@ function EncodeDialog({
     result,
     entryOptions,
     competitionOptions,
+    activeMeets,
+    eventOptions,
     open,
     onOpenChange,
 }: {
     result: Result | null;
     entryOptions: EntryOption[];
     competitionOptions: CompetitionOption[];
+    activeMeets: Option[];
+    eventOptions: EventOption[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
+    const [scope, setScope] = useState<'match' | 'event'>(result?.result_scope ?? 'match');
     const { data, setData, post, put, processing, errors, reset, transform } =
         useForm({
             meet_id: result ? String(result.meet_id) : '',
@@ -166,7 +174,7 @@ function EncodeDialog({
     const competition = competitionOptions.find(
         (option) => String(option.id) === data.match_id,
     );
-    const availableEntries = result
+    const availableEntries = result || scope === 'event'
         ? entryOptions.filter(
               (option) =>
                   String(option.meet_id) === data.meet_id &&
@@ -238,13 +246,52 @@ function EncodeDialog({
                     {!result && (
                         <div className="space-y-2">
                             <div className="space-y-2">
+                                <Label>Result type</Label>
+                                <Select value={scope} onValueChange={(value: 'match' | 'event') => {
+                                    setScope(value);
+                                    setData('match_id', '');
+                                }}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="match">Completed match result (unofficial)</SelectItem>
+                                        <SelectItem value="event">Final Sports Event result</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            {scope === 'event' && (
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="space-y-2">
+                                        <Label>Meet</Label>
+                                        <Select value={data.meet_id} onValueChange={(value) => { setData('meet_id', value); setData('event_id', ''); }}>
+                                            <SelectTrigger><SelectValue placeholder="Select meet" /></SelectTrigger>
+                                            <SelectContent>{activeMeets.map((option) => <SelectItem key={option.id} value={String(option.id)}>{option.label}</SelectItem>)}</SelectContent>
+                                        </Select>
+                                        <InputError message={errors.meet_id} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Sports Event</Label>
+                                        <Select value={data.event_id} onValueChange={(value) => setData('event_id', value)}>
+                                            <SelectTrigger><SelectValue placeholder="Select Sports Event" /></SelectTrigger>
+                                            <SelectContent>{eventOptions.filter((option) => String(option.meet_id) === data.meet_id).map((option) => <SelectItem key={option.id} value={String(option.id)}>{option.label}</SelectItem>)}</SelectContent>
+                                        </Select>
+                                        <InputError message={errors.event_id} />
+                                    </div>
+                                </div>
+                            )}
+                            {scope === 'match' && (
+                            <div className="space-y-2">
                                 <Label htmlFor="result-match">
                                     Scheduled competition
                                 </Label>
                                 <Select
                                     value={data.match_id}
                                     onValueChange={(value) => {
+                                        const selected = competitionOptions.find((option) => String(option.id) === value);
                                         setData('match_id', value);
+                                        if (selected) {
+                                            setData('meet_id', String(selected.meet_id));
+                                            setData('event_id', String(selected.event_id));
+                                        }
                                         setData('placements', [
                                             {
                                                 entry_id: '',
@@ -276,6 +323,7 @@ function EncodeDialog({
                                     </p>
                                 )}
                             </div>
+                            )}
                         </div>
                     )}
 
@@ -302,7 +350,7 @@ function EncodeDialog({
                                         onValueChange={(value) =>
                                             setRow(i, { entry_id: value })
                                         }
-                                        disabled={!result && !data.match_id}
+                                        disabled={!result && scope === 'match' && !data.match_id}
                                     >
                                         <SelectTrigger
                                             className="w-64"
@@ -760,23 +808,17 @@ export default function Results({
                                                     </Button>
                                                 </>
                                             )}
-                                        {result.can_review &&
-                                            result.status === 'validated' && (
-                                                <Button
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        router.post(
-                                                            `/results/${result.id}/official`,
-                                                            {},
-                                                            {
-                                                                preserveScroll: true,
-                                                            },
-                                                        )
-                                                    }
-                                                >
-                                                    Make official
-                                                </Button>
-                                            )}
+                                        {result.can_officialize && (
+                                            <ConfirmDialog
+                                                trigger={<Button size="sm">Mark as official</Button>}
+                                                title="Mark this Sports Event Result as OFFICIAL?"
+                                                description="This will make the result authoritative and may update the official medal tally."
+                                                confirmLabel="Mark as official"
+                                                onConfirm={() =>
+                                                    router.post(`/results/${result.id}/official`, {}, { preserveScroll: true })
+                                                }
+                                            />
+                                        )}
                                         {canEncode &&
                                             result.status === 'encoded' && (
                                                 <>
@@ -798,7 +840,7 @@ export default function Results({
                                                                     </Button>
                                                                 }
                                                                 title="Validate result?"
-                                                                description="Validation makes this standing official and locks it. Corrections afterwards require a reason and are audited."
+                                                                description="Validation forwards this unofficial standing for Top Management officialization."
                                                                 confirmLabel="Validate"
                                                                 onConfirm={() =>
                                                                     router.patch(
@@ -930,6 +972,8 @@ export default function Results({
                     result={editing}
                     entryOptions={entryOptions}
                     competitionOptions={competitionOptions}
+                    activeMeets={activeMeets}
+                    eventOptions={eventOptionsByMeet}
                     open={formOpen}
                     onOpenChange={setFormOpen}
                 />

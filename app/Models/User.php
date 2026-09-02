@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -53,6 +54,11 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, PasskeyAuthenticatable, SoftDeletes, TwoFactorAuthenticatable, VerifiesEmail;
+
+    public function profilePhoto(): BelongsTo
+    {
+        return $this->belongsTo(FileUpload::class, 'profile_photo_upload_id');
+    }
 
     protected static function booted(): void
     {
@@ -404,6 +410,10 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             return true;
         }
 
+        if ($permission === Permission::DemoManage) {
+            return $this->canManageProductionAccounts();
+        }
+
         if (in_array($permission, [
             Permission::ContentView,
             Permission::NewsManage,
@@ -420,6 +430,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
         }
 
         $teamType = match ($permission) {
+            Permission::ResultsOfficialize, Permission::ResultsReopen => ManagementTeamType::TopManagement,
             Permission::AthleteProfileValidate, Permission::AthleteDocumentsVerify,
             Permission::AthleteEligibilityReview, Permission::AthleteEligibilityApprove => ManagementTeamType::DivisionScreeningAndAccreditation,
             Permission::MedicalClearanceEvaluate, Permission::MedicalClearanceApprove => ManagementTeamType::Medical,

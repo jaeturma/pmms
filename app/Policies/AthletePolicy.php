@@ -102,6 +102,21 @@ class AthletePolicy
             && $athlete->delegation->isEditableByOfficers();
     }
 
+    /** Photos and eligibility evidence may be corrected without unlocking identity data. */
+    public function updateAssets(User $user, Athlete $athlete): bool
+    {
+        if ($user->isAdmin() || $user->canManageProductionAccounts()) {
+            return true;
+        }
+
+        if ($user->role === UserRole::Coach) {
+            return $athlete->isOwnedBy($user)
+                && $user->hasApprovedCoachScope($athlete->delegation);
+        }
+
+        return $this->isAssignedTournamentIct($user, $athlete);
+    }
+
     public function delete(User $user, Athlete $athlete): bool
     {
         if ($user->isAdmin()) {

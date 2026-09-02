@@ -118,7 +118,7 @@ class PortalController extends Controller
     {
         $meet = Meet::query()->published()->findOrFail($meet);
 
-        $slots = EventSchedule::query()
+        $slots = EventSchedule::query()->real()
             ->where('meet_id', $meet->id)
             ->with([
                 'venue:id,name,address,public_notes',
@@ -225,7 +225,7 @@ class PortalController extends Controller
 
         $sportId = $request->integer('sport_id');
 
-        $results = EventResult::query()
+        $results = EventResult::query()->real()
             ->where('meet_id', $meet->id)
             ->where('status', ResultStatus::Official->value)
             ->when($sportId > 0, fn ($query) => $query->whereHas(
@@ -397,7 +397,7 @@ class PortalController extends Controller
 
         $athleticsSportId = Sport::query()->where('name', 'Athletics')->value('id');
 
-        $slots = EventSchedule::query()
+        $slots = EventSchedule::query()->real()
             ->where('meet_id', $meet->id)
             ->when(
                 $athleticsSportId !== null,
@@ -422,7 +422,7 @@ class PortalController extends Controller
             default => $days->first(),
         };
 
-        $validatedResults = EventResult::query()
+        $validatedResults = EventResult::query()->real()
             ->where('meet_id', $meet->id)
             ->where('status', ResultStatus::Official->value)
             ->when(
@@ -514,7 +514,7 @@ class PortalController extends Controller
     {
         $meet = Meet::query()->published()->findOrFail($meet);
 
-        $match = EventMatch::query()
+        $match = EventMatch::query()->real()
             ->where('meet_id', $meet->id)
             ->with(['event.sport:id,name', 'schedule.venue:id,name'])
             ->findOrFail($match);
@@ -578,7 +578,7 @@ class PortalController extends Controller
      */
     private function matchOfficialResult(EventMatch $match): ?array
     {
-        $result = EventResult::query()
+        $result = EventResult::query()->real()
             ->where('event_id', $match->event_id)
             ->where('status', ResultStatus::Official->value)
             ->with([
@@ -1260,7 +1260,7 @@ class PortalController extends Controller
             return $this->individualEventSportPortalData($meet, $sport);
         }
 
-        $matches = EventMatch::query()
+        $matches = EventMatch::query()->real()
             ->where('meet_id', $meet->id)
             ->whereHas('event', fn ($query) => $query->where('sport_id', $sport->id))
             ->with([
@@ -1411,13 +1411,13 @@ class PortalController extends Controller
      */
     private function individualEventSportPortalData(Meet $meet, Sport $sport): array
     {
-        $slots = EventSchedule::query()
+        $slots = EventSchedule::query()->real()
             ->where('meet_id', $meet->id)
             ->whereHas('event', fn ($query) => $query->where('sport_id', $sport->id))
             ->with(['venue:id,name,address', 'event:id,name,gender,age_division'])
             ->get();
 
-        $results = EventResult::query()
+        $results = EventResult::query()->real()
             ->where('meet_id', $meet->id)
             ->where('status', ResultStatus::Official->value)
             ->whereHas('event', fn ($query) => $query->where('sport_id', $sport->id))
@@ -1561,7 +1561,7 @@ class PortalController extends Controller
     {
         $meet = Meet::query()->published()->findOrFail($meet);
 
-        $match = EventMatch::query()->where('meet_id', $meet->id)->findOrFail($match);
+        $match = EventMatch::query()->real()->where('meet_id', $meet->id)->findOrFail($match);
 
         $session = $match->scoringSessions()->latest('id')->first();
 
@@ -1604,7 +1604,7 @@ class PortalController extends Controller
      */
     private function validatedSportOptions(Meet $meet): array
     {
-        return EventResult::query()
+        return EventResult::query()->real()
             ->where('meet_id', $meet->id)
             ->where('status', ResultStatus::Official->value)
             ->with('event.sport:id,name')
@@ -1753,7 +1753,7 @@ class PortalController extends Controller
     {
         $now = now();
 
-        return EventSchedule::query()
+        return EventSchedule::query()->real()
             ->where('meet_id', $meet->id)
             ->where(function ($query) use ($now) {
                 $query->where('scheduled_date', '>', $now->toDateString())
@@ -1787,7 +1787,7 @@ class PortalController extends Controller
      */
     private function latestResult(Meet $meet): ?array
     {
-        $result = EventResult::query()
+        $result = EventResult::query()->real()
             ->where('meet_id', $meet->id)
             ->where('status', ResultStatus::Official->value)
             ->with([
@@ -1835,7 +1835,7 @@ class PortalController extends Controller
     {
         return ScoringSession::query()
             ->where('status', '!=', ScoringSessionStatus::Ended->value)
-            ->whereHas('match', fn ($query) => $query->where('meet_id', $meet->id))
+            ->whereHas('match', fn ($query) => $query->where('meet_id', $meet->id)->whereNull('demo_scenario_id'))
             ->with('match.event.sport:id,name')
             ->get()
             ->map(fn (ScoringSession $session): array => [

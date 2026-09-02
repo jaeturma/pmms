@@ -51,7 +51,7 @@ class MeetReadinessService
     {
         $scopedEventIds = array_key_exists('event_ids', $filters) ? $filters['event_ids'] : null;
         $scopedDelegationIds = array_key_exists('delegation_ids', $filters) ? $filters['delegation_ids'] : null;
-        $events = Event::query()->where('active', true)->whereHas('meets', fn ($q) => $q->whereKey($meet->id))
+        $events = Event::query()->real()->where('active', true)->whereHas('meets', fn ($q) => $q->whereKey($meet->id))
             ->when($scopedEventIds !== null, fn ($q) => $q->whereIn('events.id', $scopedEventIds))
             ->with(['sport:id,name', 'sportCategory:id,display_name', 'venueAssignments.venue:id,name', 'medalConfig'])->get();
         $eventIds = $events->modelKeys();
@@ -61,7 +61,7 @@ class MeetReadinessService
             ->where('status', '!=', EntryStatus::Withdrawn->value)
             ->with(['athlete:id', 'athlete.eligibilityReview:id,athlete_id,status', 'athlete.medicalClearance:id,athlete_id,status', 'athlete.accreditation:id,athlete_id'])
             ->get(['id', 'event_id', 'delegation_id', 'athlete_id']);
-        $schedules = EventSchedule::query()->where('meet_id', $meet->id)->whereIn('event_id', $eventIds)->get(['id', 'event_id']);
+        $schedules = EventSchedule::query()->real()->where('meet_id', $meet->id)->whereIn('event_id', $eventIds)->get(['id', 'event_id']);
         $assignments = MeetSportAssignment::query()->whereIn('meet_sport_id', $meetSports->modelKeys())
             ->where('status', MeetSportAssignmentStatus::Active->value)->get(['id', 'meet_sport_id', 'role']);
         $coachAssignments = CoachAssignmentRequest::query()->whereIn('delegation_id', $delegations->modelKeys())

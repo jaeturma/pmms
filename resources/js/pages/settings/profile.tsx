@@ -1,7 +1,8 @@
-import { Form, Head, usePage } from '@inertiajs/react';
+import { Form, Head, useForm, usePage } from '@inertiajs/react';
 import { Link } from '@inertiajs/react';
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import Heading from '@/components/heading';
+import { AthletePhotoInput } from '@/components/athlete-photo-input';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,11 +18,16 @@ type PageProps = {
 export default function Profile({
     mustVerifyEmail,
     status,
+    canUpdatePhoto,
+    photoUrl,
 }: {
     mustVerifyEmail: boolean;
     status?: string;
+    canUpdatePhoto: boolean;
+    photoUrl: string | null;
 }) {
     const { auth } = usePage<PageProps>().props;
+    const photoForm = useForm({ photo: null as File | null });
 
     return (
         <>
@@ -120,6 +126,49 @@ export default function Profile({
                         </>
                     )}
                 </Form>
+
+                {canUpdatePhoto && (
+                    <form
+                        className="space-y-4 border-t pt-6"
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            photoForm.post('/settings/profile/photo', {
+                                forceFormData: true,
+                                preserveScroll: true,
+                            });
+                        }}
+                    >
+                        <Heading
+                            variant="small"
+                            title="Profile photo"
+                            description="Update the photo used for your account and accreditation record."
+                        />
+                        {photoUrl && (
+                            <img
+                                src={photoUrl}
+                                alt="Current profile"
+                                className="h-32 w-28 rounded-md border object-cover"
+                            />
+                        )}
+                        <AthletePhotoInput
+                            id="account-profile-photo"
+                            label="New profile photo"
+                            guidance="Crop the photo before saving. JPG, PNG, and WebP are supported."
+                            onChange={(photo) =>
+                                photoForm.setData('photo', photo)
+                            }
+                        />
+                        <InputError message={photoForm.errors.photo} />
+                        <Button
+                            disabled={
+                                photoForm.processing ||
+                                photoForm.data.photo === null
+                            }
+                        >
+                            Update photo
+                        </Button>
+                    </form>
+                )}
             </div>
         </>
     );

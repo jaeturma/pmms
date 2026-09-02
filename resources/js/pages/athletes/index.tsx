@@ -261,6 +261,7 @@ function AthleteFormDialog({
     const submit = (e: FormEvent) => {
         e.preventDefault();
         post(store().url, {
+            forceFormData: true,
             preserveScroll: true,
             onSuccess: () => {
                 reset();
@@ -767,6 +768,7 @@ function EditAthleteDialog({
     const submit = (e: FormEvent) => {
         e.preventDefault();
         post(update(athlete.id).url, {
+            forceFormData: true,
             preserveScroll: true,
             onSuccess: onClose,
         });
@@ -971,7 +973,7 @@ function EditAthleteDialog({
                                         id={`edit-athlete-${field}`}
                                         label={label}
                                         guidance="Crop or rotate the image before upload. It will be reduced automatically."
-                                        accept="image/jpeg,image/png"
+                                        accept="image/jpeg,image/png,image/webp,application/pdf"
                                         document
                                         onChange={(file) =>
                                             setData(field, file)

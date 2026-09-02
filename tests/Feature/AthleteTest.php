@@ -529,10 +529,10 @@ test('replacing an athlete document removes its previous record and stored file'
     Storage::disk('local')->assertMissing($oldUpload->path);
 });
 
-test('athlete documents accept files up to eight megabytes and store an optimized image', function () {
+test('athlete documents accept files up to ten megabytes and store an optimized image', function () {
     Storage::fake('local');
     $delegation = Delegation::factory()->create();
-    $document = UploadedFile::fake()->image('phone-scan.jpg', 3200, 4200)->size(7 * 1024);
+    $document = UploadedFile::fake()->image('phone-scan.jpg', 3200, 4200)->size(9 * 1024);
 
     $this->actingAs(User::factory()->admin()->create())->post('/athletes', [
         ...validAthletePayload($delegation),
@@ -548,14 +548,14 @@ test('athlete documents accept files up to eight megabytes and store an optimize
         ->and(round($dimensions[0] / $dimensions[1], 2))->toBe(round(3200 / 4200, 2));
 });
 
-test('athlete documents over eight megabytes receive a friendly validation error', function () {
+test('athlete documents over ten megabytes receive a friendly validation error', function () {
     $delegation = Delegation::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())->post('/athletes', [
         ...validAthletePayload($delegation),
-        'medical_certificate' => UploadedFile::fake()->image('medical.jpg')->size(8193),
+        'medical_certificate' => UploadedFile::fake()->image('medical.jpg')->size(10241),
     ])->assertSessionHasErrors([
-        'medical_certificate' => 'The selected document is too large. Maximum upload size is 8 MB per file.',
+        'medical_certificate' => 'The selected document is too large. Maximum upload size is 10 MB per file.',
     ]);
 });
 

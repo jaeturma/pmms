@@ -49,50 +49,21 @@ export function AthletePhotoInput({
     );
 
     const select = (file?: File) => {
-        if (!file) {
-            return;
-        }
+        if (!file) return;
 
-        if (document && file.size > 8 * 1024 * 1024) {
-            setFileMessage('This document is too large. Maximum upload size is 8 MB per file.');
+        if (file.size > 10 * 1024 * 1024) {
+            setFileMessage(`This ${document ? 'document' : 'photo'} is too large. Maximum upload size is 10 MB per file.`);
             onChange(null);
             return;
         }
 
-        setFileMessage(document ? `${(file.size / 1024 / 1024).toFixed(1)} MB selected • Will be optimized` : null);
         if (document) {
+            setFileMessage(`${(file.size / 1024 / 1024).toFixed(1)} MB selected • Images will be optimized`);
             onChange(file);
             return;
         }
 
-        if (document && file.size > 8 * 1024 * 1024) {
-            setFileMessage('This document is too large. Maximum upload size is 8 MB per file.');
-            onChange(null);
-            return;
-        }
-
-        setFileMessage(document ? `${(file.size / 1024 / 1024).toFixed(1)} MB selected • Will be optimized` : null);
-        if (document) {
-            onChange(file);
-            return;
-        }
-
-        if (document && file.size > 8 * 1024 * 1024) {
-            setFileMessage('This document is too large. Maximum upload size is 8 MB per file.');
-            onChange(null);
-            return;
-        }
-
-        setFileMessage(document ? `${(file.size / 1024 / 1024).toFixed(1)} MB selected • Will be optimized` : null);
-        if (document) {
-            onChange(file);
-            return;
-        }
-
-        if (source) {
-            URL.revokeObjectURL(source);
-        }
-
+        if (source) URL.revokeObjectURL(source);
         setSource(URL.createObjectURL(file));
         setZoom(1);
         setOffsetX(0);
@@ -106,7 +77,7 @@ export function AthletePhotoInput({
             return;
         }
 
-        const canvas = document.createElement('canvas');
+        const canvas = globalThis.document.createElement('canvas');
         canvas.width = 800;
         canvas.height = 1000;
         const context = canvas.getContext('2d');
@@ -140,7 +111,7 @@ export function AthletePhotoInput({
                 canvas.toBlob(resolve, 'image/jpeg', quality),
             );
 
-            if (blob && blob.size <= 500 * 1024) {
+            if (blob && blob.size <= 800 * 1024) {
                 break;
             }
 
@@ -176,23 +147,7 @@ export function AthletePhotoInput({
             />
             {document && (
                 <p className="text-xs text-muted-foreground">
-                    Maximum 8 MB • Automatically optimized for storage
-                </p>
-            )}
-            {fileMessage && (
-                <p className="text-xs text-muted-foreground">{fileMessage}</p>
-            )}
-            {document && (
-                <p className="text-xs text-muted-foreground">
-                    Maximum 8 MB • Automatically optimized for storage
-                </p>
-            )}
-            {fileMessage && (
-                <p className="text-xs text-muted-foreground">{fileMessage}</p>
-            )}
-            {document && (
-                <p className="text-xs text-muted-foreground">
-                    Maximum 8 MB • Automatically optimized for storage
+                    Maximum 10 MB • JPG, PNG, WebP, or PDF
                 </p>
             )}
             {fileMessage && (
@@ -212,7 +167,9 @@ export function AthletePhotoInput({
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => document.getElementById(id)?.click()}
+                        onClick={() =>
+                            globalThis.document.getElementById(id)?.click()
+                        }
                     >
                         <Upload className="size-4" />
                         Replace

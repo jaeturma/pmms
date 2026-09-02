@@ -10,6 +10,7 @@ use App\Models\Delegation;
 use App\Models\Event;
 use App\Models\School;
 use App\Models\SchoolDistrict;
+use App\Services\AthleteRegistrationScope;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
@@ -22,7 +23,8 @@ class AthleteRequest extends FormRequest
         $athlete = $this->route('athlete');
 
         if ($athlete instanceof Athlete) {
-            return Gate::allows('update', $athlete);
+            return Gate::allows('update', $athlete)
+                || ($this->allFiles() !== [] && Gate::allows('updateAssets', $athlete));
         }
 
         $delegation = Delegation::find($this->integer('delegation_id'));
@@ -36,21 +38,13 @@ class AthleteRequest extends FormRequest
             $this->merge(['age_division' => $this->integer('grade_level') <= 6 ? 'elementary' : 'secondary']);
         }
 
-        if ($this->route('athlete') !== null || $this->filled('event_id') || $this->user()?->role !== UserRole::Coach) {
+        if ($this->route('athlete') !== null || $this->user()?->role !== UserRole::Coach) {
             return;
         }
 
-        $delegation = Delegation::find($this->integer('delegation_id'));
-        if ($delegation === null) {
-            return;
-        }
-
-        $eventIds = $this->user()->approvedCoachEventIdsForDelegation($delegation);
-        if ($eventIds->count() === 1) {
-            $event = Event::find($eventIds->first());
-            if ($event !== null && ! $event->is_team_event) {
-                $this->merge(['event_id' => $event->id]);
-            }
+        $delegations = app(AthleteRegistrationScope::class)->delegations($this->user());
+        if ($delegations->count() === 1) {
+            $this->merge(['delegation_id' => $delegations->first()->id]);
         }
     }
 
@@ -110,6 +104,7 @@ class AthleteRequest extends FormRequest
             $rules['event_id'] = $this->user()?->role === UserRole::Coach
                 ? ['nullable', 'integer', Rule::exists('events', 'id')]
                 : ['nullable', 'integer', Rule::exists('events', 'id')];
+            $rules['meet_sport_id'] = ['nullable', 'integer', Rule::exists('meet_sports', 'id')];
         } elseif ($this->user()?->isAdmin() || $this->user()?->canManageProductionAccounts()
             || Gate::allows('update', $athlete)) {
             $rules['delegation_id'] = ['sometimes', 'required', 'integer', Rule::exists('delegations', 'id')];
@@ -134,7 +129,7 @@ class AthleteRequest extends FormRequest
     /** @return array<int, string> */
     private function documentRules(): array
     {
-        return ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:'.config('pmms.athlete_documents.max_upload_kb')];
+        return ['nullable', 'file', 'mimetypes:image/jpeg,image/png,image/webp,application/pdf', 'mimes:jpg,jpeg,png,webp,pdf', 'max:'.config('pmms.athlete_documents.max_upload_kb')];
     }
 
     public function messages(): array
@@ -142,9 +137,9 @@ class AthleteRequest extends FormRequest
         $documentFields = ['athlete_history', 'form_10', 'form_10_page_2', 'birth_certificate', 'birth_certificate_page_2', 'parental_consent', 'medical_certificate'];
         $messages = [];
         foreach ($documentFields as $field) {
-            $messages["{$field}.max"] = __('The selected document is too large. Maximum upload size is 8 MB per file.');
-            $messages["{$field}.image"] = __('This file type is not supported. Please upload a JPG or PNG document image.');
-            $messages["{$field}.mimes"] = __('This file type is not supported. Please upload a JPG or PNG document image.');
+            $messages["{$field}.max"] = __('The selected document is too large. Maximum upload size is 10 MB per file.');
+            $messages["{$field}.mimetypes"] = __('This file type is not supported. Please upload a JPG, PNG, WebP, or PDF document.');
+            $messages["{$field}.mimes"] = __('This file type is not supported. Please upload a JPG, PNG, WebP, or PDF document.');
         }
 
         return $messages;
@@ -162,6 +157,14 @@ class AthleteRequest extends FormRequest
 
             if ($delegation === null || $school === null) {
                 return;
+            }
+
+            $schoolBelongsToDelegation = $delegation->school_id !== null
+                ? $school->id === $delegation->school_id
+                : ($school->district_id === $delegation->district_id
+                    || ($this->filled('district_id') && $this->integer('district_id') === $delegation->district_id));
+            if ($this->user()?->role === UserRole::Coach && ! $schoolBelongsToDelegation) {
+                $validator->errors()->add('school_id', __('The selected School does not belong to the authorized Delegation.'));
             }
 
             if ($this->user()?->role === UserRole::Coach && $this->filled('district_id')) {
@@ -204,8 +207,6 @@ class AthleteRequest extends FormRequest
                     ->exists();
                 if (! $hasMatchingScope) {
                     $validator->errors()->add('event_id', __('Your active Coach assignment does not cover this athlete’s level and Event requirements.'));
-                } elseif ($matchingIndividualEvents > 1) {
-                    $validator->errors()->add('event_id', __('Select one of your approved sports and events for this athlete.'));
                 }
             }
             if ($event !== null && $sex !== null && ! $event->gender->accepts($sex)) {

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\MatchStatus;
+use App\Enums\Permission;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\ScoreboardType;
@@ -2464,6 +2465,10 @@ class ScoringSessionController extends Controller
      */
     private function canManage(User $user, EventMatch $match): bool
     {
+        if ($match->demo_scenario_id !== null && $user->hasPermission(Permission::DemoManage)) {
+            return true;
+        }
+
         if ($user->hasRole(UserRole::Admin)) {
             return true;
         }

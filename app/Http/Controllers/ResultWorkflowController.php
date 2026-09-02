@@ -6,6 +6,7 @@ use App\Enums\ManagementTeamMemberStatus;
 use App\Enums\MatchStatus;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
+use App\Enums\Permission;
 use App\Enums\ResultStatus;
 use App\Models\EventResult;
 use App\Models\ResultAttachment;
@@ -108,7 +109,9 @@ class ResultWorkflowController extends Controller
     {
         abort_unless($attachment->event_result_id === $result->id, 404);
         abort_unless(
-            $this->canManageSportDocument($request->user(), $result) || $this->isEventSecretariat($request->user(), $result),
+            $this->canManageSportDocument($request->user(), $result)
+                || $this->isEventSecretariat($request->user(), $result)
+                || $request->user()->hasPermission(Permission::ResultsOfficialize, $result->meet),
             403,
         );
 
@@ -216,26 +219,38 @@ class ResultWorkflowController extends Controller
 
     public function makeOfficial(Request $request, EventResult $result): RedirectResponse
     {
-        $this->authorizeEventSecretariat($request->user(), $result);
-        abort_unless($result->status === ResultStatus::Validated, 422);
-        abort_if($result->currentSignedForm() === null, 422, 'The signed Result Form is missing.');
+        abort_unless($request->user()->hasPermission(Permission::ResultsOfficialize, $result->meet), 403);
 
         DB::transaction(function () use ($result, $request): void {
-            $this->medalAwards->synchronize($result, $request->user());
-            $result->forceFill([
+            $locked = EventResult::query()->lockForUpdate()->findOrFail($result->id);
+            abort_unless($locked->status === ResultStatus::Validated, 422, 'Only a validated result awaiting officialization may be marked official.');
+            abort_unless($locked->isFinalEventResult(), 422, 'Only a final Sports Event Result may be marked official. Completed Match Results remain operational and unofficial.');
+            abort_unless($locked->submitted_at !== null && $locked->submitted_by !== null, 422, 'The final result must be submitted before officialization.');
+            abort_unless($locked->submitted_at !== null && $locked->submitted_by !== null, 422, 'The final result must be submitted before officialization.');
+            abort_if($locked->currentSignedForm() === null, 422, 'The signed Result Form is missing.');
+            abort_unless($locked->placements()->exists(), 422, 'The final result has no placements.');
+
+            $duplicateRanks = $locked->placements()->select('rank')->groupBy('rank')->havingRaw('COUNT(*) > 1')->pluck('rank');
+            foreach ($duplicateRanks as $rank) {
+                abort_unless($locked->placements()->where('rank', $rank)->where('is_tie', false)->doesntExist(), 422, 'Duplicate placements must be explicitly recorded as ties.');
+            }
+
+            $this->medalAwards->synchronize($locked, $request->user());
+            $locked->forceFill([
                 'status' => ResultStatus::Official,
                 'official_by' => $request->user()->id,
                 'official_at' => now(),
             ])->save();
+
+            $this->audit->record('result.made_official', $locked, $this->context($locked));
         });
-        $this->audit->record('result.made_official', $result, $this->context($result));
 
         return back()->with('success', 'Result marked official.');
     }
 
     public function reopen(Request $request, EventResult $result): RedirectResponse
     {
-        abort_unless($request->user()->isAdmin() || $this->isEventSecretariat($request->user(), $result), 403);
+        abort_unless($request->user()->hasPermission(Permission::ResultsReopen, $result->meet), 403);
         abort_unless($result->status === ResultStatus::Official, 422);
         $validated = $request->validate(['reason' => ['required', 'string', 'max:1000']]);
 
@@ -252,7 +267,7 @@ class ResultWorkflowController extends Controller
 
     public function recalculateMedalAwards(Request $request, EventResult $result): RedirectResponse
     {
-        abort_unless($request->user()->isAdmin() || $this->isEventSecretariat($request->user(), $result), 403);
+        abort_unless($request->user()->hasPermission(Permission::ResultsOfficialize, $result->meet), 403);
         abort_unless($result->status === ResultStatus::Official, 422);
         $validated = $request->validate(['reason' => ['required', 'string', 'max:1000']]);
 

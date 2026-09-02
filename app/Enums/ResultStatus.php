@@ -15,10 +15,10 @@ enum ResultStatus: string
     public function label(): string
     {
         return match ($this) {
-            self::Encoded => 'Encoded',
+            self::Encoded => 'Unofficial (Draft)',
             self::Submitted => 'For Event Secretariat Validation',
             self::Returned => 'Returned',
-            self::Validated => 'Validated',
+            self::Validated => 'For Officialization',
             self::Official => 'Official',
             self::Reopened => 'Reopened',
             self::Cancelled => 'Cancelled',

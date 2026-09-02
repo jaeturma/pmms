@@ -357,6 +357,11 @@ test('encoded results can be re-encoded; validated results are locked', function
 test('validation records the validator and audits the decision', function () {
     $result = EventResult::factory()->create();
     $admin = User::factory()->admin()->create();
+    $result->forceFill([
+        'status' => ResultStatus::Submitted,
+        'submitted_by' => $admin->id,
+        'submitted_at' => now(),
+    ])->save();
 
     $this->actingAs($admin)
         ->patch("/results/{$result->id}/validate")

@@ -14,6 +14,7 @@ use App\Http\Controllers\CoachAssignmentRequestController;
 use App\Http\Controllers\ContentManagementController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DelegationController;
+use App\Http\Controllers\DemoDataController;
 use App\Http\Controllers\DistrictController;
 use App\Http\Controllers\DivisionController;
 use App\Http\Controllers\DrrmEquipmentController;
@@ -33,6 +34,7 @@ use App\Http\Controllers\EventController;
 use App\Http\Controllers\FaqController;
 use App\Http\Controllers\FileUploadController;
 use App\Http\Controllers\GalleryController;
+use App\Http\Controllers\HealthController;
 use App\Http\Controllers\IncidentController;
 use App\Http\Controllers\InventoryAdjustmentController;
 use App\Http\Controllers\ManagementDashboardController;
@@ -77,12 +79,20 @@ use App\Http\Controllers\VenueController;
 use App\Http\Controllers\VenueEmergencyPlanController;
 use Illuminate\Support\Facades\Route;
 
+Route::get('health', HealthController::class)
+    ->middleware('throttle:12,1')
+    ->name('health');
+
 Route::middleware('throttle:10,1')->group(function () {
     Route::get('account-activation/{token}', [AccountActivationController::class, 'show'])->name('account-activation.show');
     Route::post('account-activation/{token}', [AccountActivationController::class, 'activate'])->name('account-activation.activate');
 });
 
 Route::middleware('auth')->group(function () {
+    Route::get('system/demo-data', [DemoDataController::class, 'index'])->name('demo-data.index');
+    Route::post('system/demo-data', [DemoDataController::class, 'store'])->middleware('throttle:10,1')->name('demo-data.store');
+    Route::get('system/demo-data/{demoScenario}', [DemoDataController::class, 'show'])->name('demo-data.show');
+    Route::delete('system/demo-data/{demoScenario}', [DemoDataController::class, 'destroy'])->middleware('throttle:10,1')->name('demo-data.destroy');
     Route::inertia('support', 'support')->name('support');
     Route::get('change-password', [RequiredPasswordChangeController::class, 'edit'])->name('password-change.edit');
     Route::put('change-password', [RequiredPasswordChangeController::class, 'update'])
@@ -150,6 +160,8 @@ Route::middleware('throttle:60,1')->group(function () {
         ->name('public.scoreboard');
     Route::get('meets/{meet}/matches/{match}/scoreboard/poll', [PortalController::class, 'scoreboardPoll'])
         ->middleware('auth')
+        ->withoutMiddleware('throttle:60,1')
+        ->middleware('throttle:90,1')
         ->whereNumber(['meet', 'match'])
         ->name('public.scoreboard.poll');
 

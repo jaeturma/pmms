@@ -6,6 +6,8 @@ use App\Enums\MatchStatus;
 use App\Enums\ResultStatus;
 use App\Models\Entry;
 use App\Models\EventMatch;
+use App\Models\Event;
+use App\Models\Meet;
 use App\Models\EventResult;
 use App\Models\ScoringSession;
 use App\Models\User;
@@ -29,6 +31,31 @@ class CompetitionResultService
             return $result;
         });
         $this->audit->record('result.manually_entered', $result, ['match_id' => $match->id]);
+
+        return $result;
+    }
+
+    public function createFinalEventResult(Meet $meet, Event $event, array $placements, User $user): EventResult
+    {
+        if (EventResult::query()->where('meet_id', $meet->id)->where('event_id', $event->id)->where('result_scope', 'event')->exists()) {
+            throw ValidationException::withMessages(['event_id' => __('This Sports Event already has a final result.')]);
+        }
+
+        $result = DB::transaction(function () use ($meet, $event, $placements, $user): EventResult {
+            $result = new EventResult([
+                'meet_id' => $meet->id,
+                'event_id' => $event->id,
+                'result_source' => 'manual',
+                'result_scope' => 'event',
+            ]);
+            $result->forceFill(['status' => ResultStatus::Encoded, 'encoded_by' => $user->id, 'encoded_at' => now()])->save();
+            foreach ($placements as $placement) {
+                $result->placements()->create($this->withTeamSnapshot($placement));
+            }
+
+            return $result;
+        });
+        $this->audit->record('event_result.manually_entered', $result, ['event_id' => $event->id]);
 
         return $result;
     }
@@ -83,7 +110,7 @@ class CompetitionResultService
 
     private function newResult(EventMatch $match, User $user, string $source, ?ScoringSession $session = null): EventResult
     {
-        $result = new EventResult(['meet_id' => $match->meet_id, 'event_id' => $match->event_id, 'match_id' => $match->id, 'event_schedule_id' => $match->event_schedule_id, 'scoring_session_id' => $session?->id, 'result_source' => $source]);
+        $result = new EventResult(['meet_id' => $match->meet_id, 'event_id' => $match->event_id, 'match_id' => $match->id, 'event_schedule_id' => $match->event_schedule_id, 'scoring_session_id' => $session?->id, 'result_source' => $source, 'result_scope' => 'match']);
         $result->forceFill(['status' => ResultStatus::Encoded, 'encoded_by' => $user->id, 'encoded_at' => now()])->save();
 
         return $result;

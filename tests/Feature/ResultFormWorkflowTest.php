@@ -53,6 +53,24 @@ function eventSecretariatFor(EventResult $result): User
     return $user;
 }
 
+function topManagementFor(EventResult $result): User
+{
+    $user = User::factory()->create();
+    $team = ManagementTeam::factory()->create([
+        'meet_id' => $result->meet_id,
+        'team_type' => ManagementTeamType::TopManagement,
+        'source_code' => 'TOP_MANAGEMENT',
+        'status' => ManagementTeamStatus::Active,
+    ]);
+    ManagementTeamMember::factory()->create([
+        'management_team_id' => $team->id,
+        'user_id' => $user->id,
+        'status' => ManagementTeamMemberStatus::Active,
+    ]);
+
+    return $user;
+}
+
 function resultWithPlacement(): EventResult
 {
     $result = EventResult::factory()->create();
@@ -135,12 +153,13 @@ test('unauthorized personnel cannot upload a signed result form', function () {
         ->assertForbidden();
 });
 
-test('event secretariat can view return validate and make a submitted result official', function () {
+test('event secretariat validates and only top management can make a submitted event result official', function () {
     Storage::fake('local');
     config()->set('uploads.disk', 'local');
     $result = resultWithPlacement();
     $sportUser = assignedResultUser($result, MeetSportAssignmentRole::TournamentSecretary);
     $secretariat = eventSecretariatFor($result);
+    $topManagement = topManagementFor($result);
 
     $this->actingAs($sportUser)->post(route('results.attachments.store', $result), [
         'file' => UploadedFile::fake()->create('signed.pdf', 20, 'application/pdf'),
@@ -156,14 +175,38 @@ test('event secretariat can view return validate and make a submitted result off
         ->assertSessionHasNoErrors();
     $this->actingAs($secretariat)
         ->post(route('results.official', $result))
+        ->assertForbidden();
+
+    expect($result->fresh()->status)->toBe(ResultStatus::Validated);
+
+    $this->actingAs($topManagement)
+        ->post(route('results.official', $result))
         ->assertSessionHasNoErrors();
 
     expect($result->fresh()->status)->toBe(ResultStatus::Official)
+        ->and($result->fresh()->official_by)->toBe($topManagement->id)
+        ->and($result->fresh()->official_at)->not->toBeNull()
         ->and($result->fresh()->currentSignedForm()?->id)->toBe($attachment->id)
         ->and(AuditLog::query()->where('action', 'result.made_official')->exists())->toBeTrue();
 
     $this->actingAs($sportUser)->put(route('results.update', $result), [])->assertForbidden();
     expect($result->fresh()->status)->toBe(ResultStatus::Official);
+});
+
+test('top management cannot officialize an operational match result', function () {
+    $result = resultWithPlacement();
+    $result->forceFill([
+        'result_scope' => 'match',
+        'status' => ResultStatus::Validated,
+        'validated_at' => now(),
+    ])->save();
+
+    $this->actingAs(topManagementFor($result))
+        ->post(route('results.official', $result))
+        ->assertStatus(422);
+
+    expect($result->fresh()->status)->toBe(ResultStatus::Validated)
+        ->and($result->fresh()->medalAwards()->count())->toBe(0);
 });
 
 test('returning a result preserves the old attachment and requires a new version attachment', function () {

@@ -63,7 +63,7 @@ class ScheduleController extends Controller
         $venueId = $request->integer('venue_id');
         $date = $request->string('date')->toString();
 
-        $query = EventSchedule::query()
+        $query = EventSchedule::query()->real()
             ->with(['event.sport:id,name', 'sportCategory:id,display_name', 'venue:id,name', 'competitionArea:id,name'])
             ->when($isTournamentScoped, fn ($schedules) => $schedules->whereIn('event_id', $visibleEventIds))
             ->orderBy('scheduled_date')
@@ -86,7 +86,7 @@ class ScheduleController extends Controller
         // production import enables whole sports through meet_sports. Both
         // are valid sources for the event picker.
         $meetSportIds = $meet->meetSports()->where('active', true)->pluck('sport_id');
-        $schedulableEvents = Event::query()
+        $schedulableEvents = Event::query()->real()
             ->where('active', true)
             ->where(function ($query) use ($meet, $meetSportIds): void {
                 $query->whereHas('meets', fn ($meets) => $meets->whereKey($meet->id))
@@ -440,7 +440,7 @@ class ScheduleController extends Controller
             return new Collection;
         }
 
-        $query = EventMatch::query()
+        $query = EventMatch::query()->real()
             ->whereIn('event_schedule_id', $scheduleIds)
             ->with(['scoringSessions' => fn ($sessions) => $sessions
                 ->where('status', '!=', ScoringSessionStatus::Ended->value)

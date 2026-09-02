@@ -11,6 +11,7 @@ import {
     Contact,
     Crown,
     FileCheck,
+    FlaskConical,
     Flag,
     Gavel,
     Images,
@@ -260,6 +261,11 @@ const managerNavItems: NavItem[] = [
 ];
 
 const adminNavItems: NavItem[] = [
+    {
+        title: 'Demo Data',
+        href: '/system/demo-data',
+        icon: FlaskConical,
+    },
     {
         title: 'Users and Roles',
         href: '/system/users',
@@ -709,6 +715,7 @@ export function AppSidebar() {
             items: adminNavItems.filter((item) =>
                 [
                     'Users and Roles',
+                    'Demo Data',
                     ...(canViewSystemLogs ? ['Audit log'] : []),
                 ].includes(item.title),
             ),

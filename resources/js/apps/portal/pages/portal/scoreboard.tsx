@@ -13,6 +13,7 @@ import { PortalResultPlacements } from '@/apps/portal/components/result-placemen
 import { PortalSoftballScoreboard } from '@/apps/portal/components/softball-scoreboard';
 import { PortalSoftballSidebar } from '@/apps/portal/components/softball-sidebar';
 import { PortalSportEventStrip } from '@/apps/portal/components/sport-event-strip';
+import { usePortalPageVisible } from '@/apps/portal/lib/use-page-visible';
 import type {
     PortalLatestResult,
     PortalLiveSession,
@@ -50,6 +51,7 @@ export default function PortalScoreboard({
     // the score just stopped updating, with nothing on screen to explain
     // why, until a manual reload.
     const [pollFailures, setPollFailures] = useState(0);
+    const visible = usePortalPageVisible();
 
     // Adjust local state during render when a fresh Inertia prop arrives
     // (e.g. navigating from one match to another) — same
@@ -62,6 +64,10 @@ export default function PortalScoreboard({
     }
 
     useEffect(() => {
+        if (!visible || session?.status === 'ended') {
+            return;
+        }
+
         const interval = setInterval(() => {
             fetch(
                 publicRoutes.scoreboard.poll({ meet: meet.id, match: match.id })
@@ -93,7 +99,7 @@ export default function PortalScoreboard({
         }, POLL_INTERVAL_MS);
 
         return () => clearInterval(interval);
-    }, [meet.id, match.id]);
+    }, [meet.id, match.id, session?.status, visible]);
 
     const isBasketball =
         session !== null && session.board_type === 'basketball';

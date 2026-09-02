@@ -28,6 +28,7 @@ use App\Models\Sport;
 use App\Models\SportRosterMember;
 use App\Models\User;
 use App\Services\AthletePhotoService;
+use App\Services\AthleteRegistrationScope;
 use App\Services\AthleteDeletionService;
 use App\Services\AuditLogger;
 use App\Services\CompetitionAccessService;
@@ -52,6 +53,7 @@ class AthleteController extends Controller
         private readonly FileUploadService $uploads,
         private readonly AthletePhotoService $athletePhotos,
         private readonly AthleteDeletionService $athleteDeletion,
+        private readonly AthleteRegistrationScope $registrationScope,
     ) {}
 
     /**
@@ -465,11 +467,32 @@ class AthleteController extends Controller
      */
     public function store(AthleteRequest $request): RedirectResponse
     {
-        $delegation = Delegation::query()->findOrFail($request->integer('delegation_id'));
+        /** @var User $user */
+        $user = $request->user();
+        $delegation = $user->role === UserRole::Coach
+            ? $this->registrationScope->resolveDelegation($user)
+            : Delegation::query()->findOrFail($request->integer('delegation_id'));
+        $selectedMeetSportId = $request->filled('meet_sport_id') ? $request->integer('meet_sport_id') : null;
+        if ($user->role === UserRole::Coach && $selectedMeetSportId === null && $request->filled('event_id')) {
+            $selectedEvent = Event::query()
+                ->whereIn('id', $user->approvedCoachEventIdsForDelegation($delegation))
+                ->find($request->integer('event_id'));
+            $selectedMeetSportId = $selectedEvent === null ? null : MeetSport::query()
+                ->where('meet_id', $delegation->meet_id)
+                ->where('sport_id', $selectedEvent->sport_id)
+                ->value('id');
+        }
+        $meetSport = $user->role === UserRole::Coach
+            ? $this->registrationScope->resolveMeetSport(
+                $user,
+                $delegation,
+                $selectedMeetSportId,
+            )
+            : null;
 
         Gate::authorize('create', [Athlete::class, $delegation]);
 
-        $fileFields = ['photo', 'sports_photo', 'athlete_history', 'form_10', 'form_10_page_2', 'birth_certificate', 'birth_certificate_page_2', 'parental_consent', 'medical_certificate', 'event_id', 'district_id', 'school_district_id'];
+        $fileFields = ['photo', 'sports_photo', 'athlete_history', 'form_10', 'form_10_page_2', 'birth_certificate', 'birth_certificate_page_2', 'parental_consent', 'medical_certificate', 'event_id', 'meet_sport_id', 'district_id', 'school_district_id', 'registered_by'];
         $recalled = Athlete::onlyTrashed()->where('lrn', $request->string('lrn')->toString())->first();
         if ($recalled !== null && $recalled->delegation->meet_id !== $delegation->meet_id) {
             throw ValidationException::withMessages([
@@ -479,23 +502,20 @@ class AthleteController extends Controller
         $athlete = $recalled ?? new Athlete;
         $athlete->fill($request->safe()->except($fileFields));
 
-        /** @var User $user */
-        $user = $request->user();
         $athlete->forceFill([
             'registered_by' => $user->id,
+            'delegation_id' => $delegation->id,
             'deletion_requested_by' => null,
             'deletion_requested_at' => null,
         ]);
 
-        if ($request->hasFile('photo')) {
-            $athlete->photo_upload_id = $this->athletePhotos->store($request->file('photo'), $user, 'passport')->id;
-        }
-
-        if ($request->hasFile('sports_photo')) {
-            $athlete->sports_photo_upload_id = $this->athletePhotos->store($request->file('sports_photo'), $user, 'sports')->id;
-        }
-
-        DB::transaction(function () use ($request, $athlete, $user, $recalled): void {
+        DB::transaction(function () use ($request, $athlete, $user, $recalled, $meetSport): void {
+            if ($request->hasFile('photo')) {
+                $athlete->photo_upload_id = $this->athletePhotos->store($request->file('photo'), $user, 'passport')->id;
+            }
+            if ($request->hasFile('sports_photo')) {
+                $athlete->sports_photo_upload_id = $this->athletePhotos->store($request->file('sports_photo'), $user, 'sports')->id;
+            }
             if ($recalled !== null) {
                 $athlete->restore();
             }
@@ -527,7 +547,10 @@ class AthleteController extends Controller
                     continue;
                 }
 
-                $upload = $this->athletePhotos->storeDocument($request->file($field), $user, $field);
+                $file = $request->file($field);
+                $upload = $file->getMimeType() === 'application/pdf'
+                    ? $this->uploads->store($file, $user, $field)
+                    : $this->athletePhotos->storeDocument($file, $user, $field);
                 EligibilityDocument::query()->create([
                     'athlete_id' => $athlete->id,
                     'file_upload_id' => $upload->id,
@@ -540,12 +563,7 @@ class AthleteController extends Controller
                 'meet_id' => $athlete->delegation->meet_id,
             ]);
 
-            if ($user->role === UserRole::Coach && $request->filled('event_id')) {
-                $event = Event::query()->findOrFail($request->integer('event_id'));
-                $meetSport = MeetSport::query()->firstOrCreate([
-                    'meet_id' => $athlete->delegation->meet_id,
-                    'sport_id' => $event->sport_id,
-                ], ['active' => true]);
+            if ($meetSport !== null) {
                 SportRosterMember::query()->firstOrCreate([
                     'meet_sport_id' => $meetSport->id,
                     'athlete_id' => $athlete->id,
@@ -562,11 +580,10 @@ class AthleteController extends Controller
             'school' => $athlete->school->name,
             'registrant' => $delegation->registrantName(),
         ]);
-        if ($user->role === UserRole::Coach && $request->filled('event_id')) {
-            $event = Event::query()->findOrFail($request->integer('event_id'));
+        if ($meetSport !== null) {
             $this->audit->record('athlete.sport_roster_assigned', $athlete, [
                 'athlete' => $athlete->fullName(),
-                'sport' => $event->sport->name,
+                'sport' => $meetSport->sport->name,
                 'source' => 'coach_approved_assignment',
             ]);
         }
@@ -592,7 +609,10 @@ class AthleteController extends Controller
      */
     public function update(AthleteRequest $request, Athlete $athlete): RedirectResponse
     {
-        Gate::authorize('update', $athlete);
+        $canUpdateIdentity = Gate::allows('update', $athlete);
+        if (! $canUpdateIdentity) {
+            Gate::authorize('updateAssets', $athlete);
+        }
         $wasUnassigned = $athlete->sportRosterMemberships()->doesntExist();
 
         /** @var User $user */
@@ -600,9 +620,9 @@ class AthleteController extends Controller
         $originalMeetId = $athlete->delegation->meet_id;
         $isTournamentIct = $this->isTournamentIct($user, $athlete);
         $isCoach = $user->role === UserRole::Coach;
-        $canManageAssignments = $user->isAdmin() || $user->canManageProductionAccounts() || $isTournamentIct || $isCoach;
+        $canManageAssignments = $canUpdateIdentity && ($user->isAdmin() || $user->canManageProductionAccounts() || $isTournamentIct || $isCoach);
         $fileFields = ['photo', 'sports_photo', 'athlete_history', 'form_10', 'form_10_page_2', 'birth_certificate', 'birth_certificate_page_2', 'parental_consent', 'medical_certificate', 'meet_sport_ids', 'event_ids', 'registered_by'];
-        if (! $isTournamentIct || $user->isAdmin() || $user->canManageProductionAccounts()) {
+        if ($canUpdateIdentity && (! $isTournamentIct || $user->isAdmin() || $user->canManageProductionAccounts())) {
             $athlete->fill($request->safe()->except($fileFields));
         }
 
@@ -658,12 +678,12 @@ class AthleteController extends Controller
         $oldPhoto = null;
         $oldSportsPhoto = null;
 
-        if (! $isTournamentIct && $request->hasFile('photo')) {
+        if ($request->hasFile('photo')) {
             $oldPhoto = $athlete->photo;
             $athlete->photo_upload_id = $this->athletePhotos->store($request->file('photo'), $user, 'passport')->id;
         }
 
-        if (! $isTournamentIct && $request->hasFile('sports_photo')) {
+        if ($request->hasFile('sports_photo')) {
             $oldSportsPhoto = $athlete->sportsPhoto;
             $athlete->sports_photo_upload_id = $this->athletePhotos->store($request->file('sports_photo'), $user, 'sports')->id;
         }
@@ -706,7 +726,7 @@ class AthleteController extends Controller
 
         $replacedDocumentTypes = collect();
         foreach ($documents as $field => $type) {
-            if ($isTournamentIct || ! $request->hasFile($field)) {
+            if (! $request->hasFile($field)) {
                 continue;
             }
 
@@ -717,7 +737,10 @@ class AthleteController extends Controller
                     ->with('fileUpload')
                     ->get();
             }
-            $upload = $this->athletePhotos->storeDocument($request->file($field), $user, $field);
+            $file = $request->file($field);
+            $upload = $file->getMimeType() === 'application/pdf'
+                ? $this->uploads->store($file, $user, $field)
+                : $this->athletePhotos->storeDocument($file, $user, $field);
             EligibilityDocument::query()->create([
                 'athlete_id' => $athlete->id,
                 'file_upload_id' => $upload->id,

@@ -7,6 +7,7 @@ use App\Enums\ManagementTeamMemberStatus;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\MeetStatus;
+use App\Enums\Permission;
 use App\Enums\ResultStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\ScopesToAssignedSport;
@@ -66,6 +67,7 @@ class ResultController extends Controller
             && $assignedEventIds->isNotEmpty();
         $managedSportIds = $this->userManagedSportIds($user);
         $managedSportId = $managedSportIds->first();
+        $canOfficialize = $user->hasPermission(Permission::ResultsOfficialize, Meet::current());
 
         // `canEncode` is a strict superset of `canManage`: it governs
         // "sees encoded results and the encode form at all" (Admin/
@@ -81,7 +83,7 @@ class ResultController extends Controller
         $meetId = Meet::current()->id;
         $eventId = $request->integer('event_id');
 
-        $query = EventResult::query()
+        $query = EventResult::query()->real()
             ->with([
                 'meet:id,name',
                 'event.sport:id,code,name',
@@ -94,7 +96,7 @@ class ResultController extends Controller
             ->orderByDesc('id');
 
         if (! $canManage) {
-            $query->where(function ($visible) use ($user, $isScopedResultEncoder, $isScopedTechnicalOfficial, $assignedEventIds, $managedSportId) {
+            $query->where(function ($visible) use ($user, $isScopedResultEncoder, $isScopedTechnicalOfficial, $assignedEventIds, $managedSportId, $canOfficialize) {
                 $visible->where('status', ResultStatus::Official->value)
                     ->orWhere(function ($secretariatResults) use ($user) {
                         $secretariatResults->whereIn('status', [
@@ -132,6 +134,10 @@ class ResultController extends Controller
                     $visible->orWhere(fn ($legacy) => $legacy
                         ->where('status', ResultStatus::Encoded->value)
                         ->whereHas('event', fn ($event) => $event->where('sport_id', $managedSportId)));
+                }
+
+                if ($canOfficialize) {
+                    $visible->orWhereIn('status', [ResultStatus::Validated->value, ResultStatus::Official->value]);
                 }
             });
         }
@@ -181,6 +187,7 @@ class ResultController extends Controller
                         'meet_id' => $result->meet_id,
                         'event_id' => $result->event_id,
                         'match_id' => $result->match_id,
+                        'result_scope' => $result->result_scope,
                         'meet' => $result->meet->name,
                         'event' => $this->eventLabel($result->event),
                         'status' => $result->status->value,
@@ -193,6 +200,10 @@ class ResultController extends Controller
                         'reference' => $result->referenceNumber(),
                         'can_form' => $canForm,
                         'can_review' => $isEventSecretariat,
+                        'can_officialize' => $user->hasPermission(Permission::ResultsOfficialize, $result->meet)
+                            && $result->isFinalEventResult()
+                            && $result->status === ResultStatus::Validated
+                            && $attachment !== null,
                         'form_generated' => $result->form_generated_version === $result->version,
                         'tm_confirmed' => $result->tm_confirmed_at !== null,
                         'can_tm_confirm' => $this->userManagedSportIds($user)->contains($result->event->sport_id)
@@ -228,7 +239,7 @@ class ResultController extends Controller
             ],
             'meetOptions' => Meet::query()->orderBy('name')->get(['id', 'name'])
                 ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]),
-            'eventOptionsByMeet' => Event::query()
+            'eventOptionsByMeet' => Event::query()->real()
                 ->whereHas('meets')
                 ->when($isTournamentScoped, fn ($events) => $events->whereKey($assignedEventIds))
                 ->with(['sport:id,name', 'meets:id'])
@@ -245,7 +256,7 @@ class ResultController extends Controller
                 ->get(['id', 'name'])
                 ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]),
             'encodedEventKeys' => $canEncode
-                ? EventResult::query()
+                ? EventResult::query()->real()
                     ->when(
                         ! $canManage,
                         fn ($query) => $query->whereIn('event_id', $assignedEventIds),
@@ -277,7 +288,7 @@ class ResultController extends Controller
                     ->values()
                 : [],
             'competitionOptions' => $canEncode
-                ? EventMatch::query()
+                ? EventMatch::query()->real()
                     ->whereNotNull('event_schedule_id')
                     ->whereIn('status', ['completed', 'walkover'])
                     ->whereDoesntHave('result')
@@ -286,6 +297,7 @@ class ResultController extends Controller
                     ->get()
                     ->map(fn (EventMatch $match): array => [
                         'id' => $match->id,
+                        'meet_id' => $match->meet_id,
                         'event_id' => $match->event_id,
                         'label' => sprintf('%s · %s · %s', $this->eventLabel($match->event), $match->round_label, $match->schedule->venue->name),
                         'context' => sprintf('%s %s–%s%s', $match->schedule->scheduled_date->format('M j'), substr($match->schedule->starts_at, 0, 5), substr($match->schedule->ends_at, 0, 5), $match->competition_area ? " · {$match->competition_area}" : ''),
@@ -305,22 +317,32 @@ class ResultController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'match_id' => ['required', 'integer', Rule::exists('matches', 'id')],
+            'meet_id' => ['exclude_with:match_id', 'required_without:match_id', 'integer', Rule::exists('meets', 'id')],
+            'event_id' => ['exclude_with:match_id', 'required_without:match_id', 'integer', Rule::exists('events', 'id')],
+            'match_id' => ['nullable', 'integer', Rule::exists('matches', 'id')],
             'placements' => ['required', 'array', 'min:1'],
             'placements.*.entry_id' => ['required', 'integer', 'distinct', Rule::exists('entries', 'id')],
             'placements.*.rank' => ['required', 'integer', 'min:1', 'max:999'],
             'placements.*.mark' => ['nullable', 'string', 'max:60'],
             'placements.*.is_tie' => ['boolean'],
         ]);
-        $match = EventMatch::query()->with(['meet', 'entries'])->findOrFail((int) $data['match_id']);
-        $this->authorizeEncode($request, $match->event_id);
-        $this->assertEncodable($match->meet, $match->event_id);
-        $this->assertPlacementsValid($data['placements'], $match->meet_id, $match->event_id, $match);
-
         /** @var User $user */
         $user = $request->user();
+        $match = ! empty($data['match_id'])
+            ? EventMatch::query()->with(['meet', 'entries'])->findOrFail((int) $data['match_id'])
+            : null;
+        $meet = $match?->meet ?? Meet::query()->findOrFail((int) $data['meet_id']);
+        $event = $match?->event ?? Event::query()->findOrFail((int) $data['event_id']);
+        $this->authorizeEncode($request, $event->id);
+        $this->assertEncodable($meet, $event->id);
 
-        $result = $this->competitionResults->createManual($match, $data['placements'], $user);
+        if (! empty($data['match_id'])) {
+            $this->assertPlacementsValid($data['placements'], $meet->id, $event->id, $match);
+            $this->competitionResults->createManual($match, $data['placements'], $user);
+        } else {
+            $this->assertPlacementsValid($data['placements'], $meet->id, $event->id);
+            $this->competitionResults->createFinalEventResult($meet, $event, $data['placements'], $user);
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Result encoded.')]);
 
@@ -386,6 +408,8 @@ class ResultController extends Controller
                 ->where('meet_id', $result->meet_id)
                 ->where('source_code', 'EVENT_SECRETARIAT'))
             ->exists(), 403);
+
+        abort_unless($result->status === ResultStatus::Submitted, 422, 'Only a submitted result may be validated.');
 
         if ($result->isValidated()) {
             Inertia::flash('toast', [

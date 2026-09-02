@@ -545,7 +545,7 @@ export default function EditAthlete({
                                             id={`athlete-${field}`}
                                             label={label}
                                             guidance="Upload only to replace."
-                                            accept="image/jpeg,image/png"
+                                            accept="image/jpeg,image/png,image/webp,application/pdf"
                                             document
                                             onChange={(file) =>
                                                 form.setData(field, file)

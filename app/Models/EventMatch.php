@@ -50,6 +50,10 @@ class EventMatch extends Model
         ];
     }
 
+    public function scopeReal($query) { return $query->whereNull('demo_scenario_id'); }
+    public function scopeDemo($query) { return $query->whereNotNull('demo_scenario_id'); }
+    public function demoScenario(): BelongsTo { return $this->belongsTo(DemoScenario::class); }
+
     /**
      * @return BelongsTo<Meet, $this>
      */

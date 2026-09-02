@@ -1,6 +1,11 @@
 <?php
 
+use App\Enums\UserRole;
+use App\Models\CoachOnboardingRequest;
+use App\Models\Personnel;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 test('profile page is displayed', function () {
     $user = User::factory()->create();
@@ -62,4 +67,43 @@ test('users cannot delete their account', function () {
     $response->assertMethodNotAllowed();
 
     expect($user->fresh())->not->toBeNull();
+});
+
+test('coaches can update their profile photo and linked accreditation records', function () {
+    Storage::fake(config('uploads.disk'));
+    $coach = User::factory()->create(['role' => UserRole::Coach]);
+    $onboarding = CoachOnboardingRequest::query()->create(['user_id' => $coach->id]);
+    $personnel = Personnel::factory()->create(['user_id' => $coach->id]);
+
+    $this->actingAs($coach)
+        ->post(route('profile.photo.update'), ['photo' => UploadedFile::fake()->image('coach.jpg', 1200, 1500)])
+        ->assertSessionHasNoErrors();
+
+    $uploadId = $coach->refresh()->profile_photo_upload_id;
+    expect($uploadId)->not->toBeNull()
+        ->and($onboarding->refresh()->profile_upload_id)->toBe($uploadId)
+        ->and($personnel->refresh()->photo_upload_id)->toBe($uploadId);
+
+    $this->get(route('profile.photo'))->assertOk();
+});
+
+test('tournament ICT can update their own profile photo', function () {
+    Storage::fake(config('uploads.disk'));
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+
+    $this->actingAs($ict)
+        ->post(route('profile.photo.update'), ['photo' => UploadedFile::fake()->image('ict.png', 800, 1000)])
+        ->assertSessionHasNoErrors();
+
+    expect($ict->refresh()->profile_photo_upload_id)->not->toBeNull();
+});
+
+test('ordinary viewers cannot upload account profile photos', function () {
+    $viewer = User::factory()->create(['role' => UserRole::Viewer]);
+
+    $this->actingAs($viewer)
+        ->post(route('profile.photo.update'), ['photo' => UploadedFile::fake()->image('viewer.jpg')])
+        ->assertForbidden();
+
+    expect($viewer->refresh()->profile_photo_upload_id)->toBeNull();
 });

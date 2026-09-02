@@ -102,8 +102,14 @@ test('the audit log can be filtered to a single action', function () {
 
 test('phase 3 action families surface in the viewer and its filter', function () {
     $result = EventResult::factory()->create();
+    $submitter = User::factory()->admin()->create();
+    $result->forceFill([
+        'status' => \App\Enums\ResultStatus::Submitted,
+        'submitted_by' => $submitter->id,
+        'submitted_at' => now(),
+    ])->save();
 
-    $this->actingAs(User::factory()->admin()->create())
+    $this->actingAs($submitter)
         ->patch("/results/{$result->id}/validate")
         ->assertRedirect();
 

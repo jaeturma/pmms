@@ -25,6 +25,7 @@ class EventResultFactory extends Factory
             'meet_id' => Meet::factory()->active(),
             'event_id' => Event::factory(),
             'status' => ResultStatus::Encoded,
+            'result_scope' => 'event',
             'encoded_by' => User::factory()->organizer(),
             'encoded_at' => now(),
             'validated_by' => null,

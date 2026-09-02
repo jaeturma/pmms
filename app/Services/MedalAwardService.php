@@ -13,6 +13,18 @@ class MedalAwardService
 {
     public function synchronize(EventResult $result, User $actor): void
     {
+        if ($result->demo_scenario_id !== null) {
+            $result->medalAwards()->delete();
+
+            return;
+        }
+
+        if ($result->demo_scenario_id !== null) {
+            $result->medalAwards()->delete();
+
+            return;
+        }
+
         $result->loadMissing(['event.medalConfig', 'placements.entry.athlete', 'placements.teamEntry']);
         $config = $result->event->resolvedMedalConfig();
 

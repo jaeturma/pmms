@@ -17,6 +17,7 @@ use App\Models\Personnel;
 use App\Models\School;
 use App\Models\Sport;
 use App\Models\User;
+use App\Services\AthletePhotoService;
 use App\Services\AuditLogger;
 use App\Services\FileUploadService;
 use Illuminate\Http\RedirectResponse;
@@ -497,22 +498,29 @@ class CoachAssignmentRequestController extends Controller
         CoachOnboardingRequest $coachOnboardingRequest,
         string $type,
         FileUploadService $uploads,
+        AthletePhotoService $athletePhotos,
     ): RedirectResponse {
         $user = $request->user();
         abort_unless($this->canUpdateOnboardingDocuments($user, $coachOnboardingRequest), 403);
         abort_unless(in_array($type, ['profile', 'certification'], true), 404);
 
         $rules = $type === 'profile'
-            ? ['document' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120']]
+            ? ['document' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.config('pmms.athlete_photos.max_upload_kb')]]
             : ['document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240']];
         $validated = $request->validate($rules);
         $column = $type === 'profile' ? 'profile_upload_id' : 'certification_upload_id';
         $oldUpload = $type === 'profile' ? $coachOnboardingRequest->profile : $coachOnboardingRequest->certification;
-        $upload = $uploads->store($validated['document'], $user, 'coach_'.$type);
+        $upload = $type === 'profile'
+            ? $athletePhotos->store($validated['document'], $user, 'passport')
+            : $uploads->store($validated['document'], $user, 'coach_'.$type);
 
         $coachOnboardingRequest->forceFill([$column => $upload->id])->save();
         if ($oldUpload !== null) {
-            $uploads->delete($oldUpload);
+            if ($type === 'profile') {
+                $athletePhotos->delete($oldUpload);
+            } else {
+                $uploads->delete($oldUpload);
+            }
         }
 
         if ($type === 'profile') {

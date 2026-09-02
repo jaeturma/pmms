@@ -4,6 +4,7 @@ namespace App\Enums;
 
 enum Permission: string
 {
+    case DemoManage = 'demo.manage';
     case ContentView = 'content.view';
     case NewsManage = 'news.manage';
     case AnnouncementsManage = 'announcements.manage';
@@ -23,4 +24,6 @@ enum Permission: string
     case DistrictAthletesView = 'district.athletes.view';
     case MunicipalityReadinessView = 'municipality.readiness.view';
     case MunicipalityAthletesView = 'municipality.athletes.view';
+    case ResultsOfficialize = 'results.officialize';
+    case ResultsReopen = 'results.reopen';
 }

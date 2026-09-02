@@ -317,7 +317,7 @@ test('a coach registers an athlete only in an assigned event with photos and acc
     $this->assertDatabaseHas('file_uploads', ['id' => $photoUploadId]);
 });
 
-test('a coach with multiple approved events must select one of their sports for the athlete', function () {
+test('a coach with multiple approved events in one sport is assigned that sport automatically', function () {
     $delegation = Delegation::factory()->create(['status' => DelegationStatus::Draft]);
     $coach = coachFor($delegation);
     $firstAssignment = $coach->coachAssignmentRequests()->where('delegation_id', $delegation->id)->firstOrFail();
@@ -349,15 +349,7 @@ test('a coach with multiple approved events must select one of their sports for 
         'grade_level' => 9,
     ];
 
-    $this->actingAs($coach)->post('/athletes', $payload)
-        ->assertSessionHasErrors('event_id');
-
-    $this->assertDatabaseMissing('athletes', ['lrn' => '321654987099']);
-
-    $this->actingAs($coach)->post('/athletes', [
-        ...$payload,
-        'event_id' => $secondEvent->id,
-    ])->assertSessionHasNoErrors();
+    $this->actingAs($coach)->post('/athletes', $payload)->assertSessionHasNoErrors();
 
     $athlete = Athlete::query()->where('lrn', '321654987099')->sole();
     expect($athlete->entries()->exists())->toBeFalse()
@@ -468,7 +460,9 @@ test('a coach cannot view or register athletes for another delegation', function
             'lrn' => '999999999999',
             'grade_level' => 9,
         ])
-        ->assertForbidden();
+        ->assertSessionHasErrors('school_id');
+
+    $this->assertDatabaseMissing('athletes', ['lrn' => '999999999999']);
 });
 
 test('a coach sees all owned athletes regardless of sport or event scope', function () {

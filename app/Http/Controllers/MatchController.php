@@ -61,7 +61,7 @@ class MatchController extends Controller
 
         $eventId = $request->integer('event_id');
 
-        $query = EventMatch::query()
+        $query = EventMatch::query()->real()
             ->with([
                 'event.sport:id,name',
                 'schedule.venue:id,name',
@@ -129,7 +129,7 @@ class MatchController extends Controller
             'filters' => [
                 'event_id' => $eventId > 0 ? $eventId : null,
             ],
-            'eventOptions' => Event::query()
+            'eventOptions' => Event::query()->real()
                 ->whereHas('meets', fn ($meets) => $meets->whereKey(Meet::current()->id))
                 ->when($isTournamentScoped, fn ($query) => $query->whereKey($visibleEventIds))
                 ->with('sport:id,name')
@@ -139,7 +139,7 @@ class MatchController extends Controller
                     'label' => $this->eventLabel($event),
                 ])
                 ->values(),
-            'scheduleOptions' => EventSchedule::query()
+            'scheduleOptions' => EventSchedule::query()->real()
                 ->when(
                     $isTournamentScoped,
                     fn ($query) => $query->whereIn('event_id', $visibleEventIds),

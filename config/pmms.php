@@ -32,8 +32,8 @@ return [
     ],
 
     'athlete_photos' => [
-        'max_upload_kb' => 20480,
-        'max_stored_kb' => 500,
+        'max_upload_kb' => 10240,
+        'max_stored_kb' => 800,
         'format' => 'jpeg',
         'passport' => ['width' => 800, 'height' => 1000, 'aspect_ratio' => '4:5'],
         'sports' => ['width' => 800, 'height' => 1000, 'aspect_ratio' => '4:5'],
@@ -44,22 +44,8 @@ return [
     ],
 
     'athlete_documents' => [
-        'max_upload_kb' => 8192,
-        'preferred_stored_kb' => 900,
-        'max_long_edge' => 2200,
-        'min_long_edge' => 1400,
-    ],
-
-    'athlete_documents' => [
-        'max_upload_kb' => 8192,
-        'preferred_stored_kb' => 900,
-        'max_long_edge' => 2200,
-        'min_long_edge' => 1400,
-    ],
-
-    'athlete_documents' => [
-        'max_upload_kb' => 8192,
-        'preferred_stored_kb' => 900,
+        'max_upload_kb' => 10240,
+        'preferred_stored_kb' => 800,
         'max_long_edge' => 2200,
         'min_long_edge' => 1400,
     ],

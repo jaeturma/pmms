@@ -45,6 +45,7 @@ class MedalTallyService
     public function ageDivisionOptions(int $meetId, ?int $sportId = null): array
     {
         $values = EventResult::query()
+            ->real()
             ->where('meet_id', $meetId)
             ->where('status', ResultStatus::Official->value)
             ->when($sportId !== null, fn ($query) => $query->whereHas('event', fn ($events) => $events->where('sport_id', $sportId)))
@@ -299,6 +300,7 @@ class MedalTallyService
             ->with('medalAward')
             ->whereIn('rank', [1, 2, 3])
             ->whereHas('result', fn ($result) => $result
+                ->whereNull('demo_scenario_id')
                 ->where('status', ResultStatus::Official->value)
                 ->where(fn ($eligible) => $eligible
                     ->whereNull('match_id')
