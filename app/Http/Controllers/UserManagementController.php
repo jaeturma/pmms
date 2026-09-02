@@ -190,8 +190,25 @@ class UserManagementController extends Controller
             'role' => $user->role->value,
         ];
 
-        $this->audit->record('user.removed', $user, $context);
-        $user->delete();
+        DB::transaction(function () use ($request, $user, $context): void {
+            if ($user->role === UserRole::Coach) {
+                $user->coachAssignmentRequests()
+                    ->whereIn('status', ['pending', 'approved'])
+                    ->whereNull('ended_at')
+                    ->update(['status' => 'inactive', 'ended_at' => now()]);
+                $user->coachOnboardingRequest()
+                    ->whereIn('status', ['pending', 'approved'])
+                    ->update([
+                        'status' => 'rejected',
+                        'reviewed_by' => $request->user()->id,
+                        'reviewed_at' => now(),
+                        'review_notes' => __('Coach account removed.'),
+                    ]);
+            }
+
+            $this->audit->record('user.removed', $user, $context);
+            $user->delete();
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('User account removed.')]);
 

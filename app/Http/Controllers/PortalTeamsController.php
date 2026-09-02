@@ -255,6 +255,7 @@ class PortalTeamsController extends Controller
     private function sportPersonnel(Meet $meet, District $district, int $sportId): array
     {
         $certifiedCoachSports = CoachOnboardingRequest::query()
+            ->whereHas('user')
             ->where('status', 'approved')
             ->whereHas('meetSport', fn ($query) => $query->where('meet_id', $meet->id))
             ->whereHas('meetSport', fn ($query) => $query->where('sport_id', $sportId))
@@ -314,6 +315,7 @@ class PortalTeamsController extends Controller
             ]));
 
         $approvedAccountCoaches = CoachAssignmentRequest::query()
+            ->whereHas('user')
             ->where('status', 'approved')
             ->whereHas('meetSport', fn ($query) => $query->where('meet_id', $meet->id))
             ->whereHas('meetSport', fn ($query) => $query->where('sport_id', $sportId))

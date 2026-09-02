@@ -65,6 +65,7 @@ class MeetReadinessService
         $assignments = MeetSportAssignment::query()->whereIn('meet_sport_id', $meetSports->modelKeys())
             ->where('status', MeetSportAssignmentStatus::Active->value)->get(['id', 'meet_sport_id', 'role']);
         $coachAssignments = CoachAssignmentRequest::query()->whereIn('delegation_id', $delegations->modelKeys())
+            ->whereHas('user')
             ->where('status', 'approved')->whereNull('ended_at')
             ->where(fn ($query) => $query->whereIn('event_id', $eventIds)
                 ->orWhere(fn ($scope) => $scope->whereNull('event_id')->whereIn('meet_sport_id', $meetSports->modelKeys())))
@@ -75,7 +76,7 @@ class MeetReadinessService
             ->get(['id', 'meet_sport_id', 'delegation_id', 'athlete_id', 'gender', 'level']);
         $coachRequests = CoachOnboardingRequest::query()->where(function ($q) use ($meetSports, $eventIds): void {
             $q->whereIn('meet_sport_id', $meetSports->modelKeys())->orWhereIn('event_id', $eventIds)->orWhereHas('events', fn ($events) => $events->whereIn('events.id', $eventIds));
-        })->get(['id', 'user_id']);
+        })->whereHas('user')->get(['id', 'user_id']);
         $accreditedCoachUserIds = Personnel::query()->whereIn('user_id', $coachRequests->pluck('user_id'))->whereHas('accreditation')->pluck('user_id')->filter()->unique();
 
         // Index the production-sized collections once. Repeated Collection::where()

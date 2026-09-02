@@ -19,6 +19,12 @@ class CoachAssignmentRequest extends Model
         return $this->belongsTo(User::class);
     }
 
+    /** Explicitly load the account identity on audit/history screens. */
+    public function userIncludingDeleted(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id')->withTrashed();
+    }
+
     public function meetSport(): BelongsTo
     {
         return $this->belongsTo(MeetSport::class);

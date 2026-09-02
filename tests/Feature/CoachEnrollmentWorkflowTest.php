@@ -196,7 +196,7 @@ test('a documented municipality coach can be accredited without a school or pre-
         ->and($person->accreditation()->exists())->toBeTrue();
 });
 
-test('coach registration management renders archived user history without a null relationship error', function () {
+test('coach registration management excludes archived users from operational queues', function () {
     $coach = User::factory()->coach()->create(['name' => 'Archived Coach']);
     CoachOnboardingRequest::query()->create([
         'user_id' => $coach->id,
@@ -207,7 +207,49 @@ test('coach registration management renders archived user history without a null
     $this->actingAs(User::factory()->admin()->create())
         ->get('/coach/assignment-requests')
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->where('registrations.data.0.coach', 'Archived Coach'));
+        ->assertInertia(fn ($page) => $page->has('registrations.data', 0));
+
+    expect(CoachOnboardingRequest::query()->sole()->userIncludingDeleted?->name)->toBe('ARCHIVED COACH');
+});
+
+test('ict dashboard and coach queues survive stale actionable rows for a deleted coach', function () {
+    $meet = Meet::factory()->registrationOpen()->create(['is_active' => true]);
+    $sport = Sport::factory()->create();
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $sport->id]);
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+    $meet->events()->attach($event);
+    $delegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $coach = User::factory()->coach()->create(['name' => 'Removed Legacy Coach']);
+    $onboarding = CoachOnboardingRequest::query()->create([
+        'user_id' => $coach->id, 'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $delegation->id, 'event_id' => $event->id,
+        'status' => 'approved',
+    ]);
+    CoachAssignmentRequest::query()->create([
+        'user_id' => $coach->id, 'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $delegation->id, 'event_id' => $event->id,
+        'status' => 'approved', 'ended_at' => null,
+    ]);
+    $coach->delete();
+
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+    MeetSportAssignment::factory()->create([
+        'user_id' => $ict->id, 'meet_sport_id' => $meetSport->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($ict)->get('/dashboard')->assertOk();
+    $this->actingAs($ict)->get('/coach/assignment-requests')->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('requests.data', 0)
+            ->has('registrations.data', 0));
+
+    $this->actingAs($ict)->put("/coach/onboarding-requests/{$onboarding->id}/assignments", [
+        'event_ids' => [$event->id],
+    ])->assertSessionHasErrors('coach');
+
+    expect(CoachAssignmentRequest::query()->where('user_id', $coach->id)->count())->toBe(1);
 });
 
 test('a coach may replace attachments after approval and accreditation', function () {

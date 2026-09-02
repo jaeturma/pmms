@@ -147,6 +147,7 @@ class DashboardController extends Controller
             ->selectRaw('event_id, COUNT(DISTINCT athlete_id) as aggregate')
             ->groupBy('event_id')->pluck('aggregate', 'event_id');
         $coachCounts = CoachAssignmentRequest::query()->whereIn('event_id', $eventIds)
+            ->whereHas('user')
             ->where('status', 'approved')->whereNull('ended_at')
             ->when($delegationIds !== null, fn ($coaches) => $coaches->whereIn('delegation_id', $delegationIds))
             ->selectRaw('event_id, COUNT(DISTINCT user_id) as aggregate')

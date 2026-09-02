@@ -285,12 +285,29 @@ test('a system administrator can remove regular users and coaches', function () 
     $admin = User::factory()->admin()->create();
     $user = User::factory()->create();
     $coach = User::factory()->coach()->create();
+    $meetSport = MeetSport::factory()->create();
+    $delegation = Delegation::factory()->create(['meet_id' => $meetSport->meet_id]);
+    $event = Event::factory()->create(['sport_id' => $meetSport->sport_id]);
+    $meetSport->meet->events()->attach($event);
+    $assignment = CoachAssignmentRequest::query()->create([
+        'user_id' => $coach->id, 'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $delegation->id, 'event_id' => $event->id,
+        'status' => 'approved', 'ended_at' => null,
+    ]);
+    $onboarding = CoachOnboardingRequest::query()->create([
+        'user_id' => $coach->id, 'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $delegation->id, 'event_id' => $event->id,
+        'status' => 'pending',
+    ]);
 
     $this->actingAs($admin)->delete("/system/users/{$user->id}")->assertSessionHasNoErrors();
     $this->actingAs($admin)->delete("/system/users/{$coach->id}")->assertSessionHasNoErrors();
 
     $this->assertSoftDeleted('users', ['id' => $user->id]);
     $this->assertSoftDeleted('users', ['id' => $coach->id]);
+    expect($assignment->fresh()->status)->toBe('inactive')
+        ->and($assignment->fresh()->ended_at)->not->toBeNull()
+        ->and($onboarding->fresh()->status)->toBe('rejected');
 });
 
 test('account removal is restricted to system administrators and they cannot remove themselves', function () {

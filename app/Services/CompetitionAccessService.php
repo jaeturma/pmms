@@ -113,6 +113,10 @@ class CompetitionAccessService
     /** @return Collection<int, MeetSportAssignment> */
     public function assignments(User $user, ?int $meetId = null): Collection
     {
+        if ($user->trashed()) {
+            return collect();
+        }
+
         return $user->meetSportAssignments()
             ->where('status', MeetSportAssignmentStatus::Active->value)
             ->whereIn('role', $this->tournamentRoles())

@@ -16,6 +16,10 @@ class CoachAccessService
     /** @return Collection<int, CoachAssignmentRequest> */
     public function assignments(User $coach, ?Delegation $delegation = null): Collection
     {
+        if ($coach->trashed()) {
+            return collect();
+        }
+
         return $coach->coachAssignmentRequests()->where('status', 'approved')->whereNull('ended_at')
             ->when($delegation !== null, fn ($query) => $query->where('delegation_id', $delegation->id))
             ->with(['meetSport', 'sportCategory', 'event'])->get();

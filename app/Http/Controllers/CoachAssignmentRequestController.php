@@ -47,7 +47,7 @@ class CoachAssignmentRequestController extends Controller
         $status = in_array($status, ['pending', 'approved', 'rejected'], true) ? $status : '';
         $sportId = $request->integer('sport_id') ?: null;
 
-        $query = CoachAssignmentRequest::query()->with([
+        $query = CoachAssignmentRequest::query()->whereHas('user')->with([
             'user:id,name,email', 'meetSport.meet:id,name', 'meetSport.sport:id,name',
             'event:id,name', 'delegation.school:id,name', 'delegation.district:id,name', 'school:id,name',
         ])->latest();
@@ -130,6 +130,7 @@ class CoachAssignmentRequestController extends Controller
 
     public function review(Request $request, CoachAssignmentRequest $coachAssignmentRequest, AuditLogger $audit): RedirectResponse
     {
+        $this->activeCoach($coachAssignmentRequest->user_id);
         /** @var User $reviewer */
         $reviewer = $request->user();
         abort_unless($reviewer->canReviewCoachRegistrations() || (
@@ -167,6 +168,7 @@ class CoachAssignmentRequestController extends Controller
 
     public function resetPassword(Request $request, CoachAssignmentRequest $coachAssignmentRequest, AuditLogger $audit): RedirectResponse
     {
+        $coach = $this->activeCoach($coachAssignmentRequest->user_id);
         /** @var User $reviewer */
         $reviewer = $request->user();
         abort_unless($this->canResetAssignmentPassword($reviewer, $coachAssignmentRequest), 403);
@@ -174,13 +176,13 @@ class CoachAssignmentRequestController extends Controller
         $password = config('pmms.accounts.default_reset_password');
         abort_unless(is_string($password) && $password !== '', 503, 'The reset password is not configured.');
 
-        $coachAssignmentRequest->user->forceFill([
+        $coach->forceFill([
             'password' => Hash::make($password),
             'must_change_password' => true,
             'password_changed_at' => null,
         ])->save();
 
-        $audit->record('user.password_reset', $coachAssignmentRequest->user, [
+        $audit->record('user.password_reset', $coach, [
             'coach_assignment_request_id' => $coachAssignmentRequest->id,
             'reset_by' => $reviewer->id,
         ]);
@@ -192,6 +194,7 @@ class CoachAssignmentRequestController extends Controller
 
     public function reviewOnboarding(Request $request, CoachOnboardingRequest $coachOnboardingRequest, AuditLogger $audit): RedirectResponse
     {
+        $this->activeCoach($coachOnboardingRequest->user_id);
         /** @var User $reviewer */
         $reviewer = $request->user();
         abort_unless($this->canReviewOnboarding($reviewer, $coachOnboardingRequest), 403);
@@ -298,6 +301,7 @@ class CoachAssignmentRequestController extends Controller
 
     public function assignments(Request $request, CoachOnboardingRequest $coachOnboardingRequest): Response
     {
+        $this->activeCoach($coachOnboardingRequest->user_id);
         abort_unless($this->canManageOnboardingAssignments($request->user(), $coachOnboardingRequest), 403);
         $coachOnboardingRequest->loadMissing(['user:id,name,email', 'meetSport.meet', 'meetSport.sport:id,name', 'delegation.meet', 'delegation.school', 'delegation.district', 'event.sport', 'events.sport', 'profile:id,mime_type', 'certification:id,mime_type']);
         $existingAssignments = CoachAssignmentRequest::query()->where('user_id', $coachOnboardingRequest->user_id)
@@ -359,6 +363,7 @@ class CoachAssignmentRequestController extends Controller
 
     public function syncAssignments(Request $request, CoachOnboardingRequest $coachOnboardingRequest, AuditLogger $audit): RedirectResponse
     {
+        $this->activeCoach($coachOnboardingRequest->user_id);
         abort_unless($this->canManageOnboardingAssignments($request->user(), $coachOnboardingRequest), 403);
         $data = $request->validate([
             'event_ids' => ['required', 'array', 'min:1'],
@@ -431,6 +436,7 @@ class CoachAssignmentRequestController extends Controller
 
     public function accredit(Request $request, CoachOnboardingRequest $coachOnboardingRequest, AuditLogger $audit): RedirectResponse
     {
+        $this->activeCoach($coachOnboardingRequest->user_id);
         $coachOnboardingRequest->loadMissing(['events', 'user']);
         abort_unless($coachOnboardingRequest->status === 'approved', 422, 'Only approved coaches can be accredited.');
         abort_unless($this->canAccreditOnboarding($request->user(), $coachOnboardingRequest), 403);
@@ -500,6 +506,7 @@ class CoachAssignmentRequestController extends Controller
         FileUploadService $uploads,
         AthletePhotoService $athletePhotos,
     ): RedirectResponse {
+        $this->activeCoach($coachOnboardingRequest->user_id);
         $user = $request->user();
         abort_unless($this->canUpdateOnboardingDocuments($user, $coachOnboardingRequest), 403);
         abort_unless(in_array($type, ['profile', 'certification'], true), 404);
@@ -533,13 +540,14 @@ class CoachAssignmentRequestController extends Controller
 
     public function resetOnboardingPassword(Request $request, CoachOnboardingRequest $coachOnboardingRequest, AuditLogger $audit): RedirectResponse
     {
+        $coach = $this->activeCoach($coachOnboardingRequest->user_id);
         /** @var User $reviewer */
         $reviewer = $request->user();
         abort_unless($this->canResetOnboardingPassword($reviewer, $coachOnboardingRequest), 403);
         $password = config('pmms.accounts.default_reset_password');
         abort_unless(is_string($password) && $password !== '', 503, 'The reset password is not configured.');
-        $coachOnboardingRequest->user->forceFill(['password' => Hash::make($password), 'must_change_password' => true, 'password_changed_at' => null])->save();
-        $audit->record('user.password_reset', $coachOnboardingRequest->user, ['coach_onboarding_request_id' => $coachOnboardingRequest->id, 'reset_by' => $reviewer->id]);
+        $coach->forceFill(['password' => Hash::make($password), 'must_change_password' => true, 'password_changed_at' => null])->save();
+        $audit->record('user.password_reset', $coach, ['coach_onboarding_request_id' => $coachOnboardingRequest->id, 'reset_by' => $reviewer->id]);
 
         return back()->with('success', __('Coach password reset. The coach must change it at next sign-in.'));
     }
@@ -623,7 +631,8 @@ class CoachAssignmentRequestController extends Controller
                 });
         }
 
-        $query->when($search !== '', fn ($items) => $items->whereHas('user', fn ($users) => $users
+        $query->whereHas('user')
+            ->when($search !== '', fn ($items) => $items->whereHas('user', fn ($users) => $users
             ->where(fn ($names) => $names->where('name', 'like', "%{$search}%")
                 ->orWhere('email', 'like', "%{$search}%"))))
             ->when($status !== '', fn ($items) => $items->where('status', $status))
@@ -722,6 +731,18 @@ class CoachAssignmentRequestController extends Controller
         }
 
         return $person;
+    }
+
+    private function activeCoach(int $userId): User
+    {
+        $coach = User::query()->find($userId);
+        if ($coach === null) {
+            throw ValidationException::withMessages([
+                'coach' => __('This coach account has been removed and is no longer active.'),
+            ]);
+        }
+
+        return $coach;
     }
 
     private function materializeCoachPersonnel(CoachOnboardingRequest $request): ?Personnel
