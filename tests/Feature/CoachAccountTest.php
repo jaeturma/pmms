@@ -16,6 +16,7 @@ use App\Models\EligibilityReview;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\EventResult;
+use App\Models\EventSchedule;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
@@ -315,6 +316,33 @@ test('a coach registers an athlete only in an assigned event with photos and acc
     $this->assertDatabaseHas('athletes', ['id' => $athlete->id, 'deleted_at' => null]);
     $this->assertDatabaseHas('athletes', ['id' => $athlete->id, 'deletion_requested_by' => $coach->id]);
     $this->assertDatabaseHas('file_uploads', ['id' => $photoUploadId]);
+});
+
+test('tournament ict can cancel a coach athlete deletion request', function () {
+    $delegation = Delegation::factory()->create(['status' => DelegationStatus::Draft]);
+    $coach = coachFor($delegation);
+    $assignment = $coach->coachAssignmentRequests()->firstOrFail();
+    $athlete = Athlete::factory()->create([
+        'delegation_id' => $delegation->id,
+        'registered_by' => $coach->id,
+        'deletion_requested_by' => $coach->id,
+        'deletion_requested_at' => now(),
+    ]);
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+    MeetSportAssignment::factory()->create([
+        'user_id' => $ict->id,
+        'meet_sport_id' => $assignment->meet_sport_id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($ict)
+        ->patch("/athletes/{$athlete->id}/deletion-request/cancel")
+        ->assertSessionHasNoErrors();
+
+    expect($athlete->fresh()->deletion_requested_by)->toBeNull()
+        ->and($athlete->fresh()->deletion_requested_at)->toBeNull()
+        ->and($athlete->fresh()->deleted_at)->toBeNull();
 });
 
 test('a coach with multiple approved events in one sport is assigned that sport automatically', function () {
@@ -688,6 +716,29 @@ test('coach dashboard hides another delegation submitted entries', function () {
             ->where('coachDashboard.eligibility_reviews.0.id', $review->id)
             ->where('coachDashboard.eligibility_reviews.0.athlete', $ownAthlete->fullName())
             ->has('coachDashboard.submitted_entries', 0));
+});
+
+test('coach schedule lists only events in the coach approved delegation scope', function () {
+    $delegation = Delegation::factory()->create(['status' => DelegationStatus::Draft]);
+    $coach = coachFor($delegation);
+    $ownEvent = $coach->coachAssignmentRequests()->with('event')->firstOrFail()->event;
+    $ownSlot = EventSchedule::factory()->create([
+        'meet_id' => $delegation->meet_id,
+        'event_id' => $ownEvent->id,
+    ]);
+    $otherEvent = Event::factory()->create();
+    $delegation->meet->events()->attach($otherEvent);
+    EventSchedule::factory()->create([
+        'meet_id' => $delegation->meet_id,
+        'event_id' => $otherEvent->id,
+    ]);
+
+    $this->actingAs($coach)->get('/schedule')->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('schedules.data', 1)
+            ->where('schedules.data.0.id', $ownSlot->id)
+            ->has('eventOptions', 1)
+            ->where('eventOptions.0.id', $ownEvent->id));
 });
 
 test('coach dashboard ignores legacy entries whose athlete is archived', function () {

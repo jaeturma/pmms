@@ -63,8 +63,14 @@ class ResultController extends Controller
             Meet::current()->id,
         );
         $assignedEventIds = $user->tournamentEventIds();
-        $isTournamentScoped = ! $user->hasRole(UserRole::Admin, UserRole::Organizer)
-            && $assignedEventIds->isNotEmpty();
+        $coachDelegationIds = collect();
+        if ($user->role === UserRole::Coach) {
+            $assignedEventIds = $user->approvedCoachEventIds();
+            $coachDelegationIds = $user->approvedCoachDelegationIds();
+        }
+        $isTournamentScoped = $user->role === UserRole::Coach
+            || (! $user->hasRole(UserRole::Admin, UserRole::Organizer)
+                && $assignedEventIds->isNotEmpty());
         $managedSportIds = $this->userManagedSportIds($user);
         $managedSportId = $managedSportIds->first();
         $canOfficialize = $user->hasPermission(Permission::ResultsOfficialize, Meet::current());
@@ -94,6 +100,12 @@ class ResultController extends Controller
                 'placements.entry.athlete.school:id,name',
             ])
             ->orderByDesc('id');
+
+        if ($user->role === UserRole::Coach) {
+            $query->whereIn('event_id', $assignedEventIds)
+                ->whereHas('placements.entry', fn ($entries) => $entries
+                    ->whereIn('delegation_id', $coachDelegationIds));
+        }
 
         if (! $canManage) {
             $query->where(function ($visible) use ($user, $isScopedResultEncoder, $isScopedTechnicalOfficial, $assignedEventIds, $managedSportId, $canOfficialize) {
@@ -272,6 +284,8 @@ class ResultController extends Controller
                         ! $canManage,
                         fn ($query) => $query->whereIn('event_id', $assignedEventIds),
                     )
+                    ->when($user->role === UserRole::Coach, fn ($query) => $query
+                        ->whereIn('delegation_id', $coachDelegationIds))
                     ->with([
                         'athlete:id,first_name,last_name,school_id',
                         'athlete.school:id,name',

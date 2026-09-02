@@ -297,6 +297,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('athletes', [AthleteController::class, 'store'])->name('athletes.store');
     Route::put('athletes/{athlete}', [AthleteController::class, 'update'])->name('athletes.update');
     Route::delete('athletes/{athlete}', [AthleteController::class, 'destroy'])->name('athletes.destroy');
+    Route::patch('athletes/{athlete}/deletion-request/cancel', [AthleteController::class, 'cancelDeletionRequest'])->name('athletes.deletion-request.cancel');
     Route::delete('athletes/{athlete}/permanent', [AthleteController::class, 'forceDestroy'])->name('athletes.force-destroy');
 
     Route::get('personnel', [PersonnelController::class, 'index'])->name('personnel.index');

@@ -51,8 +51,12 @@ class ScheduleController extends Controller
         $canManageAll = Gate::allows('manage-meet-data') || $user->canManageProductionAccounts();
         $access = app(CompetitionAccessService::class);
         $visibleEventIds = $user->tournamentEventIds();
-        $isTournamentScoped = ! $user->hasRole(UserRole::Admin, UserRole::Organizer)
-            && $visibleEventIds->isNotEmpty();
+        if ($user->role === UserRole::Coach) {
+            $visibleEventIds = $user->approvedCoachEventIds();
+        }
+        $isTournamentScoped = $user->role === UserRole::Coach
+            || (! $user->hasRole(UserRole::Admin, UserRole::Organizer)
+                && $visibleEventIds->isNotEmpty());
         $canManageAssignedCompetition = $access->hasAssignmentRole(
             $user,
             $access->competitionManagerRoles(),

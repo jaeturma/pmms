@@ -111,6 +111,7 @@ type AthleteRow = {
     can_delete: boolean;
     deletion_pending: boolean;
     can_confirm_deletion: boolean;
+    can_cancel_deletion: boolean;
     deleted: boolean;
     deleted_at: string | null;
 };
@@ -1434,6 +1435,25 @@ export default function Athletes({
                                                                     {
                                                                         preserveScroll: true,
                                                                     },
+                                                                )
+                                                            }
+                                                        />
+                                                    )}
+                                                    {athlete.can_cancel_deletion && (
+                                                        <ConfirmDialog
+                                                            trigger={
+                                                                <Button variant="outline" size="sm">
+                                                                    Cancel deletion
+                                                                </Button>
+                                                            }
+                                                            title="Cancel athlete deletion request?"
+                                                            description="The Athlete will remain active and the pending deletion request will be cleared."
+                                                            confirmLabel="Cancel request"
+                                                            onConfirm={() =>
+                                                                router.patch(
+                                                                    `/athletes/${athlete.id}/deletion-request/cancel`,
+                                                                    {},
+                                                                    { preserveScroll: true },
                                                                 )
                                                             }
                                                         />

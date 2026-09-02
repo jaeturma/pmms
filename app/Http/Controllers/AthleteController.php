@@ -220,6 +220,8 @@ class AthleteController extends Controller
                     'can_delete' => ! $athlete->trashed() && $user->can('delete', $athlete),
                     'deletion_pending' => $athlete->deletion_requested_at !== null,
                     'can_confirm_deletion' => $athlete->deletion_requested_at !== null && $this->isTournamentIct($user, $athlete),
+                    'can_cancel_deletion' => $athlete->deletion_requested_at !== null
+                        && ($user->isAdmin() || $this->isTournamentIct($user, $athlete)),
                 ]),
             'filters' => [
                 'search' => $search, 'municipality_id' => $municipalityId,
@@ -832,6 +834,33 @@ class AthleteController extends Controller
         ]);
 
         return redirect()->route('athletes.index');
+    }
+
+    /** Cancel a pending Coach deletion request without altering the Athlete. */
+    public function cancelDeletionRequest(Request $request, Athlete $athlete): RedirectResponse
+    {
+        $user = $request->user();
+        abort_unless($user->isAdmin() || $this->isTournamentIct($user, $athlete), 403);
+
+        if ($athlete->deletion_requested_at === null) {
+            throw ValidationException::withMessages([
+                'deletion_request' => __('This Athlete has no pending deletion request.'),
+            ]);
+        }
+
+        $requestedBy = $athlete->deletion_requested_by;
+        $athlete->forceFill([
+            'deletion_requested_by' => null,
+            'deletion_requested_at' => null,
+        ])->save();
+
+        $this->audit->record('athlete.deletion_request_cancelled', $athlete, [
+            'name' => $athlete->fullName(),
+            'requested_by' => $requestedBy,
+        ]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Athlete deletion request cancelled.')]);
+
+        return back();
     }
 
     private function isTournamentIct(User $user, Athlete $athlete): bool

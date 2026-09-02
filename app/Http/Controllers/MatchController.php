@@ -50,8 +50,13 @@ class MatchController extends Controller
 
         $canManageAll = Gate::allows('manage-meet-data');
         $visibleEventIds = $user->tournamentEventIds();
-        $isTournamentScoped = ! $user->isAdmin()
-            && $visibleEventIds->isNotEmpty();
+        $coachDelegationIds = collect();
+        if ($user->role === UserRole::Coach) {
+            $visibleEventIds = $user->approvedCoachEventIds();
+            $coachDelegationIds = $user->approvedCoachDelegationIds();
+        }
+        $isTournamentScoped = $user->role === UserRole::Coach
+            || (! $user->isAdmin() && $visibleEventIds->isNotEmpty());
         $access = app(CompetitionAccessService::class);
         $canManageAssignedCompetition = $access->hasAssignmentRole(
             $user,
@@ -77,6 +82,11 @@ class MatchController extends Controller
                 'entries.delegation.officers',
                 fn ($officers) => $officers->whereKey($user->getKey()),
             );
+        }
+
+        if ($user->role === UserRole::Coach) {
+            $query->whereIn('event_id', $visibleEventIds)
+                ->whereHas('entries', fn ($entries) => $entries->whereIn('delegation_id', $coachDelegationIds));
         }
 
         if ($isTournamentScoped) {
@@ -164,6 +174,8 @@ class MatchController extends Controller
                     $isTournamentScoped,
                     fn ($query) => $query->whereIn('event_id', $visibleEventIds),
                 )
+                ->when($user->role === UserRole::Coach, fn ($query) => $query
+                    ->whereIn('delegation_id', $coachDelegationIds))
                 ->with([
                     'athlete:id,first_name,last_name,school_id',
                     'athlete.school:id,name',
