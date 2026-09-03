@@ -157,6 +157,7 @@ type Props = {
         athletes_total: number;
     } | null;
     canMarkCompleteAthletesEligible: boolean;
+    canMarkCertificateAthletesMedicallyCleared: boolean;
 };
 
 type SportsEventReport = {
@@ -915,7 +916,17 @@ function CoachDashboardCards({ data }: { data: CoachDashboard }) {
     );
 }
 
-function EligibilityScanButton() {
+function ProgressScanButton({
+    endpoint,
+    buttonLabel,
+    title,
+    description,
+}: {
+    endpoint: string;
+    buttonLabel: string;
+    title: string;
+    description: string;
+}) {
     const [open, setOpen] = useState(false);
     const [processing, setProcessing] = useState(false);
     const [complete, setComplete] = useState(false);
@@ -938,7 +949,7 @@ function EligibilityScanButton() {
         }, 180);
 
         router.post(
-            '/dashboard/eligibility/mark-complete',
+            endpoint,
             {},
             {
                 preserveScroll: true,
@@ -959,17 +970,13 @@ function EligibilityScanButton() {
         <>
             <Button variant="outline" onClick={() => setOpen(true)}>
                 <FileCheck className="size-4" aria-hidden="true" />
-                Mark complete athletes Eligible
+                {buttonLabel}
             </Button>
             <Dialog open={open} onOpenChange={processing ? undefined : setOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Update athlete eligibility</DialogTitle>
-                        <DialogDescription>
-                            Scan registrations in your current meet scope.
-                            Athletes with all five required document types
-                            attached will be marked Eligible.
-                        </DialogDescription>
+                        <DialogTitle>{title}</DialogTitle>
+                        <DialogDescription>{description}</DialogDescription>
                     </DialogHeader>
                     {(processing || complete) && (
                         <div className="space-y-2" aria-live="polite">
@@ -1019,6 +1026,7 @@ export default function Dashboard({
     announcements,
     readiness,
     canMarkCompleteAthletesEligible,
+    canMarkCertificateAthletesMedicallyCleared,
 }: Props) {
     return (
         <>
@@ -1037,8 +1045,26 @@ export default function Dashboard({
                     actions={
                         coachDashboard ? (
                             <QuickActions compact />
-                        ) : canMarkCompleteAthletesEligible ? (
-                            <EligibilityScanButton />
+                        ) : canMarkCompleteAthletesEligible ||
+                          canMarkCertificateAthletesMedicallyCleared ? (
+                            <div className="flex flex-wrap gap-2">
+                                {canMarkCompleteAthletesEligible && (
+                                    <ProgressScanButton
+                                        endpoint="/dashboard/eligibility/mark-complete"
+                                        buttonLabel="Mark complete athletes Eligible"
+                                        title="Update athlete eligibility"
+                                        description="Scan registrations in your current meet scope. Athletes with all five required document types attached will be marked Eligible."
+                                    />
+                                )}
+                                {canMarkCertificateAthletesMedicallyCleared && (
+                                    <ProgressScanButton
+                                        endpoint="/dashboard/medical-clearance/mark-attached"
+                                        buttonLabel="Clear medical certificates"
+                                        title="Update medical clearances"
+                                        description="Scan athletes in your current meet scope. Every athlete with a Medical Certificate attached will be marked medically cleared."
+                                    />
+                                )}
+                            </div>
                         ) : undefined
                     }
                 />

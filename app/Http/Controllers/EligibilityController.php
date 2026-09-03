@@ -22,6 +22,7 @@ use App\Models\User;
 use App\Notifications\CoachEligibilityRemarksNotification;
 use App\Services\AthletePhotoService;
 use App\Services\AthleteEligibilityService;
+use App\Services\AthleteMedicalClearanceService;
 use App\Services\AuditLogger;
 use App\Services\CompetitionAccessService;
 use App\Services\Eligibility\AthleteEligibilityChecker;
@@ -49,6 +50,7 @@ class EligibilityController extends Controller
         private readonly AthleteEligibilityChecker $athleteChecker,
         private readonly TechnicalOfficialEligibilityChecker $officialChecker,
         private readonly AthleteEligibilityService $eligibility,
+        private readonly AthleteMedicalClearanceService $medicalClearance,
     ) {}
 
     public function athleteChecker(Request $request): Response
@@ -460,12 +462,15 @@ class EligibilityController extends Controller
         }
 
         $becameEligible = $this->eligibility->markEligibleWhenComplete($athlete, $user);
+        $becameMedicallyCleared = $this->medicalClearance->clearWhenCertificateAttached($athlete, $user);
 
         Inertia::flash('toast', [
             'type' => 'success',
             'message' => $becameEligible
                 ? __('Document uploaded. All five requirements are attached, so the athlete is now Eligible.')
-                : __('Document uploaded.'),
+                : ($becameMedicallyCleared
+                    ? __('Medical Certificate uploaded. The athlete is now medically cleared.')
+                    : __('Document uploaded.')),
         ]);
 
         return back();

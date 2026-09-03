@@ -29,6 +29,7 @@ use App\Models\SportRosterMember;
 use App\Models\User;
 use App\Services\AthletePhotoService;
 use App\Services\AthleteEligibilityService;
+use App\Services\AthleteMedicalClearanceService;
 use App\Services\AthleteRegistrationScope;
 use App\Services\AthleteDeletionService;
 use App\Services\AuditLogger;
@@ -56,6 +57,7 @@ class AthleteController extends Controller
         private readonly AthleteDeletionService $athleteDeletion,
         private readonly AthleteRegistrationScope $registrationScope,
         private readonly AthleteEligibilityService $eligibility,
+        private readonly AthleteMedicalClearanceService $medicalClearance,
     ) {}
 
     /**
@@ -585,6 +587,7 @@ class AthleteController extends Controller
             ]);
 
             $this->eligibility->markEligibleWhenComplete($athlete, $user);
+            $this->medicalClearance->clearWhenCertificateAttached($athlete, $user);
 
             if ($meetSport !== null) {
                 SportRosterMember::query()->firstOrCreate([
@@ -798,6 +801,7 @@ class AthleteController extends Controller
             ]);
 
             $this->eligibility->markEligibleWhenComplete($athlete, $user);
+            $this->medicalClearance->clearWhenCertificateAttached($athlete, $user);
         }
 
         if ($oldPhoto !== null) {

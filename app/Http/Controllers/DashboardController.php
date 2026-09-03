@@ -26,6 +26,7 @@ use App\Models\User;
 use App\Services\MedalTallyService;
 use App\Services\MeetReadinessService;
 use App\Services\AthleteEligibilityService;
+use App\Services\AthleteMedicalClearanceService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -90,6 +91,7 @@ class DashboardController extends Controller
                     'athletes_eligible' => $data['summary']['athletes_eligible'], 'athletes_total' => $data['summary']['athletes_total']];
             })(),
             'canMarkCompleteAthletesEligible' => $user->isAdmin() || $user->role === UserRole::TournamentICT,
+            'canMarkCertificateAthletesMedicallyCleared' => $this->canBulkClearMedical($user, $currentMeet),
             'stats' => [
                 [
                     'key' => 'athletes',
@@ -159,6 +161,53 @@ class DashboardController extends Controller
         ]);
 
         return back();
+    }
+
+    public function markCertificateAthletesMedicallyCleared(
+        Request $request,
+        AthleteMedicalClearanceService $medicalClearance,
+    ): RedirectResponse {
+        /** @var User $user */
+        $user = $request->user();
+        $meet = Meet::current();
+        abort_unless($this->canBulkClearMedical($user, $meet), 403);
+
+        $query = Athlete::query()
+            ->whereHas('delegation', fn ($delegations) => $delegations->where('meet_id', $meet->id));
+        if ($user->role === UserRole::TournamentICT && ! $user->canManageProductionAccounts()) {
+            $eventIds = $user->tournamentEventIds($meet->id);
+            $query->whereHas('entries', fn ($entries) => $entries->whereIn('event_id', $eventIds));
+        }
+
+        $processed = 0;
+        $cleared = 0;
+        $query->orderBy('id')->chunkById(100, function ($athletes) use ($medicalClearance, $user, &$processed, &$cleared): void {
+            foreach ($athletes as $athlete) {
+                $processed++;
+                if ($medicalClearance->clearWhenCertificateAttached($athlete, $user)) {
+                    $cleared++;
+                }
+            }
+        });
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => __('Medical clearance scan complete: :cleared athlete(s) cleared out of :processed checked.', [
+                'cleared' => $cleared,
+                'processed' => $processed,
+            ]),
+        ]);
+
+        return back();
+    }
+
+    private function canBulkClearMedical(User $user, Meet $meet): bool
+    {
+        return $user->isAdmin()
+            || $user->canManageProductionAccounts()
+            || $user->hasPermission(Permission::MedicalClearanceApprove, $meet)
+            || ($user->role === UserRole::TournamentICT
+                && $user->tournamentEventIds($meet->id)->isNotEmpty());
     }
 
     /** @return array{sports_count: int, events_count: int, rows: array<int, array<string, mixed>>} */

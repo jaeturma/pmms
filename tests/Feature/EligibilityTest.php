@@ -4,6 +4,7 @@ use App\Enums\EligibilityDocumentType;
 use App\Enums\EligibilityStatus;
 use App\Enums\ManagementTeamMemberStatus;
 use App\Enums\ManagementTeamType;
+use App\Enums\MedicalClearanceStatus;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\RequirementStatus;
@@ -19,6 +20,7 @@ use App\Models\ManagementTeamMember;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
+use App\Models\MedicalClearance;
 use App\Models\User;
 use App\Notifications\CoachEligibilityRemarksNotification;
 use Illuminate\Http\UploadedFile;
@@ -186,6 +188,47 @@ test('attaching the fifth required document automatically marks the athlete elig
             ->exists())->toBeTrue();
 });
 
+test('uploading a medical certificate automatically medically clears the athlete', function () {
+    $delegation = Delegation::factory()->create();
+    $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);
+    $officer = eligibilityOfficerFor($delegation);
+
+    $this->actingAs($officer)->post('/eligibility/documents', [
+        'athlete_id' => $athlete->id,
+        'document_type' => EligibilityDocumentType::MedicalCertificate->value,
+        'file' => UploadedFile::fake()->image('medical.jpg'),
+    ])->assertSessionHasNoErrors();
+
+    expect($athlete->fresh()->medicalClearance?->status)->toBe(MedicalClearanceStatus::Cleared)
+        ->and(AuditLog::query()
+            ->where('action', 'athlete.medical.cleared')
+            ->where('context->source', 'medical_certificate_attached')
+            ->exists())->toBeTrue();
+});
+
+test('medical team can bulk clear existing athletes with attached medical certificates', function () {
+    $athlete = Athlete::factory()->create();
+    EligibilityDocument::factory()->create([
+        'athlete_id' => $athlete->id,
+        'document_type' => EligibilityDocumentType::MedicalCertificate,
+    ]);
+    $team = ManagementTeam::factory()->create([
+        'meet_id' => $athlete->delegation->meet_id,
+        'team_type' => ManagementTeamType::Medical,
+    ]);
+    $member = ManagementTeamMember::factory()->create([
+        'management_team_id' => $team->id,
+        'status' => ManagementTeamMemberStatus::Active,
+    ])->user;
+
+    $this->actingAs($member)
+        ->post('/dashboard/medical-clearance/mark-attached')
+        ->assertRedirect();
+
+    expect(MedicalClearance::query()->where('athlete_id', $athlete->id)->sole()->status)
+        ->toBe(MedicalClearanceStatus::Cleared);
+});
+
 test('admin dashboard command marks existing complete registrations eligible', function () {
     $athlete = Athlete::factory()->create();
     $review = EligibilityReview::factory()->create([
@@ -208,10 +251,14 @@ test('eligibility dashboard command is hidden from and forbidden to ordinary use
     $this->actingAs($viewer)
         ->get('/dashboard')
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('canMarkCompleteAthletesEligible', false));
+            ->where('canMarkCompleteAthletesEligible', false)
+            ->where('canMarkCertificateAthletesMedicallyCleared', false));
 
     $this->actingAs($viewer)
         ->post('/dashboard/eligibility/mark-complete')
+        ->assertForbidden();
+    $this->actingAs($viewer)
+        ->post('/dashboard/medical-clearance/mark-attached')
         ->assertForbidden();
 });
 
