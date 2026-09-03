@@ -81,7 +81,13 @@ type Athlete = {
 };
 type Props = {
     athlete: Athlete;
-    delegations: Array<{ id: number; meet_id: number; label: string }>;
+    delegations: Array<{
+        id: number;
+        meet_id: number;
+        school_id: number | null;
+        district_id: number | null;
+        label: string;
+    }>;
     schools: Array<{
         id: number;
         name: string;
@@ -91,7 +97,12 @@ type Props = {
     sports: Array<{ id: number; name: string }>;
     events: Array<{ id: number; sport_id: number; name: string }>;
     assignmentsOnly: boolean;
-    coachOptions: Array<{ id: number; name: string }>;
+    assetsOnly: boolean;
+    coachOptions: Array<{
+        id: number;
+        name: string;
+        delegation_ids: number[];
+    }>;
 };
 
 export default function EditAthlete({
@@ -101,6 +112,7 @@ export default function EditAthlete({
     sports,
     events,
     assignmentsOnly,
+    assetsOnly,
     coachOptions,
 }: Props) {
     const form = useForm({
@@ -134,6 +146,17 @@ export default function EditAthlete({
     const school = schools.find(
         (item) => item.id === Number(form.data.school_id),
     );
+    const delegation = delegations.find(
+        (item) => item.id === Number(form.data.delegation_id),
+    );
+    const availableSchools = schools.filter((item) =>
+        delegation?.school_id
+            ? item.id === delegation.school_id
+            : item.district_id === delegation?.district_id,
+    );
+    const availableCoaches = coachOptions.filter((coach) =>
+        coach.delegation_ids.includes(Number(form.data.delegation_id)),
+    );
     const toggle = (
         field: 'meet_sport_ids' | 'event_ids',
         id: number,
@@ -158,8 +181,10 @@ export default function EditAthlete({
                     title="Edit athlete"
                     description={
                         assignmentsOnly
-                            ? 'Update the athlete sports and events within your Tournament ICT scope.'
-                            : 'Update identity, school, competition assignments, and attached photos.'
+                            ? 'Update the athlete coach, delegation, district, school, sports, events, and photos within your Tournament ICT scope.'
+                            : assetsOnly
+                              ? 'Replace athlete photos and eligibility documents. Approved identity and competition data remain locked.'
+                              : 'Update identity, school, competition assignments, and attached photos.'
                     }
                     actions={
                         <Button variant="outline" asChild>
@@ -174,7 +199,7 @@ export default function EditAthlete({
                     onSubmit={submit}
                     className="grid gap-4 xl:grid-cols-[1.1fr_1fr_1fr]"
                 >
-                    {!assignmentsOnly && (
+                    {!assignmentsOnly && !assetsOnly && (
                         <section className="grid content-start gap-3 rounded-xl border p-4 sm:grid-cols-2">
                             <h2 className="font-semibold sm:col-span-2">
                                 Student information
@@ -341,35 +366,35 @@ export default function EditAthlete({
                         </section>
                     )}
 
-                    <section className="content-start space-y-3 rounded-xl border p-4">
-                        {assignmentsOnly && (
-                            <Field
-                                label="Coach"
-                                error={form.errors.registered_by}
-                            >
-                                <Select
-                                    value={form.data.registered_by}
-                                    onValueChange={(value) =>
-                                        form.setData('registered_by', value)
-                                    }
+                    {(!assetsOnly || assignmentsOnly) && (
+                        <section className="content-start space-y-3 rounded-xl border p-4">
+                            {assignmentsOnly && (
+                                <Field
+                                    label="Coach"
+                                    error={form.errors.registered_by}
                                 >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select coach" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {coachOptions.map((coach) => (
-                                            <SelectItem
-                                                key={coach.id}
-                                                value={String(coach.id)}
-                                            >
-                                                {coach.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </Field>
-                        )}
-                        {!assignmentsOnly && (
+                                    <Select
+                                        value={form.data.registered_by}
+                                        onValueChange={(value) =>
+                                            form.setData('registered_by', value)
+                                        }
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select coach" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {availableCoaches.map((coach) => (
+                                                <SelectItem
+                                                    key={coach.id}
+                                                    value={String(coach.id)}
+                                                >
+                                                    {coach.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </Field>
+                            )}
                             <>
                                 <h2 className="font-semibold">
                                     School and delegation
@@ -380,9 +405,22 @@ export default function EditAthlete({
                                 >
                                     <Select
                                         value={form.data.delegation_id}
-                                        onValueChange={(value) =>
-                                            form.setData('delegation_id', value)
-                                        }
+                                        onValueChange={(value) => {
+                                            form.setData(
+                                                'delegation_id',
+                                                value,
+                                            );
+                                            const selected = delegations.find(
+                                                (item) =>
+                                                    item.id === Number(value),
+                                            );
+                                            if (selected?.school_id) {
+                                                form.setData(
+                                                    'school_id',
+                                                    String(selected.school_id),
+                                                );
+                                            }
+                                        }}
                                     >
                                         <SelectTrigger>
                                             <SelectValue />
@@ -413,7 +451,7 @@ export default function EditAthlete({
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {schools.map((item) => (
+                                            {availableSchools.map((item) => (
                                                 <SelectItem
                                                     key={item.id}
                                                     value={String(item.id)}
@@ -433,127 +471,119 @@ export default function EditAthlete({
                                     />
                                 </Field>
                             </>
-                        )}
-                        <h2 className="pt-2 font-semibold">Applied sports</h2>
-                        <div className="grid grid-cols-2 gap-2">
-                            {sports.map((sport) => (
-                                <Check
-                                    key={sport.id}
-                                    label={sport.name}
-                                    checked={form.data.meet_sport_ids.includes(
-                                        sport.id,
-                                    )}
-                                    onChange={(checked) =>
-                                        toggle(
-                                            'meet_sport_ids',
+                            <h2 className="pt-2 font-semibold">
+                                Applied sports
+                            </h2>
+                            <div className="grid grid-cols-2 gap-2">
+                                {sports.map((sport) => (
+                                    <Check
+                                        key={sport.id}
+                                        label={sport.name}
+                                        checked={form.data.meet_sport_ids.includes(
                                             sport.id,
-                                            checked,
-                                        )
-                                    }
-                                />
-                            ))}
-                        </div>
-                        <InputError message={form.errors.meet_sport_ids} />
-                    </section>
+                                        )}
+                                        onChange={(checked) =>
+                                            toggle(
+                                                'meet_sport_ids',
+                                                sport.id,
+                                                checked,
+                                            )
+                                        }
+                                    />
+                                ))}
+                            </div>
+                            <InputError message={form.errors.meet_sport_ids} />
+                        </section>
+                    )}
 
                     <section className="content-start space-y-3 rounded-xl border p-4">
-                        <h2 className="font-semibold">Events</h2>
-                        <div className="grid max-h-48 gap-2 overflow-y-auto pr-1">
-                            {events.map((event) => (
-                                <Check
-                                    key={event.id}
-                                    label={event.name}
-                                    checked={form.data.event_ids.includes(
-                                        event.id,
-                                    )}
-                                    onChange={(checked) =>
-                                        toggle('event_ids', event.id, checked)
-                                    }
-                                />
-                            ))}
-                        </div>
-                        <InputError message={form.errors.event_ids} />
-                        {!assignmentsOnly && (
+                        {(!assetsOnly || assignmentsOnly) && (
                             <>
-                                <h2 className="pt-2 font-semibold">Photos</h2>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <AthletePhotoInput
-                                        id="athlete-photo"
-                                        label="Profile photo"
-                                        guidance="Replace the current profile photo."
-                                        onChange={(file) =>
-                                            form.setData('photo', file)
-                                        }
-                                    />
-                                    <AthletePhotoInput
-                                        id="athlete-sports-photo"
-                                        label="Sports photo"
-                                        guidance="Replace the current sports photo."
-                                        onChange={(file) =>
-                                            form.setData('sports_photo', file)
-                                        }
-                                    />
-                                </div>
-                                <InputError
-                                    message={
-                                        form.errors.photo ??
-                                        form.errors.sports_photo
-                                    }
-                                />
-                            </>
-                        )}
-                    </section>
-
-                    <section className="rounded-xl border p-4 xl:col-span-3">
-                        <div className="flex flex-wrap items-end justify-between gap-4">
-                            {!assignmentsOnly && (
-                                <div className="grid flex-1 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-                                    {(
-                                        [
-                                            [
-                                                'athlete_history',
-                                                'Athlete Record',
-                                            ],
-                                            [
-                                                'form_10',
-                                                'School Form 10 - Page 1',
-                                            ],
-                                            [
-                                                'form_10_page_2',
-                                                'School Form 10 - Page 2',
-                                            ],
-                                            [
-                                                'birth_certificate',
-                                                'Birth Certificate - Page 1',
-                                            ],
-                                            [
-                                                'birth_certificate_page_2',
-                                                'Birth Certificate - Page 2',
-                                            ],
-                                            [
-                                                'parental_consent',
-                                                'Parent Consent',
-                                            ],
-                                            [
-                                                'medical_certificate',
-                                                'Medical Certificate',
-                                            ],
-                                        ] as const
-                                    ).map(([field, label]) => (
-                                        <AthletePhotoInput
-                                            key={field}
-                                            id={`athlete-${field}`}
-                                            label={label}
-                                            guidance="Upload only to replace."
-                                            accept="image/jpeg,image/png,image/webp,application/pdf"
-                                            document
-                                            onChange={(file) =>
-                                                form.setData(field, file)
+                                <h2 className="font-semibold">Events</h2>
+                                <div className="grid max-h-48 gap-2 overflow-y-auto pr-1">
+                                    {events.map((event) => (
+                                        <Check
+                                            key={event.id}
+                                            label={event.name}
+                                            checked={form.data.event_ids.includes(
+                                                event.id,
+                                            )}
+                                            onChange={(checked) =>
+                                                toggle(
+                                                    'event_ids',
+                                                    event.id,
+                                                    checked,
+                                                )
                                             }
                                         />
                                     ))}
                                 </div>
-                            )}
+                                <InputError message={form.errors.event_ids} />
+                            </>
+                        )}
+                        <h2 className="pt-2 font-semibold">Photos</h2>
+                        <div className="grid grid-cols-2 gap-3">
+                            <AthletePhotoInput
+                                id="athlete-photo"
+                                label="Profile photo"
+                                guidance="Replace the current profile photo."
+                                onChange={(file) => form.setData('photo', file)}
+                            />
+                            <AthletePhotoInput
+                                id="athlete-sports-photo"
+                                label="Sports photo"
+                                guidance="Replace the current sports photo."
+                                onChange={(file) =>
+                                    form.setData('sports_photo', file)
+                                }
+                            />
+                        </div>
+                        <InputError
+                            message={
+                                form.errors.photo ?? form.errors.sports_photo
+                            }
+                        />
+                    </section>
+
+                    <section className="rounded-xl border p-4 xl:col-span-3">
+                        <div className="flex flex-wrap items-end justify-between gap-4">
+                            <div className="grid flex-1 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+                                {(
+                                    [
+                                        ['athlete_history', 'Athlete Record'],
+                                        ['form_10', 'School Form 10 - Page 1'],
+                                        [
+                                            'form_10_page_2',
+                                            'School Form 10 - Page 2',
+                                        ],
+                                        [
+                                            'birth_certificate',
+                                            'Birth Certificate - Page 1',
+                                        ],
+                                        [
+                                            'birth_certificate_page_2',
+                                            'Birth Certificate - Page 2',
+                                        ],
+                                        ['parental_consent', 'Parent Consent'],
+                                        [
+                                            'medical_certificate',
+                                            'Medical Certificate',
+                                        ],
+                                    ] as const
+                                ).map(([field, label]) => (
+                                    <AthletePhotoInput
+                                        key={field}
+                                        id={`athlete-${field}`}
+                                        label={label}
+                                        guidance="Upload only to replace."
+                                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                                        document
+                                        onChange={(file) =>
+                                            form.setData(field, file)
+                                        }
+                                    />
+                                ))}
+                            </div>
                             <Button type="submit" disabled={form.processing}>
                                 <Save />
                                 Save athlete

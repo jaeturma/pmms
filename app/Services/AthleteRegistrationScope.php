@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\UserRole;
 use App\Models\Delegation;
+use App\Models\Event;
 use App\Models\MeetSport;
 use App\Models\User;
 use Illuminate\Support\Collection;
@@ -14,23 +15,33 @@ class AthleteRegistrationScope
     /** @return Collection<int, Delegation> */
     public function delegations(User $coach): Collection
     {
-        $delegationIds = app(CoachAccessService::class)->assignments($coach)
-            ->pluck('delegation_id')->filter()->unique();
+        $access = app(CoachAccessService::class);
+        $delegationIds = $access->delegationIds($coach);
 
         return Delegation::query()
             ->whereIn('id', $delegationIds)
-            ->get();
+            ->get()
+            // Older approved onboarding records have event scope plus a
+            // Personnel link instead of CoachAssignmentRequest rows.
+            ->filter(fn (Delegation $delegation): bool => $access->eventIds($coach, $delegation)->isNotEmpty())
+            ->values();
     }
 
     /** @return Collection<int, MeetSport> */
     public function meetSports(User $coach, Delegation $delegation): Collection
     {
-        $meetSportIds = app(CoachAccessService::class)->assignments($coach, $delegation)
+        $access = app(CoachAccessService::class);
+        $meetSportIds = $access->assignments($coach, $delegation)
             ->pluck('meet_sport_id')->filter()->unique();
+        $legacySportIds = Event::query()
+            ->whereIn('id', $access->eventIds($coach, $delegation))
+            ->pluck('sport_id')->unique();
 
         return MeetSport::query()
             ->where('meet_id', $delegation->meet_id)
-            ->whereIn('id', $meetSportIds)
+            ->where(fn ($query) => $query
+                ->whereIn('id', $meetSportIds)
+                ->orWhereIn('sport_id', $legacySportIds))
             ->with('sport:id,name')
             ->get()
             ->unique('sport_id')

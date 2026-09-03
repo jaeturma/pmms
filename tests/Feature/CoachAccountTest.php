@@ -579,6 +579,169 @@ test('approved onboarding events provide athlete and entry scope without assignm
             ->where('eventOptionsByMeet.0.id', $event->id));
 });
 
+test('a legacy approved coach onboarding assignment can register an athlete', function () {
+    $meet = Meet::factory()->registrationOpen()->create();
+    $delegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $coach = User::factory()->coach()->create();
+    Personnel::factory()->coach()->create([
+        'delegation_id' => $delegation->id,
+        'user_id' => $coach->id,
+    ]);
+    $event = Event::factory()->create(['gender' => 'boys', 'age_division' => 'secondary']);
+    $meet->events()->attach($event);
+    MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $event->sport_id]);
+    $onboarding = CoachOnboardingRequest::query()->create([
+        'user_id' => $coach->id,
+        'district_id' => $delegation->district_id,
+        'event_id' => $event->id,
+        'status' => 'approved',
+    ]);
+    $onboarding->events()->attach($event);
+
+    $this->actingAs($coach)->post('/athletes', [
+        ...requiredCoachAthleteFields(),
+        'school_id' => schoolForDelegation($delegation)->id,
+        'event_id' => $event->id,
+        'first_name' => 'Legacy',
+        'last_name' => 'Coach',
+        'sex' => 'male',
+        'birthdate' => now()->subYears(15)->toDateString(),
+        'lrn' => '987654321098',
+        'grade_level' => 9,
+    ])->assertRedirect()->assertSessionDoesntHaveErrors();
+
+    $this->assertDatabaseHas('athletes', [
+        'lrn' => '987654321098',
+        'delegation_id' => $delegation->id,
+        'registered_by' => $coach->id,
+    ]);
+});
+
+test('coaches and tournament ICT can replace athlete photos after identity approval', function () {
+    $delegation = Delegation::factory()->create(['status' => DelegationStatus::Draft]);
+    $coach = coachFor($delegation);
+    $assignment = $coach->coachAssignmentRequests()->firstOrFail();
+    $athlete = Athlete::factory()->create([
+        'delegation_id' => $delegation->id,
+        'school_id' => schoolForDelegation($delegation)->id,
+        'registered_by' => $coach->id,
+    ]);
+    EligibilityReview::factory()->approved()->create([
+        'athlete_id' => $athlete->id,
+        'meet_id' => $delegation->meet_id,
+    ]);
+
+    $this->actingAs($coach)->get("/athletes/{$athlete->id}/edit")
+        ->assertOk()->assertInertia(fn ($page) => $page->where('assetsOnly', true));
+    $this->actingAs($coach)->put("/athletes/{$athlete->id}", [
+        'photo' => UploadedFile::fake()->image('coach-photo.jpg'),
+    ])->assertRedirect()->assertSessionDoesntHaveErrors();
+    $coachPhotoId = $athlete->fresh()->photo_upload_id;
+    expect($coachPhotoId)->not->toBeNull();
+
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+    MeetSportAssignment::factory()->create([
+        'user_id' => $ict->id,
+        'meet_sport_id' => $assignment->meet_sport_id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+    SportRosterMember::query()->create([
+        'athlete_id' => $athlete->id,
+        'delegation_id' => $delegation->id,
+        'meet_sport_id' => $assignment->meet_sport_id,
+        'level' => $athlete->ageDivision(),
+        'gender' => 'boys',
+    ]);
+
+    $this->actingAs($ict)->get("/athletes/{$athlete->id}/edit")
+        ->assertOk()->assertInertia(fn ($page) => $page->where('assetsOnly', true));
+    $this->actingAs($ict)->put("/athletes/{$athlete->id}", [
+        'sports_photo' => UploadedFile::fake()->image('ict-photo.jpg'),
+    ])->assertRedirect()->assertSessionDoesntHaveErrors();
+
+    expect($athlete->fresh()->photo_upload_id)->toBe($coachPhotoId)
+        ->and($athlete->fresh()->sports_photo_upload_id)->not->toBeNull();
+});
+
+test('tournament ICT can update an athlete coach delegation school and sport', function () {
+    $meet = Meet::factory()->create();
+    $sourceDelegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $targetDelegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $targetSchool = schoolForDelegation($targetDelegation);
+    $sport = Sport::factory()->create();
+    $event = Event::factory()->create([
+        'sport_id' => $sport->id,
+        'gender' => 'boys',
+        'age_division' => 'secondary',
+    ]);
+    $meet->events()->attach($event);
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $sport->id]);
+    $sourceCoach = User::factory()->coach()->create();
+    $targetCoach = User::factory()->coach()->create();
+    foreach ([[$sourceCoach, $sourceDelegation], [$targetCoach, $targetDelegation]] as [$coach, $delegation]) {
+        Personnel::factory()->coach()->create(['user_id' => $coach->id, 'delegation_id' => $delegation->id]);
+        CoachAssignmentRequest::query()->create([
+            'user_id' => $coach->id,
+            'delegation_id' => $delegation->id,
+            'school_id' => schoolForDelegation($delegation)->id,
+            'meet_sport_id' => $meetSport->id,
+            'event_id' => $event->id,
+            'status' => 'approved',
+        ]);
+    }
+    $athlete = Athlete::factory()->create([
+        'delegation_id' => $sourceDelegation->id,
+        'school_id' => schoolForDelegation($sourceDelegation)->id,
+        'registered_by' => $sourceCoach->id,
+        'sex' => 'male',
+        'grade_level' => 9,
+    ]);
+    SportRosterMember::query()->create([
+        'athlete_id' => $athlete->id,
+        'delegation_id' => $sourceDelegation->id,
+        'meet_sport_id' => $meetSport->id,
+        'level' => 'secondary',
+        'gender' => 'boys',
+    ]);
+    EligibilityReview::factory()->approved()->create([
+        'athlete_id' => $athlete->id,
+        'meet_id' => $meet->id,
+    ]);
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+    MeetSportAssignment::factory()->create([
+        'user_id' => $ict->id,
+        'meet_sport_id' => $meetSport->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    expect($ict->can('updateAssets', $athlete))->toBeTrue();
+
+    $this->actingAs($ict)->put("/athletes/{$athlete->id}", [
+        'delegation_id' => $targetDelegation->id,
+        'school_id' => $targetSchool->id,
+        'registered_by' => $targetCoach->id,
+        'meet_sport_ids' => [$meetSport->id],
+        'event_ids' => [$event->id],
+    ])->assertRedirect()->assertSessionDoesntHaveErrors();
+
+    expect($athlete->fresh())
+        ->delegation_id->toBe($targetDelegation->id)
+        ->school_id->toBe($targetSchool->id)
+        ->registered_by->toBe($targetCoach->id);
+    $this->assertDatabaseHas('sport_roster_members', [
+        'athlete_id' => $athlete->id,
+        'delegation_id' => $targetDelegation->id,
+        'meet_sport_id' => $meetSport->id,
+    ]);
+    $this->assertDatabaseHas('entries', [
+        'athlete_id' => $athlete->id,
+        'delegation_id' => $targetDelegation->id,
+        'event_id' => $event->id,
+    ]);
+});
+
 test('a coach can upload an eligibility document and it goes to pending', function () {
     $delegation = Delegation::factory()->create(['status' => DelegationStatus::Draft]);
     $coach = coachFor($delegation);

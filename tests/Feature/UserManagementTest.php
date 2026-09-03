@@ -7,12 +7,14 @@ use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\UserRole;
 use App\Models\CoachAssignmentRequest;
 use App\Models\CoachOnboardingRequest;
+use App\Models\Athlete;
 use App\Models\Delegation;
 use App\Models\Event;
 use App\Models\ManagementTeam;
 use App\Models\ManagementTeamMember;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
+use App\Models\Personnel;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Inertia\Testing\AssertableInertia;
@@ -327,3 +329,37 @@ test('account removal is restricted to system administrators and they cannot rem
     expect($target->fresh())->not->toBeNull()
         ->and($admin->fresh())->not->toBeNull();
 });
+
+test('administrators and ICT can permanently remove a coach and archive related athletes', function (string $reviewerType) {
+    $reviewer = $reviewerType === 'admin'
+        ? User::factory()->admin()->create()
+        : User::factory()->create();
+    if ($reviewerType === 'ict') {
+        $team = ManagementTeam::factory()->create(['team_type' => ManagementTeamType::ICT]);
+        ManagementTeamMember::factory()->create([
+            'management_team_id' => $team->id,
+            'user_id' => $reviewer->id,
+            'status' => ManagementTeamMemberStatus::Active,
+        ]);
+    }
+
+    $coach = User::factory()->coach()->create();
+    $onboarding = CoachOnboardingRequest::query()->create([
+        'user_id' => $coach->id,
+        'status' => 'approved',
+    ]);
+    $personnel = Personnel::factory()->coach()->create(['user_id' => $coach->id]);
+    $athletes = Athlete::factory()->count(2)->create(['registered_by' => $coach->id]);
+
+    $this->actingAs($reviewer)
+        ->delete("/coach/onboarding-requests/{$onboarding->id}", ['confirm' => true])
+        ->assertRedirect()
+        ->assertSessionDoesntHaveErrors();
+
+    $this->assertDatabaseMissing('users', ['id' => $coach->id]);
+    $this->assertDatabaseMissing('coach_onboarding_requests', ['id' => $onboarding->id]);
+    $this->assertDatabaseMissing('personnel', ['id' => $personnel->id]);
+    foreach ($athletes as $athlete) {
+        $this->assertSoftDeleted('athletes', ['id' => $athlete->id]);
+    }
+})->with(['admin', 'ict']);

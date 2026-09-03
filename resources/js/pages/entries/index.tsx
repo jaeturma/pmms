@@ -136,7 +136,9 @@ function SubmitEntryDialog({
         ? eventOptionsByMeet.filter(
               (event) =>
                   event.meet_id === selectedAthlete.meet_id &&
-                  event.delegation_ids.includes(selectedAthlete.delegation_id) &&
+                  event.delegation_ids.includes(
+                      selectedAthlete.delegation_id,
+                  ) &&
                   !event.is_team_event,
           )
         : [];
@@ -213,10 +215,17 @@ function SubmitEntryDialog({
                                             className="flex cursor-pointer items-start gap-3 rounded p-2 hover:bg-muted/50"
                                         >
                                             <Checkbox
-                                                disabled={selectedAthlete.event_ids.includes(event.id)}
-                                                checked={data.event_ids.includes(
+                                                disabled={selectedAthlete.event_ids.includes(
                                                     event.id,
-                                                ) || selectedAthlete.event_ids.includes(event.id)}
+                                                )}
+                                                checked={
+                                                    data.event_ids.includes(
+                                                        event.id,
+                                                    ) ||
+                                                    selectedAthlete.event_ids.includes(
+                                                        event.id,
+                                                    )
+                                                }
                                                 onCheckedChange={(checked) =>
                                                     setData(
                                                         'event_ids',
@@ -236,7 +245,9 @@ function SubmitEntryDialog({
                                             <span className="text-sm">
                                                 {event.label}
                                                 <span className="ml-2 text-xs text-muted-foreground">
-                                                    {selectedAthlete.event_ids.includes(event.id)
+                                                    {selectedAthlete.event_ids.includes(
+                                                        event.id,
+                                                    )
                                                         ? 'Already entered'
                                                         : 'Individual'}
                                                 </span>

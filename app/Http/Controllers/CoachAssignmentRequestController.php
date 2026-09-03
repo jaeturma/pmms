@@ -11,6 +11,7 @@ use App\Models\CoachAssignmentRequest;
 use App\Models\CoachOnboardingRequest;
 use App\Models\Delegation;
 use App\Models\Event;
+use App\Models\FileUpload;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\Personnel;
@@ -299,6 +300,39 @@ class CoachAssignmentRequestController extends Controller
         return back()->with('success', __('Coach account registration reviewed.'));
     }
 
+    public function updateOnboardingInformation(
+        Request $request,
+        CoachOnboardingRequest $coachOnboardingRequest,
+        AuditLogger $audit,
+    ): RedirectResponse {
+        $coach = $this->activeCoach($coachOnboardingRequest->user_id);
+        abort_unless($this->canReviewOnboarding($request->user(), $coachOnboardingRequest), 403);
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($coach->id)],
+        ]);
+
+        $before = $coach->only(['name', 'email']);
+        $nameParts = preg_split('/\s+/', trim($data['name'])) ?: [];
+        $lastName = count($nameParts) > 1 ? array_pop($nameParts) : '';
+        $firstName = implode(' ', $nameParts) ?: $data['name'];
+        DB::transaction(function () use ($coach, $coachOnboardingRequest, $data, $firstName, $lastName): void {
+            $coach->forceFill($data)->save();
+            Personnel::query()->where('user_id', $coach->id)->update([
+                'first_name' => $firstName,
+                'last_name' => $lastName,
+                'email' => $data['email'],
+            ]);
+            $coachOnboardingRequest->touch();
+        });
+        $audit->record('coach.information_updated', $coachOnboardingRequest, [
+            'before' => $before,
+            'after' => $data,
+        ], $request->user());
+
+        return back()->with('success', __('Coach information updated.'));
+    }
+
     public function assignments(Request $request, CoachOnboardingRequest $coachOnboardingRequest): Response
     {
         $this->activeCoach($coachOnboardingRequest->user_id);
@@ -324,9 +358,8 @@ class CoachAssignmentRequestController extends Controller
             ->with('sport:id,name')
             ->orderBy('sport_id')->orderBy('display_order')->orderBy('name')
             ->get();
-        $coachDelegationIds = $existingAssignments->pluck('delegation_id')->push($coachOnboardingRequest->delegation_id)->filter()->unique();
         $registeredAthletes = Athlete::query()->where('registered_by', $coachOnboardingRequest->user_id)
-            ->whereIn('delegation_id', $coachDelegationIds)->with(['school:id,name', 'entries.event:id,name'])
+            ->with(['school:id,name', 'entries.event:id,name'])
             ->orderBy('last_name')->orderBy('first_name')->get();
 
         return Inertia::render('coach/manage-assignments', [
@@ -496,7 +529,10 @@ class CoachAssignmentRequestController extends Controller
         $upload = $type === 'profile' ? $coachOnboardingRequest->profile : $coachOnboardingRequest->certification;
         abort_if($upload === null, 404);
 
-        return Storage::disk($upload->disk)->response($upload->path, $upload->original_name);
+        return Storage::disk($upload->disk)->response($upload->path, null, [
+            'Content-Type' => $upload->mime_type,
+            'Content-Disposition' => $type === 'profile' ? 'inline' : 'attachment',
+        ]);
     }
 
     public function uploadDocument(
@@ -552,6 +588,49 @@ class CoachAssignmentRequestController extends Controller
         return back()->with('success', __('Coach password reset. The coach must change it at next sign-in.'));
     }
 
+    /** Permanently remove a coach account and archive every athlete registered by it. */
+    public function destroyOnboarding(
+        Request $request,
+        CoachOnboardingRequest $coachOnboardingRequest,
+        AuditLogger $audit,
+        FileUploadService $uploads,
+    ): RedirectResponse {
+        /** @var User $reviewer */
+        $reviewer = $request->user();
+        abort_unless($this->canDeleteCoach($reviewer, $coachOnboardingRequest), 403);
+        $request->validate(['confirm' => ['required', 'accepted']]);
+
+        $coach = $this->activeCoach($coachOnboardingRequest->user_id);
+        $athleteCount = Athlete::withTrashed()->where('registered_by', $coach->id)->count();
+        $uploadIds = collect([
+            $coach->profile_photo_upload_id,
+            $coachOnboardingRequest->profile_upload_id,
+            $coachOnboardingRequest->certification_upload_id,
+        ])->merge(Personnel::query()->where('user_id', $coach->id)->pluck('photo_upload_id'))
+            ->filter()->unique();
+
+        DB::transaction(function () use ($coach, $reviewer, $audit, $athleteCount): void {
+            Athlete::query()->where('registered_by', $coach->id)->delete();
+            Personnel::query()->where('user_id', $coach->id)->delete();
+            $audit->record('coach.permanently_removed', $coach, [
+                'name' => $coach->name,
+                'athletes_archived' => $athleteCount,
+                'removed_by' => $reviewer->id,
+            ], $reviewer);
+            $coach->forceDelete();
+        }, 3);
+
+        FileUpload::query()->whereIn('id', $uploadIds)->get()
+            ->each(fn (FileUpload $upload) => $uploads->delete($upload));
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => __('Coach removed permanently. :count related athlete(s) were removed from active lists.', ['count' => $athleteCount]),
+        ]);
+
+        return back();
+    }
+
     private function canReviewOnboarding(User $user, CoachOnboardingRequest $request): bool
     {
         if ($user->canReviewCoachRegistrations()) {
@@ -570,6 +649,26 @@ class CoachAssignmentRequestController extends Controller
         return ($request->events()->whereKey($user->tournamentEventIds())->exists()
             || ($request->event_id !== null && $user->tournamentEventIds()->contains($request->event_id)))
             && $user->meetSportAssignments()->where('status', 'active')->whereIn('role', $this->coachReviewerRoles())->exists();
+    }
+
+    private function canDeleteCoach(User $user, CoachOnboardingRequest $request): bool
+    {
+        if ($user->canReviewCoachRegistrations()) {
+            return true;
+        }
+
+        if (! $this->canReviewOnboarding($user, $request)) {
+            return false;
+        }
+
+        $reviewableIds = $this->reviewableMeetSportIds($user);
+
+        return CoachAssignmentRequest::query()
+            ->where('user_id', $request->user_id)
+            ->where('status', 'approved')
+            ->whereNull('ended_at')
+            ->whereNotIn('meet_sport_id', $reviewableIds)
+            ->doesntExist();
     }
 
     private function canManageOnboardingAssignments(User $user, CoachOnboardingRequest $request): bool
@@ -648,16 +747,8 @@ class CoachAssignmentRequestController extends Controller
                     ->whereHas('personnel', fn ($personnel) => $personnel->where('user_id', $item->user_id))
                     ->value('number');
                 $canManageDocuments = $this->canUpdateOnboardingDocuments($user, $item);
-                $coachDelegationIds = CoachAssignmentRequest::query()
-                    ->where('user_id', $item->user_id)
-                    ->where('status', 'approved')
-                    ->whereNull('ended_at')
-                    ->when($item->meet_sport_id !== null, fn ($assignments) => $assignments
-                        ->where('meet_sport_id', $item->meet_sport_id))
-                    ->pluck('delegation_id');
                 $registeredAthletes = Athlete::query()
                     ->where('registered_by', $item->user_id)
-                    ->whereIn('delegation_id', $coachDelegationIds)
                     ->with(['school:id,name', 'entries.event:id,name'])
                     ->orderBy('last_name')
                     ->orderBy('first_name')
@@ -668,6 +759,7 @@ class CoachAssignmentRequestController extends Controller
                         'school' => $athlete->school->name,
                         'events' => $athlete->entries->pluck('event.name')->filter()->join(', '),
                         'profile_url' => route('athletes.show', $athlete),
+                        'photo_url' => $athlete->photo_upload_id ? route('athletes.photo', $athlete) : null,
                     ])->all();
 
                 return [
@@ -690,10 +782,13 @@ class CoachAssignmentRequestController extends Controller
                     'certification_mime_type' => $item->certification?->mime_type,
                     'documents_complete' => $item->profile_upload_id !== null && $item->certification_upload_id !== null,
                     'registered_athletes' => $registeredAthletes,
+                    'related_athletes_count' => Athlete::withTrashed()->where('registered_by', $item->user_id)->count(),
                     'assignment_url' => route('coach.onboarding-assignments.edit', $item),
                     'can_manage_assignments' => $this->canManageOnboardingAssignments($user, $item),
                     'can_reset_password' => $this->canResetOnboardingPassword($user, $item),
+                    'can_delete' => $this->canDeleteCoach($user, $item),
                     'can_update_attachments' => $canManageDocuments,
+                    'can_update_information' => $this->canReviewOnboarding($user, $item),
                     'can_accredit' => $item->status === 'approved'
                         && $item->profile_upload_id !== null
                         && $this->canAccreditOnboarding($user, $item),

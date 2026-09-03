@@ -52,13 +52,17 @@ export function AthletePhotoInput({
         if (!file) return;
 
         if (file.size > 10 * 1024 * 1024) {
-            setFileMessage(`This ${document ? 'document' : 'photo'} is too large. Maximum upload size is 10 MB per file.`);
+            setFileMessage(
+                `This ${document ? 'document' : 'photo'} is too large. Maximum upload size is 10 MB per file.`,
+            );
             onChange(null);
             return;
         }
 
         if (document) {
-            setFileMessage(`${(file.size / 1024 / 1024).toFixed(1)} MB selected • Images will be optimized`);
+            setFileMessage(
+                `${(file.size / 1024 / 1024).toFixed(1)} MB selected • Images will be optimized`,
+            );
             onChange(file);
             return;
         }

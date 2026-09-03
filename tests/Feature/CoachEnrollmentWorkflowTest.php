@@ -14,6 +14,7 @@ use App\Models\CoachOnboardingRequest;
 use App\Models\Delegation;
 use App\Models\District;
 use App\Models\EligibilityDocument;
+use App\Models\EligibilityReview;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\FileUpload;
@@ -26,6 +27,7 @@ use App\Models\Personnel;
 use App\Models\Sport;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 
 test('approved coach scope limits registration and DSAC accreditation confirms the official entry', function () {
@@ -333,6 +335,77 @@ test('only assigned sport ICT and administrators may replace another coach attac
         'document' => UploadedFile::fake()->create('admin-replacement.pdf', 100, 'application/pdf'),
     ])->assertSessionDoesntHaveErrors();
     expect($onboarding->fresh()->certification_upload_id)->not->toBe($ictUploadId);
+});
+
+test('sport ICT can fully manage a coach registration and view all of its athletes with photos', function () {
+    Storage::fake('local');
+    config()->set('pmms.accounts.default_reset_password', 'ScopedResetPassword123!');
+    $meet = Meet::factory()->registrationOpen()->create();
+    $sport = Sport::factory()->create();
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $sport->id]);
+    $event = Event::factory()->create(['sport_id' => $sport->id, 'gender' => 'boys', 'age_division' => 'secondary']);
+    $meet->events()->attach($event);
+    $delegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $coach = User::factory()->create(['role' => UserRole::Viewer, 'approval_status' => 'pending']);
+    $onboarding = CoachOnboardingRequest::query()->create([
+        'user_id' => $coach->id,
+        'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $delegation->id,
+        'event_id' => $event->id,
+        'status' => 'pending',
+    ]);
+    $onboarding->events()->attach($event);
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+    MeetSportAssignment::factory()->create([
+        'user_id' => $ict->id,
+        'meet_sport_id' => $meetSport->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($ict)->patch("/coach/onboarding-requests/{$onboarding->id}", [
+        'status' => 'approved',
+        'event_ids' => [$event->id],
+    ])->assertSessionDoesntHaveErrors();
+    $this->actingAs($ict)->patch("/coach/onboarding-requests/{$onboarding->id}/information", [
+        'name' => 'Updated Coach',
+        'email' => 'updated-coach@example.test',
+    ])->assertSessionDoesntHaveErrors();
+    $this->actingAs($ict)->post("/coach/onboarding-requests/{$onboarding->id}/documents/profile", [
+        'document' => UploadedFile::fake()->image('coach-profile.jpg'),
+    ])->assertSessionDoesntHaveErrors();
+    $this->actingAs($ict)->post("/coach/onboarding-requests/{$onboarding->id}/reset-password")
+        ->assertSessionDoesntHaveErrors();
+
+    $athlete = Athlete::factory()->create([
+        'delegation_id' => $delegation->id,
+        'school_id' => schoolForDelegation($delegation)->id,
+        'registered_by' => $coach->id,
+    ]);
+    EligibilityReview::factory()->approved()->create([
+        'athlete_id' => $athlete->id,
+        'meet_id' => $meet->id,
+    ]);
+    $this->actingAs($ict)->put("/athletes/{$athlete->id}", [
+        'photo' => UploadedFile::fake()->image('athlete-profile.jpg'),
+    ])->assertSessionDoesntHaveErrors();
+
+    $this->actingAs($ict)->get('/coach/assignment-requests')
+        ->assertInertia(fn ($page) => $page
+            ->where('registrations.data.0.can_update_information', true)
+            ->where('registrations.data.0.can_update_attachments', true)
+            ->where('registrations.data.0.can_reset_password', true)
+            ->has('registrations.data.0.registered_athletes', 1)
+            ->where('registrations.data.0.registered_athletes.0.id', $athlete->id)
+            ->where('registrations.data.0.registered_athletes.0.photo_url', fn ($url) => is_string($url) && $url !== ''));
+    $this->actingAs($ict)->get("/athletes/{$athlete->id}")->assertOk();
+    $this->actingAs($ict)->get("/athletes/{$athlete->id}/photo")
+        ->assertOk()
+        ->assertHeader('content-disposition', 'inline');
+
+    expect($coach->fresh()->role)->toBe(UserRole::Coach)
+        ->and($coach->fresh()->name)->toBe('UPDATED COACH')
+        ->and(Hash::check('ScopedResetPassword123!', $coach->fresh()->password))->toBeTrue();
 });
 
 test('an inactive ICT team membership cannot approve a coach registration', function () {

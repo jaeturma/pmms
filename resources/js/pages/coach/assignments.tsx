@@ -1,8 +1,17 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { Eye, KeyRound, Maximize2, Minus, Plus, UserCheck } from 'lucide-react';
+import {
+    Eye,
+    KeyRound,
+    Maximize2,
+    Minus,
+    Plus,
+    Trash2,
+    UserCheck,
+} from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { EmptyState } from '@/components/empty-state';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
 import { PaginationControls } from '@/components/pagination-controls';
@@ -11,6 +20,7 @@ import { SearchBar } from '@/components/search-bar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import {
     Dialog,
     DialogContent,
@@ -62,6 +72,7 @@ type RegistrationRow = {
     certification_url: string | null;
     certification_mime_type: string | null;
     can_update_attachments: boolean;
+    can_update_information: boolean;
     can_accredit: boolean;
     accreditation_number: string | null;
     accreditation_label: string | null;
@@ -72,10 +83,13 @@ type RegistrationRow = {
         school: string;
         events: string;
         profile_url: string;
+        photo_url: string | null;
     }>;
     assignment_url: string;
     can_manage_assignments: boolean;
     can_reset_password: boolean;
+    can_delete: boolean;
+    related_athletes_count: number;
 };
 type Option = {
     meet_sport_id: number;
@@ -127,6 +141,60 @@ function CoachDocumentUpload({
                 }}
             />
         </label>
+    );
+}
+
+function CoachInformationForm({
+    registration,
+}: {
+    registration: RegistrationRow;
+}) {
+    const form = useForm({
+        name: registration.coach,
+        email: registration.email,
+    });
+
+    return (
+        <form
+            className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2"
+            onSubmit={(event) => {
+                event.preventDefault();
+                form.patch(
+                    `/coach/onboarding-requests/${registration.id}/information`,
+                    { preserveScroll: true },
+                );
+            }}
+        >
+            <h3 className="font-semibold sm:col-span-2">Coach information</h3>
+            <div className="space-y-1.5">
+                <Label htmlFor={`coach-name-${registration.id}`}>Name</Label>
+                <Input
+                    id={`coach-name-${registration.id}`}
+                    value={form.data.name}
+                    onChange={(event) =>
+                        form.setData('name', event.target.value)
+                    }
+                />
+                <InputError message={form.errors.name} />
+            </div>
+            <div className="space-y-1.5">
+                <Label htmlFor={`coach-email-${registration.id}`}>Email</Label>
+                <Input
+                    id={`coach-email-${registration.id}`}
+                    type="email"
+                    value={form.data.email}
+                    onChange={(event) =>
+                        form.setData('email', event.target.value)
+                    }
+                />
+                <InputError message={form.errors.email} />
+            </div>
+            <div className="sm:col-span-2">
+                <Button size="sm" disabled={form.processing}>
+                    Save coach information
+                </Button>
+            </div>
+        </form>
     );
 }
 
@@ -270,16 +338,14 @@ export default function CoachAssignments({
                         initial={filters.search}
                         placeholder="Search by coach name or email"
                         url="/coach/assignment-requests"
-                        extraParams={
-                            {
-                                ...(filters.status
-                                    ? { status: filters.status }
-                                    : {}),
-                                ...(filters.sport_id
-                                    ? { sport_id: filters.sport_id }
-                                    : {}),
-                            }
-                        }
+                        extraParams={{
+                            ...(filters.status
+                                ? { status: filters.status }
+                                : {}),
+                            ...(filters.sport_id
+                                ? { sport_id: String(filters.sport_id) }
+                                : {}),
+                        }}
                     />
                     <Select
                         value={filters.status || 'all'}
@@ -313,26 +379,40 @@ export default function CoachAssignments({
                         </SelectContent>
                     </Select>
                     <Select
-                        value={filters.sport_id ? String(filters.sport_id) : 'all'}
+                        value={
+                            filters.sport_id ? String(filters.sport_id) : 'all'
+                        }
                         onValueChange={(sportId) =>
                             router.get(
                                 '/coach/assignment-requests',
                                 {
-                                    ...(filters.search ? { search: filters.search } : {}),
-                                    ...(filters.status ? { status: filters.status } : {}),
-                                    ...(sportId !== 'all' ? { sport_id: sportId } : {}),
+                                    ...(filters.search
+                                        ? { search: filters.search }
+                                        : {}),
+                                    ...(filters.status
+                                        ? { status: filters.status }
+                                        : {}),
+                                    ...(sportId !== 'all'
+                                        ? { sport_id: sportId }
+                                        : {}),
                                 },
                                 { preserveState: true, replace: true },
                             )
                         }
                     >
-                        <SelectTrigger className="w-56" aria-label="Filter by sport">
+                        <SelectTrigger
+                            className="w-56"
+                            aria-label="Filter by sport"
+                        >
                             <SelectValue placeholder="All sports" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All sports</SelectItem>
                             {sportOptions.map((sport) => (
-                                <SelectItem key={sport.id} value={String(sport.id)}>
+                                <SelectItem
+                                    key={sport.id}
+                                    value={String(sport.id)}
+                                >
                                     {sport.name}
                                 </SelectItem>
                             ))}
@@ -694,18 +774,48 @@ export default function CoachAssignments({
                                                             )}
                                                     </TableCell>
                                                     <TableCell className="text-right">
-                                                        <Button
-                                                            size="sm"
-                                                            variant="outline"
-                                                            onClick={() =>
-                                                                setViewedCoach(
-                                                                    item,
-                                                                )
-                                                            }
-                                                        >
-                                                            <Eye className="size-4" />
-                                                            View / update
-                                                        </Button>
+                                                        <div className="flex justify-end gap-2">
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() =>
+                                                                    setViewedCoach(
+                                                                        item,
+                                                                    )
+                                                                }
+                                                            >
+                                                                <Eye className="size-4" />
+                                                                View / update
+                                                            </Button>
+                                                            {item.can_delete && (
+                                                                <ConfirmDialog
+                                                                    trigger={
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="destructive"
+                                                                        >
+                                                                            <Trash2 className="size-4" />
+                                                                            Remove
+                                                                        </Button>
+                                                                    }
+                                                                    title={`Permanently remove ${item.coach}?`}
+                                                                    description={`Warning: This permanently deletes the coach account and removes it from the coach list. ${item.related_athletes_count} related athlete(s) will also be removed from active athlete lists. This action cannot be undone.`}
+                                                                    confirmLabel="Remove coach and athletes"
+                                                                    destructive
+                                                                    onConfirm={() =>
+                                                                        router.delete(
+                                                                            `/coach/onboarding-requests/${item.id}`,
+                                                                            {
+                                                                                data: {
+                                                                                    confirm: true,
+                                                                                },
+                                                                                preserveScroll: true,
+                                                                            },
+                                                                        )
+                                                                    }
+                                                                />
+                                                            )}
+                                                        </div>
                                                     </TableCell>
                                                 </>
                                             )}
@@ -961,6 +1071,12 @@ export default function CoachAssignments({
                                         </div>
                                     </dl>
                                 </div>
+                                {viewedCoach.can_update_information && (
+                                    <CoachInformationForm
+                                        key={viewedCoach.id}
+                                        registration={viewedCoach}
+                                    />
+                                )}
                                 <section className="space-y-3 rounded-lg border p-4">
                                     <h3 className="font-semibold">
                                         Coach documents and account
@@ -1166,16 +1282,33 @@ export default function CoachAssignments({
                                                         href={
                                                             athlete.profile_url
                                                         }
-                                                        className="rounded-lg border p-3 text-sm hover:bg-muted/50"
+                                                        className="flex items-center gap-3 rounded-lg border p-3 text-sm hover:bg-muted/50"
                                                     >
-                                                        <span className="font-medium">
-                                                            {athlete.name}
+                                                        <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-muted font-semibold">
+                                                            {athlete.photo_url ? (
+                                                                <img
+                                                                    src={
+                                                                        athlete.photo_url
+                                                                    }
+                                                                    alt={`${athlete.name} profile`}
+                                                                    className="size-full object-cover"
+                                                                />
+                                                            ) : (
+                                                                athlete.name.charAt(
+                                                                    0,
+                                                                )
+                                                            )}
                                                         </span>
-                                                        <span className="block text-muted-foreground">
-                                                            {athlete.school}
-                                                            {athlete.events
-                                                                ? ` · ${athlete.events}`
-                                                                : ' · Entry pending'}
+                                                        <span className="min-w-0">
+                                                            <span className="block truncate font-medium">
+                                                                {athlete.name}
+                                                            </span>
+                                                            <span className="block truncate text-muted-foreground">
+                                                                {athlete.school}
+                                                                {athlete.events
+                                                                    ? ` · ${athlete.events}`
+                                                                    : ' · Entry pending'}
+                                                            </span>
                                                         </span>
                                                     </a>
                                                 ),

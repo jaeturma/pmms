@@ -280,14 +280,20 @@ export default function Readiness(props: Props) {
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Municipality / Team</TableHead>
-                                <TableHead className="text-right">Athletes</TableHead>
+                                <TableHead className="text-right">
+                                    Athletes
+                                </TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {props.teams.map((team) => (
                                 <TableRow key={team.id}>
-                                    <TableCell className="font-medium">{team.team}</TableCell>
-                                    <TableCell className="text-right font-bold">{team.athletes}</TableCell>
+                                    <TableCell className="font-medium">
+                                        {team.team}
+                                    </TableCell>
+                                    <TableCell className="text-right font-bold">
+                                        {team.athletes}
+                                    </TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>

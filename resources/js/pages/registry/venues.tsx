@@ -503,7 +503,10 @@ function VenueFormDialog({
                             disabled={!data.competition_area_type}
                             value={data.competition_area_count}
                             onChange={(e) =>
-                                setData('competition_area_count', e.target.value)
+                                setData(
+                                    'competition_area_count',
+                                    e.target.value,
+                                )
                             }
                             placeholder="e.g. 3"
                         />

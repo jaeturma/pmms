@@ -24,7 +24,8 @@ class AthleteRequest extends FormRequest
 
         if ($athlete instanceof Athlete) {
             return Gate::allows('update', $athlete)
-                || ($this->allFiles() !== [] && Gate::allows('updateAssets', $athlete));
+                || (Gate::allows('updateAssets', $athlete)
+                    && ($this->allFiles() !== [] || $this->user()?->role === UserRole::TournamentICT));
         }
 
         $delegation = Delegation::find($this->integer('delegation_id'));
@@ -92,6 +93,26 @@ class AthleteRequest extends FormRequest
             'medical_certificate' => $this->documentRules(),
         ];
 
+        if ($athlete instanceof Athlete && ! Gate::allows('update', $athlete)) {
+            $allowedFields = [
+                'photo', 'sports_photo', 'athlete_history', 'form_10',
+                'form_10_page_2', 'birth_certificate', 'birth_certificate_page_2',
+                'parental_consent', 'medical_certificate',
+            ];
+            if ($this->user()?->role === UserRole::TournamentICT) {
+                $rules['delegation_id'] = ['sometimes', 'required', 'integer', Rule::exists('delegations', 'id')];
+                $rules['school_id'] = ['sometimes', 'required', 'integer', Rule::exists('schools', 'id')->where('active', true)];
+                $rules['meet_sport_ids'] = ['sometimes', 'array'];
+                $rules['meet_sport_ids.*'] = ['integer', 'distinct', Rule::exists('meet_sports', 'id')];
+                $rules['event_ids'] = ['sometimes', 'array'];
+                $rules['event_ids.*'] = ['integer', 'distinct', Rule::exists('events', 'id')];
+                $rules['registered_by'] = ['sometimes', 'nullable', 'integer', Rule::exists('users', 'id')];
+                $allowedFields = [...$allowedFields, 'delegation_id', 'school_id', 'meet_sport_ids', 'meet_sport_ids.*', 'event_ids', 'event_ids.*', 'registered_by'];
+            }
+
+            return collect($rules)->only($allowedFields)->all();
+        }
+
         if ($athlete === null) {
             $rules['middle_name'] = ['required', 'string', 'max:80'];
             $rules['name_extension'] = ['required', Rule::in(['None', 'Jr.', 'Sr.', 'II', 'III'])];
@@ -148,7 +169,22 @@ class AthleteRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
-            if ($this->route('athlete') !== null) {
+            $athlete = $this->route('athlete');
+            if ($athlete instanceof Athlete) {
+                if ($this->user()?->role === UserRole::TournamentICT
+                    && ($this->filled('delegation_id') || $this->filled('school_id'))) {
+                    $delegation = Delegation::find($this->integer('delegation_id') ?: $athlete->delegation_id);
+                    $school = School::find($this->integer('school_id') ?: $athlete->school_id);
+                    if ($delegation !== null && $school !== null) {
+                        $belongs = $delegation->school_id !== null
+                            ? $school->id === $delegation->school_id
+                            : $school->district_id === $delegation->district_id;
+                        if (! $belongs) {
+                            $validator->errors()->add('school_id', __('The selected School does not belong to the selected Delegation.'));
+                        }
+                    }
+                }
+
                 return;
             }
 
