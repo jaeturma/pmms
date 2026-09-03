@@ -98,6 +98,7 @@ class ResultController extends Controller
                 'event.sport:id,code,name',
                 'encodedBy:id,name',
                 'validatedBy:id,name',
+                'cancellationRequestedBy:id,name',
                 'attachments.file:id,original_name,mime_type,size',
                 'placements.entry.athlete:id,first_name,last_name,school_id',
                 'placements.entry.athlete.school:id,name',
@@ -215,6 +216,21 @@ class ResultController extends Controller
                         'reference' => $result->referenceNumber(),
                         'can_form' => $canForm,
                         'can_review' => $isEventSecretariat,
+                        'can_request_cancellation' => $result->status === ResultStatus::Submitted
+                            && $result->cancellation_requested_at === null
+                            && $user->meetSportAssignments()
+                                ->where('status', MeetSportAssignmentStatus::Active)
+                                ->where('role', MeetSportAssignmentRole::TournamentICT->value)
+                                ->whereHas('meetSport', fn ($scope) => $scope
+                                    ->where('meet_id', $result->meet_id)
+                                    ->where('sport_id', $result->event->sport_id))
+                                ->exists()
+                            && app(CompetitionAccessService::class)->canAccessEvent($user, $result->event, $result->meet_id),
+                        'cancellation_request' => $result->cancellation_requested_at === null ? null : [
+                            'reason' => $result->cancellation_request_reason,
+                            'requested_by' => $result->cancellationRequestedBy?->name,
+                            'requested_at' => $result->cancellation_requested_at->toDayDateTimeString(),
+                        ],
                         'can_officialize' => $user->hasPermission(Permission::ResultsOfficialize, $result->meet)
                             && $result->isFinalEventResult()
                             && $result->status === ResultStatus::Validated

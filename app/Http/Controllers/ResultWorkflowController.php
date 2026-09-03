@@ -150,11 +150,37 @@ class ResultWorkflowController extends Controller
             'returned_by' => null,
             'returned_at' => null,
             'return_reason' => null,
+            'cancellation_requested_by' => null,
+            'cancellation_requested_at' => null,
+            'cancellation_request_reason' => null,
         ])->save();
 
         $this->audit->record($action, $result, $this->context($result));
 
         return back()->with('success', 'Result submitted to the Event Secretariat.');
+    }
+
+    public function requestCancellation(Request $request, EventResult $result): RedirectResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+        abort_unless($this->isAssignedTournamentIct($user, $result), 403);
+        abort_unless($result->status === ResultStatus::Submitted, 422, 'Only a submitted result may have cancellation requested.');
+        abort_if($result->cancellation_requested_at !== null, 422, 'Cancellation has already been requested for this result.');
+        $validated = $request->validate(['reason' => ['required', 'string', 'max:1000']]);
+
+        $result->forceFill([
+            'cancellation_requested_by' => $user->id,
+            'cancellation_requested_at' => now(),
+            'cancellation_request_reason' => $validated['reason'],
+        ])->save();
+
+        $this->audit->record('result.cancellation_requested', $result, [
+            ...$this->context($result),
+            'reason' => $validated['reason'],
+        ]);
+
+        return back()->with('success', 'Cancellation requested. The submitted result remains locked while the Event Secretariat reviews the problem.');
     }
 
     public function confirmByTournamentManager(Request $request, EventResult $result): RedirectResponse
@@ -331,6 +357,18 @@ class ResultWorkflowController extends Controller
 
         return $hasRole && app(CompetitionAccessService::class)
             ->canAccessEvent($user, $result->event, $result->meet_id);
+    }
+
+    private function isAssignedTournamentIct(User $user, EventResult $result): bool
+    {
+        return $user->meetSportAssignments()
+            ->where('status', MeetSportAssignmentStatus::Active)
+            ->where('role', MeetSportAssignmentRole::TournamentICT->value)
+            ->whereHas('meetSport', fn ($meetSport) => $meetSport
+                ->where('meet_id', $result->meet_id)
+                ->where('sport_id', $result->event->sport_id))
+            ->exists()
+            && app(CompetitionAccessService::class)->canAccessEvent($user, $result->event, $result->meet_id);
     }
 
     private function isEventSecretariat(User $user, EventResult $result): bool

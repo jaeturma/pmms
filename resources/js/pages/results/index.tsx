@@ -72,6 +72,12 @@ type Result = {
     reference: string;
     can_form: boolean;
     can_review: boolean;
+    can_request_cancellation: boolean;
+    cancellation_request: {
+        reason: string;
+        requested_by: string | null;
+        requested_at: string;
+    } | null;
     can_officialize: boolean;
     form_generated: boolean;
     tm_confirmed: boolean;
@@ -743,6 +749,23 @@ export default function Results({
                                                 Awaiting TM confirmation
                                             </Badge>
                                         ) : null}
+                                        {result.cancellation_request && (
+                                            <div className="w-full rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+                                                <div className="font-medium text-destructive">
+                                                    Cancellation requested
+                                                </div>
+                                                <div className="mt-1">
+                                                    {result.cancellation_request.reason}
+                                                </div>
+                                                <div className="mt-1 text-xs text-muted-foreground">
+                                                    Requested by{' '}
+                                                    {result.cancellation_request.requested_by ??
+                                                        'ICT'}{' '}
+                                                    ·{' '}
+                                                    {result.cancellation_request.requested_at}
+                                                </div>
+                                            </div>
+                                        )}
                                         {result.can_tm_confirm &&
                                             !result.tm_confirmed && (
                                                 <Button
@@ -885,6 +908,26 @@ export default function Results({
                                                     </Button>
                                                 </>
                                             )}
+                                        {result.can_request_cancellation && (
+                                            <Button
+                                                variant="destructive"
+                                                size="sm"
+                                                onClick={() => {
+                                                    const reason = window.prompt(
+                                                        'Describe the problem requiring cancellation or correction',
+                                                    )?.trim();
+                                                    if (reason) {
+                                                        router.post(
+                                                            `/results/${result.id}/request-cancellation`,
+                                                            { reason },
+                                                            { preserveScroll: true },
+                                                        );
+                                                    }
+                                                }}
+                                            >
+                                                Request cancellation
+                                            </Button>
+                                        )}
                                         {result.can_officialize && (
                                             <ConfirmDialog
                                                 trigger={

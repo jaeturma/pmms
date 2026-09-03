@@ -141,8 +141,6 @@ class AthleteController extends Controller
 
         if ($unassigned) {
             $query->whereDoesntHave('sportRosterMemberships');
-        } elseif ($ictMeetIds->isNotEmpty() && $user->role !== UserRole::Coach && ! $deleted) {
-            $query->whereHas('sportRosterMemberships');
         }
 
         $query

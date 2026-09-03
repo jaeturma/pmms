@@ -49,6 +49,7 @@ class EventResult extends Model
             'tm_confirmed_at' => 'datetime',
             'submitted_at' => 'datetime',
             'returned_at' => 'datetime',
+            'cancellation_requested_at' => 'datetime',
             'official_at' => 'datetime',
         ];
     }
@@ -115,6 +116,11 @@ class EventResult extends Model
     public function validatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'validated_by');
+    }
+
+    public function cancellationRequestedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cancellation_requested_by');
     }
 
     public function officialBy(): BelongsTo

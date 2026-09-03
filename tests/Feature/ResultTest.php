@@ -560,6 +560,38 @@ test('a tournament secretary can accept a scoped result while ICT cannot validat
     'Tournament ICT' => [MeetSportAssignmentRole::TournamentICT, UserRole::TournamentICT],
 ]);
 
+test('assigned ICT can request cancellation of a submitted result for secretariat review', function () {
+    ['meet' => $meet, 'event' => $event] = resultFixture();
+    $result = EventResult::factory()->create([
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+        'status' => ResultStatus::Submitted,
+    ]);
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $event->sport_id]);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $ict->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($ict)->post("/results/{$result->id}/request-cancellation", [
+        'reason' => 'The final score was entered incorrectly.',
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $result->refresh();
+    expect($result->status)->toBe(ResultStatus::Submitted)
+        ->and($result->cancellation_requested_by)->toBe($ict->id)
+        ->and($result->cancellation_requested_at)->not->toBeNull()
+        ->and($result->cancellation_request_reason)->toBe('The final score was entered incorrectly.')
+        ->and(AuditLog::query()->where('action', 'result.cancellation_requested')->exists())->toBeTrue();
+
+    $this->actingAs($ict)->get('/results')->assertInertia(fn (AssertableInertia $page) => $page
+        ->where('results.data.0.can_request_cancellation', false)
+        ->where('results.data.0.cancellation_request.reason', 'The final score was entered incorrectly.'));
+});
+
 test('a technical official cannot encode a result for a sport they are not assigned to', function () {
     ['meet' => $meet, 'event' => $event, 'match' => $match, 'entries' => $entries] = resultFixture();
 

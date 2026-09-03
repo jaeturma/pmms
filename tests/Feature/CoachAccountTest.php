@@ -91,6 +91,10 @@ test('coaches and tournament ICT can recover non-listed athletes by assigning sp
         ->where('canViewUnassigned', false)
         ->has('athletes.data', 1)
         ->where('athletes.data.0.id', $athlete->id));
+    $this->actingAs($ict)->get('/athletes')->assertInertia(fn ($page) => $page
+        ->has('athletes.data', 1)
+        ->where('athletes.data.0.id', $athlete->id));
+    $this->actingAs($ict)->get("/athletes/{$athlete->id}")->assertOk();
     $this->actingAs($ict)->get('/athletes?unassigned=1')->assertInertia(fn ($page) => $page
         ->has('athletes.data', 1)
         ->where('athletes.data.0.can_update', true));

@@ -23,6 +23,7 @@ class CompetitionAccessService
     {
         $eventIds = $this->eventIds($user, $meetId);
         $sportIds = $this->sportIds($user, $meetId);
+        [$meetIds, $coachIds] = $this->assignedCoachScope($user, $meetId, $eventIds, $sportIds);
 
         return $query->where(fn (Builder $athletes): Builder => $athletes
             ->whereHas(
@@ -34,7 +35,37 @@ class CompetitionAccessService
                 fn (Builder $meetSports): Builder => $meetSports
                     ->whereIn('sport_id', $sportIds)
                     ->when($meetId !== null, fn (Builder $scope): Builder => $scope->where('meet_id', $meetId)),
-            ));
+            )
+            ->orWhere(fn (Builder $registered): Builder => $registered
+                ->whereIn('registered_by', $coachIds)
+                ->whereHas('delegation', fn (Builder $delegations): Builder => $delegations->whereIn('meet_id', $meetIds))));
+    }
+
+    /** @return array{Collection<int, int>, Collection<int, int>} */
+    private function assignedCoachScope(User $user, ?int $meetId, Collection $eventIds, Collection $sportIds): array
+    {
+        $meetIds = $meetId === null
+            ? $this->assignments($user)->pluck('meetSport.meet_id')->filter()->unique()->values()
+            : collect([$meetId]);
+        $coachIds = User::query()
+            ->where('role', UserRole::Coach->value)
+            ->where(function (Builder $coaches) use ($eventIds, $sportIds, $meetIds): void {
+                $coaches->whereHas('coachAssignmentRequests', fn (Builder $assignments) => $assignments
+                    ->where('status', 'approved')
+                    ->whereNull('ended_at')
+                    ->where(function (Builder $scope) use ($eventIds, $sportIds, $meetIds): void {
+                        $scope->whereIn('event_id', $eventIds)
+                            ->orWhereHas('meetSport', fn (Builder $meetSports) => $meetSports
+                                ->whereIn('meet_id', $meetIds)
+                                ->whereIn('sport_id', $sportIds));
+                    }))
+                    ->orWhereHas('coachOnboardingRequest', fn (Builder $onboarding) => $onboarding
+                        ->where('status', 'approved')
+                        ->whereHas('events', fn (Builder $events) => $events->whereIn('events.id', $eventIds)));
+            })
+            ->pluck('id');
+
+        return [$meetIds, $coachIds];
     }
 
     public function canAccessAthlete(User $user, Athlete $athlete): bool
@@ -42,12 +73,25 @@ class CompetitionAccessService
         $eventIds = $this->eventIds($user, $athlete->delegation->meet_id);
         $sportIds = $this->sportIds($user, $athlete->delegation->meet_id);
 
-        return $athlete->entries()->whereIn('event_id', $eventIds)->exists()
+        $canAccessCompetition = $athlete->entries()->whereIn('event_id', $eventIds)->exists()
             || $athlete->sportRosterMemberships()
                 ->whereHas('meetSport', fn (Builder $meetSport): Builder => $meetSport
                     ->where('meet_id', $athlete->delegation->meet_id)
                     ->whereIn('sport_id', $sportIds))
                 ->exists();
+
+        if ($canAccessCompetition || $athlete->registered_by === null) {
+            return $canAccessCompetition;
+        }
+
+        [, $coachIds] = $this->assignedCoachScope(
+            $user,
+            $athlete->delegation->meet_id,
+            $eventIds,
+            $sportIds,
+        );
+
+        return $coachIds->contains($athlete->registered_by);
     }
 
     /** @return list<string> */
