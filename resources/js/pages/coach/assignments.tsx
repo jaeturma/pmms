@@ -60,6 +60,8 @@ type RegistrationRow = {
     id: number;
     coach: string;
     email: string;
+    district_id: number | null;
+    school_id: number | null;
     team: string | null;
     school: string | null;
     sport: string;
@@ -105,6 +107,12 @@ type Props = {
     canReview: boolean;
     filters: { search: string; status: string; sport_id: number | null };
     sportOptions: Array<{ id: number; name: string }>;
+    districtOptions: Array<{ id: number; name: string }>;
+    schoolOptions: Array<{
+        id: number;
+        district_id: number | null;
+        name: string;
+    }>;
 };
 
 function CoachDocumentUpload({
@@ -146,13 +154,24 @@ function CoachDocumentUpload({
 
 function CoachInformationForm({
     registration,
+    districtOptions,
+    schoolOptions,
 }: {
     registration: RegistrationRow;
+    districtOptions: Props['districtOptions'];
+    schoolOptions: Props['schoolOptions'];
 }) {
     const form = useForm({
         name: registration.coach,
         email: registration.email,
+        district_id: registration.district_id
+            ? String(registration.district_id)
+            : '',
+        school_id: registration.school_id ? String(registration.school_id) : '',
     });
+    const availableSchools = schoolOptions.filter(
+        (school) => String(school.district_id ?? '') === form.data.district_id,
+    );
 
     return (
         <form
@@ -188,6 +207,56 @@ function CoachInformationForm({
                     }
                 />
                 <InputError message={form.errors.email} />
+            </div>
+            <div className="space-y-1.5">
+                <Label>District / Municipality</Label>
+                <Select
+                    value={form.data.district_id}
+                    onValueChange={(value) =>
+                        form.setData({
+                            ...form.data,
+                            district_id: value,
+                            school_id: '',
+                        })
+                    }
+                >
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select district" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {districtOptions.map((district) => (
+                            <SelectItem
+                                key={district.id}
+                                value={String(district.id)}
+                            >
+                                {district.name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <InputError message={form.errors.district_id} />
+            </div>
+            <div className="space-y-1.5">
+                <Label>School</Label>
+                <Select
+                    value={form.data.school_id}
+                    onValueChange={(value) => form.setData('school_id', value)}
+                >
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select school" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {availableSchools.map((school) => (
+                            <SelectItem
+                                key={school.id}
+                                value={String(school.id)}
+                            >
+                                {school.name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <InputError message={form.errors.school_id} />
             </div>
             <div className="sm:col-span-2">
                 <Button size="sm" disabled={form.processing}>
@@ -289,6 +358,8 @@ export default function CoachAssignments({
     canReview,
     filters,
     sportOptions,
+    districtOptions,
+    schoolOptions,
 }: Props) {
     const canAccredit = registrations.data.some((item) => item.can_accredit);
     const canManageAny = registrations.data.some(
@@ -1075,6 +1146,8 @@ export default function CoachAssignments({
                                     <CoachInformationForm
                                         key={viewedCoach.id}
                                         registration={viewedCoach}
+                                        districtOptions={districtOptions}
+                                        schoolOptions={schoolOptions}
                                     />
                                 )}
                                 <section className="space-y-3 rounded-lg border p-4">

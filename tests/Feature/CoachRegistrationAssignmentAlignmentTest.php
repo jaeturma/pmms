@@ -88,7 +88,7 @@ test('coach self registration selects sport only and rejects self assigned event
 
 test('tournament ict reviews only its sport and assigns scope during approval', function () {
     [, , $swimmingMeetSport, $delegation, $school, $events] = coachApplicationContext();
-    [, , $basketballMeetSport] = coachApplicationContext('Basketball');
+    [, , $basketballMeetSport, $basketballDelegation, $basketballSchool] = coachApplicationContext('Basketball');
     $coach = User::factory()->create(['role' => UserRole::Viewer, 'approval_status' => 'pending']);
     $application = CoachOnboardingRequest::query()->create([
         'user_id' => $coach->id, 'meet_sport_id' => $swimmingMeetSport->id,
@@ -99,11 +99,29 @@ test('tournament ict reviews only its sport and assigns scope during approval', 
     MeetSportAssignment::factory()->create(['user_id' => $swimmingIct->id, 'meet_sport_id' => $swimmingMeetSport->id, 'role' => MeetSportAssignmentRole::TournamentICT, 'status' => MeetSportAssignmentStatus::Active]);
     $basketballIct = User::factory()->create();
     MeetSportAssignment::factory()->create(['user_id' => $basketballIct->id, 'meet_sport_id' => $basketballMeetSport->id, 'role' => MeetSportAssignmentRole::TournamentICT, 'status' => MeetSportAssignmentStatus::Active]);
+    $swimmingCoach = User::factory()->coach()->create();
+    CoachAssignmentRequest::query()->create([
+        'user_id' => $swimmingCoach->id, 'meet_sport_id' => $swimmingMeetSport->id,
+        'delegation_id' => $delegation->id, 'school_id' => $school->id,
+        'scope_type' => 'sport', 'status' => 'approved', 'assigned_at' => now(),
+    ]);
+    $basketballCoach = User::factory()->coach()->create();
+    CoachAssignmentRequest::query()->create([
+        'user_id' => $basketballCoach->id, 'meet_sport_id' => $basketballMeetSport->id,
+        'delegation_id' => $basketballDelegation->id, 'school_id' => $basketballSchool->id,
+        'scope_type' => 'sport', 'status' => 'approved', 'assigned_at' => now(),
+    ]);
 
     $this->actingAs($swimmingIct)->get('/coach/assignment-requests')->assertInertia(fn (AssertableInertia $page) => $page
         ->has('registrations.data', 1)
+        ->has('requests.data', 1)
+        ->where('requests.data.0.coach', $swimmingCoach->getRawOriginal('name'))
+        ->where('sportOptions', fn ($sports) => collect($sports)->pluck('id')->all() === [$swimmingMeetSport->sport_id])
         ->where('registrations.per_page', 10));
-    $this->actingAs($basketballIct)->get('/coach/assignment-requests')->assertInertia(fn (AssertableInertia $page) => $page->has('registrations.data', 0));
+    $this->actingAs($basketballIct)->get('/coach/assignment-requests')->assertInertia(fn (AssertableInertia $page) => $page
+        ->has('registrations.data', 0)
+        ->has('requests.data', 1)
+        ->where('requests.data.0.coach', $basketballCoach->getRawOriginal('name')));
     $this->actingAs($basketballIct)->patch("/coach/onboarding-requests/{$application->id}", ['status' => 'approved', 'event_ids' => [$events->first()->id]])->assertForbidden();
 
     $this->actingAs($swimmingIct)->patch("/coach/onboarding-requests/{$application->id}", ['status' => 'approved', 'event_ids' => [$events->first()->id]])->assertSessionDoesntHaveErrors();

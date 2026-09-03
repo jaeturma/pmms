@@ -270,7 +270,7 @@ function EncodeDialog({
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="match">
-                                            Completed match result (unofficial)
+                                            Match result — scheduled or non-scheduled
                                         </SelectItem>
                                         <SelectItem value="event">
                                             Final Sports Event result
@@ -345,7 +345,7 @@ function EncodeDialog({
                             {scope === 'match' && (
                                 <div className="space-y-2">
                                     <Label htmlFor="result-match">
-                                        Scheduled competition
+                                        Completed match
                                     </Label>
                                     <Select
                                         value={data.match_id}

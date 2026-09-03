@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\MeetSportAssignmentRole;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\EventRequest;
+use App\Models\CompetitionArea;
 use App\Models\Event;
 use App\Models\Meet;
 use App\Models\Person;
@@ -196,6 +197,12 @@ class EventController extends Controller
         $keep = [];
 
         foreach ($venues as $venue) {
+            $this->ensurePlayingAreas(
+                Venue::query()->findOrFail($venue['venue_id']),
+                $venue['playing_area_type'],
+                (int) $venue['playing_area_count'],
+            );
+
             $assignment = $event->venueAssignments()->updateOrCreate(
                 ['venue_id' => $venue['venue_id']],
                 [
@@ -208,6 +215,34 @@ class EventController extends Controller
         }
 
         $event->venueAssignments()->when($keep !== [], fn ($query) => $query->whereNotIn('id', $keep))->delete();
+    }
+
+    /** Ensure a nominated venue has one independently schedulable row per playing area. */
+    private function ensurePlayingAreas(Venue $venue, string $type, int $count): void
+    {
+        $type = strtolower(trim($type));
+        $label = match ($type) {
+            'court' => 'Court',
+            'field' => 'Field',
+            'table' => 'Table',
+            'lane' => 'Lane',
+            'pitch' => 'Pitch',
+            'ring' => 'Ring',
+            'track' => 'Track',
+            default => 'Venue',
+        };
+        $nextOrder = (int) $venue->competitionAreas()->max('display_order');
+
+        for ($number = 1; $number <= max(1, $count); $number++) {
+            CompetitionArea::query()->firstOrCreate(
+                ['venue_id' => $venue->id, 'name' => $label.' '.$number],
+                [
+                    'area_type' => $type,
+                    'display_order' => ++$nextOrder,
+                    'status' => 'active',
+                ],
+            );
+        }
     }
 
     private function authorizeSport(User $user, int $sportId): void

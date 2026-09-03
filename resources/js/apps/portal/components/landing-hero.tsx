@@ -60,7 +60,7 @@ export function PortalLandingHero({
     return (
         <section
             className={cn(
-                'relative -mx-4 -mt-8 flex min-h-[78vh] flex-col justify-center overflow-hidden border-b-4 border-[var(--portal-accent)] px-4 pt-8 pb-14 text-[var(--portal-ink-foreground)] sm:-mx-6 sm:-mt-10 sm:px-6 sm:pt-12 sm:pb-20 lg:-mx-10 lg:px-10 xl:-mx-16 xl:px-16 2xl:-mx-24 2xl:px-24',
+                'relative -mx-4 -mt-8 flex min-h-[78vh] flex-col justify-center overflow-hidden border-b-4 border-[var(--portal-accent)] px-4 pt-4 pb-14 text-[var(--portal-ink-foreground)] sm:-mx-6 sm:-mt-10 sm:px-6 sm:pt-6 sm:pb-20 lg:-mx-10 lg:px-10 xl:-mx-16 xl:px-16 2xl:-mx-24 2xl:px-24',
                 className,
             )}
         >

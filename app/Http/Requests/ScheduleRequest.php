@@ -24,10 +24,17 @@ class ScheduleRequest extends FormRequest
         }
 
         $categoryId = $event->sport_category_id;
-        $venueId = EventVenue::query()
-            ->where('event_id', $event->id)
-            ->orderBy('id')
-            ->value('venue_id');
+        // Keep the venue explicitly selected by the operator. Previously this
+        // always replaced it with the event's first nominated venue, which
+        // made saved schedules disagree with the form selection.
+        $venueId = $this->integer('venue_id') ?: null;
+
+        if ($venueId === null) {
+            $venueId = EventVenue::query()
+                ->where('event_id', $event->id)
+                ->orderBy('id')
+                ->value('venue_id');
+        }
 
         if ($venueId === null && $categoryId !== null) {
             $venueId = SportCategoryCompetitionArea::query()
@@ -166,6 +173,7 @@ class ScheduleRequest extends FormRequest
                         );
                     } elseif ($areaId > 0 && ! CompetitionArea::query()
                         ->whereKey($areaId)
+                        ->where('venue_id', $venueId)
                         ->where('area_type', $assignment->playing_area_type)
                         ->exists()) {
                         $validator->errors()->add(

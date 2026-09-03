@@ -376,6 +376,7 @@ test('one person with multiple eligible roles receives one entitlement per meal'
 });
 
 test('admin override requires a reason and records override method', function () {
+    $this->travelTo(Carbon::parse('2026-09-05 12:00:00', 'Asia/Manila'));
     MealSchedule::factory()->create([
         'meet_id' => Meet::current()->id, 'date' => now()->toDateString(),
         'starts_at' => now()->addHour()->format('H:i'), 'ends_at' => now()->addHours(2)->format('H:i'),
@@ -387,6 +388,22 @@ test('admin override requires a reason and records override method', function ()
     $entitlement = MealEntitlement::query()->where('user_id', $person->id)->sole();
 
     $this->actingAs($admin)->post("/food/distribution/{$entitlement->id}/consume", ['override' => true])->assertSessionHasErrors('reason');
+    expect($entitlement->fresh()->status)->toBe('available')
+        ->and($entitlement->consumed_at)->toBeNull()
+        ->and($entitlement->consumed_by_user_id)->toBeNull()
+        ->and($entitlement->consumption_method)->toBeNull()
+        ->and($entitlement->consumption_notes)->toBeNull();
+
     $this->actingAs($admin)->post("/food/distribution/{$entitlement->id}/consume", ['override' => true, 'reason' => 'Delayed delegation arrival'])->assertSessionHasNoErrors();
-    expect($entitlement->fresh()->consumption_method)->toBe('admin_override');
+    $consumed = $entitlement->fresh();
+    expect($consumed->consumption_method)->toBe('admin_override')
+        ->and($consumed->consumption_notes)->toBe('Delayed delegation arrival')
+        ->and($consumed->consumed_at)->not->toBeNull()
+        ->and($consumed->consumed_by_user_id)->toBe($admin->id);
+
+    $this->actingAs($admin)->post("/food/distribution/{$entitlement->id}/consume", [
+        'override' => true,
+        'reason' => 'Duplicate attempt',
+    ])->assertSessionHasErrors('meal');
+    $this->travelBack();
 });

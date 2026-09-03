@@ -15,7 +15,7 @@ use App\Models\SportCategory;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 
-test('a category assignment sees its event across delegations but not sibling or unrelated events', function () {
+test('category compatibility assignments resolve to event scope across delegations without leaking unrelated sports', function () {
     $meet = Meet::factory()->registrationOpen()->create();
     $basketball = Sport::factory()->create(['name' => 'Basketball']);
     $volleyball = Sport::factory()->create(['name' => 'Volleyball']);
@@ -70,7 +70,9 @@ test('a category assignment sees its event across delegations but not sibling or
     ]);
 
     $this->actingAs($official)->get('/athletes')->assertInertia(fn (AssertableInertia $page) => $page
-        ->has('athletes.data', 0));
+        ->has('athletes.data', 3)
+        ->where('athletes.data', fn ($athletes) => collect($athletes)->pluck('id')->sort()->values()->all()
+            === collect([$nabunturanBoy->id, $monkayoBoy->id, $basketballGirl->id])->sort()->values()->all()));
     $this->actingAs($official)->get('/athletes?unassigned=1')->assertInertia(fn (AssertableInertia $page) => $page
         ->has('athletes.data', 4));
 

@@ -93,9 +93,6 @@ class CompetitionResultService
 
     public function assertReady(EventMatch $match): void
     {
-        if ($match->event_schedule_id === null) {
-            throw ValidationException::withMessages(['match_id' => __('A scheduled competition is required before entering a result.')]);
-        }
         $this->assertCompleted($match);
     }
 

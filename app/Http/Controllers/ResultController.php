@@ -322,7 +322,6 @@ class ResultController extends Controller
                 : [],
             'competitionOptions' => $canEncode
                 ? EventMatch::query()->real()
-                    ->whereNotNull('event_schedule_id')
                     ->whereIn('status', ['completed', 'walkover'])
                     ->whereDoesntHave('result')
                     ->when(! $canManage, fn ($query) => $query->whereIn('event_id', $assignedEventIds))
@@ -332,8 +331,10 @@ class ResultController extends Controller
                         'id' => $match->id,
                         'meet_id' => $match->meet_id,
                         'event_id' => $match->event_id,
-                        'label' => sprintf('%s · %s · %s', $this->eventLabel($match->event), $match->round_label, $match->schedule->venue->name),
-                        'context' => sprintf('%s %s–%s%s', $match->schedule->scheduled_date->format('M j'), substr($match->schedule->starts_at, 0, 5), substr($match->schedule->ends_at, 0, 5), $match->competition_area ? " · {$match->competition_area}" : ''),
+                        'label' => sprintf('%s · %s · %s', $this->eventLabel($match->event), $match->round_label, $match->schedule?->venue?->name ?? __('No schedule')),
+                        'context' => $match->schedule === null
+                            ? __('Non-scheduled match')
+                            : sprintf('%s %s–%s%s', $match->schedule->scheduled_date->format('M j'), substr($match->schedule->starts_at, 0, 5), substr($match->schedule->ends_at, 0, 5), $match->competition_area ? " · {$match->competition_area}" : ''),
                         'entries' => $match->entries->map(fn (Entry $entry): array => ['id' => $entry->id, 'label' => "{$entry->athlete->fullName()} — {$entry->athlete->school->name}"])->values(),
                     ])->values()
                 : [],

@@ -203,9 +203,7 @@ class AthleteController extends Controller
                     'coach' => $athlete->registrar?->hasRole(UserRole::Coach)
                         ? $athlete->registrar->name
                         : null,
-                    'photo_url' => $athlete->photo_upload_id === null || $athlete->trashed()
-                        ? null
-                        : route('athletes.photo', $athlete),
+                    'photo_url' => $athlete->trashed() ? null : $athlete->photoUrl(),
                     'sports' => $athlete->rosterSportNames()->join(', '),
                     'events' => $athlete->entries->pluck('event.name')->filter()->unique()->sort()->join(', '),
                     'accreditation_status' => $athlete->accreditation !== null
@@ -280,7 +278,8 @@ class AthleteController extends Controller
     public function edit(Request $request, Athlete $athlete): Response
     {
         $canUpdateIdentity = Gate::allows('update', $athlete);
-        if (! $canUpdateIdentity) {
+        $canUpdateAssignments = Gate::allows('updateAssignments', $athlete);
+        if (! $canUpdateIdentity && ! $canUpdateAssignments) {
             Gate::authorize('updateAssets', $athlete);
         }
 
@@ -326,8 +325,8 @@ class AthleteController extends Controller
                 'age_division' => $athlete->ageDivision()->value,
                 'meet_sport_ids' => $athlete->sportRosterMemberships->pluck('meet_sport_id')->all(),
                 'event_ids' => $athlete->entries->pluck('event_id')->all(),
-                'photo_url' => $athlete->photo_upload_id ? route('athletes.photo', $athlete) : null,
-                'sports_photo_url' => $athlete->sports_photo_upload_id ? route('athletes.sports-photo', $athlete) : null,
+                'photo_url' => $athlete->photoUrl(),
+                'sports_photo_url' => $athlete->sportsPhotoUrl(),
                 'registered_by' => $athlete->registered_by,
             ],
             'delegations' => $delegations->map(fn (Delegation $item) => [
@@ -338,8 +337,8 @@ class AthleteController extends Controller
             'schools' => $schools->map(fn (School $item) => ['id' => $item->id, 'name' => $item->name, 'district' => $item->district?->name ?? 'Not assigned', 'district_id' => $item->district_id]),
             'sports' => $meetSports->map(fn (MeetSport $item) => ['id' => $item->id, 'name' => $item->sport->name]),
             'events' => $events->map(fn (Event $item) => ['id' => $item->id, 'sport_id' => $item->sport_id, 'name' => $item->sport->name.' — '.$item->name]),
-            'assignmentsOnly' => $isTournamentIct && ! $request->user()->isAdmin() && ! $request->user()->canManageProductionAccounts(),
-            'assetsOnly' => ! $canUpdateIdentity,
+            'assignmentsOnly' => ! $canUpdateIdentity && $canUpdateAssignments,
+            'assetsOnly' => ! $canUpdateIdentity && ! $canUpdateAssignments,
             'canReassignCoach' => $canReassignCoach,
             'coachOptions' => $coachOptions->map(fn (User $coach) => [
                 'id' => $coach->id, 'name' => $coach->name,
@@ -407,9 +406,7 @@ class AthleteController extends Controller
                 'coach' => $athlete->registrar?->hasRole(UserRole::Coach)
                     ? $athlete->registrar->name
                     : null,
-                'photo_url' => $athlete->photo_upload_id === null
-                    ? null
-                    : route('athletes.photo', $athlete),
+                'photo_url' => $athlete->photoUrl(),
                 'sports_photo_url' => $athlete->sportsPhotoUrl(),
                 'sports' => $athlete->rosterSportNames()
                     ->whenEmpty(fn () => $athlete->entries
@@ -673,7 +670,8 @@ class AthleteController extends Controller
     public function update(AthleteRequest $request, Athlete $athlete): RedirectResponse
     {
         $canUpdateIdentity = Gate::allows('update', $athlete);
-        if (! $canUpdateIdentity) {
+        $canUpdateAssignments = Gate::allows('updateAssignments', $athlete);
+        if (! $canUpdateIdentity && ! $canUpdateAssignments) {
             Gate::authorize('updateAssets', $athlete);
         }
         $wasUnassigned = $athlete->sportRosterMemberships()->doesntExist();
@@ -684,7 +682,7 @@ class AthleteController extends Controller
         $isTournamentIct = $this->isTournamentIct($user, $athlete);
         $isCoach = $user->role === UserRole::Coach;
         $canReassignCoach = $isTournamentIct || $user->canManageProductionAccounts();
-        $canManageAssignments = $isTournamentIct
+        $canManageAssignments = $canUpdateAssignments || $isTournamentIct
             || ($canUpdateIdentity && ($user->isAdmin() || $user->canManageProductionAccounts() || $isCoach));
         $fileFields = ['photo', 'sports_photo', 'athlete_history', 'form_10', 'form_10_page_2', 'birth_certificate', 'birth_certificate_page_2', 'parental_consent', 'medical_certificate', 'meet_sport_ids', 'event_ids', 'registered_by'];
         if ($canUpdateIdentity && (! $isTournamentIct || $user->isAdmin() || $user->canManageProductionAccounts())) {
@@ -881,7 +879,7 @@ class AthleteController extends Controller
         return Storage::disk($upload->disk)->response($path, null, [
             'Content-Type' => $upload->mime_type ?: 'image/jpeg',
             'Content-Disposition' => 'inline',
-            'Cache-Control' => 'private, max-age=300',
+            'Cache-Control' => 'private, no-store, no-cache, must-revalidate',
         ]);
     }
 

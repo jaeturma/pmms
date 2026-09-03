@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Event;
+use App\Models\CompetitionArea;
 use App\Models\Person;
 use App\Models\Sport;
 use App\Models\User;
@@ -33,7 +34,9 @@ test('an event supports multiple venues and one or two coordinators per venue', 
     $event = Event::query()->where('name', 'Venue Assignment Event')->firstOrFail();
     expect($event->venueAssignments()->count())->toBe(2)
         ->and($event->venueAssignments()->where('venue_id', $venueA->id)->firstOrFail()->coordinators()->count())->toBe(2)
-        ->and($event->venueAssignments()->where('venue_id', $venueB->id)->firstOrFail()->playing_area_count)->toBe(6);
+        ->and($event->venueAssignments()->where('venue_id', $venueB->id)->firstOrFail()->playing_area_count)->toBe(6)
+        ->and(CompetitionArea::query()->where('venue_id', $venueA->id)->pluck('name')->all())->toBe(['Court 1', 'Court 2'])
+        ->and(CompetitionArea::query()->where('venue_id', $venueB->id)->pluck('name')->all())->toBe(['Table 1', 'Table 2', 'Table 3', 'Table 4', 'Table 5', 'Table 6']);
 });
 
 test('an event venue rejects more than two coordinators', function () {

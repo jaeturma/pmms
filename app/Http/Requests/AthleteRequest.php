@@ -24,6 +24,9 @@ class AthleteRequest extends FormRequest
 
         if ($athlete instanceof Athlete) {
             return Gate::allows('update', $athlete)
+                || (Gate::allows('updateAssignments', $athlete)
+                    && ($this->has('event_ids') || $this->has('meet_sport_ids')
+                        || $this->has('delegation_id') || $this->has('school_id') || $this->has('registered_by')))
                 || (Gate::allows('updateAssets', $athlete)
                     && ($this->allFiles() !== [] || $this->user()?->role === UserRole::TournamentICT));
         }
@@ -99,13 +102,16 @@ class AthleteRequest extends FormRequest
                 'form_10_page_2', 'birth_certificate', 'birth_certificate_page_2',
                 'parental_consent', 'medical_certificate',
             ];
-            if ($this->user()?->role === UserRole::TournamentICT) {
-                $rules['delegation_id'] = ['sometimes', 'required', 'integer', Rule::exists('delegations', 'id')];
-                $rules['school_id'] = ['sometimes', 'required', 'integer', Rule::exists('schools', 'id')->where('active', true)];
+            if (Gate::allows('updateAssignments', $athlete)) {
                 $rules['meet_sport_ids'] = ['sometimes', 'array'];
                 $rules['meet_sport_ids.*'] = ['integer', 'distinct', Rule::exists('meet_sports', 'id')];
                 $rules['event_ids'] = ['sometimes', 'array'];
                 $rules['event_ids.*'] = ['integer', 'distinct', Rule::exists('events', 'id')];
+                $allowedFields = [...$allowedFields, 'meet_sport_ids', 'meet_sport_ids.*', 'event_ids', 'event_ids.*'];
+            }
+            if ($this->user()?->role === UserRole::TournamentICT) {
+                $rules['delegation_id'] = ['sometimes', 'required', 'integer', Rule::exists('delegations', 'id')];
+                $rules['school_id'] = ['sometimes', 'required', 'integer', Rule::exists('schools', 'id')->where('active', true)];
                 $rules['registered_by'] = ['sometimes', 'nullable', 'integer', Rule::exists('users', 'id')];
                 $allowedFields = [...$allowedFields, 'delegation_id', 'school_id', 'meet_sport_ids', 'meet_sport_ids.*', 'event_ids', 'event_ids.*', 'registered_by'];
             }

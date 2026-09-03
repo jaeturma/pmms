@@ -131,6 +131,13 @@ class Athlete extends Model
         return $this->belongsTo(FileUpload::class, 'photo_upload_id');
     }
 
+    public function photoUrl(): ?string
+    {
+        return $this->photo_upload_id === null
+            ? null
+            : route('athletes.photo', $this).'?v='.$this->photo_upload_id;
+    }
+
     /**
      * The action/competition photo used on live scoreboards (e.g. a boxing
      * bout's corner display) — distinct from `photo`, the registry/ID-card
@@ -151,7 +158,9 @@ class Athlete extends Model
      */
     public function sportsPhotoUrl(): ?string
     {
-        return $this->sports_photo_upload_id === null ? null : route('athletes.sports-photo', $this);
+        return $this->sports_photo_upload_id === null
+            ? null
+            : route('athletes.sports-photo', $this).'?v='.$this->sports_photo_upload_id;
     }
 
     public function fullName(): string

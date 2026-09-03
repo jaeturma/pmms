@@ -36,7 +36,7 @@ test('guests are redirected from the match list', function () {
     $this->get('/matches')->assertRedirect('/login');
 });
 
-test('live scoring can only be enabled for basketball softball baseball and boxing', function (string $sportName, bool $allowed) {
+test('live scoring can be enabled only for sports with an implemented production board', function (string $sportName, bool $allowed) {
     $meet = Meet::factory()->active()->create();
     $sport = \App\Models\Sport::factory()->create(['name' => $sportName]);
     $event = Event::factory()->create(['sport_id' => $sport->id]);
@@ -61,7 +61,7 @@ test('live scoring can only be enabled for basketball softball baseball and boxi
     'Softball' => ['Softball', true],
     'Baseball' => ['Baseball', true],
     'Boxing' => ['Boxing', true],
-    'Volleyball' => ['Volleyball', false],
+    'Volleyball' => ['Volleyball', true],
     'Athletics' => ['Athletics', false],
 ]);
 
@@ -95,7 +95,7 @@ test('viewers cannot see matches; officers only their own delegation\'s', functi
             ->where('canManage', true));
 });
 
-test('a technical official only sees matches for their assigned sport, and cannot manage any', function () {
+test('a technical official only sees matches for their assigned sport and can link participants', function () {
     $ownSportMatch = EventMatch::factory()->create();
     $otherSportMatch = EventMatch::factory()->create();
 
@@ -108,7 +108,15 @@ test('a technical official only sees matches for their assigned sport, and canno
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('matches.data', 1)
             ->where('matches.data.0.id', $ownSportMatch->id)
+            ->where('matches.data.0.can_manage_participants', true)
             ->where('canManage', false));
+
+    $entry = confirmedEntryFor($ownSportMatch);
+    $this->actingAs($official)
+        ->put("/matches/{$ownSportMatch->id}/participants", ['entry_ids' => [$entry->id]])
+        ->assertSessionHasNoErrors();
+
+    expect($ownSportMatch->entries()->whereKey($entry->id)->exists())->toBeTrue();
 
     expect($otherSportMatch->id)->not->toBe($ownSportMatch->id);
 });
@@ -376,6 +384,69 @@ test('participants must be confirmed entries of the match event', function () {
         ->assertSessionHasErrors('entry_ids');
 
     expect($match->entries()->count())->toBe(1);
+});
+
+test('match participant slots are generated per sport delegation and assigning an athlete creates the entry', function () {
+    $match = EventMatch::factory()->create();
+    $meetSport = MeetSport::factory()->create([
+        'meet_id' => $match->meet_id,
+        'sport_id' => $match->event->sport_id,
+        'active' => true,
+    ]);
+    $delegation = Delegation::factory()->approved()->create(['meet_id' => $match->meet_id]);
+    $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);
+    \App\Models\SportRosterMember::query()->create([
+        'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $delegation->id,
+        'athlete_id' => $athlete->id,
+        'level' => $match->event->age_division->value,
+        'gender' => $match->event->gender->value,
+    ]);
+
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin)->get('/matches')->assertOk();
+    $slot = \App\Models\MatchParticipantSlot::query()
+        ->where('match_id', $match->id)->where('delegation_id', $delegation->id)->firstOrFail();
+
+    $this->actingAs($admin)->put("/matches/{$match->id}/participants", [
+        'slot_assignments' => [['slot_id' => $slot->id, 'athlete_id' => $athlete->id]],
+    ])->assertSessionHasNoErrors();
+
+    $entry = Entry::query()->where('event_id', $match->event_id)->where('athlete_id', $athlete->id)->firstOrFail();
+    expect($entry->status->value)->toBe('confirmed')
+        ->and($slot->fresh()->entry_id)->toBe($entry->id)
+        ->and($match->entries()->whereKey($entry->id)->exists())->toBeTrue();
+});
+
+test('existing delegation event entries automatically fill generated match slots', function () {
+    $match = EventMatch::factory()->create();
+    $meetSport = MeetSport::factory()->create([
+        'meet_id' => $match->meet_id,
+        'sport_id' => $match->event->sport_id,
+        'active' => true,
+    ]);
+    $delegation = Delegation::factory()->approved()->create(['meet_id' => $match->meet_id]);
+    $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);
+    \App\Models\SportRosterMember::query()->create([
+        'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $delegation->id,
+        'athlete_id' => $athlete->id,
+        'level' => $match->event->age_division->value,
+        'gender' => $match->event->gender->value,
+    ]);
+    $entry = Entry::factory()->create([
+        'event_id' => $match->event_id,
+        'delegation_id' => $delegation->id,
+        'athlete_id' => $athlete->id,
+        'status' => 'submitted',
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())->get('/matches')->assertOk();
+
+    expect(\App\Models\MatchParticipantSlot::query()
+        ->where('match_id', $match->id)->where('entry_id', $entry->id)->exists())->toBeTrue()
+        ->and($match->entries()->whereKey($entry->id)->exists())->toBeTrue()
+        ->and($entry->fresh()->status->value)->toBe('confirmed');
 });
 
 test('team events allow only one entry per school in a match', function () {

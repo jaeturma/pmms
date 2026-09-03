@@ -532,7 +532,7 @@ class PortalController extends Controller
             ->with(['event.sport:id,name', 'schedule.venue:id,name'])
             ->findOrFail($match);
 
-        abort_unless(ScoreboardType::supportsLiveSport($match->event->sport->name), 404);
+        abort_unless(ScoreboardType::supportsMatch($match->event->sport->name, $match->live_scoring_enabled), 404);
 
         $session = $match->scoringSessions()->latest('id')->first();
 
@@ -1384,14 +1384,11 @@ class PortalController extends Controller
      */
     private function sportPortalLiveNow(Meet $meet, Sport $sport): array
     {
-        if (! ScoreboardType::supportsLiveSport($sport->name)) {
-            return [null, 0];
-        }
-
         $liveSessions = ScoringSession::query()
             ->where('status', '!=', ScoringSessionStatus::Ended->value)
             ->whereHas('match', fn ($query) => $query
                 ->where('meet_id', $meet->id)
+                ->where('live_scoring_enabled', true)
                 ->whereHas('event', fn ($event) => $event->where('sport_id', $sport->id)))
             ->with([
                 'match.event:id,sport_id,name,gender,age_division',
@@ -1613,7 +1610,7 @@ class PortalController extends Controller
         $match = EventMatch::query()->real()->where('meet_id', $meet->id)
             ->with('event.sport:id,name')->findOrFail($match);
 
-        abort_unless(ScoreboardType::supportsLiveSport($match->event->sport->name), 404);
+        abort_unless(ScoreboardType::supportsMatch($match->event->sport->name, $match->live_scoring_enabled), 404);
 
         $session = $match->scoringSessions()->latest('id')->first();
 

@@ -23,12 +23,24 @@ enum ScoreboardType: string
     case Billiard = 'billiard';
     case Bocce = 'bocce';
 
-    /** Live scoreboards are intentionally limited to these four sports. */
+    /** Sports with an implemented production scoring board. */
     public static function supportsLiveSport(?string $sportName): bool
     {
         return in_array(mb_strtolower(trim((string) $sportName)), [
             'basketball', 'softball', 'baseball', 'boxing',
+            'volleyball', 'sepak takraw', 'football', 'futsal',
+            'table tennis', 'badminton', 'taekwondo', 'wushu',
+            'pencak silat', 'arnis', 'wrestling', 'tennis',
+            'goal ball', 'goalball', 'paragames - goal ball',
+            'billiard', 'billiards', 'bocce', 'paragames - boccee',
         ], true);
+    }
+
+    /** Dedicated board, or an explicitly enabled match using Generic. */
+    public static function supportsMatch(?string $sportName, bool $explicitlyEnabled): bool
+    {
+        return self::supportsLiveSport($sportName)
+            || ($explicitlyEnabled && self::forSport($sportName) === self::Generic);
     }
 
     public static function forSport(?string $sportName): self
@@ -43,8 +55,8 @@ enum ScoreboardType: string
             'taekwondo', 'wushu', 'pencak silat', 'arnis' => self::CombatRounds,
             'wrestling' => self::Wrestling,
             'tennis' => self::Tennis,
-            'goal ball', 'paragames - goal ball' => self::GoalBall,
-            'billiard' => self::Billiard,
+            'goal ball', 'goalball', 'paragames - goal ball' => self::GoalBall,
+            'billiard', 'billiards' => self::Billiard,
             'bocce', 'paragames - boccee' => self::Bocce,
             default => self::Generic,
         };

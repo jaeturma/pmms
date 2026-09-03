@@ -605,13 +605,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::post('matches', [MatchController::class, 'store'])->name('matches.store');
         Route::put('matches/{match}', [MatchController::class, 'update'])->name('matches.update');
-        Route::put('matches/{match}/participants', [MatchController::class, 'syncParticipants'])->name('matches.participants');
         Route::patch('matches/{match}/status', [MatchController::class, 'updateStatus'])->name('matches.status');
         Route::delete('matches/{match}', [MatchController::class, 'destroy'])->name('matches.destroy');
 
         Route::patch('results/{result}/validate', [ResultController::class, 'validateResult'])->name('results.validate');
         Route::patch('results/{result}/correct', [ResultController::class, 'correct'])->name('results.correct');
         Route::delete('results/{result}', [ResultController::class, 'destroy'])->name('results.destroy');
+    });
+
+    Route::middleware('role:admin,organizer,coach,technical_official,tournament_manager,tournament_ict,tournament_secretary')->group(function () {
+        Route::put('matches/{match}/participants', [MatchController::class, 'syncParticipants'])->name('matches.participants');
     });
 
     // Live scoring mutations are their own role group, not folded into the

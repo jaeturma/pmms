@@ -59,6 +59,7 @@ type Transition = {
 type Match = {
     id: number;
     event_id: number;
+    sport_id: number;
     event_schedule_id: number | null;
     event: string;
     round_label: string;
@@ -71,10 +72,19 @@ type Match = {
     live_score_available: boolean;
     awards_medals: boolean;
     participants: Participant[];
+    participant_slots: Array<{
+        id: number;
+        delegation_id: number;
+        delegation: string;
+        position: number;
+        athlete_id: number | null;
+        athlete: string | null;
+    }>;
     transitions: Transition[];
     is_scheduled: boolean;
     can_delete: boolean;
     can_remove: boolean;
+    can_manage_participants: boolean;
 };
 
 type Option = { id: number; label: string; live_score_available?: boolean };
@@ -82,6 +92,7 @@ type Option = { id: number; label: string; live_score_available?: boolean };
 type ScheduleOption = Option & { event_id: number };
 
 type EntryOption = Option & { event_id: number };
+type AthleteOption = Option & { sport_id: number; delegation_id: number };
 
 type Props = {
     matches: Paginated<Match>;
@@ -89,6 +100,7 @@ type Props = {
     eventOptions: Option[];
     scheduleOptions: ScheduleOption[];
     entryOptions: EntryOption[];
+    athleteOptions: AthleteOption[];
     canManage: boolean;
 };
 
@@ -309,16 +321,22 @@ function MatchFormDialog({
 function ParticipantsDialog({
     match,
     entryOptions,
+    athleteOptions,
     open,
     onOpenChange,
 }: {
     match: Match;
     entryOptions: EntryOption[];
+    athleteOptions: AthleteOption[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
-    const { data, setData, put, processing, errors } = useForm({
+    const { data, setData, put, processing, errors, transform } = useForm({
         entry_ids: match.participants.map((p) => p.entry_id),
+        slot_assignments: match.participant_slots.map((slot) => ({
+            slot_id: slot.id,
+            athlete_id: slot.athlete_id ? String(slot.athlete_id) : '',
+        })),
     });
 
     const options = entryOptions.filter(
@@ -336,6 +354,13 @@ function ParticipantsDialog({
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
+        transform((values) => ({
+            ...values,
+            slot_assignments: values.slot_assignments.map((assignment) => ({
+                slot_id: assignment.slot_id,
+                athlete_id: assignment.athlete_id || null,
+            })),
+        }));
         put(participantsRoute(match.id).url, {
             preserveScroll: true,
             onSuccess: () => onOpenChange(false),
@@ -351,10 +376,38 @@ function ParticipantsDialog({
                     </DialogTitle>
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
-                    {options.length === 0 ? (
+                    {match.participant_slots.length > 0 ? (
+                        <div className="max-h-96 space-y-3 overflow-y-auto rounded-lg border p-3">
+                            {match.participant_slots.map((slot, index) => {
+                                const athletes = athleteOptions.filter(
+                                    (athlete) =>
+                                        athlete.sport_id === match.sport_id &&
+                                        athlete.delegation_id === slot.delegation_id,
+                                );
+                                return (
+                                    <div key={slot.id} className="grid items-center gap-2 sm:grid-cols-[minmax(10rem,1fr)_minmax(14rem,2fr)]">
+                                        <Label>{slot.delegation}{match.participant_slots.filter((item) => item.delegation_id === slot.delegation_id).length > 1 ? ` · Entry ${slot.position}` : ''}</Label>
+                                        <Select
+                                            value={data.slot_assignments[index]?.athlete_id || 'unassigned'}
+                                            onValueChange={(value) => {
+                                                const next = [...data.slot_assignments];
+                                                next[index] = { slot_id: slot.id, athlete_id: value === 'unassigned' ? '' : value };
+                                                setData('slot_assignments', next);
+                                            }}
+                                        >
+                                            <SelectTrigger><SelectValue placeholder="Assign athlete later" /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="unassigned">Unassigned</SelectItem>
+                                                {athletes.map((athlete) => <SelectItem key={athlete.id} value={String(athlete.id)}>{athlete.label}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : options.length === 0 ? (
                         <p className="text-sm text-muted-foreground">
-                            No confirmed entries for this event yet. Confirm
-                            entries first.
+                            No delegation sport rosters are available for this event yet.
                         </p>
                     ) : (
                         <div className="max-h-72 space-y-2 overflow-y-auto rounded-lg border p-3">
@@ -380,7 +433,7 @@ function ParticipantsDialog({
                     <DialogFooter>
                         <Button
                             type="submit"
-                            disabled={processing || options.length === 0}
+                            disabled={processing || (options.length === 0 && match.participant_slots.length === 0)}
                         >
                             Save participants
                         </Button>
@@ -397,6 +450,7 @@ export default function Matches({
     eventOptions,
     scheduleOptions,
     entryOptions,
+    athleteOptions,
     canManage,
 }: Props) {
     const [formOpen, setFormOpen] = useState(false);
@@ -502,7 +556,11 @@ export default function Matches({
                                     <TableHead>Participants</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead>Live</TableHead>
-                                    {canManage && (
+                                    {(canManage ||
+                                        matches.data.some(
+                                            (match) =>
+                                                match.can_manage_participants,
+                                        )) && (
                                         <TableHead className="text-right">
                                             Actions
                                         </TableHead>
@@ -584,10 +642,12 @@ export default function Matches({
                                                 </Button>
                                             )}
                                         </TableCell>
-                                        {canManage && (
+                                        {(canManage ||
+                                            match.can_manage_participants) && (
                                             <TableCell className="text-right">
                                                 <div className="flex justify-end gap-2">
-                                                    {match.is_scheduled && (
+                                                    {match.is_scheduled &&
+                                                        match.can_manage_participants && (
                                                         <Button
                                                             variant="outline"
                                                             size="sm"
@@ -600,7 +660,7 @@ export default function Matches({
                                                             Participants
                                                         </Button>
                                                     )}
-                                                    <Button
+                                                    {canManage && <Button
                                                         variant="outline"
                                                         size="sm"
                                                         onClick={() =>
@@ -608,8 +668,8 @@ export default function Matches({
                                                         }
                                                     >
                                                         Edit
-                                                    </Button>
-                                                    {match.transitions.map(
+                                                    </Button>}
+                                                    {canManage && match.transitions.map(
                                                         (transition) => (
                                                             <ConfirmDialog
                                                                 key={
@@ -646,7 +706,7 @@ export default function Matches({
                                                             />
                                                         ),
                                                     )}
-                                                    {match.can_delete ? (
+                                                    {canManage && (match.can_delete ? (
                                                         <ConfirmDialog
                                                             trigger={
                                                                 <Button
@@ -680,7 +740,7 @@ export default function Matches({
                                                         >
                                                             Delete result first
                                                         </Button>
-                                                    ) : null}
+                                                    ) : null)}
                                                 </div>
                                             </TableCell>
                                         )}
@@ -713,6 +773,7 @@ export default function Matches({
                     key={participantsFor.id}
                     match={participantsFor}
                     entryOptions={entryOptions}
+                    athleteOptions={athleteOptions}
                     open={participantsFor !== null}
                     onOpenChange={(open) => {
                         if (!open) {

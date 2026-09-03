@@ -10,6 +10,7 @@ use App\Models\Athlete;
 use App\Models\CoachAssignmentRequest;
 use App\Models\CoachOnboardingRequest;
 use App\Models\Delegation;
+use App\Models\District;
 use App\Models\Event;
 use App\Models\FileUpload;
 use App\Models\Meet;
@@ -56,7 +57,10 @@ class CoachAssignmentRequestController extends Controller
         if ($canRequest) {
             $query->where('user_id', $user->id);
         } elseif (! $user->canReviewCoachRegistrations()) {
-            $query->whereIn('event_id', $user->tournamentEventIds());
+            $query->where(function ($scope) use ($visibleIds, $user): void {
+                $scope->whereIn('meet_sport_id', $visibleIds)
+                    ->orWhereIn('event_id', $user->tournamentEventIds());
+            });
         }
 
         $query->when($search !== '', fn ($items) => $items->whereHas('user', fn ($users) => $users
@@ -80,7 +84,12 @@ class CoachAssignmentRequestController extends Controller
             'canReview' => $user->canReviewCoachRegistrations() || $reviewableIds->isNotEmpty(),
             'options' => $canRequest ? $this->requestOptions($user) : [],
             'filters' => ['search' => $search, 'status' => $status, 'sport_id' => $sportId],
-            'sportOptions' => Sport::query()->where('active', true)->orderBy('name')->get(['id', 'name']),
+            'sportOptions' => Sport::query()->where('active', true)
+                ->when(! $canRequest && ! $user->canReviewCoachRegistrations(), fn ($sports) => $sports
+                    ->whereIn('id', MeetSport::query()->whereKey($visibleIds)->select('sport_id')))
+                ->orderBy('name')->get(['id', 'name']),
+            'districtOptions' => District::query()->where('active', true)->orderBy('name')->get(['id', 'name']),
+            'schoolOptions' => School::query()->where('active', true)->orderBy('name')->get(['id', 'district_id', 'name']),
         ]);
     }
 
@@ -310,20 +319,52 @@ class CoachAssignmentRequestController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($coach->id)],
+            'district_id' => ['required', 'integer', Rule::exists('districts', 'id')->where('active', true)],
+            'school_id' => [
+                'required',
+                'integer',
+                Rule::exists('schools', 'id')->where(fn ($schools) => $schools
+                    ->where('active', true)
+                    ->where('district_id', $request->integer('district_id'))),
+            ],
         ]);
 
         $before = $coach->only(['name', 'email']);
+        $before += $coachOnboardingRequest->only(['district_id', 'school_id', 'delegation_id']);
         $nameParts = preg_split('/\s+/', trim($data['name'])) ?: [];
         $lastName = count($nameParts) > 1 ? array_pop($nameParts) : '';
         $firstName = implode(' ', $nameParts) ?: $data['name'];
-        DB::transaction(function () use ($coach, $coachOnboardingRequest, $data, $firstName, $lastName): void {
-            $coach->forceFill($data)->save();
+        $coachOnboardingRequest->loadMissing(['meetSport.meet', 'delegation.meet']);
+        $meet = $coachOnboardingRequest->delegation?->meet ?? $coachOnboardingRequest->meetSport?->meet;
+        abort_if($meet === null, 422, 'The coach registration is not linked to a meet.');
+        $delegation = $meet->delegations()->where(function ($delegations) use ($data): void {
+            $delegations->where('school_id', $data['school_id'])
+                ->orWhere(fn ($district) => $district->whereNull('school_id')->where('district_id', $data['district_id']));
+        })->orderByRaw('CASE WHEN school_id = ? THEN 0 ELSE 1 END', [$data['school_id']])->first();
+        if ($delegation === null) {
+            throw ValidationException::withMessages([
+                'district_id' => __('The selected school and district do not have a delegation in this meet.'),
+            ]);
+        }
+
+        DB::transaction(function () use ($coach, $coachOnboardingRequest, $data, $firstName, $lastName, $delegation): void {
+            $coach->forceFill(['name' => $data['name'], 'email' => $data['email']])->save();
+            $coachOnboardingRequest->forceFill([
+                'district_id' => $data['district_id'],
+                'school_id' => $data['school_id'],
+                'delegation_id' => $delegation->id,
+            ])->save();
             Personnel::query()->where('user_id', $coach->id)->update([
+                'delegation_id' => $delegation->id,
+                'school_id' => $data['school_id'],
                 'first_name' => $firstName,
                 'last_name' => $lastName,
                 'email' => $data['email'],
             ]);
-            $coachOnboardingRequest->touch();
+            CoachAssignmentRequest::query()->where('user_id', $coach->id)->update([
+                'delegation_id' => $delegation->id,
+                'school_id' => $data['school_id'],
+            ]);
         });
         $audit->record('coach.information_updated', $coachOnboardingRequest, [
             'before' => $before,
@@ -766,6 +807,8 @@ class CoachAssignmentRequestController extends Controller
                     'id' => $item->id,
                     'coach' => $item->user->name,
                     'email' => $item->user->email,
+                    'district_id' => $item->district_id ?? $item->school?->district_id,
+                    'school_id' => $item->school_id,
                     'team' => $item->delegation?->registrantName() ?? $item->district?->name,
                     'school' => $item->school?->name,
                     'sport' => $item->meetSport?->sport?->name

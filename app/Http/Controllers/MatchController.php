@@ -11,10 +11,14 @@ use App\Http\Controllers\Concerns\ScopesToAssignedSport;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\MatchRequest;
 use App\Models\Entry;
+use App\Models\Athlete;
 use App\Models\Event;
 use App\Models\EventMatch;
 use App\Models\EventSchedule;
 use App\Models\Meet;
+use App\Models\MatchParticipantSlot;
+use App\Models\MeetSport;
+use App\Models\SportRosterMember;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\CompetitionAccessService;
@@ -66,6 +70,9 @@ class MatchController extends Controller
             $access->competitionManagerRoles(),
             Meet::current()->id,
         );
+        $canLinkAssignedParticipants = $canManageAssignedCompetition
+            || ($user->role === UserRole::TechnicalOfficial && $visibleEventIds->isNotEmpty())
+            || $access->hasAssignmentRole($user, [MeetSportAssignmentRole::TechnicalOfficial->value], Meet::current()->id);
 
         $eventId = $request->integer('event_id');
 
@@ -73,6 +80,7 @@ class MatchController extends Controller
             ->with([
                 'event.sport:id,name',
                 'schedule.venue:id,name',
+                'schedule.competitionArea:id,name',
                 'result:id,match_id',
                 'entries.athlete:id,first_name,last_name,school_id',
                 'entries.athlete.school:id,name',
@@ -89,8 +97,7 @@ class MatchController extends Controller
         }
 
         if ($user->role === UserRole::Coach) {
-            $query->whereIn('event_id', $visibleEventIds)
-                ->whereHas('entries', fn ($entries) => $entries->whereIn('delegation_id', $coachDelegationIds));
+            $query->whereIn('event_id', $visibleEventIds);
         }
 
         if ($isTournamentScoped) {
@@ -101,11 +108,18 @@ class MatchController extends Controller
             $query->where('event_id', $eventId);
         }
 
+        $matches = $query->paginate($this->registryPageSize)->withQueryString();
+        foreach ($matches as $visibleMatch) {
+            $this->ensureParticipantSlots($visibleMatch);
+        }
+        $matches->getCollection()->load('participantSlots.delegation.school', 'participantSlots.delegation.district', 'participantSlots.entry.athlete.school');
+
         return Inertia::render('matches/index', [
-            'matches' => $query->paginate($this->registryPageSize)->withQueryString()
+            'matches' => $matches
                 ->through(fn (EventMatch $match): array => [
                     'id' => $match->id,
                     'event_id' => $match->event_id,
+                    'sport_id' => $match->event->sport_id,
                     'event_schedule_id' => $match->event_schedule_id,
                     'event' => $this->eventLabel($match->event),
                     'round_label' => $match->round_label,
@@ -121,7 +135,9 @@ class MatchController extends Controller
                         $match->schedule->scheduled_date->format('M j'),
                         substr($match->schedule->starts_at, 0, 5),
                         substr($match->schedule->ends_at, 0, 5),
-                        $match->schedule->venue->name,
+                        $match->schedule->venue->name.($match->schedule->competitionArea
+                            ? ' / '.$match->schedule->competitionArea->name
+                            : ''),
                     ),
                     'participants' => $match->entries
                         ->map(fn (Entry $entry): array => [
@@ -132,6 +148,16 @@ class MatchController extends Controller
                         ->sortBy('name')
                         ->values()
                         ->all(),
+                    'participant_slots' => $match->participantSlots
+                        ->when($user->role === UserRole::Coach, fn ($slots) => $slots->whereIn('delegation_id', $coachDelegationIds))
+                        ->map(fn (MatchParticipantSlot $slot): array => [
+                        'id' => $slot->id,
+                        'delegation_id' => $slot->delegation_id,
+                        'delegation' => $slot->delegation->registrantName(),
+                        'position' => $slot->position,
+                        'athlete_id' => $slot->entry?->athlete_id,
+                        'athlete' => $slot->entry?->athlete?->fullName(),
+                    ])->values(),
                     'transitions' => $match->status->allowedTransitions() === [] ? [] : array_map(
                         fn (MatchStatus $status): array => [
                             'value' => $status->value,
@@ -142,6 +168,9 @@ class MatchController extends Controller
                     'is_scheduled' => $match->status === MatchStatus::Scheduled,
                     'can_remove' => $this->canRemoveMatch($user, $match),
                     'can_delete' => $match->result === null && $this->canRemoveMatch($user, $match),
+                    'can_manage_participants' => $canManageAll
+                        || ($user->role === UserRole::Coach && $coachDelegationIds->isNotEmpty())
+                        || ($canLinkAssignedParticipants && $access->canAccessEvent($user, $match->event, $match->meet_id)),
                 ]),
             'filters' => [
                 'event_id' => $eventId > 0 ? $eventId : null,
@@ -162,7 +191,7 @@ class MatchController extends Controller
                     $isTournamentScoped,
                     fn ($query) => $query->whereIn('event_id', $visibleEventIds),
                 )
-                ->with('venue:id,name')
+                ->with(['venue:id,name', 'competitionArea:id,name'])
                 ->get()
                 ->map(fn (EventSchedule $slot): array => [
                     'id' => $slot->id,
@@ -172,7 +201,7 @@ class MatchController extends Controller
                         $slot->scheduled_date->format('M j'),
                         substr($slot->starts_at, 0, 5),
                         substr($slot->ends_at, 0, 5),
-                        $slot->venue->name,
+                        $slot->venue->name.($slot->competitionArea ? ' / '.$slot->competitionArea->name : ''),
                     ),
                 ])
                 ->values(),
@@ -196,6 +225,20 @@ class MatchController extends Controller
                 ])
                 ->sortBy('label')
                 ->values(),
+            'athleteOptions' => SportRosterMember::query()
+                ->whereHas('meetSport', fn ($meetSports) => $meetSports->where('meet_id', Meet::current()->id))
+                ->when($isTournamentScoped, fn ($members) => $members->whereHas(
+                    'meetSport.sport.events', fn ($events) => $events->whereIn('events.id', $visibleEventIds),
+                ))
+                ->when($user->role === UserRole::Coach, fn ($members) => $members->whereIn('delegation_id', $coachDelegationIds))
+                ->with(['athlete.school', 'meetSport:id,sport_id'])
+                ->get()
+                ->map(fn (SportRosterMember $member): array => [
+                    'id' => $member->athlete_id,
+                    'sport_id' => $member->meetSport->sport_id,
+                    'delegation_id' => $member->delegation_id,
+                    'label' => $member->athlete->fullName().' — '.$member->athlete->school->name,
+                ])->unique(fn (array $option): string => $option['id'].'-'.$option['sport_id'])->values(),
             'canManage' => $canManageAll || $canManageAssignedCompetition,
         ]);
     }
@@ -211,6 +254,7 @@ class MatchController extends Controller
         $this->assertMatchIsValid($data);
 
         $match = EventMatch::create($data);
+        $this->ensureParticipantSlots($match);
 
         $this->audit->record('match.created', $match, $this->context($match));
 
@@ -249,11 +293,14 @@ class MatchController extends Controller
     public function syncParticipants(Request $request, EventMatch $match): RedirectResponse
     {
         $match->loadMissing('event');
-        $this->authorizeManage($request, $match->event_id);
+        $this->authorizeParticipantManagement($request, $match);
 
         $validated = $request->validate([
             'entry_ids' => ['array'],
             'entry_ids.*' => ['integer', 'distinct', Rule::exists('entries', 'id')],
+            'slot_assignments' => ['array'],
+            'slot_assignments.*.slot_id' => ['required', 'integer', 'distinct', Rule::exists('match_participant_slots', 'id')],
+            'slot_assignments.*.athlete_id' => ['nullable', 'integer', Rule::exists('athletes', 'id')],
         ]);
 
         if ($match->status !== MatchStatus::Scheduled) {
@@ -267,6 +314,10 @@ class MatchController extends Controller
 
         /** @var array<int, int> $entryIds */
         $entryIds = $validated['entry_ids'] ?? [];
+
+        if (array_key_exists('slot_assignments', $validated)) {
+            $entryIds = $this->assignParticipantSlots($match, $validated['slot_assignments'], $request->user());
+        }
 
         $entries = Entry::query()
             ->with(['athlete:id,first_name,last_name,school_id', 'delegation:id,meet_id'])
@@ -318,6 +369,121 @@ class MatchController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Match participants updated.')]);
 
         return back();
+    }
+
+    /** Participant assignment is also an operational duty of a Technical Official. */
+    private function authorizeParticipantManagement(Request $request, EventMatch $match): void
+    {
+        $user = $request->user();
+        if ($user->isAdmin()) {
+            return;
+        }
+
+        $access = app(CompetitionAccessService::class);
+        if ($user->role === UserRole::Coach && $user->approvedCoachEventIds()->contains($match->event_id)) {
+            return;
+        }
+
+        $hasOperationalRole = $access->hasAssignmentRole($user, [
+            ...$access->competitionManagerRoles(),
+            MeetSportAssignmentRole::TechnicalOfficial->value,
+        ], $match->meet_id) || $user->role === UserRole::TechnicalOfficial;
+
+        abort_unless($hasOperationalRole
+            && $access->canAccessEvent($user, $match->event, $match->meet_id), 403);
+    }
+
+    private function ensureParticipantSlots(EventMatch $match): void
+    {
+        $meetSportId = MeetSport::query()->where('meet_id', $match->meet_id)
+            ->where('sport_id', $match->event->sport_id)->value('id');
+        $delegationIds = SportRosterMember::query()
+            ->when($meetSportId !== null, fn ($members) => $members->where('meet_sport_id', $meetSportId), fn ($members) => $members->whereRaw('1 = 0'))
+            ->distinct()->pluck('delegation_id')
+            ->merge(Entry::query()->where('event_id', $match->event_id)
+                ->where('status', '!=', EntryStatus::Withdrawn->value)
+                ->pluck('delegation_id'))
+            ->unique();
+        $configuredCount = max(1, (int) $match->event->max_entries_per_delegation);
+        foreach ($delegationIds as $delegationId) {
+            $entries = Entry::query()
+                ->where('event_id', $match->event_id)
+                ->where('delegation_id', $delegationId)
+                ->where('status', '!=', EntryStatus::Withdrawn->value)
+                ->orderByRaw("CASE WHEN status = ? THEN 0 ELSE 1 END", [EntryStatus::Confirmed->value])
+                ->orderBy('id')
+                ->get();
+            $count = max($configuredCount, $entries->count());
+
+            for ($position = 1; $position <= $count; $position++) {
+                MatchParticipantSlot::query()->firstOrCreate([
+                    'match_id' => $match->id,
+                    'delegation_id' => $delegationId,
+                    'position' => $position,
+                ]);
+            }
+
+            // Existing event registrations are the source of truth for
+            // pre-filling a delegation's match slots. Preserve explicit
+            // choices and distribute the remaining entries into empty slots.
+            $slots = MatchParticipantSlot::query()->where('match_id', $match->id)
+                ->where('delegation_id', $delegationId)->orderBy('position')->get();
+            $assignedIds = $slots->pluck('entry_id')->filter();
+            $availableEntries = $entries->whereNotIn('id', $assignedIds)->values();
+            foreach ($slots->whereNull('entry_id')->values() as $index => $slot) {
+                $entry = $availableEntries->get($index);
+                if ($entry === null) {
+                    break;
+                }
+                $entry->forceFill(['status' => EntryStatus::Confirmed->value])->save();
+                $slot->update(['entry_id' => $entry->id]);
+            }
+        }
+
+        $match->entries()->syncWithoutDetaching(
+            $match->participantSlots()->whereNotNull('entry_id')->pluck('entry_id')->all(),
+        );
+    }
+
+    /** @return array<int, int> */
+    private function assignParticipantSlots(EventMatch $match, array $assignments, User $user): array
+    {
+        $entryIds = [];
+        foreach ($assignments as $assignment) {
+            $slot = MatchParticipantSlot::query()->where('match_id', $match->id)
+                ->findOrFail($assignment['slot_id']);
+            if ($user->role === UserRole::Coach && ! $user->approvedCoachDelegationIds()->contains($slot->delegation_id)) {
+                abort(403);
+            }
+            $athleteId = $assignment['athlete_id'] ?? null;
+            if ($athleteId === null) {
+                $slot->update(['entry_id' => null]);
+                continue;
+            }
+            $athlete = Athlete::query()->whereKey($athleteId)
+                ->where('delegation_id', $slot->delegation_id)->firstOrFail();
+            $isOnSportRoster = SportRosterMember::query()
+                ->where('athlete_id', $athlete->id)
+                ->where('delegation_id', $slot->delegation_id)
+                ->whereHas('meetSport', fn ($meetSports) => $meetSports
+                    ->where('meet_id', $match->meet_id)
+                    ->where('sport_id', $match->event->sport_id))
+                ->exists();
+            if (! $isOnSportRoster) {
+                throw ValidationException::withMessages([
+                    'slot_assignments' => __('The selected athlete is not on this delegation’s roster for the match sport.'),
+                ]);
+            }
+            $entry = Entry::query()->firstOrCreate([
+                'athlete_id' => $athlete->id,
+                'event_id' => $match->event_id,
+            ], ['delegation_id' => $slot->delegation_id]);
+            $entry->forceFill(['status' => EntryStatus::Confirmed->value])->save();
+            $slot->update(['entry_id' => $entry->id]);
+            $entryIds[] = $entry->id;
+        }
+
+        return $entryIds;
     }
 
     /**

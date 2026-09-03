@@ -165,6 +165,7 @@ class ScheduleController extends Controller
                         ->where('area_type', $assignment->playing_area_type)
                         ->where('status', '!=', 'unavailable')
                         ->pluck('id')
+                        ->take(max(1, $assignment->playing_area_count))
                         ->values();
 
                     return [
@@ -173,7 +174,7 @@ class ScheduleController extends Controller
                         'sport_category_id' => null,
                         'label' => $assignment->venue->name,
                         'playing_area_type' => $assignment->playing_area_type,
-                        'playing_area_count' => max($assignment->playing_area_count, $areaIds->count()),
+                        'playing_area_count' => $assignment->playing_area_count,
                         'competition_area_ids' => $areaIds,
                     ];
                 });

@@ -1157,7 +1157,7 @@ test('the live payload resolves each corner\'s athlete and sports photo for a tw
 
     expect($payload['side_a_athlete'])->toBe([
         'name' => $entryA->athlete->fullName(),
-        'sports_photo_url' => route('athletes.sports-photo', $entryA->athlete),
+        'sports_photo_url' => route('athletes.sports-photo', $entryA->athlete).'?v='.$sportsPhoto->id,
     ])->and($payload['side_b_athlete'])->toBe([
         'name' => $entryB->athlete->fullName(),
         'sports_photo_url' => null,

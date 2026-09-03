@@ -60,7 +60,7 @@ test('manual results inherit their completed scheduled competition context', fun
     expect(AuditLog::query()->where('action', 'result.manually_entered')->exists())->toBeTrue();
 });
 
-test('results reject unscheduled incomplete or foreign participants', function () {
+test('results reject incomplete matches or foreign participants', function () {
     $fixture = alignedCompetition();
     $fixture['match']->forceFill(['status' => MatchStatus::Scheduled])->save();
     $user = User::factory()->admin()->create();
@@ -76,6 +76,25 @@ test('results reject unscheduled incomplete or foreign participants', function (
         'match_id' => $fixture['match']->id,
         'placements' => [['entry_id' => $foreign->id, 'rank' => 1]],
     ])->assertSessionHasErrors('placements');
+});
+
+test('a completed non-scheduled match accepts a manual result', function () {
+    $fixture = alignedCompetition();
+    $fixture['match']->forceFill(['event_schedule_id' => null])->save();
+
+    $this->actingAs(User::factory()->admin()->create())->post('/results', [
+        'match_id' => $fixture['match']->id,
+        'placements' => [
+            ['entry_id' => $fixture['entries'][0]->id, 'rank' => 1],
+            ['entry_id' => $fixture['entries'][1]->id, 'rank' => 2],
+        ],
+    ])->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('event_results', [
+        'match_id' => $fixture['match']->id,
+        'event_schedule_id' => null,
+        'result_source' => 'manual',
+    ]);
 });
 
 test('only one result can be entered for a scheduled competition', function () {

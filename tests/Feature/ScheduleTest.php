@@ -159,7 +159,7 @@ test('the venue picker falls back to venues assigned to the event sport', functi
             ->where('venueOptions.0.playing_area_count', 2));
 });
 
-test('a configured events assigned venue overrides a submitted venue', function () {
+test('a configured event rejects a venue that was not nominated', function () {
     $input = validSlotInput();
     $assigned = Venue::factory()->create();
     EventVenue::create([
@@ -171,12 +171,9 @@ test('a configured events assigned venue overrides a submitted venue', function 
 
     $this->actingAs(User::factory()->admin()->create())
         ->post('/schedule', $input)
-        ->assertSessionHasNoErrors();
+        ->assertSessionHasErrors('venue_id');
 
-    $this->assertDatabaseHas('event_schedules', [
-        'event_id' => $input['event_id'],
-        'venue_id' => $assigned->id,
-    ]);
+    $this->assertDatabaseMissing('event_schedules', ['event_id' => $input['event_id']]);
 });
 
 test('a court or table must be selected when an event has multiple playing areas', function () {
@@ -304,7 +301,7 @@ test('different competition areas allow simultaneous slots', function () {
     expect(EventSchedule::where('competition_area_id', $courtTwo->id)->exists())->toBeTrue();
 });
 
-test('venue areas remain the scheduling source of truth when an event assignment count is stale', function () {
+test('an event exposes only its nominated number of venue areas', function () {
     $input = validSlotInput();
     $venue = Venue::query()->findOrFail($input['venue_id']);
     $fieldOne = CompetitionArea::create(['venue_id' => $venue->id, 'name' => 'Field 1', 'area_type' => 'field']);
@@ -318,18 +315,16 @@ test('venue areas remain the scheduling source of truth when an event assignment
 
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin)->get('/schedule')->assertInertia(fn (AssertableInertia $page) => $page
-        ->where('venueOptions.0.playing_area_count', 2)
-        ->where('venueOptions.0.competition_area_ids', [$fieldOne->id, $fieldTwo->id]));
+        ->where('venueOptions.0.playing_area_count', 1)
+        ->where('venueOptions.0.competition_area_ids', [$fieldOne->id]));
 
     $this->actingAs($admin)->post('/schedule', $input)
         ->assertSessionHasErrors('competition_area_id');
 
     $first = [...$input, 'competition_area_id' => $fieldOne->id];
-    $second = [...$input, 'competition_area_id' => $fieldTwo->id];
     $this->actingAs($admin)->post('/schedule', $first)->assertSessionHasNoErrors();
-    $this->actingAs($admin)->post('/schedule', $second)->assertSessionHasNoErrors();
 
-    expect(EventSchedule::query()->where('venue_id', $venue->id)->count())->toBe(2);
+    expect(EventSchedule::query()->where('venue_id', $venue->id)->count())->toBe(1);
 });
 
 test('back-to-back slots and other venues do not conflict', function () {

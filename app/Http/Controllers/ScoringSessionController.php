@@ -2424,7 +2424,7 @@ class ScoringSessionController extends Controller
      */
     private function authorizeView(Request $request, EventMatch $match): void
     {
-        abort_unless(ScoreboardType::supportsLiveSport($match->event->sport->name), 404);
+        abort_unless($this->supportsScoring($match), 404);
 
         /** @var User $user */
         $user = $request->user();
@@ -2463,7 +2463,7 @@ class ScoringSessionController extends Controller
      */
     private function canManage(User $user, EventMatch $match): bool
     {
-        if (! ScoreboardType::supportsLiveSport($match->event->sport->name)) {
+        if (! $this->supportsScoring($match)) {
             return false;
         }
 
@@ -2512,6 +2512,20 @@ class ScoringSessionController extends Controller
         $user = $request->user();
 
         abort_unless($this->canManage($user, $match), 403);
+    }
+
+    /**
+     * Dedicated production boards are supported by name. A legacy/custom
+     * sport may use Generic only when live scoring was explicitly enabled
+     * on that match; MatchRequest still prevents newly enabling unsupported
+     * sports through ordinary match management.
+     */
+    private function supportsScoring(EventMatch $match): bool
+    {
+        return ScoreboardType::supportsMatch(
+            $match->event->sport->name,
+            $match->live_scoring_enabled,
+        );
     }
 
     /**

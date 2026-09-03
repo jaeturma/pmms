@@ -86,6 +86,11 @@ class EventMatch extends Model
         return $this->belongsToMany(Entry::class, 'match_entries', 'match_id')->withTimestamps();
     }
 
+    public function participantSlots(): HasMany
+    {
+        return $this->hasMany(MatchParticipantSlot::class, 'match_id');
+    }
+
     /**
      * @return HasMany<ScoringSession, $this>
      */

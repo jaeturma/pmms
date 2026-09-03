@@ -249,6 +249,25 @@ test('a coach can edit an assigned athlete until accreditation is approved', fun
         ->assertForbidden();
 
     expect($athlete->fresh()->first_name)->toBe('BEFORE');
+
+    $existingAssignment = $coach->coachAssignmentRequests()->firstOrFail();
+    $additionalEvent = Event::factory()->create(['sport_id' => $existingAssignment->event->sport_id]);
+    $delegation->meet->events()->attach($additionalEvent);
+    CoachAssignmentRequest::query()->create([
+        'user_id' => $coach->id,
+        'delegation_id' => $delegation->id,
+        'school_id' => schoolForDelegation($delegation)->id,
+        'meet_sport_id' => $existingAssignment->meet_sport_id,
+        'event_id' => $additionalEvent->id,
+        'status' => 'approved',
+    ]);
+
+    $this->actingAs($coach)->put("/athletes/{$athlete->id}", [
+        'meet_sport_ids' => [$existingAssignment->meet_sport_id],
+        'event_ids' => [$additionalEvent->id],
+    ])->assertSessionHasNoErrors();
+
+    expect($athlete->entries()->pluck('event_id')->all())->toBe([$additionalEvent->id]);
 });
 
 test('a coach registers an athlete only in an assigned event with photos and accreditation documents', function () {
@@ -635,12 +654,19 @@ test('coaches and tournament ICT can replace athlete photos after identity appro
     ]);
 
     $this->actingAs($coach)->get("/athletes/{$athlete->id}/edit")
-        ->assertOk()->assertInertia(fn ($page) => $page->where('assetsOnly', true));
+        ->assertOk()->assertInertia(fn ($page) => $page
+            ->where('assignmentsOnly', true)
+            ->where('assetsOnly', false));
     $this->actingAs($coach)->put("/athletes/{$athlete->id}", [
         'photo' => UploadedFile::fake()->image('coach-photo.jpg'),
     ])->assertRedirect()->assertSessionDoesntHaveErrors();
     $coachPhotoId = $athlete->fresh()->photo_upload_id;
     expect($coachPhotoId)->not->toBeNull();
+    $expectedPhotoUrl = route('athletes.photo', $athlete).'?v='.$coachPhotoId;
+    $this->actingAs($coach)->get("/athletes/{$athlete->id}")
+        ->assertInertia(fn ($page) => $page->where('athlete.photo_url', $expectedPhotoUrl));
+    $photoResponse = $this->actingAs($coach)->get($expectedPhotoUrl)->assertOk();
+    expect($photoResponse->headers->get('Cache-Control'))->toContain('no-store');
 
     $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
     MeetSportAssignment::factory()->create([
@@ -658,7 +684,9 @@ test('coaches and tournament ICT can replace athlete photos after identity appro
     ]);
 
     $this->actingAs($ict)->get("/athletes/{$athlete->id}/edit")
-        ->assertOk()->assertInertia(fn ($page) => $page->where('assetsOnly', true));
+        ->assertOk()->assertInertia(fn ($page) => $page
+            ->where('assignmentsOnly', true)
+            ->where('assetsOnly', false));
     $this->actingAs($ict)->put("/athletes/{$athlete->id}", [
         'sports_photo' => UploadedFile::fake()->image('ict-photo.jpg'),
     ])->assertRedirect()->assertSessionDoesntHaveErrors();
@@ -743,6 +771,79 @@ test('tournament ICT can update an athlete coach delegation school and sport', f
         'delegation_id' => $targetDelegation->id,
         'event_id' => $event->id,
     ]);
+
+    $this->actingAs($ict)->put("/athletes/{$athlete->id}", [
+        'school_id' => $targetSchool->id,
+    ])->assertRedirect()->assertSessionDoesntHaveErrors();
+});
+
+test('tournament ICT can correct an approved coach school and district in assigned sport', function () {
+    $meet = Meet::factory()->create();
+    $sourceDistrict = District::factory()->create();
+    $targetDistrict = District::factory()->create();
+    $sourceSchool = School::factory()->create(['district_id' => $sourceDistrict->id, 'active' => true]);
+    $targetSchool = School::factory()->create(['district_id' => $targetDistrict->id, 'active' => true]);
+    $sourceDelegation = Delegation::factory()->create([
+        'meet_id' => $meet->id,
+        'school_id' => null,
+        'district_id' => $sourceDistrict->id,
+    ]);
+    $targetDelegation = Delegation::factory()->create([
+        'meet_id' => $meet->id,
+        'school_id' => null,
+        'district_id' => $targetDistrict->id,
+    ]);
+    $sport = Sport::factory()->create();
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $sport->id]);
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+    $meet->events()->attach($event);
+    $coach = User::factory()->coach()->create(['name' => 'Original Coach', 'email' => 'original@example.test']);
+    $onboarding = CoachOnboardingRequest::query()->create([
+        'user_id' => $coach->id,
+        'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $sourceDelegation->id,
+        'district_id' => $sourceDistrict->id,
+        'school_id' => $sourceSchool->id,
+        'status' => 'approved',
+    ]);
+    $assignment = CoachAssignmentRequest::query()->create([
+        'user_id' => $coach->id,
+        'meet_sport_id' => $meetSport->id,
+        'event_id' => $event->id,
+        'delegation_id' => $sourceDelegation->id,
+        'school_id' => $sourceSchool->id,
+        'status' => 'approved',
+    ]);
+    $personnel = Personnel::factory()->coach()->create([
+        'user_id' => $coach->id,
+        'delegation_id' => $sourceDelegation->id,
+        'school_id' => $sourceSchool->id,
+    ]);
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+    MeetSportAssignment::factory()->create([
+        'user_id' => $ict->id,
+        'meet_sport_id' => $meetSport->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($ict)->patch("/coach/onboarding-requests/{$onboarding->id}/information", [
+        'name' => 'Corrected Coach',
+        'email' => 'corrected@example.test',
+        'district_id' => $targetDistrict->id,
+        'school_id' => $targetSchool->id,
+    ])->assertRedirect()->assertSessionDoesntHaveErrors();
+
+    expect($onboarding->fresh())
+        ->district_id->toBe($targetDistrict->id)
+        ->school_id->toBe($targetSchool->id)
+        ->delegation_id->toBe($targetDelegation->id);
+    expect($assignment->fresh())
+        ->school_id->toBe($targetSchool->id)
+        ->delegation_id->toBe($targetDelegation->id);
+    expect($personnel->fresh())
+        ->school_id->toBe($targetSchool->id)
+        ->delegation_id->toBe($targetDelegation->id);
 });
 
 test('a coach can upload an eligibility document and it goes to pending', function () {
