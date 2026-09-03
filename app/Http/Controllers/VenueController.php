@@ -17,6 +17,7 @@ use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -160,25 +161,38 @@ class VenueController extends Controller
         return back();
     }
 
-    /**
-     * Delete a venue that no schedule references.
-     */
-    public function destroy(Venue $venue): RedirectResponse
+    /** Permanently delete a venue and its venue-specific configuration. */
+    public function destroy(Request $request, Venue $venue): RedirectResponse
     {
-        if ($venue->isInUse()) {
-            Inertia::flash('toast', [
-                'type' => 'error',
-                'message' => __('This venue is scheduled for events. Archive it instead.'),
-            ]);
+        abort_unless($request->user()->isAdmin(), 403);
+        $request->validate(['confirm' => ['required', 'accepted']]);
 
-            return back();
-        }
+        $name = $venue->name;
+        $removed = DB::transaction(function () use ($venue): array {
+            $counts = [
+                'schedules' => $venue->schedules()->count(),
+                'event_assignments' => $venue->eventAssignments()->count(),
+                'sport_assignments' => $venue->meetSportAssignments()->count(),
+                'coordinator_assignments' => $venue->gameCoordinatorAssignments()->count(),
+            ];
 
-        $venue->delete();
+            DB::table('sport_category_competition_areas')->where('venue_id', $venue->id)->delete();
+            $venue->schedules()->delete();
+            $venue->gameCoordinatorAssignments()->delete();
+            $venue->eventAssignments()->delete();
+            $venue->meetSportAssignments()->delete();
+            $venue->delete();
 
-        $this->audit->record('venue.deleted', $venue, ['name' => $venue->name]);
+            return $counts;
+        });
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Venue deleted.')]);
+        $this->audit->record('venue.permanently_deleted', null, [
+            'venue_id' => $venue->id,
+            'name' => $name,
+            ...$removed,
+        ]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Venue permanently removed.')]);
 
         return back();
     }

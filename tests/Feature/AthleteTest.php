@@ -1,9 +1,13 @@
 <?php
 
 use App\Enums\EligibilityDocumentType;
+use App\Enums\EligibilityStatus;
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\ManagementTeamMemberStatus;
 use App\Enums\ManagementTeamType;
 use App\Enums\RequirementStatus;
+use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Accreditation;
@@ -11,6 +15,7 @@ use App\Models\CoachAssignmentRequest;
 use App\Models\Delegation;
 use App\Models\District;
 use App\Models\EligibilityDocument;
+use App\Models\EligibilityReview;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\EventResult;
@@ -19,6 +24,7 @@ use App\Models\ManagementTeam;
 use App\Models\ManagementTeamMember;
 use App\Models\Meet;
 use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
 use App\Models\Personnel;
 use App\Models\ResultPlacement;
 use App\Models\School;
@@ -61,6 +67,55 @@ test('viewers have no access to athlete data', function () {
     $this->actingAs(User::factory()->create())
         ->get('/athletes')
         ->assertForbidden();
+});
+
+test('assigned tournament operations can manually approve an athlete with incomplete documents', function (MeetSportAssignmentRole $role) {
+    $athlete = Athlete::factory()->create();
+    $meetSport = MeetSport::factory()->create(['meet_id' => $athlete->delegation->meet_id]);
+    SportRosterMember::query()->create([
+        'athlete_id' => $athlete->id,
+        'delegation_id' => $athlete->delegation_id,
+        'meet_sport_id' => $meetSport->id,
+        'level' => $athlete->ageDivision(),
+        'gender' => $athlete->sex->value === 'male' ? 'boys' : 'girls',
+    ]);
+    $ict = User::factory()->create();
+    MeetSportAssignment::factory()->create([
+        'user_id' => $ict->id,
+        'meet_sport_id' => $meetSport->id,
+        'role' => $role,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($ict)->get("/athletes/{$athlete->id}")
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page->where('athlete.can_mark_eligible', true));
+
+    $this->actingAs($ict)->patch("/athletes/{$athlete->id}/eligibility")->assertRedirect();
+
+    $review = EligibilityReview::query()->where('athlete_id', $athlete->id)->sole();
+    expect($review->status)->toBe(EligibilityStatus::Approved)
+        ->and($review->reviewer_id)->toBe($ict->id)
+        ->and($review->remarks)->toContain('incomplete document')
+        ->and(AuditLog::query()->where('action', 'eligibility.approved')->latest('id')->firstOrFail()->context['source'])
+        ->toBe('tournament_operations_manual_override');
+
+    $this->actingAs($ict)->get("/athletes/{$athlete->id}")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('athlete.eligibility_status', 'Eligible — Incomplete documents')
+            ->where('athlete.eligibility_documents_incomplete', true)
+            ->where('athlete.can_mark_eligible', false));
+})->with([
+    'Tournament ICT' => MeetSportAssignmentRole::TournamentICT,
+    'Tournament Secretary' => MeetSportAssignmentRole::TournamentSecretary,
+]);
+
+test('unassigned ict cannot manually mark an athlete eligible', function () {
+    $athlete = Athlete::factory()->create();
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+
+    $this->actingAs($ict)->patch("/athletes/{$athlete->id}/eligibility")->assertForbidden();
+    expect(EligibilityReview::query()->where('athlete_id', $athlete->id)->exists())->toBeFalse();
 });
 
 test('athlete and coach names display in uppercase everywhere', function () {

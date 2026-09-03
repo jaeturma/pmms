@@ -304,6 +304,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('athletes/{athlete}/sports-photo', [AthleteController::class, 'sportsPhoto'])->name('athletes.sports-photo');
     Route::post('athletes', [AthleteController::class, 'store'])->name('athletes.store');
     Route::put('athletes/{athlete}', [AthleteController::class, 'update'])->name('athletes.update');
+    Route::patch('athletes/{athlete}/eligibility', [AthleteController::class, 'markEligible'])->name('athletes.eligibility.mark');
     Route::delete('athletes/{athlete}', [AthleteController::class, 'destroy'])->name('athletes.destroy');
     Route::patch('athletes/{athlete}/deletion-request/cancel', [AthleteController::class, 'cancelDeletionRequest'])->name('athletes.deletion-request.cancel');
     Route::delete('athletes/{athlete}/permanent', [AthleteController::class, 'forceDestroy'])->name('athletes.force-destroy');

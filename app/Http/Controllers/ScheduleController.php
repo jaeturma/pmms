@@ -106,7 +106,7 @@ class ScheduleController extends Controller
         $eventVenueAssignments = EventVenue::query()
             ->whereIn('event_id', $schedulableEvents->pluck('id'))
             ->whereHas('venue', fn ($venues) => $venues->where('active', true))
-            ->with('venue:id,name')
+            ->with(['venue:id,name', 'venue.competitionAreas:id,venue_id,area_type,status'])
             ->get()
             ->groupBy('event_id');
 
@@ -160,27 +160,41 @@ class ScheduleController extends Controller
             $directAssignments = $eventVenueAssignments->get($event->id, collect());
 
             if ($directAssignments->isNotEmpty()) {
-                return $directAssignments->map(fn (EventVenue $assignment): array => [
-                    'id' => $assignment->venue_id,
-                    'event_id' => $event->id,
-                    'sport_category_id' => null,
-                    'label' => $assignment->venue->name,
-                    'playing_area_type' => $assignment->playing_area_type,
-                    'playing_area_count' => $assignment->playing_area_count,
-                    'competition_area_ids' => [],
-                ]);
+                return $directAssignments->map(function (EventVenue $assignment) use ($event): array {
+                    $areaIds = $assignment->venue->competitionAreas
+                        ->where('area_type', $assignment->playing_area_type)
+                        ->where('status', '!=', 'unavailable')
+                        ->pluck('id')
+                        ->values();
+
+                    return [
+                        'id' => $assignment->venue_id,
+                        'event_id' => $event->id,
+                        'sport_category_id' => null,
+                        'label' => $assignment->venue->name,
+                        'playing_area_type' => $assignment->playing_area_type,
+                        'playing_area_count' => max($assignment->playing_area_count, $areaIds->count()),
+                        'competition_area_ids' => $areaIds,
+                    ];
+                });
             }
 
             return $sportVenueAssignments->get($event->sport_id, collect())
-                ->map(fn (MeetSportVenue $assignment): array => [
-                    'id' => $assignment->venue_id,
-                    'event_id' => $event->id,
-                    'sport_category_id' => null,
-                    'label' => $assignment->venue->name,
-                    'playing_area_type' => $assignment->venue->competitionAreas->first()?->area_type ?? 'venue',
-                    'playing_area_count' => $assignment->expected_area_count ?? 1,
-                    'competition_area_ids' => [],
-                ]);
+                ->map(function (MeetSportVenue $assignment) use ($event): array {
+                    $areas = $assignment->venue->competitionAreas->where('status', '!=', 'unavailable');
+                    $areaType = $areas->first()?->area_type ?? 'venue';
+                    $areaIds = $areas->where('area_type', $areaType)->pluck('id')->values();
+
+                    return [
+                        'id' => $assignment->venue_id,
+                        'event_id' => $event->id,
+                        'sport_category_id' => null,
+                        'label' => $assignment->venue->name,
+                        'playing_area_type' => $areaType,
+                        'playing_area_count' => max($assignment->expected_area_count ?? 1, $areaIds->count()),
+                        'competition_area_ids' => $areaIds,
+                    ];
+                });
         })->values();
 
         $slots = $query->paginate($this->registryPageSize)->withQueryString();

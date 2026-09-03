@@ -96,6 +96,7 @@ class AthleteController extends Controller
                 'delegation.school:id,name',
                 'delegation.district:id,name',
                 'eligibilityReview:id,athlete_id,status',
+                'eligibilityDocuments:id,athlete_id,document_type',
                 'accreditation:id,athlete_id',
                 'sportRosterMemberships.meetSport.sport:id,name',
                 'entries.event.sport:id,name',
@@ -213,7 +214,9 @@ class AthleteController extends Controller
                         ? __('Accredited')
                         : __('Not accredited'),
                     'eligibility_status' => match ($athlete->eligibilityReview?->status?->value) {
-                        'approved' => __('Eligible'),
+                        'approved' => $this->hasCompleteEligibilityDocuments($athlete)
+                            ? __('Eligible')
+                            : __('Eligible — Incomplete documents'),
                         'pending' => __('Review'),
                         'returned', 'rejected' => __('Disqualified'),
                         default => __('Pending'),
@@ -427,7 +430,14 @@ class AthleteController extends Controller
                 'accreditation_status' => $athlete->accreditation !== null
                     ? __('Accredited')
                     : ($athlete->eligibilityReview?->status->label() ?? __('Documents not submitted')),
+                'eligibility_status' => $athlete->eligibilityReview?->status === EligibilityStatus::Approved
+                    ? ($this->hasCompleteEligibilityDocuments($athlete)
+                        ? __('Eligible')
+                        : __('Eligible — Incomplete documents'))
+                    : ($athlete->eligibilityReview?->status->label() ?? __('Documents not submitted')),
+                'eligibility_documents_incomplete' => ! $this->hasCompleteEligibilityDocuments($athlete),
                 'can_update' => Gate::allows('update', $athlete),
+                'can_mark_eligible' => Gate::allows('markEligible', $athlete),
                 'documents' => $documents->map(fn (EligibilityDocument $document): array => [
                     'id' => $document->id,
                     'document' => $document->document_type->label(),
@@ -453,6 +463,35 @@ class AthleteController extends Controller
                 ])->values()->all(),
             ],
         ]);
+    }
+
+    /** Manually mark one athlete Eligible when the batch scan missed them. */
+    public function markEligible(Request $request, Athlete $athlete): RedirectResponse
+    {
+        Gate::authorize('markEligible', $athlete);
+
+        $this->eligibility->markEligibleManually($athlete, $request->user());
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => __('Athlete marked Eligible.'),
+        ]);
+
+        return back();
+    }
+
+    private function hasCompleteEligibilityDocuments(Athlete $athlete): bool
+    {
+        $athlete->loadMissing('eligibilityDocuments:id,athlete_id,document_type');
+        $uploadedTypes = $athlete->eligibilityDocuments
+            ->pluck('document_type')
+            ->map(fn (EligibilityDocumentType|string $type): string => $type instanceof EligibilityDocumentType
+                ? $type->value
+                : $type)
+            ->unique();
+
+        return collect(EligibilityDocumentType::qualificationRequirements())
+            ->every(fn (EligibilityDocumentType $type): bool => $uploadedTypes->contains($type->value));
     }
 
     /**

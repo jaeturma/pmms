@@ -133,6 +133,25 @@ class AthletePolicy
                 && $user->hasApprovedCoachScope($athlete->delegation));
     }
 
+    /** Assigned ICT/Secretary may manually approve an athlete missed by the batch scan. */
+    public function markEligible(User $user, Athlete $athlete): bool
+    {
+        return $this->isAssignedEligibilityOperator($user, $athlete)
+            && $this->isNotEligible($athlete);
+    }
+
+    private function isAssignedEligibilityOperator(User $user, Athlete $athlete): bool
+    {
+        return app(CompetitionAccessService::class)->hasAssignmentRole(
+            $user,
+            [
+                MeetSportAssignmentRole::TournamentICT->value,
+                MeetSportAssignmentRole::TournamentSecretary->value,
+            ],
+            $athlete->delegation->meet_id,
+        ) && app(CompetitionAccessService::class)->canAccessAthlete($user, $athlete);
+    }
+
     private function isNotEligible(Athlete $athlete): bool
     {
         return $athlete->eligibilityReview()->where('status', 'approved')->doesntExist();

@@ -751,12 +751,13 @@ export default function Venues({
                                                                     variant="destructive"
                                                                     size="sm"
                                                                 >
-                                                                    Delete
+                                                                    Remove
+                                                                    permanently
                                                                 </Button>
                                                             }
-                                                            title="Delete venue?"
-                                                            description="This permanently removes the venue. Only venues without scheduled events can be deleted."
-                                                            confirmLabel="Delete"
+                                                            title="Permanently remove venue?"
+                                                            description="This cannot be undone. Venue sport assignments, event assignments, coordinator assignments, competition areas, and scheduled slots will also be removed."
+                                                            confirmLabel="Remove permanently"
                                                             destructive
                                                             onConfirm={() =>
                                                                 router.delete(
@@ -764,6 +765,9 @@ export default function Venues({
                                                                         venue.id,
                                                                     ).url,
                                                                     {
+                                                                        data: {
+                                                                            confirm: true,
+                                                                        },
                                                                         preserveScroll: true,
                                                                     },
                                                                 )

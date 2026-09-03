@@ -151,10 +151,15 @@ class ScheduleRequest extends FormRequest
                 // without assignments retain legacy behavior until configured.
                 if (! $hasCategoryConfiguration && $venueAssignments->exists()) {
                     $assignment = (clone $venueAssignments)->where('venue_id', $venueId)->first();
+                    $availableAreaCount = $assignment === null ? 0 : CompetitionArea::query()
+                        ->where('venue_id', $venueId)
+                        ->where('area_type', $assignment->playing_area_type)
+                        ->where('status', '!=', 'unavailable')
+                        ->count();
 
                     if ($assignment === null) {
                         $validator->errors()->add('venue_id', __('That venue is not assigned to the selected event.'));
-                    } elseif ($assignment->playing_area_count > 1 && $areaId <= 0) {
+                    } elseif (max($assignment->playing_area_count, $availableAreaCount) > 1 && $areaId <= 0) {
                         $validator->errors()->add(
                             'competition_area_id',
                             __('Select a :area for this event.', ['area' => $assignment->playing_area_type]),
@@ -184,10 +189,14 @@ class ScheduleRequest extends FormRequest
                             ->where('sport_id', $event->sport_id)
                             ->where('active', true))
                         ->exists();
+                    $availableAreaCount = CompetitionArea::query()
+                        ->where('venue_id', $venueId)
+                        ->where('status', '!=', 'unavailable')
+                        ->count();
 
                     if ($sportHasAssignedVenues && $sportAssignment === null) {
                         $validator->errors()->add('venue_id', __('That venue is not assigned to the selected event\'s sport.'));
-                    } elseif (($sportAssignment?->expected_area_count ?? 1) > 1 && $areaId <= 0) {
+                    } elseif (max($sportAssignment?->expected_area_count ?? 1, $availableAreaCount) > 1 && $areaId <= 0) {
                         $validator->errors()->add('competition_area_id', __('Select a competition area for this venue.'));
                     }
                 }

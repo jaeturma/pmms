@@ -302,6 +302,34 @@ test('different competition areas allow simultaneous slots', function () {
     expect(EventSchedule::where('competition_area_id', $courtTwo->id)->exists())->toBeTrue();
 });
 
+test('venue areas remain the scheduling source of truth when an event assignment count is stale', function () {
+    $input = validSlotInput();
+    $venue = Venue::query()->findOrFail($input['venue_id']);
+    $fieldOne = CompetitionArea::create(['venue_id' => $venue->id, 'name' => 'Field 1', 'area_type' => 'field']);
+    $fieldTwo = CompetitionArea::create(['venue_id' => $venue->id, 'name' => 'Field 2', 'area_type' => 'field']);
+    EventVenue::create([
+        'event_id' => $input['event_id'],
+        'venue_id' => $venue->id,
+        'playing_area_type' => 'field',
+        'playing_area_count' => 1,
+    ]);
+
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin)->get('/schedule')->assertInertia(fn (AssertableInertia $page) => $page
+        ->where('venueOptions.0.playing_area_count', 2)
+        ->where('venueOptions.0.competition_area_ids', [$fieldOne->id, $fieldTwo->id]));
+
+    $this->actingAs($admin)->post('/schedule', $input)
+        ->assertSessionHasErrors('competition_area_id');
+
+    $first = [...$input, 'competition_area_id' => $fieldOne->id];
+    $second = [...$input, 'competition_area_id' => $fieldTwo->id];
+    $this->actingAs($admin)->post('/schedule', $first)->assertSessionHasNoErrors();
+    $this->actingAs($admin)->post('/schedule', $second)->assertSessionHasNoErrors();
+
+    expect(EventSchedule::query()->where('venue_id', $venue->id)->count())->toBe(2);
+});
+
 test('back-to-back slots and other venues do not conflict', function () {
     $venue = Venue::factory()->create();
     EventSchedule::factory()->create([
@@ -688,14 +716,15 @@ test('the schedule payload exposes the sport category label for the admin form',
             ->where('sportCategoryOptions.0.sport_id', $category->sport_id));
 });
 
-test('venues with schedule slots cannot be deleted', function () {
+test('an administrator can permanently remove a venue and its schedule slots', function () {
     $slot = EventSchedule::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())
-        ->delete("/venues/{$slot->venue_id}")
+        ->delete("/venues/{$slot->venue_id}", ['confirm' => true])
         ->assertRedirect();
 
-    $this->assertDatabaseHas('venues', ['id' => $slot->venue_id]);
+    $this->assertDatabaseMissing('venues', ['id' => $slot->venue_id]);
+    $this->assertDatabaseMissing('event_schedules', ['id' => $slot->id]);
 });
 
 test('a slot with no match exposes no live-scoreboard link', function () {

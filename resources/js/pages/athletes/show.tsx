@@ -1,4 +1,4 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import {
     ArrowLeft,
     CheckCircle2,
@@ -9,9 +9,10 @@ import {
     TriangleAlert,
 } from 'lucide-react';
 import { useState } from 'react';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { PageHeader } from '@/components/page-header';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Dialog,
@@ -47,7 +48,10 @@ type Athlete = {
     sports: string;
     events: string;
     accreditation_status: string;
+    eligibility_status: string;
+    eligibility_documents_incomplete: boolean;
     can_update: boolean;
+    can_mark_eligible: boolean;
     documents: Array<{
         id: number;
         document: string;
@@ -103,7 +107,7 @@ export default function AthleteShow({ athlete }: Props) {
         ['Events', athlete.events || 'Not assigned'],
         ['Coach', athlete.coach || 'Not assigned'],
         ['Delegation', athlete.delegation],
-        ['Eligibility Status', athlete.accreditation_status],
+        ['Eligibility Status', athlete.eligibility_status],
         ['School', athlete.school],
     ];
 
@@ -115,12 +119,32 @@ export default function AthleteShow({ athlete }: Props) {
                     title={fullName}
                     description="Athlete profile. Views of this page are audited."
                     actions={
-                        <Button variant="outline" asChild>
-                            <Link href={index().url}>
-                                <ArrowLeft />
-                                Back to athletes
-                            </Link>
-                        </Button>
+                        <div className="flex flex-wrap gap-2">
+                            {athlete.can_mark_eligible && (
+                                <ConfirmDialog
+                                    trigger={
+                                        <Button>
+                                            <CheckCircle2 />
+                                            Mark Eligible
+                                        </Button>
+                                    }
+                                    title="Mark this athlete Eligible?"
+                                    description="This manually approves the athlete even when required documents are missing. Incomplete uploads will remain clearly noted, and the action will be recorded in the audit log."
+                                    confirmLabel="Mark Eligible"
+                                    onConfirm={() =>
+                                        router.patch(
+                                            `/athletes/${athlete.id}/eligibility`,
+                                        )
+                                    }
+                                />
+                            )}
+                            <Button variant="outline" asChild>
+                                <Link href={index().url}>
+                                    <ArrowLeft />
+                                    Back to athletes
+                                </Link>
+                            </Button>
+                        </div>
                     }
                 />
 
@@ -163,6 +187,20 @@ export default function AthleteShow({ athlete }: Props) {
                                     ))}
                                 </dl>
                             </div>
+
+                            {athlete.eligibility_status.startsWith(
+                                'Eligible',
+                            ) &&
+                                athlete.eligibility_documents_incomplete && (
+                                    <div className="mt-4 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+                                        <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+                                        <span>
+                                            This athlete is Eligible by manual
+                                            ICT/Secretary approval, but required
+                                            document uploads are incomplete.
+                                        </span>
+                                    </div>
+                                )}
 
                             <div className="mt-6 overflow-hidden rounded-lg border">
                                 <Table>

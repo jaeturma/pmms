@@ -253,12 +253,22 @@ test('venues not in use can be deleted', function () {
     $venue = Venue::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())
-        ->delete("/venues/{$venue->id}")
+        ->delete("/venues/{$venue->id}", ['confirm' => true])
         ->assertRedirect();
 
     $this->assertDatabaseMissing('venues', ['id' => $venue->id]);
 
-    expect(AuditLog::query()->where('action', 'venue.deleted')->exists())->toBeTrue();
+    expect(AuditLog::query()->where('action', 'venue.permanently_deleted')->exists())->toBeTrue();
+});
+
+test('only an administrator can permanently remove a venue', function () {
+    $venue = Venue::factory()->create();
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->delete("/venues/{$venue->id}", ['confirm' => true])
+        ->assertForbidden();
+
+    $this->assertDatabaseHas('venues', ['id' => $venue->id]);
 });
 
 test('the venue registry can be searched by name and address', function () {
