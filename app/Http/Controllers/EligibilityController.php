@@ -21,6 +21,7 @@ use App\Models\TechnicalOfficialAccreditation;
 use App\Models\User;
 use App\Notifications\CoachEligibilityRemarksNotification;
 use App\Services\AthletePhotoService;
+use App\Services\AthleteEligibilityService;
 use App\Services\AuditLogger;
 use App\Services\CompetitionAccessService;
 use App\Services\Eligibility\AthleteEligibilityChecker;
@@ -47,6 +48,7 @@ class EligibilityController extends Controller
         private readonly AthletePhotoService $athletePhotos,
         private readonly AthleteEligibilityChecker $athleteChecker,
         private readonly TechnicalOfficialEligibilityChecker $officialChecker,
+        private readonly AthleteEligibilityService $eligibility,
     ) {}
 
     public function athleteChecker(Request $request): Response
@@ -457,7 +459,14 @@ class EligibilityController extends Controller
             ]);
         }
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Document uploaded.')]);
+        $becameEligible = $this->eligibility->markEligibleWhenComplete($athlete, $user);
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => $becameEligible
+                ? __('Document uploaded. All five requirements are attached, so the athlete is now Eligible.')
+                : __('Document uploaded.'),
+        ]);
 
         return back();
     }

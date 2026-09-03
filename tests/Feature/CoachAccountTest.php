@@ -284,7 +284,7 @@ test('a coach registers an athlete only in an assigned event with photos and acc
         ->and($athlete->eligibilityDocuments()->where('document_type', 'athlete_history')->count())->toBe(1)
         ->and($athlete->eligibilityDocuments()->where('document_type', 'form_10')->count())->toBe(2)
         ->and($athlete->eligibilityDocuments()->where('document_type', 'birth_certificate')->count())->toBe(2)
-        ->and($athlete->eligibilityReview?->status)->toBe(EligibilityStatus::Pending);
+        ->and($athlete->eligibilityReview?->status)->toBe(EligibilityStatus::Approved);
 
     $otherEvent = Event::factory()->create(['gender' => 'boys', 'age_division' => 'secondary']);
     $delegation->meet->events()->attach($otherEvent);
@@ -306,15 +306,14 @@ test('a coach registers an athlete only in an assigned event with photos and acc
     $this->actingAs($coach)->put("/athletes/{$athlete->id}", [
         'first_name' => 'Pedro Updated', 'last_name' => 'Santos', 'sex' => 'male',
         'birthdate' => now()->subYears(15)->toDateString(), 'lrn' => $athlete->lrn, 'grade_level' => 9,
-    ])->assertSessionHasNoErrors();
-    expect($athlete->fresh()->first_name)->toBe('PEDRO UPDATED');
+    ])->assertForbidden();
+    expect($athlete->fresh()->first_name)->toBe('ADMIN UPDATED');
 
     $photoUploadId = $athlete->photo_upload_id;
     $this->actingAs($coach)->delete("/athletes/{$athlete->id}")
-        ->assertRedirect()
-        ->assertSessionDoesntHaveErrors();
+        ->assertForbidden();
     $this->assertDatabaseHas('athletes', ['id' => $athlete->id, 'deleted_at' => null]);
-    $this->assertDatabaseHas('athletes', ['id' => $athlete->id, 'deletion_requested_by' => $coach->id]);
+    $this->assertDatabaseHas('athletes', ['id' => $athlete->id, 'deletion_requested_by' => null]);
     $this->assertDatabaseHas('file_uploads', ['id' => $photoUploadId]);
 });
 

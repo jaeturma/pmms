@@ -213,6 +213,8 @@ Route::middleware('throttle:60,1')->group(function () {
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::post('dashboard/eligibility/mark-complete', [DashboardController::class, 'markCompleteAthletesEligible'])
+        ->name('dashboard.eligibility.mark-complete');
     Route::post('coach/assignment-requests', [CoachAssignmentRequestController::class, 'store'])->name('coach.assignment-requests.store');
     Route::get('coach/assignment-requests', [CoachAssignmentRequestController::class, 'index'])->name('coach.assignment-requests.index');
     Route::patch('coach/assignment-requests/{coachAssignmentRequest}', [CoachAssignmentRequestController::class, 'review'])->name('coach.assignment-requests.review');

@@ -98,6 +98,7 @@ type Props = {
     events: Array<{ id: number; sport_id: number; name: string }>;
     assignmentsOnly: boolean;
     assetsOnly: boolean;
+    canReassignCoach: boolean;
     coachOptions: Array<{
         id: number;
         name: string;
@@ -113,6 +114,7 @@ export default function EditAthlete({
     events,
     assignmentsOnly,
     assetsOnly,
+    canReassignCoach,
     coachOptions,
 }: Props) {
     const form = useForm({
@@ -368,7 +370,7 @@ export default function EditAthlete({
 
                     {(!assetsOnly || assignmentsOnly) && (
                         <section className="content-start space-y-3 rounded-xl border p-4">
-                            {assignmentsOnly && (
+                            {canReassignCoach && (
                                 <Field
                                     label="Coach"
                                     error={form.errors.registered_by}

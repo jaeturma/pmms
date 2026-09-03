@@ -7,10 +7,12 @@ use App\Enums\RequirementStatus;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Accreditation;
+use App\Models\CoachAssignmentRequest;
 use App\Models\Delegation;
 use App\Models\District;
 use App\Models\EligibilityDocument;
 use App\Models\Entry;
+use App\Models\Event;
 use App\Models\EventResult;
 use App\Models\FileUpload;
 use App\Models\ManagementTeam;
@@ -224,7 +226,29 @@ test('active ICT team members can register athletes', function () {
 
 test('active ICT team members can open and update the full athlete editor', function () {
     $delegation = Delegation::factory()->create();
-    $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id, 'school_id' => schoolForDelegation($delegation)->id]);
+    $event = Event::factory()->create();
+    $delegation->meet->events()->attach($event);
+    $meetSport = MeetSport::factory()->create([
+        'meet_id' => $delegation->meet_id,
+        'sport_id' => $event->sport_id,
+    ]);
+    $originalCoach = User::factory()->coach()->create();
+    $replacementCoach = User::factory()->coach()->create();
+    foreach ([$originalCoach, $replacementCoach] as $coach) {
+        CoachAssignmentRequest::query()->create([
+            'user_id' => $coach->id,
+            'delegation_id' => $delegation->id,
+            'school_id' => schoolForDelegation($delegation)->id,
+            'meet_sport_id' => $meetSport->id,
+            'event_id' => $event->id,
+            'status' => 'approved',
+        ]);
+    }
+    $athlete = Athlete::factory()->create([
+        'delegation_id' => $delegation->id,
+        'school_id' => schoolForDelegation($delegation)->id,
+        'registered_by' => $originalCoach->id,
+    ]);
     $ict = User::factory()->create();
     $team = ManagementTeam::factory()->create(['team_type' => ManagementTeamType::ICT]);
     ManagementTeamMember::factory()->create([
@@ -234,14 +258,76 @@ test('active ICT team members can open and update the full athlete editor', func
 
     $this->actingAs($ict)->get("/athletes/{$athlete->id}/edit")
         ->assertOk()->assertInertia(fn (AssertableInertia $page) => $page
-        ->component('athletes/edit')->where('athlete.id', $athlete->id));
+        ->component('athletes/edit')
+        ->where('athlete.id', $athlete->id)
+        ->where('canReassignCoach', true)
+        ->has('coachOptions', 2));
 
     $this->actingAs($ict)->put("/athletes/{$athlete->id}", [
         ...validAthletePayload($delegation), 'first_name' => 'Updated',
-        'lrn' => $athlete->lrn, 'meet_sport_ids' => [], 'event_ids' => [],
+        'lrn' => $athlete->lrn, 'meet_sport_ids' => [$meetSport->id],
+        'event_ids' => [$event->id], 'registered_by' => $replacementCoach->id,
     ])->assertRedirect()->assertSessionDoesntHaveErrors();
 
-    expect($athlete->refresh()->first_name)->toBe('UPDATED');
+    expect($athlete->refresh()->first_name)->toBe('UPDATED')
+        ->and($athlete->registered_by)->toBe($replacementCoach->id);
+});
+
+test('administrators can replace an athletes delegation sports and events', function () {
+    $meet = Meet::factory()->create();
+    $sourceDelegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $targetDelegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $oldEvent = Event::factory()->create();
+    $newEvent = Event::factory()->create();
+    $meet->events()->attach([$oldEvent->id, $newEvent->id]);
+    $oldMeetSport = MeetSport::factory()->create([
+        'meet_id' => $meet->id,
+        'sport_id' => $oldEvent->sport_id,
+    ]);
+    $newMeetSport = MeetSport::factory()->create([
+        'meet_id' => $meet->id,
+        'sport_id' => $newEvent->sport_id,
+    ]);
+    $athlete = Athlete::factory()->create([
+        'delegation_id' => $sourceDelegation->id,
+        'school_id' => schoolForDelegation($sourceDelegation)->id,
+    ]);
+    Entry::factory()->create([
+        'athlete_id' => $athlete->id,
+        'delegation_id' => $sourceDelegation->id,
+        'event_id' => $oldEvent->id,
+    ]);
+    SportRosterMember::query()->create([
+        'athlete_id' => $athlete->id,
+        'delegation_id' => $sourceDelegation->id,
+        'meet_sport_id' => $oldMeetSport->id,
+        'level' => $athlete->ageDivision(),
+        'gender' => $athlete->sex->value === 'male' ? 'boys' : 'girls',
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put("/athletes/{$athlete->id}", [
+            ...validAthletePayload($targetDelegation),
+            'lrn' => $athlete->lrn,
+            'delegation_id' => $targetDelegation->id,
+            'school_id' => schoolForDelegation($targetDelegation)->id,
+            'meet_sport_ids' => [$newMeetSport->id],
+            'event_ids' => [$newEvent->id],
+        ])->assertRedirect()->assertSessionDoesntHaveErrors();
+
+    expect($athlete->fresh()->delegation_id)->toBe($targetDelegation->id)
+        ->and($athlete->entries()->pluck('event_id')->all())->toBe([$newEvent->id])
+        ->and($athlete->sportRosterMemberships()->pluck('meet_sport_id')->all())->toBe([$newMeetSport->id]);
+    $this->assertDatabaseHas('entries', [
+        'athlete_id' => $athlete->id,
+        'delegation_id' => $targetDelegation->id,
+        'event_id' => $newEvent->id,
+    ]);
+    $this->assertDatabaseHas('sport_roster_members', [
+        'athlete_id' => $athlete->id,
+        'delegation_id' => $targetDelegation->id,
+        'meet_sport_id' => $newMeetSport->id,
+    ]);
 });
 
 test('athlete registration lists every active school with its school id', function () {

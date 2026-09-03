@@ -25,6 +25,8 @@ use App\Models\Protest;
 use App\Models\User;
 use App\Services\MedalTallyService;
 use App\Services\MeetReadinessService;
+use App\Services\AthleteEligibilityService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
@@ -87,6 +89,7 @@ class DashboardController extends Controller
                     'sports_ready' => $data['summary']['sports_ready'], 'sports_total' => $data['summary']['sports_total'], 'events_ready' => $data['summary']['events_ready'], 'events_total' => $data['summary']['events_total'],
                     'athletes_eligible' => $data['summary']['athletes_eligible'], 'athletes_total' => $data['summary']['athletes_total']];
             })(),
+            'canMarkCompleteAthletesEligible' => $user->isAdmin() || $user->role === UserRole::TournamentICT,
             'stats' => [
                 [
                     'key' => 'athletes',
@@ -115,6 +118,47 @@ class DashboardController extends Controller
                 ])
                 ->values(),
         ]);
+    }
+
+    /**
+     * Repair existing registrations that already contain all five required
+     * attachments. New uploads are handled immediately by the same service.
+     */
+    public function markCompleteAthletesEligible(Request $request, AthleteEligibilityService $eligibility): RedirectResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+        abort_unless($user->isAdmin() || $user->role === UserRole::TournamentICT, 403);
+
+        $meet = Meet::current();
+        $query = Athlete::query()
+            ->whereHas('delegation', fn ($delegations) => $delegations->where('meet_id', $meet->id));
+
+        if ($user->role === UserRole::TournamentICT) {
+            $eventIds = $user->tournamentEventIds($meet->id);
+            $query->whereHas('entries', fn ($entries) => $entries->whereIn('event_id', $eventIds));
+        }
+
+        $processed = 0;
+        $marked = 0;
+        $query->orderBy('id')->chunkById(100, function ($athletes) use ($eligibility, $user, &$processed, &$marked): void {
+            foreach ($athletes as $athlete) {
+                $processed++;
+                if ($eligibility->markEligibleWhenComplete($athlete, $user)) {
+                    $marked++;
+                }
+            }
+        });
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => __('Eligibility scan complete: :marked athlete(s) marked Eligible out of :processed checked.', [
+                'marked' => $marked,
+                'processed' => $processed,
+            ]),
+        ]);
+
+        return back();
     }
 
     /** @return array{sports_count: int, events_count: int, rows: array<int, array<string, mixed>>} */

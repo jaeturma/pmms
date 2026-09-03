@@ -28,6 +28,7 @@ use App\Models\Sport;
 use App\Models\SportRosterMember;
 use App\Models\User;
 use App\Services\AthletePhotoService;
+use App\Services\AthleteEligibilityService;
 use App\Services\AthleteRegistrationScope;
 use App\Services\AthleteDeletionService;
 use App\Services\AuditLogger;
@@ -54,6 +55,7 @@ class AthleteController extends Controller
         private readonly AthletePhotoService $athletePhotos,
         private readonly AthleteDeletionService $athleteDeletion,
         private readonly AthleteRegistrationScope $registrationScope,
+        private readonly AthleteEligibilityService $eligibility,
     ) {}
 
     /**
@@ -285,6 +287,7 @@ class AthleteController extends Controller
         $schools = School::query()->where('active', true)->with(['district:id,name', 'schoolDistrict:id,name'])->orderBy('name')->get();
         $isTournamentIct = $this->isTournamentIct($request->user(), $athlete);
         $isCoach = $request->user()->role === UserRole::Coach;
+        $canReassignCoach = $isTournamentIct || $request->user()->canManageProductionAccounts();
         $allowedEventIds = $isTournamentIct
             ? app(CompetitionAccessService::class)->eventIds($request->user(), $athlete->delegation->meet_id)
             : ($isCoach ? $request->user()->approvedCoachEventIdsForDelegation($athlete->delegation) : null);
@@ -297,14 +300,14 @@ class AthleteController extends Controller
         $allowedSportIds = $allowedEventIds === null
             ? collect()
             : Event::query()->whereKey($allowedEventIds)->pluck('sport_id')->unique();
-        $coachOptions = $isTournamentIct
+        $coachOptions = $canReassignCoach
             ? User::query()->where('role', UserRole::Coach->value)
                 ->whereHas('coachAssignmentRequests', fn ($query) => $query
                     ->where('status', 'approved')->whereNull('ended_at')
                     ->whereIn('delegation_id', $delegations->modelKeys())
-                    ->where(fn ($scope) => $scope
+                    ->when($isTournamentIct, fn ($query) => $query->where(fn ($scope) => $scope
                         ->whereIn('event_id', $allowedEventIds)
-                        ->orWhereHas('meetSport', fn ($meetSport) => $meetSport->whereIn('sport_id', $allowedSportIds))))
+                        ->orWhereHas('meetSport', fn ($meetSport) => $meetSport->whereIn('sport_id', $allowedSportIds)))))
                 ->with(['coachAssignmentRequests' => fn ($query) => $query
                     ->where('status', 'approved')->whereNull('ended_at')
                     ->whereIn('delegation_id', $delegations->modelKeys())])
@@ -334,6 +337,7 @@ class AthleteController extends Controller
             'events' => $events->map(fn (Event $item) => ['id' => $item->id, 'sport_id' => $item->sport_id, 'name' => $item->sport->name.' — '.$item->name]),
             'assignmentsOnly' => $isTournamentIct && ! $request->user()->isAdmin() && ! $request->user()->canManageProductionAccounts(),
             'assetsOnly' => ! $canUpdateIdentity,
+            'canReassignCoach' => $canReassignCoach,
             'coachOptions' => $coachOptions->map(fn (User $coach) => [
                 'id' => $coach->id, 'name' => $coach->name,
                 'delegation_ids' => $coach->coachAssignmentRequests->pluck('delegation_id')->filter()->unique()->values(),
@@ -580,6 +584,8 @@ class AthleteController extends Controller
                 'meet_id' => $athlete->delegation->meet_id,
             ]);
 
+            $this->eligibility->markEligibleWhenComplete($athlete, $user);
+
             if ($meetSport !== null) {
                 SportRosterMember::query()->firstOrCreate([
                     'meet_sport_id' => $meetSport->id,
@@ -637,6 +643,7 @@ class AthleteController extends Controller
         $originalMeetId = $athlete->delegation->meet_id;
         $isTournamentIct = $this->isTournamentIct($user, $athlete);
         $isCoach = $user->role === UserRole::Coach;
+        $canReassignCoach = $isTournamentIct || $user->canManageProductionAccounts();
         $canManageAssignments = $isTournamentIct
             || ($canUpdateIdentity && ($user->isAdmin() || $user->canManageProductionAccounts() || $isCoach));
         $fileFields = ['photo', 'sports_photo', 'athlete_history', 'form_10', 'form_10_page_2', 'birth_certificate', 'birth_certificate_page_2', 'parental_consent', 'medical_certificate', 'meet_sport_ids', 'event_ids', 'registered_by'];
@@ -656,23 +663,30 @@ class AthleteController extends Controller
                 ? $request->input('meet_sport_ids', [])
                 : $athlete->sportRosterMemberships()->pluck('meet_sport_id'))
                 ->map(fn ($id) => (int) $id)->unique();
+
+            if ($canReassignCoach && $request->filled('registered_by')) {
+                $coach = User::query()->where('role', UserRole::Coach->value)
+                    ->findOrFail($request->integer('registered_by'));
+                $coachEventIds = $coach->approvedCoachEventIdsForDelegation($delegation);
+                $coachSportIds = Event::query()->whereKey($coachEventIds)->pluck('sport_id')->unique();
+                $selectedSportIds = MeetSport::query()->whereKey($meetSportIds)->pluck('sport_id')->unique();
+                if (! $coach->coachAssignmentRequests()->where('delegation_id', $delegation->id)
+                    ->where('status', 'approved')->whereNull('ended_at')->exists()
+                    || $eventIds->diff($coachEventIds)->isNotEmpty()
+                    || $selectedSportIds->diff($coachSportIds)->isNotEmpty()) {
+                    throw ValidationException::withMessages([
+                        'registered_by' => __('The selected Coach is not approved for this athlete’s delegation, sports, and events.'),
+                    ]);
+                }
+                $athlete->registered_by = $coach->id;
+            }
+
             if ($isTournamentIct) {
                 $allowedEventIds = app(CompetitionAccessService::class)->eventIds($user, $athlete->delegation->meet_id);
                 $allowedSportIds = Event::query()->whereKey($allowedEventIds)->pluck('sport_id')->unique();
                 if ($eventIds->diff($allowedEventIds)->isNotEmpty()
                     || MeetSport::query()->whereKey($meetSportIds)->whereNotIn('sport_id', $allowedSportIds)->exists()) {
                     throw ValidationException::withMessages(['event_ids' => __('Tournament ICT may only assign sports and events within their active scope.')]);
-                }
-                if ($request->filled('registered_by')) {
-                    $coach = User::query()->where('role', UserRole::Coach->value)->findOrFail($request->integer('registered_by'));
-                    $coachEventIds = $coach->approvedCoachEventIdsForDelegation($delegation);
-                    $coachSportIds = Event::query()->whereKey($coachEventIds)->pluck('sport_id')->unique();
-                    $selectedSportIds = MeetSport::query()->whereKey($meetSportIds)->pluck('sport_id')->unique();
-                    if ($eventIds->diff($coachEventIds)->isNotEmpty()
-                        || $selectedSportIds->diff($coachSportIds)->isNotEmpty()) {
-                        throw ValidationException::withMessages(['registered_by' => __('The selected Coach is not approved for this athlete’s assigned events.')]);
-                    }
-                    $athlete->registered_by = $coach->id;
                 }
                 $athlete->delegation_id = $delegation->id;
                 if ($request->filled('school_id')) {
@@ -782,6 +796,8 @@ class AthleteController extends Controller
                 'athlete_id' => $athlete->id,
                 'meet_id' => $athlete->delegation->meet_id,
             ]);
+
+            $this->eligibility->markEligibleWhenComplete($athlete, $user);
         }
 
         if ($oldPhoto !== null) {

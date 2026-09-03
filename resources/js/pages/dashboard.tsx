@@ -1,4 +1,4 @@
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     Activity,
     Award,
@@ -17,6 +17,7 @@ import {
     UsersRound,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { PublicAnnouncements } from '@/components/public-announcements';
@@ -26,6 +27,14 @@ import { StatCard } from '@/components/stat-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import {
     Table,
     TableBody,
@@ -147,6 +156,7 @@ type Props = {
         athletes_eligible: number;
         athletes_total: number;
     } | null;
+    canMarkCompleteAthletesEligible: boolean;
 };
 
 type SportsEventReport = {
@@ -905,6 +915,100 @@ function CoachDashboardCards({ data }: { data: CoachDashboard }) {
     );
 }
 
+function EligibilityScanButton() {
+    const [open, setOpen] = useState(false);
+    const [processing, setProcessing] = useState(false);
+    const [complete, setComplete] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    useEffect(
+        () => () => {
+            if (timer.current) clearInterval(timer.current);
+        },
+        [],
+    );
+
+    const run = () => {
+        setProcessing(true);
+        setComplete(false);
+        setProgress(5);
+        timer.current = setInterval(() => {
+            setProgress((value) => Math.min(value + 5, 90));
+        }, 180);
+
+        router.post(
+            '/dashboard/eligibility/mark-complete',
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setProgress(100);
+                    setComplete(true);
+                },
+                onFinish: () => {
+                    if (timer.current) clearInterval(timer.current);
+                    timer.current = null;
+                    setProcessing(false);
+                },
+            },
+        );
+    };
+
+    return (
+        <>
+            <Button variant="outline" onClick={() => setOpen(true)}>
+                <FileCheck className="size-4" aria-hidden="true" />
+                Mark complete athletes Eligible
+            </Button>
+            <Dialog open={open} onOpenChange={processing ? undefined : setOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Update athlete eligibility</DialogTitle>
+                        <DialogDescription>
+                            Scan registrations in your current meet scope.
+                            Athletes with all five required document types
+                            attached will be marked Eligible.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {(processing || complete) && (
+                        <div className="space-y-2" aria-live="polite">
+                            <div className="flex justify-between text-sm">
+                                <span>
+                                    {complete
+                                        ? 'Scan complete'
+                                        : 'Scanning athletes…'}
+                                </span>
+                                <span>{progress}%</span>
+                            </div>
+                            <div className="h-2 overflow-hidden rounded-full bg-muted">
+                                <div
+                                    className="h-full rounded-full bg-primary transition-[width] duration-200"
+                                    style={{ width: `${progress}%` }}
+                                />
+                            </div>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            disabled={processing}
+                            onClick={() => setOpen(false)}
+                        >
+                            {complete ? 'Close' : 'Cancel'}
+                        </Button>
+                        {!complete && (
+                            <Button disabled={processing} onClick={run}>
+                                {processing ? 'Scanning…' : 'Start scan'}
+                            </Button>
+                        )}
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </>
+    );
+}
+
 export default function Dashboard({
     currentMeet,
     operations,
@@ -914,6 +1018,7 @@ export default function Dashboard({
     stats,
     announcements,
     readiness,
+    canMarkCompleteAthletesEligible,
 }: Props) {
     return (
         <>
@@ -930,7 +1035,11 @@ export default function Dashboard({
                             : 'Overview of activity across the system.'
                     }
                     actions={
-                        coachDashboard ? <QuickActions compact /> : undefined
+                        coachDashboard ? (
+                            <QuickActions compact />
+                        ) : canMarkCompleteAthletesEligible ? (
+                            <EligibilityScanButton />
+                        ) : undefined
                     }
                 />
 

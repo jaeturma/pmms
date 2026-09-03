@@ -154,6 +154,67 @@ test('an officer upload creates a document and a pending review', function () {
         ->and(AuditLog::query()->where('action', 'eligibility.document_uploaded')->exists())->toBeTrue();
 });
 
+test('attaching the fifth required document automatically marks the athlete eligible', function () {
+    $delegation = Delegation::factory()->create();
+    $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);
+    $review = EligibilityReview::factory()->create([
+        'athlete_id' => $athlete->id,
+        'meet_id' => $delegation->meet_id,
+    ]);
+    $officer = eligibilityOfficerFor($delegation);
+
+    foreach (EligibilityDocumentType::qualificationRequirements() as $type) {
+        if ($type === EligibilityDocumentType::MedicalCertificate) {
+            continue;
+        }
+        EligibilityDocument::factory()->create([
+            'athlete_id' => $athlete->id,
+            'document_type' => $type,
+        ]);
+    }
+
+    $this->actingAs($officer)->post('/eligibility/documents', [
+        'athlete_id' => $athlete->id,
+        'document_type' => EligibilityDocumentType::MedicalCertificate->value,
+        'file' => UploadedFile::fake()->image('medical.jpg'),
+    ])->assertSessionHasNoErrors();
+
+    expect($review->fresh()->status)->toBe(EligibilityStatus::Approved)
+        ->and(AuditLog::query()
+            ->where('action', 'eligibility.approved')
+            ->where('context->source', 'all_required_documents_attached')
+            ->exists())->toBeTrue();
+});
+
+test('admin dashboard command marks existing complete registrations eligible', function () {
+    $athlete = Athlete::factory()->create();
+    $review = EligibilityReview::factory()->create([
+        'athlete_id' => $athlete->id,
+        'meet_id' => $athlete->delegation->meet_id,
+    ]);
+    createVerifiedQualificationDocuments($athlete);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post('/dashboard/eligibility/mark-complete')
+        ->assertRedirect();
+
+    expect($review->fresh()->status)->toBe(EligibilityStatus::Approved);
+});
+
+test('eligibility dashboard command is hidden from and forbidden to ordinary users', function () {
+    $viewer = User::factory()->create();
+
+    $this->actingAs($viewer)
+        ->get('/dashboard')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('canMarkCompleteAthletesEligible', false));
+
+    $this->actingAs($viewer)
+        ->post('/dashboard/eligibility/mark-complete')
+        ->assertForbidden();
+});
+
 test('an incomplete athlete remains in the DSAC queue with all five checklist requirements', function () {
     $athlete = Athlete::factory()->create();
     EligibilityReview::factory()->create([
