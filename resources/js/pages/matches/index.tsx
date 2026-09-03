@@ -72,6 +72,8 @@ type Match = {
     participants: Participant[];
     transitions: Transition[];
     is_scheduled: boolean;
+    can_delete: boolean;
+    can_remove: boolean;
 };
 
 type Option = { id: number; label: string };
@@ -626,30 +628,41 @@ export default function Matches({
                                                             />
                                                         ),
                                                     )}
-                                                    <ConfirmDialog
-                                                        trigger={
-                                                            <Button
-                                                                variant="destructive"
-                                                                size="sm"
-                                                            >
-                                                                Delete
-                                                            </Button>
-                                                        }
-                                                        title="Delete match?"
-                                                        description="This removes the match and its participant list."
-                                                        confirmLabel="Delete"
-                                                        destructive
-                                                        onConfirm={() =>
-                                                            router.delete(
-                                                                destroy(
-                                                                    match.id,
-                                                                ).url,
-                                                                {
-                                                                    preserveScroll: true,
-                                                                },
-                                                            )
-                                                        }
-                                                    />
+                                                    {match.can_delete ? (
+                                                        <ConfirmDialog
+                                                            trigger={
+                                                                <Button
+                                                                    variant="destructive"
+                                                                    size="sm"
+                                                                >
+                                                                    Delete
+                                                                </Button>
+                                                            }
+                                                            title="Delete match?"
+                                                            description="This removes the result-free match, scoring session, and participant list."
+                                                            confirmLabel="Delete"
+                                                            destructive
+                                                            onConfirm={() =>
+                                                                router.delete(
+                                                                    destroy(
+                                                                        match.id,
+                                                                    ).url,
+                                                                    {
+                                                                        preserveScroll: true,
+                                                                    },
+                                                                )
+                                                            }
+                                                        />
+                                                    ) : match.can_remove ? (
+                                                        <Button
+                                                            variant="destructive"
+                                                            size="sm"
+                                                            disabled
+                                                            title="An administrator must delete this match's result first."
+                                                        >
+                                                            Delete result first
+                                                        </Button>
+                                                    ) : null}
                                                 </div>
                                             </TableCell>
                                         )}

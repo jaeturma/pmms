@@ -11,6 +11,7 @@ use App\Models\District;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\EventMatch;
+use App\Models\EventResult;
 use App\Models\EventSchedule;
 use App\Models\Meet;
 use App\Models\MeetSport;
@@ -106,7 +107,7 @@ test('a tournament manager only sees matches for their managed sport, and can ma
     expect($otherSportMatch->id)->not->toBe($ownSportMatch->id);
 });
 
-test('assigned tournament management staff can create update and delete matches for their sport', function (MeetSportAssignmentRole $role, UserRole $userRole) {
+test('assigned tournament staff can create and update matches but only ICT can delete', function (MeetSportAssignmentRole $role, UserRole $userRole) {
     $meet = Meet::factory()->active()->create();
     $event = Event::factory()->create();
     $meet->events()->attach($event);
@@ -138,16 +139,21 @@ test('assigned tournament management staff can create update and delete matches 
 
     expect($match->fresh()->round_label)->toBe('Semifinal');
 
-    $this->actingAs($user)->delete("/matches/{$match->id}")
-        ->assertRedirect();
-    $this->assertDatabaseMissing('matches', ['id' => $match->id]);
+    $response = $this->actingAs($user)->delete("/matches/{$match->id}");
+    if ($role === MeetSportAssignmentRole::TournamentICT) {
+        $response->assertRedirect();
+        $this->assertDatabaseMissing('matches', ['id' => $match->id]);
+    } else {
+        $response->assertForbidden();
+        $this->assertDatabaseHas('matches', ['id' => $match->id]);
+    }
 })->with([
     'Tournament Manager' => [MeetSportAssignmentRole::TournamentManager, UserRole::TournamentManager],
     'Tournament Secretary' => [MeetSportAssignmentRole::TournamentSecretary, UserRole::TournamentSecretary],
     'Tournament ICT' => [MeetSportAssignmentRole::TournamentICT, UserRole::TournamentICT],
 ]);
 
-test('a tournament manager can create, update, participants, status, and delete a match in their managed sport', function () {
+test('a tournament manager can manage a match but cannot delete it', function () {
     $meet = Meet::factory()->active()->create();
     $event = Event::factory()->create();
     $meet->events()->attach($event);
@@ -197,9 +203,9 @@ test('a tournament manager can create, update, participants, status, and delete 
 
     $this->actingAs($manager)
         ->delete("/matches/{$match->id}")
-        ->assertRedirect();
+        ->assertForbidden();
 
-    $this->assertDatabaseMissing('matches', ['id' => $match->id]);
+    $this->assertDatabaseHas('matches', ['id' => $match->id]);
 });
 
 test('a tournament manager cannot create, update, or manage a match outside their managed sport', function () {
@@ -504,6 +510,39 @@ test('managers can update and delete matches with audit records', function () {
     $this->assertDatabaseMissing('matches', ['id' => $match->id]);
 
     expect(AuditLog::query()->where('action', 'match.deleted')->exists())->toBeTrue();
+});
+
+test('tournament ICT can delete a match only after an administrator removes its result', function () {
+    $match = EventMatch::factory()->create();
+    $meetSport = MeetSport::factory()->create([
+        'meet_id' => $match->meet_id,
+        'sport_id' => $match->event->sport_id,
+    ]);
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $ict->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+    $result = EventResult::factory()->create([
+        'meet_id' => $match->meet_id,
+        'event_id' => $match->event_id,
+        'match_id' => $match->id,
+        'result_scope' => 'match',
+    ]);
+
+    $this->actingAs($ict)->delete("/matches/{$match->id}")
+        ->assertSessionHasErrors('match');
+    $this->assertDatabaseHas('matches', ['id' => $match->id]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->delete("/results/{$result->id}")
+        ->assertSessionDoesntHaveErrors();
+    $this->actingAs($ict)->delete("/matches/{$match->id}")
+        ->assertSessionDoesntHaveErrors();
+
+    $this->assertDatabaseMissing('matches', ['id' => $match->id]);
 });
 
 test('entries that took part in a match cannot be deleted', function () {

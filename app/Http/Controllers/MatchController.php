@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\EntryStatus;
 use App\Enums\MatchStatus;
+use App\Enums\MeetSportAssignmentRole;
 use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\ScopesToAssignedSport;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
@@ -19,6 +20,7 @@ use App\Services\CompetitionAccessService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -70,6 +72,7 @@ class MatchController extends Controller
             ->with([
                 'event.sport:id,name',
                 'schedule.venue:id,name',
+                'result:id,match_id',
                 'entries.athlete:id,first_name,last_name,school_id',
                 'entries.athlete.school:id,name',
             ])
@@ -135,6 +138,8 @@ class MatchController extends Controller
                         $match->status->allowedTransitions(),
                     ),
                     'is_scheduled' => $match->status === MatchStatus::Scheduled,
+                    'can_remove' => $this->canRemoveMatch($user, $match),
+                    'can_delete' => $match->result === null && $this->canRemoveMatch($user, $match),
                 ]),
             'filters' => [
                 'event_id' => $eventId > 0 ? $eventId : null,
@@ -355,11 +360,22 @@ class MatchController extends Controller
     public function destroy(Request $request, EventMatch $match): RedirectResponse
     {
         $match->loadMissing('event');
-        $this->authorizeManage($request, $match->event_id);
+        /** @var User $user */
+        $user = $request->user();
+        abort_unless($this->canRemoveMatch($user, $match), 403);
+
+        if ($match->result()->exists()) {
+            throw ValidationException::withMessages([
+                'match' => __('This match has a result. An administrator must delete the result before the match can be removed.'),
+            ]);
+        }
 
         $context = $this->context($match);
 
-        $match->delete();
+        DB::transaction(function () use ($match): void {
+            $match->scoringSessions()->delete();
+            $match->delete();
+        }, 3);
 
         $this->audit->record('match.deleted', $match, $context);
 
@@ -399,6 +415,21 @@ class MatchController extends Controller
                 ),
             403,
         );
+    }
+
+    private function canRemoveMatch(User $user, EventMatch $match): bool
+    {
+        if ($user->isAdmin()) {
+            return true;
+        }
+
+        $access = app(CompetitionAccessService::class);
+
+        return $access->hasAssignmentRole(
+            $user,
+            [MeetSportAssignmentRole::TournamentICT->value],
+            $match->meet_id,
+        ) && $access->canAccessEvent($user, $match->event, $match->meet_id);
     }
 
     /**

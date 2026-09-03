@@ -16,6 +16,7 @@ use App\Models\Entry;
 use App\Models\Event;
 use App\Models\EventMatch;
 use App\Models\EventResult;
+use App\Models\FileUpload;
 use App\Models\Meet;
 use App\Models\ResultAttachment;
 use App\Models\ResultPlacement;
@@ -23,6 +24,7 @@ use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\CompetitionAccessService;
 use App\Services\CompetitionResultService;
+use App\Services\FileUploadService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -39,6 +41,7 @@ class ResultController extends Controller
     public function __construct(
         private readonly AuditLogger $audit,
         private readonly CompetitionResultService $competitionResults,
+        private readonly FileUploadService $uploads,
     ) {}
 
     /**
@@ -500,30 +503,27 @@ class ResultController extends Controller
         return back();
     }
 
-    /**
-     * Delete an unvalidated result (working data only).
-     */
+    /** Delete a result and every derived medal-tally award. Admin only. */
     public function destroy(Request $request, EventResult $result): RedirectResponse
     {
-        $this->authorizeManage($request, $result);
-
-        if ($result->isValidated()) {
-            Inertia::flash('toast', [
-                'type' => 'error',
-                'message' => __('Validated results cannot be deleted. Record a correction instead.'),
-            ]);
-
-            return back();
-        }
+        abort_unless($request->user()->isAdmin(), 403);
 
         $context = $this->context($result);
+        $attachmentUploadIds = $result->attachments()->pluck('file_upload_id');
 
-        $result->placements()->delete();
-        $result->delete();
+        DB::transaction(function () use ($result): void {
+            $result->medalAwards()->delete();
+            $result->attachments()->delete();
+            $result->placements()->delete();
+            $result->delete();
+        }, 3);
+
+        FileUpload::query()->whereIn('id', $attachmentUploadIds)->get()
+            ->each(fn (FileUpload $upload) => $this->uploads->delete($upload));
 
         $this->audit->record('result.deleted', $result, $context);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Result deleted.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Result and its medal tally awards deleted.')]);
 
         return back();
     }

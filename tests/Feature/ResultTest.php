@@ -17,6 +17,7 @@ use App\Models\EventSchedule;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
+use App\Models\MedalAward;
 use App\Models\ResultPlacement;
 use App\Models\School;
 use App\Models\ScoringSession;
@@ -413,9 +414,27 @@ test('encoded corrections are refused — editing is direct', function () {
         ->and(AuditLog::query()->where('action', 'result.corrected')->exists())->toBeFalse();
 });
 
-test('encoded results can be deleted; validated results cannot', function () {
+test('administrators can delete encoded and official results with their medal tally awards', function () {
     $encoded = EventResult::factory()->create();
     $validated = EventResult::factory()->validated()->create();
+    $entry = placeableEntry($validated->meet, $validated->event);
+    $placement = ResultPlacement::factory()->create([
+        'event_result_id' => $validated->id,
+        'entry_id' => $entry->id,
+        'rank' => 1,
+    ]);
+    $award = MedalAward::query()->create([
+        'event_result_id' => $validated->id,
+        'result_placement_id' => $placement->id,
+        'delegation_id' => $entry->delegation_id,
+        'school_id' => $entry->athlete->school_id,
+        'rank' => 1,
+        'medal_type' => 'gold',
+        'physical_quantity' => 1,
+        'tally_quantity' => 1,
+        'result_version' => 1,
+        'snapshotted_at' => now(),
+    ]);
 
     $admin = User::factory()->admin()->create();
 
@@ -431,7 +450,8 @@ test('encoded results can be deleted; validated results cannot', function () {
         ->delete("/results/{$validated->id}")
         ->assertRedirect();
 
-    $this->assertDatabaseHas('event_results', ['id' => $validated->id]);
+    $this->assertDatabaseMissing('event_results', ['id' => $validated->id]);
+    $this->assertDatabaseMissing('medal_awards', ['id' => $award->id]);
 });
 
 test('viewers and delegation officers cannot manage results', function (User $user) {
