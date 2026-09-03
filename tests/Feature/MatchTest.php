@@ -36,6 +36,35 @@ test('guests are redirected from the match list', function () {
     $this->get('/matches')->assertRedirect('/login');
 });
 
+test('live scoring can only be enabled for basketball softball baseball and boxing', function (string $sportName, bool $allowed) {
+    $meet = Meet::factory()->active()->create();
+    $sport = \App\Models\Sport::factory()->create(['name' => $sportName]);
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+    $meet->events()->attach($event);
+
+    $response = $this->actingAs(User::factory()->admin()->create())->post('/matches', [
+        'event_id' => $event->id,
+        'event_schedule_id' => null,
+        'round_label' => 'Final',
+        'sequence' => 1,
+        'live_scoring_enabled' => true,
+    ]);
+
+    if ($allowed) {
+        $response->assertSessionHasNoErrors();
+    } else {
+        $response->assertSessionHasErrors('live_scoring_enabled');
+        $this->assertDatabaseMissing('matches', ['event_id' => $event->id]);
+    }
+})->with([
+    'Basketball' => ['Basketball', true],
+    'Softball' => ['Softball', true],
+    'Baseball' => ['Baseball', true],
+    'Boxing' => ['Boxing', true],
+    'Volleyball' => ['Volleyball', false],
+    'Athletics' => ['Athletics', false],
+]);
+
 test('viewers cannot see matches; officers only their own delegation\'s', function () {
     $match = EventMatch::factory()->create();
     $entry = confirmedEntryFor($match);

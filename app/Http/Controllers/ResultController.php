@@ -189,7 +189,7 @@ class ResultController extends Controller
                         ->whereHas('managementTeam', fn ($team) => $team
                             ->where('meet_id', $result->meet_id)
                             ->where('source_code', 'EVENT_SECRETARIAT'))
-                        ->exists();
+                        ->exists() || $this->isAssignedTournamentSecretary($user, $result);
                     $attachment = $result->attachments
                         ->where('attachment_type', ResultAttachment::SIGNED_RESULT_FORM)
                         ->where('result_version', $result->version)
@@ -424,7 +424,7 @@ class ResultController extends Controller
             ->whereHas('managementTeam', fn ($team) => $team
                 ->where('meet_id', $result->meet_id)
                 ->where('source_code', 'EVENT_SECRETARIAT'))
-            ->exists(), 403);
+            ->exists() || $this->isAssignedTournamentSecretary($user, $result), 403);
 
         abort_unless($result->status === ResultStatus::Submitted, 422, 'Only a submitted result may be validated.');
 
@@ -445,7 +445,7 @@ class ResultController extends Controller
 
         $this->audit->record('result.validated', $result, $this->context($result));
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Result validated.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Result accepted and published as unofficial. The unofficial tally has been updated.')]);
 
         return back();
     }
@@ -503,19 +503,28 @@ class ResultController extends Controller
         return back();
     }
 
-    /** Delete a result and every derived medal-tally award. Admin only. */
+    /** Delete a result, its match and schedule, while retaining athletes and setup. */
     public function destroy(Request $request, EventResult $result): RedirectResponse
     {
         abort_unless($request->user()->isAdmin(), 403);
 
-        $context = $this->context($result);
+        $result->loadMissing('match', 'schedule');
+        $context = [...$this->context($result),
+            'match_id' => $result->match_id,
+            'event_schedule_id' => $result->event_schedule_id,
+        ];
         $attachmentUploadIds = $result->attachments()->pluck('file_upload_id');
 
         DB::transaction(function () use ($result): void {
+            $match = $result->match;
+            $schedule = $result->schedule;
             $result->medalAwards()->delete();
             $result->attachments()->delete();
             $result->placements()->delete();
             $result->delete();
+            $match?->scoringSessions()->delete();
+            $match?->delete();
+            $schedule?->delete();
         }, 3);
 
         FileUpload::query()->whereIn('id', $attachmentUploadIds)->get()
@@ -523,7 +532,7 @@ class ResultController extends Controller
 
         $this->audit->record('result.deleted', $result, $context);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Result and its medal tally awards deleted.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Result, related match, schedule, and tally contribution deleted. Athletes and competition setup were retained.')]);
 
         return back();
     }
@@ -737,6 +746,18 @@ class ResultController extends Controller
             $event->gender->label(),
             $event->age_division->label(),
         );
+    }
+
+    private function isAssignedTournamentSecretary(User $user, EventResult $result): bool
+    {
+        return $user->meetSportAssignments()
+            ->where('status', MeetSportAssignmentStatus::Active)
+            ->where('role', MeetSportAssignmentRole::TournamentSecretary->value)
+            ->whereHas('meetSport', fn ($meetSport) => $meetSport
+                ->where('meet_id', $result->meet_id)
+                ->where('sport_id', $result->event->sport_id))
+            ->exists()
+            && app(CompetitionAccessService::class)->canAccessEvent($user, $result->event, $result->meet_id);
     }
 
     /**

@@ -48,11 +48,11 @@ export default function PortalResults({
             <div className="flex flex-col gap-6">
                 <PortalHero
                     title="Results"
-                    description="Official, validated event results only."
+                    description="Accepted results are published as unofficial until final officialization."
                 />
 
                 <PortalSectionHeader
-                    title="Validated results"
+                    title="Published results"
                     action={
                         <div className="flex flex-wrap items-center gap-2">
                             <div className="relative">

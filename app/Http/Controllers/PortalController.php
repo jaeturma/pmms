@@ -7,6 +7,7 @@ use App\Enums\MatchStatus;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetStatus;
 use App\Enums\ResultStatus;
+use App\Enums\ScoreboardType;
 use App\Enums\ScoringSessionStatus;
 use App\Enums\SportPortalSlug;
 use App\Models\Announcement;
@@ -227,7 +228,7 @@ class PortalController extends Controller
 
         $results = EventResult::query()->real()
             ->where('meet_id', $meet->id)
-            ->where('status', ResultStatus::Official->value)
+            ->whereIn('status', [ResultStatus::Validated->value, ResultStatus::Official->value])
             ->when($sportId > 0, fn ($query) => $query->whereHas(
                 'event',
                 fn ($event) => $event->where('sport_id', $sportId),
@@ -424,7 +425,7 @@ class PortalController extends Controller
 
         $validatedResults = EventResult::query()->real()
             ->where('meet_id', $meet->id)
-            ->where('status', ResultStatus::Official->value)
+            ->whereIn('status', [ResultStatus::Validated->value, ResultStatus::Official->value])
             ->when(
                 $athleticsSportId !== null,
                 fn ($query) => $query->whereHas('event', fn ($event) => $event->where('sport_id', $athleticsSportId)),
@@ -519,6 +520,8 @@ class PortalController extends Controller
             ->with(['event.sport:id,name', 'schedule.venue:id,name'])
             ->findOrFail($match);
 
+        abort_unless(ScoreboardType::supportsLiveSport($match->event->sport->name), 404);
+
         $session = $match->scoringSessions()->latest('id')->first();
 
         return Inertia::render('portal/scoreboard', [
@@ -580,7 +583,7 @@ class PortalController extends Controller
     {
         $result = EventResult::query()->real()
             ->where('event_id', $match->event_id)
-            ->where('status', ResultStatus::Official->value)
+            ->whereIn('status', [ResultStatus::Validated->value, ResultStatus::Official->value])
             ->with([
                 'event.sport:id,name',
                 'placements' => fn ($placements) => $placements->orderBy('rank'),
@@ -890,7 +893,7 @@ class PortalController extends Controller
         $placements = ResultPlacement::query()
             ->whereHas('result', fn ($query) => $query
                 ->where('meet_id', $meet->id)
-                ->where('status', ResultStatus::Official->value))
+                ->whereIn('status', [ResultStatus::Validated->value, ResultStatus::Official->value]))
             ->where(function ($query) use ($term) {
                 $query->whereHas('entry.athlete', fn ($athlete) => $athlete
                     ->where('first_name', 'like', "%{$term}%")
@@ -1339,6 +1342,10 @@ class PortalController extends Controller
      */
     private function sportPortalLiveNow(Meet $meet, Sport $sport): array
     {
+        if (! ScoreboardType::supportsLiveSport($sport->name)) {
+            return [null, 0];
+        }
+
         $liveSessions = ScoringSession::query()
             ->where('status', '!=', ScoringSessionStatus::Ended->value)
             ->whereHas('match', fn ($query) => $query
@@ -1419,7 +1426,7 @@ class PortalController extends Controller
 
         $results = EventResult::query()->real()
             ->where('meet_id', $meet->id)
-            ->where('status', ResultStatus::Official->value)
+            ->whereIn('status', [ResultStatus::Validated->value, ResultStatus::Official->value])
             ->whereHas('event', fn ($query) => $query->where('sport_id', $sport->id))
             ->with([
                 'placements' => fn ($placements) => $placements->orderBy('rank')->limit(1),
@@ -1561,7 +1568,10 @@ class PortalController extends Controller
     {
         $meet = Meet::query()->published()->findOrFail($meet);
 
-        $match = EventMatch::query()->real()->where('meet_id', $meet->id)->findOrFail($match);
+        $match = EventMatch::query()->real()->where('meet_id', $meet->id)
+            ->with('event.sport:id,name')->findOrFail($match);
+
+        abort_unless(ScoreboardType::supportsLiveSport($match->event->sport->name), 404);
 
         $session = $match->scoringSessions()->latest('id')->first();
 
@@ -1606,7 +1616,7 @@ class PortalController extends Controller
     {
         return EventResult::query()->real()
             ->where('meet_id', $meet->id)
-            ->where('status', ResultStatus::Official->value)
+            ->whereIn('status', [ResultStatus::Validated->value, ResultStatus::Official->value])
             ->with('event.sport:id,name')
             ->get()
             ->map(fn (EventResult $result): array => [
@@ -1789,7 +1799,7 @@ class PortalController extends Controller
     {
         $result = EventResult::query()->real()
             ->where('meet_id', $meet->id)
-            ->where('status', ResultStatus::Official->value)
+            ->whereIn('status', [ResultStatus::Validated->value, ResultStatus::Official->value])
             ->with([
                 'event.sport:id,name',
                 'placements' => fn ($placements) => $placements->orderBy('rank')->limit(3),

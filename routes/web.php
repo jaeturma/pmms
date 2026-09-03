@@ -195,7 +195,7 @@ Route::middleware('throttle:60,1')->group(function () {
     // payload shape (`liveNow`/`otherLiveCount`) is identical.
     Route::get('live/{sportSlug}', [PortalController::class, 'liveSportPortal'])
         ->middleware('auth')
-        ->whereIn('sportSlug', SportPortalSlug::values())
+        ->whereIn('sportSlug', SportPortalSlug::liveScoreValues())
         ->name('public.live-sport-portal');
 
     // Phase 12: permanent, meet-agnostic sport-portal routes

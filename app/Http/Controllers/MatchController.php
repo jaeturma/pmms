@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\EntryStatus;
 use App\Enums\MatchStatus;
+use App\Enums\ScoreboardType;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\ScopesToAssignedSport;
@@ -111,6 +112,7 @@ class MatchController extends Controller
                     'sequence' => $match->sequence,
                     'competition_area' => $match->competition_area,
                     'live_scoring_enabled' => $match->live_scoring_enabled,
+                    'live_score_available' => ScoreboardType::supportsLiveSport($match->event->sport->name),
                     'awards_medals' => $match->awards_medals,
                     'status' => $match->status->value,
                     'status_label' => $match->status->label(),
@@ -152,6 +154,7 @@ class MatchController extends Controller
                 ->map(fn (Event $event): array => [
                     'id' => $event->id,
                     'label' => $this->eventLabel($event),
+                    'live_score_available' => ScoreboardType::supportsLiveSport($event->sport->name),
                 ])
                 ->values(),
             'scheduleOptions' => EventSchedule::query()->real()

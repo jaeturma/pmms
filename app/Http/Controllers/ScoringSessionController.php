@@ -2428,6 +2428,8 @@ class ScoringSessionController extends Controller
      */
     private function authorizeView(Request $request, EventMatch $match): void
     {
+        abort_unless(ScoreboardType::supportsLiveSport($match->event->sport->name), 404);
+
         /** @var User $user */
         $user = $request->user();
 
@@ -2465,6 +2467,10 @@ class ScoringSessionController extends Controller
      */
     private function canManage(User $user, EventMatch $match): bool
     {
+        if (! ScoreboardType::supportsLiveSport($match->event->sport->name)) {
+            return false;
+        }
+
         if ($match->demo_scenario_id !== null && $user->hasPermission(Permission::DemoManage)) {
             return true;
         }

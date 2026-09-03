@@ -454,6 +454,44 @@ test('administrators can delete encoded and official results with their medal ta
     $this->assertDatabaseMissing('medal_awards', ['id' => $award->id]);
 });
 
+test('administrator result deletion cascades to its match and schedule but retains athletes and setup', function () {
+    $meet = Meet::factory()->active()->create();
+    $event = Event::factory()->create();
+    $meet->events()->attach($event);
+    $schedule = EventSchedule::factory()->create([
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+    ]);
+    $match = EventMatch::factory()->create([
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+        'event_schedule_id' => $schedule->id,
+    ]);
+    $entry = placeableEntry($meet, $event);
+    $match->entries()->attach($entry);
+    $result = EventResult::factory()->create([
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+        'match_id' => $match->id,
+        'event_schedule_id' => $schedule->id,
+        'result_scope' => 'match',
+    ]);
+    ResultPlacement::factory()->create([
+        'event_result_id' => $result->id,
+        'entry_id' => $entry->id,
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->delete("/results/{$result->id}")
+        ->assertRedirect();
+
+    $this->assertDatabaseMissing('event_results', ['id' => $result->id]);
+    $this->assertDatabaseMissing('matches', ['id' => $match->id]);
+    $this->assertDatabaseMissing('event_schedules', ['id' => $schedule->id]);
+    $this->assertDatabaseHas('athletes', ['id' => $entry->athlete_id]);
+    $this->assertDatabaseHas('events', ['id' => $event->id]);
+});
+
 test('viewers and delegation officers cannot manage results', function (User $user) {
     $result = EventResult::factory()->create();
 
@@ -465,7 +503,7 @@ test('viewers and delegation officers cannot manage results', function (User $us
     'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
 ]);
 
-test('a tournament secretary or ICT can encode and update a result for their own sport, but not validate, correct, or delete it', function (MeetSportAssignmentRole $role, UserRole $userRole) {
+test('a tournament secretary can accept a scoped result while ICT cannot validate it', function (MeetSportAssignmentRole $role, UserRole $userRole) {
     ['meet' => $meet, 'event' => $event, 'match' => $match, 'entries' => $entries] = resultFixture();
 
     $official = User::factory()->create(['role' => $userRole]);
@@ -507,7 +545,14 @@ test('a tournament secretary or ICT can encode and update a result for their own
         ->assertRedirect()
         ->assertSessionHasNoErrors();
 
-    $this->actingAs($official)->patch("/results/{$result->id}/validate")->assertForbidden();
+    $result->forceFill(['status' => ResultStatus::Submitted])->save();
+    $validation = $this->actingAs($official)->patch("/results/{$result->id}/validate");
+    if ($role === MeetSportAssignmentRole::TournamentSecretary) {
+        $validation->assertRedirect()->assertSessionHasNoErrors();
+        expect($result->fresh()->status)->toBe(ResultStatus::Validated);
+    } else {
+        $validation->assertForbidden();
+    }
     $this->actingAs($official)->patch("/results/{$result->id}/correct", ['reason' => 'needs a second look'])->assertForbidden();
     $this->actingAs($official)->delete("/results/{$result->id}")->assertForbidden();
 })->with([

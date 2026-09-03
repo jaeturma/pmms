@@ -56,6 +56,7 @@ type ScheduleSlot = {
     note: string | null;
     match_id: number | null;
     is_live: boolean;
+    live_score_available: boolean;
     can_manage: boolean;
 };
 
@@ -494,7 +495,8 @@ export default function Schedule({
                                             {slot.note ?? '—'}
                                         </TableCell>
                                         <TableCell>
-                                            {slot.match_id ? (
+                                            {slot.match_id &&
+                                                slot.live_score_available ? (
                                                 <div className="flex items-center gap-2">
                                                     {slot.is_live && (
                                                         <Badge

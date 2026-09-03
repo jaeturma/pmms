@@ -335,12 +335,25 @@ class ResultWorkflowController extends Controller
 
     private function isEventSecretariat(User $user, EventResult $result): bool
     {
-        return $user->managementTeamMemberships()
+        $isCentralSecretariat = $user->managementTeamMemberships()
             ->where('status', ManagementTeamMemberStatus::Active)
             ->whereHas('managementTeam', fn ($query) => $query
                 ->where('meet_id', $result->meet_id)
                 ->where('source_code', 'EVENT_SECRETARIAT'))
             ->exists();
+
+        if ($isCentralSecretariat) {
+            return true;
+        }
+
+        return $user->meetSportAssignments()
+            ->where('status', MeetSportAssignmentStatus::Active)
+            ->where('role', MeetSportAssignmentRole::TournamentSecretary->value)
+            ->whereHas('meetSport', fn ($meetSport) => $meetSport
+                ->where('meet_id', $result->meet_id)
+                ->where('sport_id', $result->event->sport_id))
+            ->exists()
+            && app(CompetitionAccessService::class)->canAccessEvent($user, $result->event, $result->meet_id);
     }
 
     private function context(EventResult $result): array

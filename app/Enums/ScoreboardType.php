@@ -23,6 +23,14 @@ enum ScoreboardType: string
     case Billiard = 'billiard';
     case Bocce = 'bocce';
 
+    /** Live scoreboards are intentionally limited to these four sports. */
+    public static function supportsLiveSport(?string $sportName): bool
+    {
+        return in_array(mb_strtolower(trim((string) $sportName)), [
+            'basketball', 'softball', 'baseball', 'boxing',
+        ], true);
+    }
+
     public static function forSport(?string $sportName): self
     {
         return match (mb_strtolower((string) $sportName)) {

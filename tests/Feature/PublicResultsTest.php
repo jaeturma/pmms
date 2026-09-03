@@ -37,6 +37,21 @@ test('guests can view validated results of a published meet', function () {
             ->where('results.0.placements.0.mark', '11.2s'));
 });
 
+test('secretariat accepted results are published as unofficial', function () {
+    $meet = Meet::factory()->active()->published()->create();
+    $result = EventResult::factory()->create([
+        'meet_id' => $meet->id,
+        'status' => ResultStatus::Validated,
+        'validated_at' => now(),
+    ]);
+    ResultPlacement::factory()->create(['event_result_id' => $result->id, 'rank' => 1]);
+
+    $this->get("/meets/{$meet->id}/results")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('results', 1)
+            ->where('results.0.id', $result->id));
+});
+
 test('unpublished meets have no public results page', function () {
     $meet = Meet::factory()->active()->create();
     EventResult::factory()->validated()->create(['meet_id' => $meet->id]);

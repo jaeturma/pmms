@@ -113,4 +113,15 @@ enum SportPortalSlug: string
     {
         return array_column(self::cases(), 'value');
     }
+
+    /** @return list<string> */
+    public static function liveScoreValues(): array
+    {
+        return [
+            self::Basketball->value,
+            self::Softball->value,
+            self::Baseball->value,
+            self::Boxing->value,
+        ];
+    }
 }

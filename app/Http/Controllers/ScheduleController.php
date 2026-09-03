@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\MeetStatus;
+use App\Enums\ScoreboardType;
 use App\Enums\ScoringSessionStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\ScopesToAssignedSport;
@@ -214,6 +215,7 @@ class ScheduleController extends Controller
                         'note' => $schedule->note,
                         'match_id' => $match?->id,
                         'is_live' => $match !== null && $match->scoringSessions->isNotEmpty(),
+                        'live_score_available' => ScoreboardType::supportsLiveSport($schedule->event->sport->name),
                         'can_manage' => $canManageAll
                             || ($canManageAssignedCompetition && $visibleEventIds->contains($schedule->event_id)),
                     ];

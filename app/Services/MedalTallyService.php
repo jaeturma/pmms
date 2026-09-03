@@ -47,7 +47,7 @@ class MedalTallyService
         $values = EventResult::query()
             ->real()
             ->where('meet_id', $meetId)
-            ->where('status', ResultStatus::Official->value)
+            ->whereIn('status', [ResultStatus::Validated->value, ResultStatus::Official->value])
             ->when($sportId !== null, fn ($query) => $query->whereHas('event', fn ($events) => $events->where('sport_id', $sportId)))
             ->with('event:id,age_division')
             ->get()
@@ -301,7 +301,7 @@ class MedalTallyService
             ->whereIn('rank', [1, 2, 3])
             ->whereHas('result', fn ($result) => $result
                 ->whereNull('demo_scenario_id')
-                ->where('status', ResultStatus::Official->value)
+                ->whereIn('status', [ResultStatus::Validated->value, ResultStatus::Official->value])
                 ->where(fn ($eligible) => $eligible
                     ->whereNull('match_id')
                     ->orWhereHas('match', fn ($match) => $match->where('awards_medals', true)))

@@ -68,6 +68,7 @@ type Match = {
     schedule_label: string | null;
     competition_area: string | null;
     live_scoring_enabled: boolean;
+    live_score_available: boolean;
     awards_medals: boolean;
     participants: Participant[];
     transitions: Transition[];
@@ -76,7 +77,7 @@ type Match = {
     can_remove: boolean;
 };
 
-type Option = { id: number; label: string };
+type Option = { id: number; label: string; live_score_available?: boolean };
 
 type ScheduleOption = Option & { event_id: number };
 
@@ -120,7 +121,9 @@ function MatchFormDialog({
             round_label: match?.round_label ?? '',
             sequence: match ? String(match.sequence) : '1',
             competition_area: match?.competition_area ?? '',
-            live_scoring_enabled: match?.live_scoring_enabled ?? false,
+            live_scoring_enabled: match?.live_score_available
+                ? match.live_scoring_enabled
+                : false,
             awards_medals: match?.awards_medals ?? false,
         });
 
@@ -135,6 +138,9 @@ function MatchFormDialog({
     const slotOptions = scheduleOptions.filter(
         (option) => String(option.event_id) === data.event_id,
     );
+    const liveScoreAvailable =
+        eventOptions.find((option) => String(option.id) === data.event_id)
+            ?.live_score_available ?? false;
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -170,6 +176,13 @@ function MatchFormDialog({
                             onValueChange={(value) => {
                                 setData('event_id', value);
                                 setData('event_schedule_id', 'none');
+                                if (
+                                    !eventOptions.find(
+                                        (option) => String(option.id) === value,
+                                    )?.live_score_available
+                                ) {
+                                    setData('live_scoring_enabled', false);
+                                }
                             }}
                         >
                             <SelectTrigger id="match-event">
@@ -258,18 +271,20 @@ function MatchFormDialog({
                         <InputError message={errors.competition_area} />
                     </div>
                     <div className="flex flex-wrap gap-6">
-                        <label className="flex items-center gap-2 text-sm">
-                            <Checkbox
-                                checked={data.live_scoring_enabled}
-                                onCheckedChange={(checked) =>
-                                    setData(
-                                        'live_scoring_enabled',
-                                        checked === true,
-                                    )
-                                }
-                            />
-                            Live scoreboard
-                        </label>
+                        {liveScoreAvailable && (
+                            <label className="flex items-center gap-2 text-sm">
+                                <Checkbox
+                                    checked={data.live_scoring_enabled}
+                                    onCheckedChange={(checked) =>
+                                        setData(
+                                            'live_scoring_enabled',
+                                            checked === true,
+                                        )
+                                    }
+                                />
+                                Live scoreboard
+                            </label>
+                        )}
                         <label className="flex items-center gap-2 text-sm">
                             <Checkbox
                                 checked={data.awards_medals}
@@ -547,24 +562,27 @@ export default function Matches({
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                asChild
-                                                disabled={
-                                                    !match.live_scoring_enabled
-                                                }
-                                            >
-                                                <Link
-                                                    href={
-                                                        scoringBoard(match.id)
-                                                            .url
+                                            {match.live_score_available && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    asChild
+                                                    disabled={
+                                                        !match.live_scoring_enabled
                                                     }
                                                 >
-                                                    <Radio aria-hidden="true" />
-                                                    Live
-                                                </Link>
-                                            </Button>
+                                                    <Link
+                                                        href={
+                                                            scoringBoard(
+                                                                match.id,
+                                                            ).url
+                                                        }
+                                                    >
+                                                        <Radio aria-hidden="true" />
+                                                        Live
+                                                    </Link>
+                                                </Button>
+                                            )}
                                         </TableCell>
                                         {canManage && (
                                             <TableCell className="text-right">
