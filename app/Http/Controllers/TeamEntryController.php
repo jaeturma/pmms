@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\AgeDivision;
 use App\Enums\EligibilityStatus;
+use App\Enums\MeetSportAssignmentRole;
 use App\Enums\EntryStatus;
 use App\Enums\MedicalClearanceStatus;
 use App\Enums\UserRole;
@@ -15,6 +16,7 @@ use App\Models\SportRosterMember;
 use App\Models\TeamEntry;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\CompetitionAccessService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -98,6 +100,11 @@ class TeamEntryController extends Controller
             throw ValidationException::withMessages(['athlete_ids' => __('All team members must belong to the same delegation.')]);
         }
         $delegation = $athletes->first()->delegation;
+        $isAssignedIct = app(CompetitionAccessService::class)->hasAssignmentRole(
+            $user,
+            [MeetSportAssignmentRole::TournamentICT->value],
+            $delegation->meet_id,
+        ) && app(CompetitionAccessService::class)->canAccessEvent($user, $event, $delegation->meet_id);
         $meetSportId = MeetSport::query()->where('meet_id', $delegation->meet_id)
             ->where('sport_id', $event->sport_id)->value('id');
         $rosterCount = $meetSportId === null ? 0 : SportRosterMember::query()
@@ -128,7 +135,7 @@ class TeamEntryController extends Controller
             throw ValidationException::withMessages(['athlete_ids' => __('A coach may select only accredited athletes for an entry.')]);
         }
         foreach ($athletes as $athlete) {
-            if ($athlete->eligibilityReview?->status !== EligibilityStatus::Approved) {
+            if (! $isAssignedIct && $athlete->eligibilityReview?->status !== EligibilityStatus::Approved) {
                 throw ValidationException::withMessages(['athlete_ids' => __('Every team member must be DSAC approved.')]);
             }
             if (! $event->meets->contains('id', $athlete->delegation->meet_id)) {

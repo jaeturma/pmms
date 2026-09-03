@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\EligibilityStatus;
 use App\Enums\EntryStatus;
 use App\Enums\MeetStatus;
+use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MedicalClearanceStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
@@ -18,6 +19,7 @@ use App\Models\SportRosterMember;
 use App\Models\TeamEntry;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\CompetitionAccessService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -132,7 +134,8 @@ class EntryController extends Controller
                     'status_label' => $entry->status->label(),
                     'eligibility_approved' => $entry->athlete->eligibilityReview?->status === EligibilityStatus::Approved,
                     'can_confirm' => $entry->status === EntryStatus::Submitted
-                        && $entry->athlete->eligibilityReview?->status === EligibilityStatus::Approved
+                        && ($entry->athlete->eligibilityReview?->status === EligibilityStatus::Approved
+                            || $this->isAssignedIct($user, $entry->delegation->meet_id))
                         && $user->can('confirm', $entry),
                     'can_withdraw' => $entry->status !== EntryStatus::Withdrawn
                         && $user->can('withdraw', $entry),
@@ -255,6 +258,7 @@ class EntryController extends Controller
             ->findOrFail($request->integer('athlete_id'));
 
         $delegation = $athlete->delegation;
+        $isAssignedIct = $this->isAssignedIct($request->user(), $delegation->meet_id);
 
         if ($request->user()?->role === UserRole::Coach
             && $athlete->accreditation()->doesntExist()) {
@@ -295,7 +299,7 @@ class EntryController extends Controller
             if (! $event->age_division->accepts($athlete->ageDivision())) {
                 throw ValidationException::withMessages([$errorKey => __('The athlete\'s grade level does not match :event.', ['event' => $event->name])]);
             }
-            if ($athlete->eligibilityReview?->status !== EligibilityStatus::Approved) {
+            if (! $isAssignedIct && $athlete->eligibilityReview?->status !== EligibilityStatus::Approved) {
                 throw ValidationException::withMessages([$errorKey => __('Only DSAC-eligible athletes may be submitted to a Sports Event.')]);
             }
             if ($delegation->meet->medical_clearance_required
@@ -357,7 +361,8 @@ class EntryController extends Controller
         Gate::authorize('confirm', $entry);
 
         $entry->loadMissing(['event.sport', 'athlete.delegation.meet', 'athlete.eligibilityReview', 'athlete.medicalClearance']);
-        if ($entry->athlete->eligibilityReview?->status !== EligibilityStatus::Approved) {
+        if (! $this->isAssignedIct(request()->user(), $entry->delegation->meet_id)
+            && $entry->athlete->eligibilityReview?->status !== EligibilityStatus::Approved) {
             throw ValidationException::withMessages([
                 'entry' => __('This entry cannot be confirmed until DSAC approves the athlete’s eligibility.'),
             ]);
@@ -390,6 +395,15 @@ class EntryController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Entry confirmed.')]);
 
         return back();
+    }
+
+    private function isAssignedIct(?User $user, int $meetId): bool
+    {
+        return $user !== null && app(CompetitionAccessService::class)->hasAssignmentRole(
+            $user,
+            [MeetSportAssignmentRole::TournamentICT->value],
+            $meetId,
+        );
     }
 
     /**

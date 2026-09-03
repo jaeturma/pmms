@@ -352,6 +352,30 @@ test('an entry cannot be confirmed before DSAC approves athlete eligibility', fu
     expect($entry->fresh()->status)->toBe(EntryStatus::Submitted);
 });
 
+test('assigned tournament ICT can create and confirm an entry regardless of eligibility status', function () {
+    [$meet, $delegation, $athlete, $event] = entrySetup();
+    $athlete->eligibilityReview->forceFill(['status' => 'pending'])->save();
+    $meetSport = MeetSport::query()->where('meet_id', $meet->id)->where('sport_id', $event->sport_id)->sole();
+    $ict = User::factory()->create(['role' => 'tournament_ict']);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'user_id' => $ict->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($ict)->post('/entries', [
+        'athlete_id' => $athlete->id,
+        'event_id' => $event->id,
+    ])->assertSessionDoesntHaveErrors();
+
+    $entry = Entry::query()->where('athlete_id', $athlete->id)->where('event_id', $event->id)->sole();
+    $this->actingAs($ict)->patch("/entries/{$entry->id}/confirm")
+        ->assertSessionDoesntHaveErrors();
+
+    expect($entry->fresh()->status)->toBe(EntryStatus::Confirmed);
+});
+
 test('assigned tournament leaders can confirm eligible entries for their sport', function (MeetSportAssignmentRole $role) {
     [$meet, $delegation, $athlete, $event] = entrySetup();
     $meetSport = MeetSport::query()->where('meet_id', $meet->id)->where('sport_id', $event->sport_id)->sole();

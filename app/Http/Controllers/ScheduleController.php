@@ -403,30 +403,7 @@ class ScheduleController extends Controller
             ]);
         }
 
-        $conflict = EventSchedule::query()
-            ->where('venue_id', $data['venue_id'])
-            ->when(
-                ! empty($data['competition_area_id']),
-                fn ($query) => $query->where(fn ($scope) => $scope
-                    ->where('competition_area_id', $data['competition_area_id'])
-                    ->orWhereNull('competition_area_id')),
-            )
-            ->whereDate('scheduled_date', $data['scheduled_date'])
-            ->where('starts_at', '<', $data['ends_at'])
-            ->where('ends_at', '>', $data['starts_at'])
-            ->when($ignore, fn ($query) => $query->whereKeyNot($ignore->id))
-            ->with('event:id,name')
-            ->first();
-
-        if ($conflict !== null) {
-            throw ValidationException::withMessages([
-                'starts_at' => __('The selected venue or competition area is already booked :start–:end that day for :event.', [
-                    'start' => substr($conflict->starts_at, 0, 5),
-                    'end' => substr($conflict->ends_at, 0, 5),
-                    'event' => $conflict->event->name,
-                ]),
-            ]);
-        }
+        // Overlapping slots are permitted, including at the same venue or competition area.
     }
 
     private function meetIsSchedulable(Meet $meet): bool

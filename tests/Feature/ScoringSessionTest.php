@@ -584,7 +584,7 @@ test('a session can only be started for a scheduled match', function () {
 });
 
 test('only one active session per match is allowed', function () {
-    $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
+    $match = basketballMatch();
     ScoringSession::factory()->create(['match_id' => $match->id]);
 
     $this->actingAs(User::factory()->admin()->create())
@@ -703,17 +703,20 @@ test('score never goes below zero', function () {
     expect($session->fresh()->score_a)->toBe(0);
 });
 
-test('ending a scoring session completes the match without creating an EventResult', function () {
-    $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
+test('ending an unslotted scoring session completes the match and submits an EventResult', function () {
+    $match = basketballMatch();
+    $match->forceFill(['event_schedule_id' => null])->save();
     $session = ScoringSession::factory()->create(['match_id' => $match->id]);
 
     $this->actingAs(User::factory()->admin()->create())
         ->patch("/scoring-sessions/{$session->id}/end", [])
         ->assertSessionHasNoErrors();
 
-    expect(EventResult::query()->count())->toBe(0)
+    expect(EventResult::query()->count())->toBe(1)
         ->and(ResultPlacement::query()->count())->toBe(0)
-        ->and($match->fresh()->status)->toBe(MatchStatus::Completed);
+        ->and($match->fresh()->status)->toBe(MatchStatus::Completed)
+        ->and($match->result?->result_source)->toBe('live_score')
+        ->and($match->result?->scoring_session_id)->toBe($session->id);
 });
 
 test('a session cannot be mutated once it has ended', function () {

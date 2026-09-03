@@ -10,6 +10,7 @@ use App\Models\Delegation;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\User;
+use App\Services\CompetitionAccessService;
 
 class EntryPolicy
 {
@@ -42,6 +43,11 @@ class EntryPolicy
             return true;
         }
 
+        $access = app(CompetitionAccessService::class);
+        if ($access->hasAssignmentRole($user, [MeetSportAssignmentRole::TournamentICT->value], $delegation->meet_id)) {
+            return $event === null || $access->canAccessEvent($user, $event, $delegation->meet_id);
+        }
+
         return ($delegation->hasOfficer($user) || ($event !== null && $user->hasApprovedCoachScope($delegation, $event)))
             && $delegation->meet->isRegistrationOpen();
     }
@@ -61,6 +67,7 @@ class EntryPolicy
                 MeetSportAssignmentRole::TournamentManager->value,
                 MeetSportAssignmentRole::AssistantTournamentManager->value,
                 MeetSportAssignmentRole::TournamentSecretary->value,
+                MeetSportAssignmentRole::TournamentICT->value,
             ])
             ->whereHas('meetSport', fn ($meetSport) => $meetSport
                 ->where('meet_id', $entry->delegation->meet_id)

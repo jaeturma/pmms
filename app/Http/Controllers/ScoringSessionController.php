@@ -413,9 +413,7 @@ class ScoringSessionController extends Controller
     }
 
     /**
-     * End the session. This never creates, updates, or implies an
-     * EventResult/ResultPlacement — an Organizer still encodes the
-     * official result separately, same as if no live session existed.
+     * End the session, complete the match, and submit its encoded result.
      */
     public function end(Request $request, ScoringSession $session): RedirectResponse
     {
@@ -440,9 +438,7 @@ class ScoringSessionController extends Controller
         ]);
 
         $session->match->forceFill(['status' => MatchStatus::Completed])->save();
-        if ($session->match->event_schedule_id !== null) {
-            $this->competitionResults->createFromLiveScore($session->fresh(), $user);
-        }
+        $this->competitionResults->createFromLiveScore($session->fresh(), $user);
 
         $this->audit->record('scoring.ended', $session, $this->context($session));
 

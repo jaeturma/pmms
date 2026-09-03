@@ -64,7 +64,7 @@ class CompetitionResultService
     {
         $session->loadMissing('match.entries');
         $match = $session->match;
-        $this->assertReady($match);
+        $this->assertCompleted($match);
         if ($match->result !== null) {
             return $match->result;
         }
@@ -96,6 +96,11 @@ class CompetitionResultService
         if ($match->event_schedule_id === null) {
             throw ValidationException::withMessages(['match_id' => __('A scheduled competition is required before entering a result.')]);
         }
+        $this->assertCompleted($match);
+    }
+
+    private function assertCompleted(EventMatch $match): void
+    {
         if (! in_array($match->status, [MatchStatus::Completed, MatchStatus::Walkover], true)) {
             throw ValidationException::withMessages(['match_id' => __('The competition must be completed before entering a result.')]);
         }
