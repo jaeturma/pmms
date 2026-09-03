@@ -1,5 +1,5 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { ClipboardList, Plus, Search, Trash2 } from 'lucide-react';
+import { Camera, ClipboardList, Plus, Search, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -55,6 +55,7 @@ type Assignment = {
     end_date: string | null;
     status: string;
     status_label: string;
+    photo_url: string | null;
 };
 
 type SportOption = { id: number; label: string };
@@ -424,9 +425,24 @@ export default function MeetSportAssignments({
                                             )}
                                         </TableCell>
                                         <TableCell>
-                                            {assignment.user}
-                                            <span className="block text-xs text-muted-foreground">
-                                                {assignment.user_email}
+                                            <span className="flex items-center gap-3">
+                                                {assignment.photo_url ? (
+                                                    <img
+                                                        src={assignment.photo_url}
+                                                        alt=""
+                                                        className="size-10 rounded-full object-cover"
+                                                    />
+                                                ) : (
+                                                    <span className="flex size-10 items-center justify-center rounded-full bg-muted text-sm font-semibold">
+                                                        {assignment.user.charAt(0)}
+                                                    </span>
+                                                )}
+                                                <span>
+                                                    {assignment.user}
+                                                    <span className="block text-xs text-muted-foreground">
+                                                        {assignment.user_email}
+                                                    </span>
+                                                </span>
                                             </span>
                                         </TableCell>
                                         <TableCell>
@@ -495,6 +511,36 @@ export default function MeetSportAssignments({
                                         </TableCell>
                                         {canManage && (
                                             <TableCell className="text-right">
+                                                <label className="inline-flex cursor-pointer">
+                                                    <input
+                                                        type="file"
+                                                        accept="image/jpeg,image/png,image/webp"
+                                                        className="sr-only"
+                                                        onChange={(event) => {
+                                                            const photo =
+                                                                event.target
+                                                                    .files?.[0];
+                                                            if (!photo) return;
+                                                            router.post(
+                                                                `/meet-sport-assignments/${assignment.id}/photo`,
+                                                                { photo },
+                                                                {
+                                                                    forceFormData: true,
+                                                                    preserveScroll: true,
+                                                                },
+                                                            );
+                                                            event.target.value =
+                                                                '';
+                                                        }}
+                                                    />
+                                                    <span className="inline-flex size-9 items-center justify-center rounded-md hover:bg-accent">
+                                                        <Camera className="size-4" />
+                                                        <span className="sr-only">
+                                                            Upload photo for{' '}
+                                                            {assignment.user}
+                                                        </span>
+                                                    </span>
+                                                </label>
                                                 <ConfirmDialog
                                                     trigger={
                                                         <Button

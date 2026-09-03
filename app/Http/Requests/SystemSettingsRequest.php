@@ -54,6 +54,7 @@ class SystemSettingsRequest extends FormRequest
             'coach_registration_enabled' => ['sometimes', 'boolean'],
             'coach_athlete_registration_enabled' => ['sometimes', 'boolean'],
             'medal_tally_official' => ['sometimes', 'boolean'],
+            'team_photo_visibility' => ['sometimes', Rule::in(['authenticated', 'public'])],
         ];
     }
 }

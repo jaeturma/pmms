@@ -8,6 +8,7 @@ use App\Models\Event;
 use App\Models\EventMatch;
 use App\Models\EventResult;
 use App\Models\EventSchedule;
+use App\Models\FileUpload;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
@@ -17,9 +18,11 @@ use App\Models\School;
 use App\Models\ScoringSession;
 use App\Models\Sport;
 use App\Models\SportCategory;
+use App\Models\Setting;
 use App\Models\User;
 use App\Models\Venue;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia;
 
 /**
@@ -205,6 +208,64 @@ test("today's, completed, and upcoming games are classified correctly with real 
             ->where('upcomingGames.0.id', $upcomingMatch->id)
             ->has('venues', 1)
             ->where('venues.0.name', 'Main Gym'));
+});
+
+test('venue and schedule summaries include event slots before matches are generated', function () {
+    $meet = Meet::factory()->active()->published()->featured()->create();
+    $sport = basketballSport();
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+    $venue = Venue::factory()->create(['name' => 'Tournament Annex', 'address' => 'Capitol Grounds']);
+
+    EventSchedule::factory()->create([
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+        'venue_id' => $venue->id,
+        'scheduled_date' => today()->addDay()->toDateString(),
+        'starts_at' => '08:30:00',
+    ]);
+
+    $this->get('/basketball')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('upcomingGames', 1)
+            ->where('upcomingGames.0.round_label', $event->name)
+            ->where('upcomingGames.0.venue', 'Tournament Annex')
+            ->has('venues', 1)
+            ->where('venues.0.name', 'Tournament Annex')
+            ->where('venues.0.address', 'Capitol Grounds'));
+});
+
+test('team photos default to logged users and can be made public in system settings', function () {
+    Storage::fake('local');
+    $meet = Meet::factory()->active()->published()->featured()->create();
+    $sport = basketballSport();
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $sport->id]);
+    $upload = FileUpload::factory()->create([
+        'disk' => 'local',
+        'path' => 'team/manager.jpg',
+        'original_name' => 'manager.jpg',
+        'mime_type' => 'image/jpeg',
+    ]);
+    Storage::disk('local')->put($upload->path, 'photo');
+    $assignment = MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $meetSport->id,
+        'role' => MeetSportAssignmentRole::TournamentManager,
+        'photo_upload_id' => $upload->id,
+    ]);
+
+    auth()->logout();
+    $this->get('/basketball')->assertInertia(fn (AssertableInertia $page) => $page
+        ->where('sport.tournament_management.0.photo_url', null));
+    $this->get("/tournament-team/{$assignment->id}/photo")->assertForbidden();
+
+    $this->actingAs(User::factory()->create())
+        ->get("/tournament-team/{$assignment->id}/photo")
+        ->assertOk();
+
+    Setting::current()->forceFill(['team_photo_visibility' => 'public'])->save();
+    auth()->logout();
+    $this->get('/basketball')->assertInertia(fn (AssertableInertia $page) => $page
+        ->where('sport.tournament_management.0.photo_url', route('public.assignment-photo', $assignment)));
+    $this->get("/tournament-team/{$assignment->id}/photo")->assertOk();
 });
 
 test('games from a different sport never appear on this sport\'s portal', function () {

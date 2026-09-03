@@ -48,6 +48,7 @@ use Illuminate\Support\Carbon;
     'coach_registration_enabled',
     'coach_athlete_registration_enabled',
     'medal_tally_official',
+    'team_photo_visibility',
     'login_splash_title',
 ])]
 class Setting extends Model

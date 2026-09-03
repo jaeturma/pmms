@@ -65,6 +65,7 @@ class SystemSettingsController extends Controller
                 'coach_registration_enabled' => $settings->coach_registration_enabled,
                 'coach_athlete_registration_enabled' => $settings->coach_athlete_registration_enabled,
                 'medal_tally_official' => $settings->medalTallyIsOfficial(),
+                'team_photo_visibility' => $settings->team_photo_visibility ?: 'authenticated',
             ],
         ]);
     }
@@ -95,6 +96,7 @@ class SystemSettingsController extends Controller
             'coach_registration_enabled' => $validated['coach_registration_enabled'] ?? $settings->coach_registration_enabled,
             'coach_athlete_registration_enabled' => $validated['coach_athlete_registration_enabled'] ?? $settings->coach_athlete_registration_enabled,
             'medal_tally_official' => $validated['medal_tally_official'] ?? $settings->medalTallyIsOfficial(),
+            'team_photo_visibility' => $validated['team_photo_visibility'] ?? $settings->team_photo_visibility ?? 'authenticated',
         ]);
 
         if ($request->hasFile('app_logo')) {
@@ -164,6 +166,7 @@ class SystemSettingsController extends Controller
             'coach_registration_enabled' => $settings->coach_registration_enabled,
             'coach_athlete_registration_enabled' => $settings->coach_athlete_registration_enabled,
             'medal_tally_official' => $settings->medal_tally_official,
+            'team_photo_visibility' => $settings->team_photo_visibility,
             'timezone' => $settings->timezone,
         ]);
 

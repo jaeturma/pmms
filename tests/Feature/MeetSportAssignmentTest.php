@@ -5,13 +5,16 @@ use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\UserRole;
 use App\Models\AuditLog;
 use App\Models\Event;
+use App\Models\FileUpload;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
 use App\Models\Sport;
 use App\Models\SportCategory;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia;
 
 /**
@@ -278,6 +281,30 @@ test('tournament ICT can manage manager secretary ICT and technical officials on
         'status' => MeetSportAssignmentStatus::Active->value,
     ])->assertSessionHasNoErrors();
     $this->actingAs($ict)->delete("/meet-sport-assignments/{$managed->id}")->assertSessionHasNoErrors();
+});
+
+test('tournament ICT can upload team photos only within their assigned sport', function () {
+    Storage::fake('local');
+    $assignedMeetSport = MeetSport::factory()->create();
+    $otherMeetSport = MeetSport::factory()->create(['meet_id' => $assignedMeetSport->meet_id]);
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => $assignedMeetSport->id,
+        'user_id' => $ict->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+    $managed = MeetSportAssignment::factory()->create(['meet_sport_id' => $assignedMeetSport->id]);
+    $outside = MeetSportAssignment::factory()->create(['meet_sport_id' => $otherMeetSport->id]);
+
+    $this->actingAs($ict)->post("/meet-sport-assignments/{$managed->id}/photo", [
+        'photo' => UploadedFile::fake()->image('official.jpg', 600, 600),
+    ])->assertSessionHasNoErrors();
+    expect($managed->fresh()->photo_upload_id)->not->toBeNull();
+
+    $this->actingAs($ict)->post("/meet-sport-assignments/{$outside->id}/photo", [
+        'photo' => UploadedFile::fake()->image('outside.jpg', 600, 600),
+    ])->assertForbidden();
 });
 
 test('assigning a catalog sport adds it to the current tournament', function () {

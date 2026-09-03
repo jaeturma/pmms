@@ -36,9 +36,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Public portal pages: guest routes, no authentication. Every query goes
@@ -47,6 +49,16 @@ use Inertia\Response;
  */
 class PortalController extends Controller
 {
+    public function assignmentPhoto(MeetSportAssignment $meetSportAssignment): StreamedResponse
+    {
+        $visibility = Setting::current()->team_photo_visibility ?: 'authenticated';
+        abort_if($visibility !== 'public' && ! auth()->check(), 403);
+
+        $upload = $meetSportAssignment->photo;
+        abort_if($upload === null, 404);
+
+        return Storage::disk($upload->disk)->response($upload->path, $upload->original_name);
+    }
     /** Public, stable About URL for the active published meet. */
     public function currentAbout(): Response
     {
@@ -1131,6 +1143,8 @@ class PortalController extends Controller
      */
     private function sportProfileTournamentManagement(MeetSport $meetSport): array
     {
+        $canViewPhotos = auth()->check() || Setting::current()->team_photo_visibility === 'public';
+
         return MeetSportAssignment::query()
             ->where('meet_sport_id', $meetSport->id)
             ->where('role', '!=', MeetSportAssignmentRole::TechnicalOfficial->value)
@@ -1142,6 +1156,9 @@ class PortalController extends Controller
                 'role_label' => $assignment->role->label(),
                 'category' => $assignment->sportCategory?->display_name,
                 'is_lead' => $assignment->is_lead,
+                'photo_url' => $canViewPhotos && $assignment->photo_upload_id !== null
+                    ? route('public.assignment-photo', $assignment)
+                    : null,
             ])
             ->values()
             ->all();
@@ -1187,6 +1204,7 @@ class PortalController extends Controller
      */
     private function sportProfileTechnicalOfficials(Sport $sport, ?MeetSport $meetSport): array
     {
+        $canViewPhotos = auth()->check() || Setting::current()->team_photo_visibility === 'public';
         $meetOfficials = $meetSport === null
             ? collect()
             : MeetSportAssignment::query()
@@ -1195,13 +1213,16 @@ class PortalController extends Controller
                 ->whereNotIn('status', ['declined', 'ended'])
                 ->with(['user:id,name', 'person:id,full_name'])
                 ->get()
-                ->map(function (MeetSportAssignment $assignment): array {
+                ->map(function (MeetSportAssignment $assignment) use ($canViewPhotos): array {
                     $designation = trim((string) $assignment->original_designation);
 
                     return [
                         'name' => $assignment->user?->name ?? $assignment->person?->full_name ?? __('Unknown person'),
                         'duty' => $designation !== '' && strcasecmp($designation, 'Technical Official') !== 0
                             ? $designation
+                            : null,
+                        'photo_url' => $canViewPhotos && $assignment->photo_upload_id !== null
+                            ? route('public.assignment-photo', $assignment)
                             : null,
                     ];
                 });
@@ -1213,6 +1234,7 @@ class PortalController extends Controller
             ->map(fn (object $row): array => [
                 'name' => (string) $row->name,
                 'duty' => $row->duty === null ? null : (string) $row->duty,
+                'photo_url' => null,
             ]);
 
         return $meetOfficials
@@ -1275,6 +1297,19 @@ class PortalController extends Controller
             ])
             ->get();
 
+        // Event schedules are authoritative. A slot may legitimately exist
+        // before a bracket/match row is generated, and must still appear in
+        // the public venue and schedule summaries.
+        $scheduleOnlySlots = EventSchedule::query()->real()
+            ->where('meet_id', $meet->id)
+            ->whereHas('event', fn ($query) => $query->where('sport_id', $sport->id))
+            ->when(
+                $matches->pluck('event_schedule_id')->filter()->isNotEmpty(),
+                fn ($query) => $query->whereNotIn('id', $matches->pluck('event_schedule_id')->filter()),
+            )
+            ->with(['venue:id,name,address', 'event:id,name,gender,age_division'])
+            ->get();
+
         $sessionsByMatch = ScoringSession::query()
             ->whereIn('match_id', $matches->pluck('id'))
             ->orderByDesc('id')
@@ -1290,17 +1325,23 @@ class PortalController extends Controller
 
         $todayGames = $scheduled
             ->filter(fn (EventMatch $match): bool => $match->schedule->scheduled_date->toDateString() === $today)
-            ->sortBy(fn (EventMatch $match): string => $match->schedule->starts_at)
-            ->take(10)
             ->map(fn (EventMatch $match): array => $this->sportPortalGameRow($match, $sessionsByMatch->get($match->id)))
+            ->concat($scheduleOnlySlots
+                ->filter(fn (EventSchedule $slot): bool => $slot->scheduled_date->toDateString() === $today)
+                ->map(fn (EventSchedule $slot): array => $this->individualEventGameRow($slot, null)))
+            ->sortBy('starts_at')
+            ->take(10)
             ->values()
             ->all();
 
         $upcomingGames = $scheduled
             ->filter(fn (EventMatch $match): bool => $match->schedule->scheduled_date->toDateString() > $today)
-            ->sortBy(fn (EventMatch $match): string => $match->schedule->scheduled_date->toDateString().' '.$match->schedule->starts_at)
-            ->take(10)
             ->map(fn (EventMatch $match): array => $this->sportPortalGameRow($match, $sessionsByMatch->get($match->id)))
+            ->concat($scheduleOnlySlots
+                ->filter(fn (EventSchedule $slot): bool => $slot->scheduled_date->toDateString() > $today)
+                ->map(fn (EventSchedule $slot): array => $this->individualEventGameRow($slot, null)))
+            ->sortBy(fn (array $game): string => ($game['scheduled_date'] ?? '').' '.($game['starts_at'] ?? ''))
+            ->take(10)
             ->values()
             ->all();
 
@@ -1314,6 +1355,7 @@ class PortalController extends Controller
 
         $venues = $matches
             ->map(fn (EventMatch $match): ?Venue => $match->schedule?->venue)
+            ->concat($scheduleOnlySlots->pluck('venue'))
             ->filter()
             ->unique('id')
             ->sortBy('name')

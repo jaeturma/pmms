@@ -23,9 +23,13 @@ export function PortalTournamentManagement({ assignments }: { assignments: Porta
                     key={`${assignment.role_label}-${assignment.name}-${index}`}
                     className="flex items-start gap-3 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-3"
                 >
-                    <span className="portal-icon-badge size-10 shrink-0 bg-[var(--portal-ink-soft)] text-[var(--portal-ink)]">
-                        <UserCog aria-hidden="true" className="size-5" />
-                    </span>
+                    {assignment.photo_url ? (
+                        <img src={assignment.photo_url} alt="" className="size-10 shrink-0 rounded-full object-cover" />
+                    ) : (
+                        <span className="portal-icon-badge size-10 shrink-0 bg-[var(--portal-ink-soft)] text-[var(--portal-ink)]">
+                            <UserCog aria-hidden="true" className="size-5" />
+                        </span>
+                    )}
                     <span className="min-w-0">
                         <span className="block truncate font-medium text-[var(--portal-fg)]">{assignment.name}</span>
                         <span className="block text-xs text-[var(--portal-muted-foreground)]">

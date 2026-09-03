@@ -31,9 +31,20 @@ export function PortalTechnicalOfficials({
                     key={`${official.name}-${index}`}
                     className="flex items-center gap-3 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-3"
                 >
-                    <span className="portal-icon-badge size-10 shrink-0 bg-[var(--portal-maroon-soft)] text-[var(--portal-maroon)]">
-                        <ShieldCheck aria-hidden="true" className="size-5" />
-                    </span>
+                    {official.photo_url ? (
+                        <img
+                            src={official.photo_url}
+                            alt=""
+                            className="size-10 shrink-0 rounded-full object-cover"
+                        />
+                    ) : (
+                        <span className="portal-icon-badge size-10 shrink-0 bg-[var(--portal-maroon-soft)] text-[var(--portal-maroon)]">
+                            <ShieldCheck
+                                aria-hidden="true"
+                                className="size-5"
+                            />
+                        </span>
+                    )}
                     <span className="min-w-0">
                         <span className="block truncate font-medium text-[var(--portal-fg)]">
                             {official.name}

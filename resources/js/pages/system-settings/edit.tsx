@@ -49,6 +49,7 @@ type Props = {
         coach_registration_enabled: boolean;
         coach_athlete_registration_enabled: boolean;
         medal_tally_official: boolean;
+        team_photo_visibility: 'authenticated' | 'public';
     };
 };
 
@@ -80,6 +81,7 @@ export default function SystemSettingsEdit({ settings }: Props) {
         coach_athlete_registration_enabled:
             settings.coach_athlete_registration_enabled,
         medal_tally_official: settings.medal_tally_official,
+        team_photo_visibility: settings.team_photo_visibility,
     });
 
     const submit = (e: FormEvent) => {
@@ -97,6 +99,42 @@ export default function SystemSettingsEdit({ settings }: Props) {
                 />
 
                 <form onSubmit={submit} className="max-w-2xl space-y-10">
+                    <section className="space-y-4">
+                        <Heading
+                            variant="small"
+                            title="Tournament team photos"
+                            description="Control who can see profile thumbnails for tournament management and technical officials on sports pages."
+                        />
+                        <div className="space-y-2">
+                            <Label htmlFor="team_photo_visibility">
+                                Photo visibility
+                            </Label>
+                            <Select
+                                value={data.team_photo_visibility}
+                                onValueChange={(value) =>
+                                    setData(
+                                        'team_photo_visibility',
+                                        value as 'authenticated' | 'public',
+                                    )
+                                }
+                            >
+                                <SelectTrigger id="team_photo_visibility">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="authenticated">
+                                        Logged users only
+                                    </SelectItem>
+                                    <SelectItem value="public">
+                                        Publicly visible
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <InputError
+                                message={errors.team_photo_visibility}
+                            />
+                        </div>
+                    </section>
                     <section className="space-y-4">
                         <Heading
                             variant="small"

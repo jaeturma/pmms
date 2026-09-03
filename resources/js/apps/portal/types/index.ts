@@ -425,6 +425,7 @@ export type PortalSportPersonnelAssignment = {
     role_label: string;
     category: string | null;
     is_lead: boolean;
+    photo_url: string | null;
 };
 
 /** A Technical Official for one sport's mini portal — `duty` is `null`
@@ -435,6 +436,7 @@ export type PortalSportPersonnelAssignment = {
 export type PortalTechnicalOfficial = {
     name: string;
     duty: string | null;
+    photo_url: string | null;
 };
 
 export type PortalSportCategorySummary = {

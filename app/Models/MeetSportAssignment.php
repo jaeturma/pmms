@@ -93,4 +93,9 @@ class MeetSportAssignment extends Model
     {
         return $this->belongsTo(Person::class);
     }
+
+    public function photo(): BelongsTo
+    {
+        return $this->belongsTo(FileUpload::class, 'photo_upload_id');
+    }
 }

@@ -11,6 +11,7 @@ use App\Models\Sport;
 use App\Models\SportCategory;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\AthletePhotoService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -31,7 +32,10 @@ use Inertia\Response;
  */
 class MeetSportAssignmentController extends Controller
 {
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(
+        private readonly AuditLogger $audit,
+        private readonly AthletePhotoService $photos,
+    ) {}
 
     /**
      * All assignments, optionally filtered to one meet. Open to any
@@ -80,6 +84,7 @@ class MeetSportAssignmentController extends Controller
                 'end_date' => $assignment->end_date?->toDateString(),
                 'status' => $assignment->status->value,
                 'status_label' => $assignment->status->label(),
+                'photo_url' => $assignment->photo_upload_id === null ? null : route('public.assignment-photo', $assignment),
             ]),
             'filters' => ['search' => $search],
             'sportOptions' => Sport::query()
@@ -231,6 +236,31 @@ class MeetSportAssignmentController extends Controller
         ]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Assignment status updated.')]);
+
+        return back();
+    }
+
+    public function updatePhoto(Request $request, MeetSportAssignment $meetSportAssignment): RedirectResponse
+    {
+        $this->authorizeManage($request, $meetSportAssignment->meetSport, $meetSportAssignment->role);
+
+        $validated = $request->validate([
+            'photo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.config('pmms.athlete_photos.max_upload_kb')],
+        ]);
+
+        $oldPhoto = $meetSportAssignment->photo;
+        $upload = $this->photos->store($validated['photo'], $request->user(), 'passport');
+        $meetSportAssignment->forceFill(['photo_upload_id' => $upload->id])->save();
+
+        if ($oldPhoto !== null) {
+            $this->photos->delete($oldPhoto);
+        }
+
+        $this->audit->record('meet_sport_assignment.photo_updated', $meetSportAssignment, [
+            'person' => $this->assignmentName($meetSportAssignment),
+        ]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Team profile photo updated.')]);
 
         return back();
     }

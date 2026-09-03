@@ -113,6 +113,7 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('districts/{district}/logo', [DistrictController::class, 'logo'])->name('districts.logo');
     Route::get('districts/{district}/team-logo', [DistrictController::class, 'teamLogo'])->name('districts.team-logo');
     Route::get('sports/{sport}/photo', [SportController::class, 'photo'])->name('sports.photo');
+    Route::get('tournament-team/{meetSportAssignment}/photo', [PortalController::class, 'assignmentPhoto'])->name('public.assignment-photo');
     Route::get('division/logo', [DivisionController::class, 'logo'])->name('division.logo');
     Route::get('division/hero-icon', [DivisionController::class, 'heroIcon'])->name('division.hero-icon');
     Route::get('branding/logo', [SystemSettingsController::class, 'logo'])->name('branding.logo');
@@ -262,6 +263,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('meet-sport-assignments', [MeetSportAssignmentController::class, 'index'])->name('meet-sport-assignments.index');
     Route::post('meet-sport-assignments', [MeetSportAssignmentController::class, 'store'])->name('meet-sport-assignments.store');
     Route::patch('meet-sport-assignments/{meetSportAssignment}/status', [MeetSportAssignmentController::class, 'updateStatus'])->name('meet-sport-assignments.status');
+    Route::post('meet-sport-assignments/{meetSportAssignment}/photo', [MeetSportAssignmentController::class, 'updatePhoto'])->name('meet-sport-assignments.photo');
     Route::delete('meet-sport-assignments/{meetSportAssignment}', [MeetSportAssignmentController::class, 'destroy'])->name('meet-sport-assignments.destroy');
     Route::get('management-teams', [ManagementTeamController::class, 'index'])->name('management-teams.index');
     Route::post('management-team-members', [ManagementTeamMemberController::class, 'store'])->name('management-team-members.store');
