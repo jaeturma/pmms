@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/page-header';
 import { PaginationControls } from '@/components/pagination-controls';
 import type { Paginated } from '@/components/pagination-controls';
 import { SearchBar } from '@/components/search-bar';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -107,6 +108,7 @@ type AthleteRow = {
     events: string;
     accreditation_status: string;
     eligibility_status: string;
+    eligibility_state: 'eligible' | 'not_eligible' | 'under_review';
     can_update: boolean;
     can_delete: boolean;
     deletion_pending: boolean;
@@ -134,8 +136,9 @@ type SchoolOption = {
 type CoachEventOption = {
     id: number;
     label: string;
+    category: string;
     gender: string;
-    age_division: string;
+    grade_level: string;
 };
 
 type Props = {
@@ -370,9 +373,16 @@ function AthleteFormDialog({
                                                     key={event.id}
                                                     value={String(event.id)}
                                                 >
-                                                    {event.label} (
-                                                    {event.age_division},{' '}
-                                                    {event.gender})
+                                                    <span className="flex flex-col py-1">
+                                                        <span className="font-medium">
+                                                            {event.label}
+                                                        </span>
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {event.category} ·{' '}
+                                                            {event.gender} ·{' '}
+                                                            {event.grade_level}
+                                                        </span>
+                                                    </span>
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
@@ -1360,7 +1370,20 @@ export default function Athletes({
                                                 {athlete.delegation}
                                             </TableCell>
                                             <TableCell>
-                                                {athlete.eligibility_status}
+                                                <Badge
+                                                    variant="outline"
+                                                    className={
+                                                        athlete.eligibility_state ===
+                                                        'eligible'
+                                                            ? 'border-green-600/30 bg-green-500/15 text-green-700 dark:text-green-400'
+                                                            : athlete.eligibility_state ===
+                                                                'under_review'
+                                                              ? 'border-orange-600/30 bg-orange-500/15 text-orange-700 dark:text-orange-400'
+                                                              : 'border-red-600/30 bg-red-500/15 text-red-700 dark:text-red-400'
+                                                    }
+                                                >
+                                                    {athlete.eligibility_status}
+                                                </Badge>
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <div className="flex justify-end gap-2">

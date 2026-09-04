@@ -95,7 +95,15 @@ type Props = {
         district_id: number | null;
     }>;
     sports: Array<{ id: number; name: string }>;
-    events: Array<{ id: number; sport_id: number; name: string }>;
+    events: Array<{
+        id: number;
+        sport_id: number;
+        sport: string;
+        name: string;
+        category: string;
+        gender: string;
+        grade_level: string;
+    }>;
     assignmentsOnly: boolean;
     assetsOnly: boolean;
     canReassignCoach: boolean;
@@ -502,22 +510,51 @@ export default function EditAthlete({
                         {(!assetsOnly || assignmentsOnly) && (
                             <>
                                 <h2 className="font-semibold">Events</h2>
-                                <div className="grid max-h-48 gap-2 overflow-y-auto pr-1">
+                                <p className="text-sm text-muted-foreground">
+                                    Select events that match the athlete’s
+                                    grade, division, and gender.
+                                </p>
+                                <div className="grid max-h-80 gap-2 overflow-y-auto pr-1">
                                     {events.map((event) => (
-                                        <Check
+                                        <label
                                             key={event.id}
-                                            label={event.name}
-                                            checked={form.data.event_ids.includes(
-                                                event.id,
-                                            )}
-                                            onChange={(checked) =>
-                                                toggle(
-                                                    'event_ids',
+                                            className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 hover:bg-muted/50"
+                                        >
+                                            <Checkbox
+                                                className="mt-0.5"
+                                                checked={form.data.event_ids.includes(
                                                     event.id,
-                                                    checked,
-                                                )
-                                            }
-                                        />
+                                                )}
+                                                onCheckedChange={(checked) =>
+                                                    toggle(
+                                                        'event_ids',
+                                                        event.id,
+                                                        checked === true,
+                                                    )
+                                                }
+                                            />
+                                            <span className="min-w-0 space-y-1">
+                                                <span className="block font-medium">
+                                                    {event.name}
+                                                </span>
+                                                <span className="block text-xs text-muted-foreground">
+                                                    {event.sport} ·{' '}
+                                                    {event.category}
+                                                </span>
+                                                <span className="flex flex-wrap gap-1.5 text-xs">
+                                                    <span className="rounded bg-muted px-2 py-0.5">
+                                                        {event.gender}
+                                                    </span>
+                                                    <span className="rounded bg-muted px-2 py-0.5">
+                                                        {event.grade_level}
+                                                    </span>
+                                                    <span className="rounded bg-muted px-2 py-0.5">
+                                                        Athlete: Grade{' '}
+                                                        {athlete.grade_level}
+                                                    </span>
+                                                </span>
+                                            </span>
+                                        </label>
                                     ))}
                                 </div>
                                 <InputError message={form.errors.event_ids} />

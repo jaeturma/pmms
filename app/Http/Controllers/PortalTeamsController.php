@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\EligibilityStatus;
 use App\Enums\EntryStatus;
 use App\Enums\PersonnelRole;
+use App\Models\Athlete;
 use App\Models\CoachAssignmentRequest;
 use App\Models\CoachOnboardingRequest;
 use App\Models\Delegation;
@@ -13,7 +14,6 @@ use App\Models\Entry;
 use App\Models\Meet;
 use App\Models\Personnel;
 use App\Models\Sport;
-use App\Models\SportRosterMember;
 use App\Services\MedalTallyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -202,27 +202,27 @@ class PortalTeamsController extends Controller
      */
     private function municipalityParticipation(Meet $meet): Collection
     {
-        return SportRosterMember::query()
-            ->whereHas('meetSport', fn ($query) => $query->where('meet_id', $meet->id))
+        return Athlete::query()
+            ->whereHas('delegation', fn ($query) => $query->where('meet_id', $meet->id))
             ->with([
-                'athlete:id,school_id',
-                'athlete.school:id,district_id',
+                'school:id,district_id',
                 'delegation:id,district_id',
-                'meetSport:id,sport_id',
+                'sportRosterMemberships.meetSport:id,sport_id',
             ])
             ->get()
-            ->filter(fn (SportRosterMember $member): bool => $this->rosterMunicipalityId($member) !== null)
-            ->groupBy(fn (SportRosterMember $member): int => $this->rosterMunicipalityId($member))
-            ->map(fn (Collection $members): array => [
-                'athlete_count' => $members->pluck('athlete.id')->unique()->count(),
-                'sport_count' => $members->pluck('meetSport.sport_id')->unique()->count(),
+            ->filter(fn (Athlete $athlete): bool => $this->athleteMunicipalityId($athlete) !== null)
+            ->groupBy(fn (Athlete $athlete): int => $this->athleteMunicipalityId($athlete))
+            ->map(fn (Collection $athletes): array => [
+                'athlete_count' => $athletes->pluck('id')->unique()->count(),
+                'sport_count' => $athletes->flatMap(fn (Athlete $athlete) => $athlete->sportRosterMemberships
+                    ->pluck('meetSport.sport_id'))->filter()->unique()->count(),
             ]);
     }
 
-    private function rosterMunicipalityId(SportRosterMember $member): ?int
+    private function athleteMunicipalityId(Athlete $athlete): ?int
     {
-        return $member->athlete?->school?->district_id
-            ?? $member->delegation?->district_id;
+        return $athlete->school?->district_id
+            ?? $athlete->delegation?->district_id;
     }
 
     /**

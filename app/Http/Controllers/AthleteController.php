@@ -210,12 +210,14 @@ class AthleteController extends Controller
                         ? __('Accredited')
                         : __('Not accredited'),
                     'eligibility_status' => match ($athlete->eligibilityReview?->status?->value) {
-                        'approved' => $this->hasCompleteEligibilityDocuments($athlete)
-                            ? __('Eligible')
-                            : __('Eligible — Incomplete documents'),
-                        'pending' => __('Review'),
-                        'returned', 'rejected' => __('Disqualified'),
-                        default => __('Pending'),
+                        'approved' => __('Eligible'),
+                        'pending', 'returned' => __('Under Review'),
+                        default => __('Not Eligible'),
+                    },
+                    'eligibility_state' => match ($athlete->eligibilityReview?->status?->value) {
+                        'approved' => 'eligible',
+                        'pending', 'returned' => 'under_review',
+                        default => 'not_eligible',
                     },
                     'deleted' => $athlete->trashed(),
                     'deleted_at' => $athlete->deleted_at?->toDateTimeString(),
@@ -252,7 +254,7 @@ class AthleteController extends Controller
             'coachEventOptionsByDelegation' => $user->role === UserRole::Coach
                 ? $availableDelegations->mapWithKeys(function (Delegation $delegation) use ($user): array {
                     $events = Event::query()
-                        ->with('sport:id,name')
+                        ->with(['sport:id,name', 'sportCategory:id,display_name'])
                         ->whereIn('id', $user->approvedCoachEventIdsForDelegation($delegation))
                         ->where('is_team_event', false)
                         ->orderBy('name')
@@ -260,8 +262,14 @@ class AthleteController extends Controller
                         ->map(fn (Event $event): array => [
                             'id' => $event->id,
                             'label' => $event->sport->name.' — '.$event->name,
-                            'gender' => $event->gender->value,
-                            'age_division' => $event->age_division->value,
+                            'category' => $event->sportCategory?->display_name ?? $event->age_division->label(),
+                            'gender' => $event->gender->label(),
+                            'grade_level' => match ($event->age_division->value) {
+                                'elementary' => __('Grades 1–6'),
+                                'secondary' => __('Grades 7–12'),
+                                'elementary_secondary', 'mixed' => __('Grades 1–12'),
+                                default => $event->age_division->label(),
+                            },
                         ])
                         ->values();
 
@@ -298,7 +306,7 @@ class AthleteController extends Controller
             ->with('sport:id,name')->orderBy('display_order')->get();
         $events = $athlete->delegation->meet->events()
             ->when($allowedEventIds !== null, fn ($query) => $query->whereIn('events.id', $allowedEventIds))
-            ->with('sport:id,name')->orderBy('display_order')->get();
+            ->with(['sport:id,name', 'sportCategory:id,display_name'])->orderBy('display_order')->get();
         $allowedSportIds = $allowedEventIds === null
             ? collect()
             : Event::query()->whereKey($allowedEventIds)->pluck('sport_id')->unique();
@@ -336,7 +344,20 @@ class AthleteController extends Controller
             ]),
             'schools' => $schools->map(fn (School $item) => ['id' => $item->id, 'name' => $item->name, 'district' => $item->district?->name ?? 'Not assigned', 'district_id' => $item->district_id]),
             'sports' => $meetSports->map(fn (MeetSport $item) => ['id' => $item->id, 'name' => $item->sport->name]),
-            'events' => $events->map(fn (Event $item) => ['id' => $item->id, 'sport_id' => $item->sport_id, 'name' => $item->sport->name.' — '.$item->name]),
+            'events' => $events->map(fn (Event $item) => [
+                'id' => $item->id,
+                'sport_id' => $item->sport_id,
+                'sport' => $item->sport->name,
+                'name' => $item->name,
+                'category' => $item->sportCategory?->display_name ?? $item->age_division->label(),
+                'gender' => $item->gender->label(),
+                'grade_level' => match ($item->age_division->value) {
+                    'elementary' => __('Grades 1–6'),
+                    'secondary' => __('Grades 7–12'),
+                    'elementary_secondary', 'mixed' => __('Grades 1–12'),
+                    default => $item->age_division->label(),
+                },
+            ]),
             'assignmentsOnly' => ! $canUpdateIdentity && $canUpdateAssignments,
             'assetsOnly' => ! $canUpdateIdentity && ! $canUpdateAssignments,
             'canReassignCoach' => $canReassignCoach,

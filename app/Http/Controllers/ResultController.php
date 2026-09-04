@@ -309,14 +309,24 @@ class ResultController extends Controller
                         'athlete:id,first_name,last_name,school_id',
                         'athlete.school:id,name',
                         'delegation:id,meet_id',
+                        'delegation.school:id,name',
+                        'delegation.district:id,name',
+                        'event:id,is_team_event',
                     ])
                     ->get()
                     ->map(fn (Entry $entry): array => [
                         'id' => $entry->id,
                         'event_id' => $entry->event_id,
                         'meet_id' => $entry->delegation->meet_id,
-                        'label' => "{$entry->athlete->fullName()} — {$entry->athlete->school->name}",
+                        'is_team_event' => $entry->event->is_team_event,
+                        'delegation_id' => $entry->delegation_id,
+                        'label' => $entry->event->is_team_event
+                            ? $entry->delegation->registrantName()
+                            : "{$entry->delegation->registrantName()} — {$entry->athlete->fullName()}",
                     ])
+                    ->unique(fn (array $option): string => $option['is_team_event']
+                        ? 'team-'.$option['event_id'].'-'.$option['delegation_id']
+                        : 'entry-'.$option['id'])
                     ->sortBy('label')
                     ->values()
                 : [],
@@ -325,7 +335,7 @@ class ResultController extends Controller
                     ->whereIn('status', ['completed', 'walkover'])
                     ->whereDoesntHave('result')
                     ->when(! $canManage, fn ($query) => $query->whereIn('event_id', $assignedEventIds))
-                    ->with(['event.sport:id,name', 'schedule.venue:id,name', 'entries.athlete.school:id,name'])
+                    ->with(['event.sport:id,name', 'schedule.venue:id,name', 'entries.athlete.school:id,name', 'entries.delegation.school:id,name', 'entries.delegation.district:id,name'])
                     ->get()
                     ->map(fn (EventMatch $match): array => [
                         'id' => $match->id,
@@ -335,7 +345,15 @@ class ResultController extends Controller
                         'context' => $match->schedule === null
                             ? __('Non-scheduled match')
                             : sprintf('%s %s–%s%s', $match->schedule->scheduled_date->format('M j'), substr($match->schedule->starts_at, 0, 5), substr($match->schedule->ends_at, 0, 5), $match->competition_area ? " · {$match->competition_area}" : ''),
-                        'entries' => $match->entries->map(fn (Entry $entry): array => ['id' => $entry->id, 'label' => "{$entry->athlete->fullName()} — {$entry->athlete->school->name}"])->values(),
+                        'entries' => $match->entries->map(fn (Entry $entry): array => [
+                            'id' => $entry->id,
+                            'delegation_id' => $entry->delegation_id,
+                            'label' => $match->event->is_team_event
+                                ? $entry->delegation->registrantName()
+                                : "{$entry->delegation->registrantName()} — {$entry->athlete->fullName()}",
+                        ])->unique(fn (array $option): string => $match->event->is_team_event
+                            ? 'team-'.$option['delegation_id']
+                            : 'entry-'.$option['id'])->values(),
                     ])->values()
                 : [],
             'canManage' => $canManage,

@@ -4,14 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Enums\EntryStatus;
 use App\Enums\MatchStatus;
-use App\Enums\ScoreboardType;
 use App\Enums\MeetSportAssignmentRole;
+use App\Enums\ScoreboardType;
 use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\ScopesToAssignedSport;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\MatchRequest;
-use App\Models\Entry;
 use App\Models\Athlete;
+use App\Models\Delegation;
+use App\Models\Entry;
 use App\Models\Event;
 use App\Models\EventMatch;
 use App\Models\EventSchedule;
@@ -24,8 +25,8 @@ use App\Services\AuditLogger;
 use App\Services\CompetitionAccessService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -395,16 +396,22 @@ class MatchController extends Controller
 
     private function ensureParticipantSlots(EventMatch $match): void
     {
+        $match->loadMissing('event.sport');
         $meetSportId = MeetSport::query()->where('meet_id', $match->meet_id)
             ->where('sport_id', $match->event->sport_id)->value('id');
-        $delegationIds = SportRosterMember::query()
-            ->when($meetSportId !== null, fn ($members) => $members->where('meet_sport_id', $meetSportId), fn ($members) => $members->whereRaw('1 = 0'))
-            ->distinct()->pluck('delegation_id')
-            ->merge(Entry::query()->where('event_id', $match->event_id)
-                ->where('status', '!=', EntryStatus::Withdrawn->value)
-                ->pluck('delegation_id'))
-            ->unique();
-        $configuredCount = max(1, (int) $match->event->max_entries_per_delegation);
+        $isAthletics = str_contains(strtolower($match->event->sport->name), 'athletics');
+        $delegationIds = $isAthletics
+            ? Delegation::query()->where('meet_id', $match->meet_id)->pluck('id')
+            : SportRosterMember::query()
+                ->when($meetSportId !== null, fn ($members) => $members->where('meet_sport_id', $meetSportId), fn ($members) => $members->whereRaw('1 = 0'))
+                ->distinct()->pluck('delegation_id')
+                ->merge(Entry::query()->where('event_id', $match->event_id)
+                    ->where('status', '!=', EntryStatus::Withdrawn->value)
+                    ->pluck('delegation_id'))
+                ->unique();
+        $configuredCount = $match->event->is_team_event
+            ? 1
+            : max(2, (int) $match->event->max_entries_per_delegation);
         foreach ($delegationIds as $delegationId) {
             $entries = Entry::query()
                 ->where('event_id', $match->event_id)
