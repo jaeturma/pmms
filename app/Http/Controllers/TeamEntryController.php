@@ -51,7 +51,7 @@ class TeamEntryController extends Controller
                 'event_id' => $event->id,
             ], ['status' => EntryStatus::Submitted]);
             $latePostedAssignment = $team->isRosterLocked()
-                && $this->canAssignAfterPosting($request->user(), $team);
+                && $this->canManageLockedRoster($request->user(), $team);
             if ($team->isRosterLocked() && ! $latePostedAssignment) {
                 throw ValidationException::withMessages(['athlete_ids' => __('This team roster is locked.')]);
             }
@@ -170,16 +170,20 @@ class TeamEntryController extends Controller
         }
     }
 
-    private function canAssignAfterPosting(User $user, TeamEntry $team): bool
+    private function canManageLockedRoster(User $user, TeamEntry $team): bool
     {
-        return app(CompetitionAccessService::class)->hasAssignmentRole(
+        if ($user->isAdmin()) {
+            return true;
+        }
+
+        $access = app(CompetitionAccessService::class);
+        $isIct = $access->hasAssignmentRole(
             $user,
             [MeetSportAssignmentRole::TournamentICT->value],
             $team->delegation->meet_id,
-        )
-            && app(CompetitionAccessService::class)->canAccessEvent($user, $team->event, $team->delegation->meet_id)
-            && $team->placements()
-                ->whereHas('result', fn ($results) => $results->where('status', ResultStatus::Official->value))
-                ->exists();
+        ) && $access->canAccessEvent($user, $team->event, $team->delegation->meet_id);
+
+        return $isIct || ($user->role === UserRole::Coach
+            && $user->hasApprovedCoachScope($team->delegation, $team->event));
     }
 }

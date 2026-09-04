@@ -234,10 +234,9 @@ class EntryController extends Controller
                         'maximum' => $maximum,
                         'complete' => $minimum === null || $count >= $minimum,
                         'locked' => $team->isRosterLocked(),
-                        'can_assign_after_posting' => $this->isAssignedIct($user, $team->delegation->meet_id)
-                            && app(CompetitionAccessService::class)->canAccessEvent($user, $team->event, $team->delegation->meet_id)
-                            && $team->placements()->whereHas('result', fn ($results) => $results
-                                ->where('status', \App\Enums\ResultStatus::Official->value))->exists(),
+                        'can_assign_after_posting' => $user->isAdmin() || ($this->isAssignedIct($user, $team->delegation->meet_id)
+                            && app(CompetitionAccessService::class)->canAccessEvent($user, $team->event, $team->delegation->meet_id))
+                            || ($user->role === UserRole::Coach && $user->hasApprovedCoachScope($team->delegation, $team->event)),
                         'status' => $team->status->label(),
                         'members' => $team->members->map(fn ($member): array => [
                             'id' => $member->athlete_id,

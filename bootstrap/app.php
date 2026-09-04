@@ -43,8 +43,20 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->respond(function (Response $response, Throwable $e, Request $request): Response {
             $status = $response->getStatusCode();
 
-            if (in_array($status, [403, 404], true) && ! $request->expectsJson()) {
-                return Inertia::render('error', ['status' => $status])
+            if (in_array($status, [403, 404, 500], true) && ! $request->expectsJson() && ($status !== 500 || $request->user() !== null)) {
+                $props = ['status' => $status];
+                if ($status === 500) {
+                    $user = $request->user();
+                    $props += [
+                        'title' => __('Unable to complete this information'),
+                        'message' => __('A linked record may be missing or inconsistent. Check the athlete or coach delegation, school, municipality, sport, event entry, and team membership. ICT or System Admin can inspect the exact problems in Data Repair.'),
+                        'canRepair' => $user !== null && ($user->isAdmin()
+                            || $user->hasRole(\App\Enums\UserRole::TournamentICT)
+                            || $user->canManageProductionAccounts()),
+                    ];
+                }
+
+                return Inertia::render('error', $props)
                     ->toResponse($request)
                     ->setStatusCode($status);
             }

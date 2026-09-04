@@ -1,13 +1,13 @@
 <?php
 
-test('the server error page shows a branded maintenance notice', function () {
+test('the server error page suggests correcting linked data instead of displaying a raw error', function () {
     $html = view('errors.500')->render();
 
     expect($html)
         ->toContain('/favicon.svg')
-        ->toContain('Temporary maintenance')
+        ->toContain('Information needs attention')
         ->toContain('We’ll be back shortly.')
-        ->toContain('We apologize for the inconvenience')
+        ->toContain('delegation, school, municipality, sport, event entry, and team membership')
         ->toContain('Try again');
 });
 

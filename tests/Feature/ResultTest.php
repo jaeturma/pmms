@@ -22,6 +22,7 @@ use App\Models\ResultPlacement;
 use App\Models\School;
 use App\Models\ScoringSession;
 use App\Models\Sport;
+use App\Models\TeamEntry;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 
@@ -66,6 +67,38 @@ function resultFixture(int $entryCount = 2): array
 
     return ['meet' => $meet, 'event' => $event, 'match' => $match, 'entries' => $entries];
 }
+
+test('a completed team match accepts incomplete delegation entries without individual match entries', function () {
+    $meet = Meet::factory()->active()->create();
+    $event = Event::factory()->create(['is_team_event' => true]);
+    $meet->events()->attach($event);
+    $match = EventMatch::factory()->create([
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+        'status' => MatchStatus::Completed,
+    ]);
+    $teams = collect([1, 2])->map(fn (): TeamEntry => TeamEntry::query()->create([
+        'delegation_id' => Delegation::factory()->approved()->create(['meet_id' => $meet->id])->id,
+        'event_id' => $event->id,
+        'status' => 'submitted',
+    ]));
+    $match->teamEntries()->sync($teams->pluck('id'));
+
+    $this->actingAs(User::factory()->admin()->create())->post('/results', [
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+        'match_id' => $match->id,
+        'placements' => [
+            ['team_entry_id' => $teams[0]->id, 'rank' => 1],
+            ['team_entry_id' => $teams[1]->id, 'rank' => 2],
+        ],
+    ])->assertSessionHasNoErrors();
+
+    expect($match->result()->exists())->toBeTrue()
+        ->and($match->result->placements()->pluck('team_entry_id')->all())
+        ->toBe($teams->pluck('id')->all())
+        ->and($match->entries()->exists())->toBeFalse();
+});
 
 test('results index remains available when a historical placement athlete was archived', function () {
     $admin = User::factory()->admin()->create();

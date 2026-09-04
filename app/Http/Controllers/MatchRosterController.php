@@ -48,11 +48,14 @@ class MatchRosterController extends Controller
     {
         $this->authorizeManage($request, $match);
 
+        $match->loadMissing('event');
         $entries = $match->entries()->with('athlete:id,school_id')->get();
 
         return response()->json([
             'roster' => MatchRosterPlayer::payloadForMatch($match->id),
-            'eligibleAthletes' => $this->eligibleAthletes($match, $entries),
+            'eligibleAthletes' => $match->event->is_team_event
+                ? $this->eligibleTeamAthletes($match)
+                : $this->eligibleAthletes($match, $entries),
         ]);
     }
 
@@ -86,11 +89,18 @@ class MatchRosterController extends Controller
             ]);
         }
 
-        $sideSchoolId = $this->sideSchoolId($match, $data['side']);
+        $sideDelegationId = $match->event->is_team_event ? $this->sideDelegationId($match, $data['side']) : null;
+        $validSide = $match->event->is_team_event
+            ? ($sideDelegationId !== null
+                ? $sideDelegationId === $entry->delegation_id
+                : ($this->sideSchoolId($match, $data['side']) !== null
+                    && $this->sideSchoolId($match, $data['side']) === $entry->athlete->school_id))
+            : ($this->sideSchoolId($match, $data['side']) !== null
+                && $this->sideSchoolId($match, $data['side']) === $entry->athlete->school_id);
 
-        if ($sideSchoolId === null || $entry->athlete->school_id !== $sideSchoolId) {
+        if (! $validSide) {
             throw ValidationException::withMessages([
-                'entry_id' => __('This athlete\'s school does not match this side of the match.'),
+                'entry_id' => __('This athlete does not belong to the selected team side.'),
             ]);
         }
 
@@ -214,6 +224,37 @@ class MatchRosterController extends Controller
         }
 
         return $side === 'a' ? $entries[0]->athlete->school_id : $entries[1]->athlete->school_id;
+    }
+
+    private function sideDelegationId(EventMatch $match, string $side): ?int
+    {
+        $teams = $match->teamEntries()->orderBy('match_team_entries.id')->get();
+
+        if ($teams->count() !== 2) {
+            return null;
+        }
+
+        return $side === 'a' ? $teams[0]->delegation_id : $teams[1]->delegation_id;
+    }
+
+    /** @return array{a: array<int, array{id: int, label: string}>, b: array<int, array{id: int, label: string}>} */
+    private function eligibleTeamAthletes(EventMatch $match): array
+    {
+        $teams = $match->teamEntries()->with('members.entry.athlete')->orderBy('match_team_entries.id')->get();
+        if ($teams->count() !== 2) {
+            return $this->eligibleAthletes($match, $match->entries()->with('athlete:id,school_id')->get());
+        }
+
+        $rosteredEntryIds = MatchRosterPlayer::query()->where('match_id', $match->id)->pluck('entry_id');
+        $payload = fn ($team): array => $team->members
+            ->whereNotIn('entry_id', $rosteredEntryIds)
+            ->filter(fn ($member): bool => $member->entry?->status === EntryStatus::Confirmed)
+            ->map(fn ($member): array => [
+                'id' => $member->entry_id,
+                'label' => $member->entry->athlete->fullName(),
+            ])->values()->all();
+
+        return ['a' => $payload($teams[0]), 'b' => $payload($teams[1])];
     }
 
     /**

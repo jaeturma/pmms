@@ -95,10 +95,9 @@ class MatchController extends Controller
             ->orderByDesc('id');
 
         if ($user->role === UserRole::DelegationOfficer) {
-            $query->whereHas(
-                'entries.delegation.officers',
-                fn ($officers) => $officers->whereKey($user->getKey()),
-            );
+            $query->where(fn ($matches) => $matches
+                ->whereHas('entries.delegation.officers', fn ($officers) => $officers->whereKey($user->getKey()))
+                ->orWhereHas('teamEntries.delegation.officers', fn ($officers) => $officers->whereKey($user->getKey())));
         }
 
         if ($user->role === UserRole::Coach) {
@@ -330,6 +329,7 @@ class MatchController extends Controller
         $this->authorizeParticipantManagement($request, $match);
 
         $validated = $request->validate([
+            'participant_mode' => ['nullable', Rule::in(['team', 'individual'])],
             'entry_ids' => ['array'],
             'entry_ids.*' => ['integer', 'distinct', Rule::exists('entries', 'id')],
             'team_entry_ids' => ['array'],
@@ -338,6 +338,15 @@ class MatchController extends Controller
             'slot_assignments.*.slot_id' => ['required', 'integer', 'distinct', Rule::exists('match_participant_slots', 'id')],
             'slot_assignments.*.athlete_id' => ['nullable', 'integer', Rule::exists('athletes', 'id')],
         ]);
+
+        $expectedMode = $match->event->is_team_event ? 'team' : 'individual';
+        if (isset($validated['participant_mode']) && $validated['participant_mode'] !== $expectedMode) {
+            throw ValidationException::withMessages([
+                'participant_mode' => $match->event->is_team_event
+                    ? __('This Event is configured as Team. Select Team / Delegation participants.')
+                    : __('This Event is configured as Individual. Select Athlete participants.'),
+            ]);
+        }
 
         if ($match->status !== MatchStatus::Scheduled) {
             Inertia::flash('toast', [

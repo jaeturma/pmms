@@ -130,7 +130,7 @@ test('medical clearance is enforced when the meet requires it', function () {
     ])->assertSessionHasErrors('athlete_ids');
 });
 
-test('finalizing a complete team locks the snapshot and confirms member entries', function () {
+test('finalized team members remain editable without changing the delegation entry', function () {
     [, $event, $athletes] = teamEntryContext();
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin)->post('/team-entries', [
@@ -146,7 +146,10 @@ test('finalizing a complete team locks the snapshot and confirms member entries'
     $this->actingAs($admin)->post('/team-entries', [
         'event_id' => $event->id,
         'athlete_ids' => [$athletes->first()->id],
-    ])->assertSessionHasErrors('athlete_ids');
+    ])->assertSessionDoesntHaveErrors();
+
+    expect($team->refresh()->members()->count())->toBe(1)
+        ->and($team->status->value)->toBe('confirmed');
 });
 
 test('assigned ICT can update athletes on an official winning team entry without changing its tally', function () {

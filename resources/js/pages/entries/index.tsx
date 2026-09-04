@@ -325,7 +325,7 @@ function TeamEntryDialog({
                 <DialogHeader>
                     <DialogTitle>
                         {team
-                            ? 'Assign athletes to posted winning entry'
+                            ? 'Manage team members'
                             : 'Create team / pair entry'}
                     </DialogTitle>
                 </DialogHeader>
@@ -369,9 +369,9 @@ function TeamEntryDialog({
                     </div>}
                     {team && (
                         <p className="text-sm text-muted-foreground">
-                            {team.event} — {team.delegation}. Athlete names can
-                            be updated without changing the posted placement or
-                            medal tally.
+                            {team.event} — {team.delegation}. Members can be
+                            connected now or updated later without changing the
+                            delegation's match placement or medal tally.
                         </p>
                     )}
                     <div className="space-y-2">

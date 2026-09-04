@@ -42,6 +42,7 @@ class ResultWorkflowController extends Controller
         $result->loadMissing([
             'meet', 'event.sport', 'event.sportCategory',
             'placements.entry.athlete.school.district', 'match', 'schedule.venue',
+            'placements.teamEntry.delegation.school', 'placements.teamEntry.delegation.district',
         ]);
 
         $result->forceFill([

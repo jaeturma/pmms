@@ -342,6 +342,7 @@ function ParticipantsDialog({
     onOpenChange: (open: boolean) => void;
 }) {
     const { data, setData, put, processing, errors, transform } = useForm({
+        participant_mode: '' as '' | 'team' | 'individual',
         entry_ids: match.is_team_event
             ? []
             : match.participants.map((p) => p.entry_id),
@@ -352,21 +353,21 @@ function ParticipantsDialog({
         })),
     });
 
-    const options = (match.is_team_event ? teamEntryOptions : entryOptions).filter(
+    const options = (data.participant_mode === 'team' ? teamEntryOptions : entryOptions).filter(
         (option) => option.event_id === match.event_id,
     );
-    const selectedIds = match.is_team_event
+    const selectedIds = data.participant_mode === 'team'
         ? data.team_entry_ids
         : data.entry_ids;
     const useParticipantSlots =
-        options.length === 0 && match.participant_slots.length > 0;
+        data.participant_mode === 'individual' && options.length === 0 && match.participant_slots.length > 0;
     const allChecked =
         options.length > 0 &&
         options.every((option) => selectedIds.includes(option.id));
 
     const toggle = (entryId: number, checked: boolean) => {
         setData(
-            match.is_team_event ? 'team_entry_ids' : 'entry_ids',
+            data.participant_mode === 'team' ? 'team_entry_ids' : 'entry_ids',
             checked
                 ? [...selectedIds, entryId]
                 : selectedIds.filter((id) => id !== entryId),
@@ -378,6 +379,7 @@ function ParticipantsDialog({
         transform((values) =>
             useParticipantSlots
                 ? {
+                      participant_mode: 'individual',
                       slot_assignments: values.slot_assignments.map(
                           (assignment) => ({
                               slot_id: assignment.slot_id,
@@ -386,8 +388,8 @@ function ParticipantsDialog({
                       ),
                   }
                 : match.is_team_event
-                  ? { team_entry_ids: values.team_entry_ids }
-                  : { entry_ids: values.entry_ids },
+                  ? { participant_mode: 'team', team_entry_ids: values.team_entry_ids }
+                  : { participant_mode: 'individual', entry_ids: values.entry_ids },
         );
         put(participantsRoute(match.id).url, {
             preserveScroll: true,
@@ -404,12 +406,30 @@ function ParticipantsDialog({
                     </DialogTitle>
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
+                    <div className="space-y-2">
+                        <Label>Participant type</Label>
+                        <Select value={data.participant_mode} onValueChange={(value: 'team' | 'individual') => {
+                            setData('participant_mode', value);
+                            setData('entry_ids', []);
+                            setData('team_entry_ids', []);
+                        }}>
+                            <SelectTrigger><SelectValue placeholder="Choose Team or Individual first" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="team">Team / Delegation</SelectItem>
+                                <SelectItem value="individual">Individual Athlete</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        {data.participant_mode && data.participant_mode !== (match.is_team_event ? 'team' : 'individual') && <InputError message={match.is_team_event ? 'This event is configured as Team. Choose Team / Delegation.' : 'This event is configured as Individual. Choose Individual Athlete.'} />}
+                        <InputError message={errors.participant_mode} />
+                    </div>
                     <p className="text-sm text-muted-foreground">
-                        {match.is_team_event
+                        {data.participant_mode === 'team'
                             ? 'Select one delegation team entry for each participant.'
-                            : 'Select each individual athlete entry. Entries are shown as Delegation (Athlete).'}
+                            : data.participant_mode === 'individual'
+                              ? 'Select each individual athlete entry. Entries are shown as Delegation (Athlete).'
+                              : 'Choose how participants will be entered before selecting them.'}
                     </p>
-                    {useParticipantSlots ? (
+                    {!data.participant_mode ? null : useParticipantSlots ? (
                         <div className="max-h-96 space-y-3 overflow-y-auto rounded-lg border p-3">
                             {match.participant_slots.map((slot, index) => {
                                 const athletes = athleteOptions.filter(
@@ -450,7 +470,7 @@ function ParticipantsDialog({
                                     checked={allChecked}
                                     onCheckedChange={(checked) =>
                                         setData(
-                                            match.is_team_event ? 'team_entry_ids' : 'entry_ids',
+                                            data.participant_mode === 'team' ? 'team_entry_ids' : 'entry_ids',
                                             checked === true
                                                 ? options.map(
                                                       (option) => option.id,
@@ -486,6 +506,8 @@ function ParticipantsDialog({
                             type="submit"
                             disabled={
                                 processing ||
+                                !data.participant_mode ||
+                                data.participant_mode !== (match.is_team_event ? 'team' : 'individual') ||
                                 (options.length === 0 &&
                                     match.participant_slots.length === 0)
                             }

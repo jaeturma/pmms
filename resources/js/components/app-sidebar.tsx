@@ -178,6 +178,11 @@ const mainNavItems: NavItem[] = [
         icon: UserCog,
     },
     {
+        title: 'Data Repair',
+        href: '/data-repair',
+        icon: TriangleAlert,
+    },
+    {
         title: 'Entries',
         href: entriesIndex(),
         icon: ListChecks,
@@ -475,6 +480,7 @@ export function AppSidebar() {
                     'Delegations',
                     'Athletes',
                     'Personnel',
+                    'Data Repair',
                     'Entries',
                     'Eligibility',
                 ]),
@@ -511,7 +517,7 @@ export function AppSidebar() {
                         href: '/coach/assignment-requests',
                         icon: UserCog,
                     },
-                    ...byTitle(['Athletes', 'Eligibility'], mainNavItems),
+                    ...byTitle(['Athletes', 'Eligibility', 'Data Repair'], mainNavItems),
                 ],
             },
             {
@@ -581,6 +587,7 @@ export function AppSidebar() {
                 ...byTitle(['Schools', 'Tournament Assignments']),
             );
             navSections[1].items.push(...byTitle(['Protests']));
+            navSections[2].items.push(...byTitle(['Data Repair']));
         }
 
         if (teamTypes.includes('division_screening_and_accreditation')) {

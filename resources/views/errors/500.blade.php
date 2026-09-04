@@ -29,17 +29,19 @@
 <body>
     <main role="main" aria-labelledby="maintenance-title">
         <img class="logo" src="/favicon.svg" alt="{{ config('app.name', 'PMMS') }} system logo">
-        <p class="eyebrow">Temporary maintenance</p>
+        <p class="eyebrow">Information needs attention</p>
         <h1 id="maintenance-title">We’ll be back shortly.</h1>
         <p class="lead">
-            The {{ config('app.name', 'PMMS') }} site is temporarily unavailable while our team performs maintenance and restores normal service.
-            We apologize for the inconvenience and appreciate your patience.
+            A required record may be missing or linked incorrectly. Check the athlete or coach delegation, school, municipality, sport, event entry, and team membership before trying again.
         </p>
         <p class="note">
-            Your information remains safe. Please wait a few moments and try again. If the interruption continues, contact your ICT administrator and include the page you were trying to open.
+            ICT or System Admin can open Data Repair to see affected records, suggested corrections, and safe automatic repairs. If no data issue is reported, contact ICT and include the page you were opening.
         </p>
         <div class="actions">
             <button type="button" onclick="window.location.reload()">Try again</button>
+            @auth
+                <a href="/data-repair">Inspect data problems</a>
+            @endauth
             <a href="/">Return to home page</a>
         </div>
         <footer>Error {{ $errorStatus }} &middot; Service temporarily unavailable</footer>

@@ -11,6 +11,7 @@ type Props = {
     status: number;
     title?: string;
     message?: string;
+    canRepair?: boolean;
 };
 
 const defaults: Record<
@@ -29,9 +30,15 @@ const defaults: Record<
             "This page doesn't exist, or the meet it belongs to hasn't been published yet.",
         icon: Compass,
     },
+    500: {
+        title: 'Unable to complete this information',
+        message:
+            'A required or linked record may be missing. Review its delegation, school, sport, event entry, and team membership, then try again.',
+        icon: ShieldAlert,
+    },
 };
 
-export default function ErrorPage({ status, title, message }: Props) {
+export default function ErrorPage({ status, title, message, canRepair }: Props) {
     const { auth } = usePage().props;
     const fallback = defaults[status] ?? {
         title: `Error ${status}`,
@@ -47,17 +54,12 @@ export default function ErrorPage({ status, title, message }: Props) {
                     icon={fallback.icon}
                     title={title ?? fallback.title}
                     description={message ?? fallback.message}
-                    action={
-                        <Button asChild>
-                            {auth.user ? (
-                                <Link href={dashboard()}>
-                                    Back to dashboard
-                                </Link>
-                            ) : (
-                                <Link href={home()}>Back to portal home</Link>
-                            )}
+                    action={<div className="flex flex-wrap justify-center gap-2">
+                        {status === 500 && canRepair && <Button asChild><Link href="/data-repair">Inspect and repair data</Link></Button>}
+                        <Button variant={status === 500 && canRepair ? 'outline' : 'default'} asChild>
+                            {auth.user ? <Link href={dashboard()}>Back to dashboard</Link> : <Link href={home()}>Back to portal home</Link>}
                         </Button>
-                    }
+                    </div>}
                 />
             </div>
         </div>

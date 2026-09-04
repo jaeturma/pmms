@@ -12,6 +12,7 @@ use App\Models\Meet;
 use App\Models\EventResult;
 use App\Models\ScoringSession;
 use App\Models\User;
+use App\Models\TeamEntry;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -67,14 +68,16 @@ class CompetitionResultService
 
     public function createFromLiveScore(ScoringSession $session, User $user): EventResult
     {
-        $session->loadMissing('match.entries');
+        $session->loadMissing('match.event', 'match.entries', 'match.teamEntries.members');
         $match = $session->match;
         $this->assertCompleted($match);
         if ($match->result !== null) {
             return $match->result;
         }
-        $entries = $match->entries->values();
-        if ($entries->count() !== 2) {
+        $participants = $match->event->is_team_event
+            ? $match->teamEntries->values()
+            : $match->entries->values();
+        if ($participants->count() !== 2) {
             $result = DB::transaction(fn (): EventResult => $this->newResult($match, $user, 'live_score', $session));
             $this->audit->record('result.created_from_live_score', $result, ['match_id' => $match->id, 'scoring_session_id' => $session->id, 'placements_require_review' => true]);
 
@@ -83,10 +86,17 @@ class CompetitionResultService
         $tie = $session->score_a === $session->score_b;
         $ranks = $tie ? [1, 1] : ($session->score_a > $session->score_b ? [1, 2] : [2, 1]);
         $mark = "{$session->score_a}-{$session->score_b}";
-        $result = DB::transaction(function () use ($match, $session, $user, $entries, $ranks, $mark, $tie): EventResult {
+        $result = DB::transaction(function () use ($match, $session, $user, $participants, $ranks, $mark, $tie): EventResult {
             $result = $this->newResult($match, $user, 'live_score', $session);
-            foreach ($entries as $index => $entry) {
-                $result->placements()->create($this->withTeamSnapshot(['entry_id' => $entry->id, 'rank' => $ranks[$index], 'mark' => $mark, 'is_tie' => $tie]));
+            foreach ($participants as $index => $participant) {
+                $placement = ['rank' => $ranks[$index], 'mark' => $mark, 'is_tie' => $tie];
+                if ($match->event->is_team_event) {
+                    $placement['team_entry_id'] = $participant->id;
+                    $placement['entry_id'] = $participant->members->first()?->entry_id;
+                } else {
+                    $placement['entry_id'] = $participant->id;
+                }
+                $result->placements()->create($this->withTeamSnapshot($placement));
             }
 
             return $result;
@@ -125,6 +135,14 @@ class CompetitionResultService
 
     private function withTeamSnapshot(array $placement): array
     {
+        if (! empty($placement['team_entry_id'])) {
+            $placement['entry_id'] ??= TeamEntry::query()
+                ->find($placement['team_entry_id'])?->members()
+                ->value('entry_id');
+
+            return $placement;
+        }
+
         $entry = Entry::query()->with('event')->find($placement['entry_id']);
         if ($entry?->event?->is_team_event) {
             $placement['team_entry_id'] = $entry->teamMemberships()

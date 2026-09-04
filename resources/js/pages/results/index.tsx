@@ -45,7 +45,8 @@ import {
 } from '@/routes/results';
 
 type Placement = {
-    entry_id: number;
+    entry_id: number | null;
+    team_entry_id: number | null;
     rank: number;
     athlete: string;
     school: string;
@@ -119,11 +120,12 @@ type CompetitionOption = Option & {
     meet_id: number;
     event_id: number;
     context: string;
-    entries: Option[];
+    entries: Array<Option & { participant_type: 'entry' | 'team' }>;
 };
 
 type PlacementRow = {
     entry_id: string;
+    team_entry_id: string;
     rank: string;
     mark: string;
     is_tie: boolean;
@@ -138,6 +140,7 @@ type Props = {
     activeMeets: Option[];
     encodedEventKeys: string[];
     entryOptions: EntryOption[];
+    teamEntryOptions: EntryOption[];
     competitionOptions: CompetitionOption[];
     /** Admin/Organizer only — kept for parity with other registry pages'
      * props even though this page's own UI now reads the per-row
@@ -154,6 +157,7 @@ type Props = {
 function EncodeDialog({
     result,
     entryOptions,
+    teamEntryOptions,
     competitionOptions,
     activeMeets,
     eventOptions,
@@ -163,6 +167,7 @@ function EncodeDialog({
 }: {
     result: Result | null;
     entryOptions: EntryOption[];
+    teamEntryOptions: EntryOption[];
     competitionOptions: CompetitionOption[];
     activeMeets: Option[];
     eventOptions: EventOption[];
@@ -181,13 +186,18 @@ function EncodeDialog({
             match_id: result?.match_id ? String(result.match_id) : '',
             placements: (result
                 ? result.placements.map((placement) => ({
-                      entry_id: String(placement.entry_id),
+                      entry_id: placement.entry_id
+                          ? String(placement.entry_id)
+                          : '',
+                      team_entry_id: placement.team_entry_id
+                          ? String(placement.team_entry_id)
+                          : '',
                       rank: String(placement.rank),
                       mark: placement.mark ?? '',
                       is_tie: placement.is_tie,
                   }))
                 : [
-                      { entry_id: '', rank: '1', mark: '', is_tie: false },
+                      { entry_id: '', team_entry_id: '', rank: '1', mark: '', is_tie: false },
                   ]) as PlacementRow[],
         });
 
@@ -199,6 +209,7 @@ function EncodeDialog({
                 : current.event_schedule_id,
         placements: current.placements.map((row) => ({
             entry_id: row.entry_id,
+            team_entry_id: row.team_entry_id,
             rank: row.rank,
             mark: row.mark === '' ? null : row.mark,
             is_tie: row.is_tie,
@@ -210,7 +221,7 @@ function EncodeDialog({
     );
     const availableEntries =
         result || scope === 'event'
-            ? entryOptions.filter(
+            ? [...entryOptions.map((option) => ({ ...option, participant_type: 'entry' as const })), ...teamEntryOptions.map((option) => ({ ...option, participant_type: 'team' as const }))].filter(
                   (option) =>
                       String(option.meet_id) === data.meet_id &&
                       String(option.event_id) === data.event_id,
@@ -231,6 +242,7 @@ function EncodeDialog({
             ...data.placements,
             {
                 entry_id: '',
+                team_entry_id: '',
                 rank: String(data.placements.length + 1),
                 mark: '',
                 is_tie: false,
@@ -430,6 +442,7 @@ function EncodeDialog({
                                             setData('placements', [
                                                 {
                                                     entry_id: '',
+                                                    team_entry_id: '',
                                                     rank: '1',
                                                     mark: '',
                                                     is_tie: false,
@@ -485,10 +498,14 @@ function EncodeDialog({
                                         }
                                     />
                                     <Select
-                                        value={row.entry_id}
-                                        onValueChange={(value) =>
-                                            setRow(i, { entry_id: value })
-                                        }
+                                        value={row.team_entry_id ? `team:${row.team_entry_id}` : row.entry_id ? `entry:${row.entry_id}` : ''}
+                                        onValueChange={(value) => {
+                                            const [type, id] = value.split(':');
+                                            setRow(i, {
+                                                entry_id: type === 'entry' ? id : '',
+                                                team_entry_id: type === 'team' ? id : '',
+                                            });
+                                        }}
                                         disabled={
                                             !result &&
                                             scope === 'match' &&
@@ -505,7 +522,7 @@ function EncodeDialog({
                                             {availableEntries.map((option) => (
                                                 <SelectItem
                                                     key={option.id}
-                                                    value={String(option.id)}
+                                                    value={`${option.participant_type}:${option.id}`}
                                                 >
                                                     {option.label}
                                                 </SelectItem>
@@ -639,6 +656,7 @@ export default function Results({
     scheduleOptions,
     activeMeets,
     entryOptions,
+    teamEntryOptions,
     competitionOptions,
     canEncode,
 }: Props) {
@@ -1242,6 +1260,7 @@ export default function Results({
                     key={editing?.id ?? 'create'}
                     result={editing}
                     entryOptions={entryOptions}
+                    teamEntryOptions={teamEntryOptions}
                     competitionOptions={competitionOptions}
                     activeMeets={activeMeets}
                     eventOptions={eventOptionsByMeet}

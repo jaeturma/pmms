@@ -90,11 +90,17 @@ class ScoringSessionController extends Controller
             'event.sport:id,name',
             'entries.athlete:id,first_name,last_name,school_id,photo_upload_id',
             'entries.athlete.school:id,name',
+            'teamEntries.delegation.school:id,name',
+            'teamEntries.delegation.district:id,name',
             'schedule.venue:id,name',
         ]);
 
         $session = $match->scoringSessions()->latest('id')->first();
         $entries = $match->entries;
+        $teamEntries = $match->teamEntries;
+        $sideLabels = $match->event->is_team_event
+            ? $teamEntries->map(fn ($team): string => $team->delegation->registrantName())->values()
+            : $entries->map(fn (Entry $entry): string => $entry->athlete->school->name)->values();
 
         return Inertia::render('scoring/show', [
             'match' => [
@@ -109,15 +115,17 @@ class ScoringSessionController extends Controller
                 'status' => $match->status->value,
                 'is_scheduled' => $match->status === MatchStatus::Scheduled,
             ],
-            'suggestedLabels' => $entries->count() === 2 ? [
-                $entries[0]->athlete->school->name,
-                $entries[1]->athlete->school->name,
+            'suggestedLabels' => $sideLabels->count() === 2 ? [
+                $sideLabels[0],
+                $sideLabels[1],
             ] : [null, null],
             'suggestedBoardType' => ScoreboardType::forSport($match->event->sport->name)->value,
             'session' => $session === null ? null : $session->toLivePayload(),
             'channel' => "match.{$match->id}.scoring",
             'canManage' => $this->canManage($user, $match),
-            'participants' => $this->matchParticipants($entries),
+            'participants' => $match->event->is_team_event
+                ? [null, null]
+                : $this->matchParticipants($entries),
         ]);
     }
 
@@ -159,11 +167,15 @@ class ScoringSessionController extends Controller
         // For a scheduled head-to-head match, the assigned participants
         // are authoritative. An ICT operator must not accidentally start
         // the board under hand-typed or swapped team names.
-        $scheduledLabels = $match->entries()
-            ->with('athlete.school:id,name')
-            ->get()
-            ->map(fn (Entry $entry): string => $entry->athlete->school->name)
-            ->values();
+        $match->loadMissing([
+            'event',
+            'entries.athlete.school:id,name',
+            'teamEntries.delegation.school:id,name',
+            'teamEntries.delegation.district:id,name',
+        ]);
+        $scheduledLabels = $match->event->is_team_event
+            ? $match->teamEntries->map(fn ($team): string => $team->delegation->registrantName())->values()
+            : $match->entries->map(fn (Entry $entry): string => $entry->athlete->school->name)->values();
 
         if ($scheduledLabels->count() === 2) {
             $data['side_a_label'] = $scheduledLabels[0];
@@ -2443,7 +2455,10 @@ class ScoringSessionController extends Controller
 
         $isOwnMatch = $match->entries()
             ->whereHas('delegation.officers', fn ($officers) => $officers->whereKey($user->getKey()))
-            ->exists();
+            ->exists()
+            || $match->teamEntries()
+                ->whereHas('delegation.officers', fn ($officers) => $officers->whereKey($user->getKey()))
+                ->exists();
 
         if (! $isOwnMatch) {
             abort(403);

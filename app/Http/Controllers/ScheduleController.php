@@ -404,7 +404,31 @@ class ScheduleController extends Controller
             ]);
         }
 
-        // Overlapping slots are permitted, including at the same venue or competition area.
+        // A venue can run simultaneous competitions on different playing
+        // areas, but one physical area cannot host overlapping activities.
+        $conflict = EventSchedule::query()
+            ->where('meet_id', $meet->id)
+            ->whereDate('scheduled_date', $data['scheduled_date'])
+            ->where('starts_at', '<', $data['ends_at'])
+            ->where('ends_at', '>', $data['starts_at'])
+            ->when($ignore !== null, fn ($slots) => $slots->whereKeyNot($ignore->id))
+            ->when(
+                ! empty($data['competition_area_id']),
+                fn ($slots) => $slots->where('competition_area_id', $data['competition_area_id']),
+                fn ($slots) => $slots->where('venue_id', $data['venue_id'])->whereNull('competition_area_id'),
+            )
+            ->with(['event:id,name', 'venue:id,name', 'competitionArea:id,name'])
+            ->first();
+
+        if ($conflict !== null) {
+            throw ValidationException::withMessages([
+                'starts_at' => __('This playing area is already booked for :event from :start to :end.', [
+                    'event' => $conflict->event->name,
+                    'start' => substr($conflict->starts_at, 0, 5),
+                    'end' => substr($conflict->ends_at, 0, 5),
+                ]),
+            ]);
+        }
     }
 
     private function meetIsSchedulable(Meet $meet): bool
@@ -454,10 +478,9 @@ class ScheduleController extends Controller
                 ->limit(1)]);
 
         if ($user->role === UserRole::DelegationOfficer) {
-            $query->whereHas(
-                'entries.delegation.officers',
-                fn ($officers) => $officers->whereKey($user->getKey()),
-            );
+            $query->where(fn ($matches) => $matches
+                ->whereHas('entries.delegation.officers', fn ($officers) => $officers->whereKey($user->getKey()))
+                ->orWhereHas('teamEntries.delegation.officers', fn ($officers) => $officers->whereKey($user->getKey())));
         }
 
         return $query->get()->keyBy('event_schedule_id');

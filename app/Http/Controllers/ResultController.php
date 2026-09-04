@@ -21,6 +21,7 @@ use App\Models\FileUpload;
 use App\Models\Meet;
 use App\Models\ResultAttachment;
 use App\Models\ResultPlacement;
+use App\Models\TeamEntry;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\CompetitionAccessService;
@@ -114,13 +115,18 @@ class ResultController extends Controller
                     ->select(['id', 'first_name', 'last_name', 'school_id']),
                 'placements.entry.athlete.school:id,name',
                 'placements.entry.delegation.school:id,name',
+                'placements.teamEntry.delegation.school:id,name',
+                'placements.teamEntry.delegation.district:id,name',
             ])
             ->orderByDesc('id');
 
         if ($user->role === UserRole::Coach) {
             $query->whereIn('event_id', $assignedEventIds)
-                ->whereHas('placements.entry', fn ($entries) => $entries
-                    ->whereIn('delegation_id', $coachDelegationIds));
+                ->where(fn ($results) => $results
+                    ->whereHas('placements.entry', fn ($entries) => $entries
+                        ->whereIn('delegation_id', $coachDelegationIds))
+                    ->orWhereHas('placements.teamEntry', fn ($teams) => $teams
+                        ->whereIn('delegation_id', $coachDelegationIds)));
         }
 
         if (! $canManage) {
@@ -306,11 +312,14 @@ class ResultController extends Controller
                             ->sortBy([['rank', 'asc']])
                             ->map(fn (ResultPlacement $placement): array => [
                                 'entry_id' => $placement->entry_id,
+                                'team_entry_id' => $placement->team_entry_id,
                                 'rank' => $placement->rank,
-                                'athlete' => $placement->entry?->athlete?->fullName()
+                                'athlete' => $placement->teamEntry?->delegation?->registrantName()
+                                    ?? $placement->entry?->athlete?->fullName()
                                     ?? $placement->entry?->delegation?->school?->name
                                     ?? 'Archived participant',
-                                'school' => $placement->entry?->athlete?->school?->name
+                                'school' => $placement->teamEntry?->delegation?->registrantName()
+                                    ?? $placement->entry?->athlete?->school?->name
                                     ?? $placement->entry?->delegation?->school?->name
                                     ?? 'School unavailable',
                                 'mark' => $placement->mark,
@@ -371,6 +380,7 @@ class ResultController extends Controller
                 ? Entry::query()
                     ->where('status', EntryStatus::Confirmed->value)
                     ->whereHas('athlete')
+                    ->whereHas('event', fn ($events) => $events->where('is_team_event', false))
                     ->when(
                         ! $canManage,
                         fn ($query) => $query->whereIn('event_id', $assignedEventIds),
@@ -402,12 +412,25 @@ class ResultController extends Controller
                     ->sortBy('label')
                     ->values()
                 : [],
+            'teamEntryOptions' => $canEncode
+                ? TeamEntry::query()
+                    ->whereIn('status', [EntryStatus::Submitted->value, EntryStatus::Confirmed->value])
+                    ->when(! $canManage, fn ($query) => $query->whereIn('event_id', $assignedEventIds))
+                    ->with(['delegation:id,meet_id,school_id,district_id', 'delegation.school:id,name', 'delegation.district:id,name'])
+                    ->get()
+                    ->map(fn (TeamEntry $team): array => [
+                        'id' => $team->id,
+                        'event_id' => $team->event_id,
+                        'meet_id' => $team->delegation->meet_id,
+                        'label' => $team->delegation->registrantName(),
+                    ])->sortBy('label')->values()
+                : [],
             'competitionOptions' => $canEncode
                 ? EventMatch::query()->real()
                     ->whereIn('status', ['completed', 'walkover'])
                     ->whereDoesntHave('result')
                     ->when(! $canManage, fn ($query) => $query->whereIn('event_id', $assignedEventIds))
-                    ->with(['event.sport:id,name', 'schedule.venue:id,name', 'entries.athlete.school:id,name', 'entries.delegation.school:id,name', 'entries.delegation.district:id,name'])
+                    ->with(['event.sport:id,name', 'schedule.venue:id,name', 'entries.athlete.school:id,name', 'entries.delegation.school:id,name', 'entries.delegation.district:id,name', 'teamEntries.delegation.school:id,name', 'teamEntries.delegation.district:id,name'])
                     ->get()
                     ->map(fn (EventMatch $match): array => [
                         'id' => $match->id,
@@ -417,9 +440,10 @@ class ResultController extends Controller
                         'context' => $match->schedule === null
                             ? __('Non-scheduled match')
                             : sprintf('%s %s–%s%s', $match->schedule->scheduled_date->format('M j'), substr($match->schedule->starts_at, 0, 5), substr($match->schedule->ends_at, 0, 5), $match->competition_area ? " · {$match->competition_area}" : ''),
-                        'entries' => $match->entries->map(fn (Entry $entry): array => [
+                        'entries' => ($match->event->is_team_event ? $match->teamEntries : $match->entries)->map(fn (Entry|TeamEntry $entry): array => [
                             'id' => $entry->id,
                             'delegation_id' => $entry->delegation_id,
+                            'participant_type' => $match->event->is_team_event ? 'team' : 'entry',
                             'label' => $match->event->is_team_event
                                 ? $entry->delegation->registrantName()
                                 : "{$entry->delegation->registrantName()} — ".($entry->athlete?->fullName() ?? __('Archived participant')),
@@ -446,7 +470,8 @@ class ResultController extends Controller
             'event_schedule_id' => ['exclude_with:match_id', 'nullable', 'integer', Rule::exists('event_schedules', 'id')],
             'match_id' => ['nullable', 'integer', Rule::exists('matches', 'id')],
             'placements' => ['required', 'array', 'min:1'],
-            'placements.*.entry_id' => ['required', 'integer', 'distinct', Rule::exists('entries', 'id')],
+            'placements.*.entry_id' => ['nullable', 'integer', 'distinct', 'required_without:placements.*.team_entry_id', Rule::exists('entries', 'id')],
+            'placements.*.team_entry_id' => ['nullable', 'integer', 'distinct', 'required_without:placements.*.entry_id', Rule::exists('team_entries', 'id')],
             'placements.*.rank' => ['required', 'integer', 'min:1', 'max:999'],
             'placements.*.mark' => ['nullable', 'string', 'max:60'],
             'placements.*.is_tie' => ['boolean'],
@@ -454,7 +479,7 @@ class ResultController extends Controller
         /** @var User $user */
         $user = $request->user();
         $match = ! empty($data['match_id'])
-            ? EventMatch::query()->with(['meet', 'entries'])->findOrFail((int) $data['match_id'])
+            ? EventMatch::query()->with(['meet', 'event', 'entries', 'teamEntries'])->findOrFail((int) $data['match_id'])
             : null;
         $meet = $match?->meet ?? Meet::query()->findOrFail((int) $data['meet_id']);
         $event = $match?->event ?? Event::query()->findOrFail((int) $data['event_id']);
@@ -661,7 +686,8 @@ class ResultController extends Controller
         return $request->validate([
             'event_id' => ['required', 'integer', Rule::exists('events', 'id')],
             'placements' => ['required', 'array', 'min:1'],
-            'placements.*.entry_id' => ['required', 'integer', 'distinct', Rule::exists('entries', 'id')],
+            'placements.*.entry_id' => ['nullable', 'integer', 'distinct', 'required_without:placements.*.team_entry_id', Rule::exists('entries', 'id')],
+            'placements.*.team_entry_id' => ['nullable', 'integer', 'distinct', 'required_without:placements.*.entry_id', Rule::exists('team_entries', 'id')],
             'placements.*.rank' => ['required', 'integer', 'min:1', 'max:999'],
             'placements.*.mark' => ['nullable', 'string', 'max:60'],
             'placements.*.is_tie' => ['boolean'],
@@ -748,14 +774,41 @@ class ResultController extends Controller
         $event = Event::query()->findOrFail($eventId);
         $entries = Entry::query()
             ->with(['athlete:id,first_name,last_name', 'delegation:id,meet_id'])
-            ->whereIn('id', array_column($placements, 'entry_id'))
+            ->whereIn('id', array_filter(array_column($placements, 'entry_id')))
+            ->get()
+            ->keyBy('id');
+        $teamEntries = TeamEntry::query()
+            ->with(['delegation:id,meet_id,school_id,district_id', 'delegation.school:id,name', 'delegation.district:id,name', 'members'])
+            ->whereIn('id', array_filter(array_column($placements, 'team_entry_id')))
             ->get()
             ->keyBy('id');
         $placedTeamIds = [];
 
         foreach ($placements as $placement) {
+            if ($event->is_team_event && ! empty($placement['team_entry_id'])) {
+                $team = $teamEntries->get($placement['team_entry_id']);
+                if ($team === null || $team->event_id !== $eventId || $team->delegation->meet_id !== $meetId) {
+                    throw ValidationException::withMessages([
+                        'placements' => __('Every team placement must belong to this meet event.'),
+                    ]);
+                }
+                // The delegation is the authoritative participant for a team
+                // event. Its athlete roster may be completed after encoding.
+                if ($match !== null && ! $match->teamEntries->contains('id', $team->id)) {
+                    throw ValidationException::withMessages([
+                        'placements' => __('Every placement must be a participant in this competition.'),
+                    ]);
+                }
+                if (in_array($team->id, $placedTeamIds, true)) {
+                    throw ValidationException::withMessages(['placements' => __('Select each team only once in the result.')]);
+                }
+                $placedTeamIds[] = $team->id;
+
+                continue;
+            }
+
             /** @var Entry|null $entry */
-            $entry = $entries->get($placement['entry_id']);
+            $entry = $entries->get($placement['entry_id'] ?? null);
 
             if ($entry === null
                 || $entry->event_id !== $eventId
@@ -817,9 +870,12 @@ class ResultController extends Controller
     private function writePlacements(EventResult $result, array $placements): void
     {
         foreach ($placements as $placement) {
+            $team = ! empty($placement['team_entry_id'])
+                ? TeamEntry::query()->with('members')->find($placement['team_entry_id'])
+                : null;
             $result->placements()->create([
-                'entry_id' => $placement['entry_id'],
-                'team_entry_id' => Entry::query()->find($placement['entry_id'])?->teamMemberships()
+                'entry_id' => $placement['entry_id'] ?? $team?->members->first()?->entry_id,
+                'team_entry_id' => $placement['team_entry_id'] ?? Entry::query()->find($placement['entry_id'] ?? null)?->teamMemberships()
                     ->whereHas('teamEntry', fn ($team) => $team->where('status', EntryStatus::Confirmed->value))
                     ->value('team_entry_id'),
                 'rank' => $placement['rank'],
@@ -838,13 +894,19 @@ class ResultController extends Controller
             ->with([
                 'entry.athlete:id,first_name,last_name,school_id',
                 'entry.athlete.school:id,name',
+                'teamEntry.delegation.school:id,name',
+                'teamEntry.delegation.district:id,name',
             ])
             ->orderBy('rank')
             ->get()
             ->map(fn (ResultPlacement $placement): array => [
                 'rank' => $placement->rank,
-                'athlete' => $placement->entry->athlete->fullName(),
-                'school' => $placement->entry->athlete->school->name,
+                'athlete' => $placement->teamEntry?->delegation?->registrantName()
+                    ?? $placement->entry?->athlete?->fullName()
+                    ?? __('Archived participant'),
+                'school' => $placement->teamEntry?->delegation?->registrantName()
+                    ?? $placement->entry?->athlete?->school?->name
+                    ?? __('School unavailable'),
                 'mark' => $placement->mark,
                 'is_tie' => $placement->is_tie,
             ])

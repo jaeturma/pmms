@@ -371,6 +371,8 @@ class ReportController extends Controller
             'validatedBy:id,name',
             'placements.entry.athlete:id,first_name,last_name,school_id',
             'placements.entry.athlete.school:id,name',
+            'placements.teamEntry.delegation.school:id,name',
+            'placements.teamEntry.delegation.district:id,name',
         ]);
 
         return [
@@ -393,8 +395,12 @@ class ReportController extends Controller
                 ->sortBy([['rank', 'asc']])
                 ->map(fn (ResultPlacement $placement): array => [
                     'rank' => $placement->rank,
-                    'athlete' => $placement->entry->athlete->fullName(),
-                    'school' => $placement->entry->athlete->school->name,
+                    'athlete' => $placement->teamEntry?->delegation?->registrantName()
+                        ?? $placement->entry?->athlete?->fullName()
+                        ?? __('Archived participant'),
+                    'school' => $placement->teamEntry?->delegation?->registrantName()
+                        ?? $placement->entry?->athlete?->school?->name
+                        ?? __('School unavailable'),
                     'mark' => $placement->mark,
                     'is_tie' => $placement->is_tie,
                 ])

@@ -13,6 +13,7 @@ use App\Http\Controllers\BilletingVenueController;
 use App\Http\Controllers\CoachAssignmentRequestController;
 use App\Http\Controllers\ContentManagementController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DataRepairController;
 use App\Http\Controllers\DelegationController;
 use App\Http\Controllers\DemoDataController;
 use App\Http\Controllers\DistrictController;
@@ -318,6 +319,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('personnel/{personnel}', [PersonnelController::class, 'update'])->name('personnel.update');
     Route::put('personnel/{personnel}/sports', [PersonnelController::class, 'syncSports'])->name('personnel.sports');
     Route::delete('personnel/{personnel}', [PersonnelController::class, 'destroy'])->name('personnel.destroy');
+
+    Route::get('data-repair', [DataRepairController::class, 'index'])->name('data-repair.index');
+    Route::post('data-repair/repair', [DataRepairController::class, 'repair'])->name('data-repair.repair');
 
     Route::get('entries', [EntryController::class, 'index'])->name('entries.index');
     Route::post('entries', [EntryController::class, 'store'])->name('entries.store');
