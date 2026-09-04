@@ -19,6 +19,7 @@ use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -236,6 +237,73 @@ class MedicalClearanceController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Clearance record updated.')]);
 
         return back();
+    }
+
+    public function clear(Request $request, MedicalClearance $medicalClearance): RedirectResponse
+    {
+        abort_unless($this->policy->manage($request->user(), $medicalClearance->meet), 403);
+
+        $this->markCleared($medicalClearance, $request->user(), 'individual');
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Medical record accepted and marked cleared.')]);
+
+        return back();
+    }
+
+    public function bulkClear(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'clearance_ids' => ['nullable', 'array', 'max:1000', 'required_without:all_pending'],
+            'clearance_ids.*' => ['integer', 'distinct', Rule::exists('medical_clearances', 'id')],
+            'all_pending' => ['nullable', 'boolean'],
+        ]);
+        $allPending = $request->boolean('all_pending');
+        $query = MedicalClearance::query()
+            ->when(! $allPending, fn ($clearances) => $clearances->whereKey($validated['clearance_ids'] ?? []))
+            ->when($allPending, fn ($clearances) => $clearances
+                ->where('meet_id', Meet::current()->id)
+                ->whereIn('status', [
+                    MedicalClearanceStatus::Pending->value,
+                    MedicalClearanceStatus::ForEvaluation->value,
+                    MedicalClearanceStatus::Referred->value,
+                ]));
+        $clearances = $query->with('meet')->get();
+
+        abort_if($clearances->isEmpty(), 422, 'No medical records were selected for acceptance.');
+        foreach ($clearances as $clearance) {
+            abort_unless($this->policy->manage($request->user(), $clearance->meet), 403);
+        }
+
+        DB::transaction(function () use ($clearances, $request, $allPending): void {
+            foreach ($clearances as $clearance) {
+                $this->markCleared($clearance, $request->user(), $allPending ? 'all_pending' : 'selected');
+            }
+        }, 3);
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => trans_choice(':count medical record accepted and marked cleared.|:count medical records accepted and marked cleared.', $clearances->count(), ['count' => $clearances->count()]),
+        ]);
+
+        return back();
+    }
+
+    private function markCleared(MedicalClearance $clearance, User $actor, string $mode): void
+    {
+        if ($clearance->status === MedicalClearanceStatus::Cleared) {
+            return;
+        }
+
+        $from = $clearance->status->value;
+        $clearance->forceFill(['status' => MedicalClearanceStatus::Cleared])->save();
+        $this->audit->record('medical_clearance.accepted', $clearance, [
+            'meet' => $clearance->meet->name,
+            'from' => $from,
+            'to' => MedicalClearanceStatus::Cleared->value,
+            'mode' => $mode,
+            'accepted_by' => $actor->id,
+        ]);
+        $this->recordAuthorityAudit($clearance);
     }
 
     private function recordAuthorityAudit(MedicalClearance $clearance): void

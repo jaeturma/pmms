@@ -303,6 +303,12 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
         return $this->belongsToMany(Sport::class)->withTimestamps();
     }
 
+    /** @return BelongsToMany<Athlete, $this> */
+    public function coachedAthletes(): BelongsToMany
+    {
+        return $this->belongsToMany(Athlete::class, 'athlete_coach', 'coach_id', 'athlete_id')->withTimestamps();
+    }
+
     /**
      * This user's meet-scoped tournament-personnel assignments (Tournament
      * Manager/Secretary/ICT/Technical Official) — distinct from `sports()`

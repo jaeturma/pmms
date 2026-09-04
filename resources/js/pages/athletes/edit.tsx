@@ -78,6 +78,7 @@ type Athlete = {
     photo_url: string | null;
     sports_photo_url: string | null;
     registered_by: number | null;
+    coach_ids: number[];
 };
 type Props = {
     athlete: Athlete;
@@ -142,6 +143,7 @@ export default function EditAthlete({
         registered_by: athlete.registered_by
             ? String(athlete.registered_by)
             : '',
+        coach_ids: athlete.coach_ids,
         photo: null as File | null,
         sports_photo: null as File | null,
         athlete_history: null as File | null,
@@ -380,29 +382,44 @@ export default function EditAthlete({
                         <section className="content-start space-y-3 rounded-xl border p-4">
                             {canReassignCoach && (
                                 <Field
-                                    label="Coach"
-                                    error={form.errors.registered_by}
+                                    label="Coaches (select up to 2)"
+                                    error={form.errors.coach_ids}
                                 >
-                                    <Select
-                                        value={form.data.registered_by}
-                                        onValueChange={(value) =>
-                                            form.setData('registered_by', value)
-                                        }
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select coach" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {availableCoaches.map((coach) => (
-                                                <SelectItem
-                                                    key={coach.id}
-                                                    value={String(coach.id)}
-                                                >
-                                                    {coach.name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                    <div className="grid gap-2 rounded-md border p-3">
+                                        {availableCoaches.map((coach) => (
+                                            <label
+                                                key={coach.id}
+                                                className="flex items-center gap-2"
+                                            >
+                                                <Checkbox
+                                                    checked={form.data.coach_ids.includes(
+                                                        coach.id,
+                                                    )}
+                                                    disabled={
+                                                        !form.data.coach_ids.includes(
+                                                            coach.id,
+                                                        ) &&
+                                                        form.data.coach_ids.length >= 2
+                                                    }
+                                                    onCheckedChange={(checked) =>
+                                                        form.setData(
+                                                            'coach_ids',
+                                                            checked === true
+                                                                ? [
+                                                                      ...form.data.coach_ids,
+                                                                      coach.id,
+                                                                  ]
+                                                                : form.data.coach_ids.filter(
+                                                                      (id) =>
+                                                                          id !== coach.id,
+                                                                  ),
+                                                        )
+                                                    }
+                                                />
+                                                {coach.name}
+                                            </label>
+                                        ))}
+                                    </div>
                                 </Field>
                             )}
                             <>
@@ -424,6 +441,7 @@ export default function EditAthlete({
                                                 (item) =>
                                                     item.id === Number(value),
                                             );
+
                                             if (selected?.school_id) {
                                                 form.setData(
                                                     'school_id',

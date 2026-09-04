@@ -1,5 +1,5 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { AlertTriangle, Plus, Stethoscope } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Plus, Stethoscope } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { EmptyState } from '@/components/empty-state';
@@ -538,11 +538,15 @@ function ClearanceRow({
     clearance,
     canRequestEmergencyAccess,
     canManage,
+    selected,
+    onSelectedChange,
     statusOptions,
 }: {
     clearance: Clearance;
     canRequestEmergencyAccess: boolean;
     canManage: boolean;
+    selected: boolean;
+    onSelectedChange: (selected: boolean) => void;
     statusOptions: ValueLabel[];
 }) {
     const [editOpen, setEditOpen] = useState(false);
@@ -552,10 +556,35 @@ function ClearanceRow({
         <li className="space-y-2 rounded-lg border p-3 text-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
+                    {canManage && (
+                        <Checkbox
+                            className="mr-2"
+                            aria-label={`Select ${clearance.person}`}
+                            checked={selected}
+                            onCheckedChange={(checked) =>
+                                onSelectedChange(checked === true)
+                            }
+                        />
+                    )}
                     <span className="font-medium">{clearance.person}</span>{' '}
                     <Badge variant="outline">{clearance.status_label}</Badge>
                 </div>
                 <div className="flex gap-2">
+                    {canManage && clearance.status !== 'cleared' && (
+                        <Button
+                            size="sm"
+                            onClick={() =>
+                                router.patch(
+                                    `/medical-clearances/${clearance.id}/clear`,
+                                    {},
+                                    { preserveScroll: true },
+                                )
+                            }
+                        >
+                            <CheckCircle2 aria-hidden="true" />
+                            Accept / clear
+                        </Button>
+                    )}
                     {canManage && (
                         <Button
                             variant="outline"
@@ -632,6 +661,22 @@ export default function Medical({
 }: Props) {
     const [createOpen, setCreateOpen] = useState(false);
     const [reveal, setReveal] = useState<EmergencyAccessReveal | null>(null);
+    const [selectedIds, setSelectedIds] = useState<number[]>([]);
+
+    const clearSelected = () => {
+        if (selectedIds.length === 0) {
+            return;
+        }
+
+        router.patch(
+            '/medical-clearances/bulk-clear',
+            { clearance_ids: selectedIds },
+            {
+                preserveScroll: true,
+                onSuccess: () => setSelectedIds([]),
+            },
+        );
+    };
 
     useEffect(() => {
         return router.on('flash', (event) => {
@@ -654,10 +699,32 @@ export default function Medical({
                     description="Medical clearance roster — known conditions, emergency contacts, and consent."
                     actions={
                         canManage && (
-                            <Button onClick={() => setCreateOpen(true)}>
-                                <Plus aria-hidden="true" />
-                                Add clearance record
-                            </Button>
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    variant="outline"
+                                    disabled={selectedIds.length === 0}
+                                    onClick={clearSelected}
+                                >
+                                    <CheckCircle2 aria-hidden="true" />
+                                    Accept selected ({selectedIds.length})
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={() =>
+                                        router.patch(
+                                            '/medical-clearances/bulk-clear',
+                                            { all_pending: true },
+                                            { preserveScroll: true },
+                                        )
+                                    }
+                                >
+                                    Accept all pending
+                                </Button>
+                                <Button onClick={() => setCreateOpen(true)}>
+                                    <Plus aria-hidden="true" />
+                                    Add clearance record
+                                </Button>
+                            </div>
                         )
                     }
                 />
@@ -722,6 +789,16 @@ export default function Medical({
                                     canRequestEmergencyAccess
                                 }
                                 canManage={canManage}
+                                selected={selectedIds.includes(clearance.id)}
+                                onSelectedChange={(selected) =>
+                                    setSelectedIds((current) =>
+                                        selected
+                                            ? [...current, clearance.id]
+                                            : current.filter(
+                                                  (id) => id !== clearance.id,
+                                              ),
+                                    )
+                                }
                                 statusOptions={statusOptions}
                             />
                         ))}

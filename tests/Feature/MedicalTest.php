@@ -177,6 +177,50 @@ test('admins can update a clearance record', function () {
     expect(AuditLog::query()->where('action', 'medical_clearance.updated')->exists())->toBeTrue();
 });
 
+test('system admin can accept one or selected medical records in one click', function () {
+    $meet = Meet::factory()->active()->create();
+    $first = MedicalClearance::factory()->create(['meet_id' => $meet->id, 'status' => MedicalClearanceStatus::Pending]);
+    $second = MedicalClearance::factory()->create(['meet_id' => $meet->id, 'status' => MedicalClearanceStatus::ForEvaluation]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->patch("/medical-clearances/{$first->id}/clear")
+        ->assertRedirect()->assertSessionDoesntHaveErrors();
+    $this->actingAs($admin)->patch('/medical-clearances/bulk-clear', [
+        'clearance_ids' => [$second->id],
+    ])->assertRedirect()->assertSessionDoesntHaveErrors();
+
+    expect($first->fresh()->status)->toBe(MedicalClearanceStatus::Cleared)
+        ->and($second->fresh()->status)->toBe(MedicalClearanceStatus::Cleared)
+        ->and(AuditLog::query()->where('action', 'medical_clearance.accepted')->count())->toBe(2);
+});
+
+test('medical team can accept all pending medical records for its meet', function () {
+    $meet = Meet::factory()->active()->create();
+    $pending = MedicalClearance::factory()->create(['meet_id' => $meet->id, 'status' => MedicalClearanceStatus::Pending]);
+    $referred = MedicalClearance::factory()->create(['meet_id' => $meet->id, 'status' => MedicalClearanceStatus::Referred]);
+    $restricted = MedicalClearance::factory()->create(['meet_id' => $meet->id, 'status' => MedicalClearanceStatus::Restricted]);
+
+    $this->actingAs(medicalTeamMember($meet))->patch('/medical-clearances/bulk-clear', [
+        'all_pending' => true,
+    ])->assertRedirect()->assertSessionDoesntHaveErrors();
+
+    expect($pending->fresh()->status)->toBe(MedicalClearanceStatus::Cleared)
+        ->and($referred->fresh()->status)->toBe(MedicalClearanceStatus::Cleared)
+        ->and($restricted->fresh()->status)->toBe(MedicalClearanceStatus::Restricted);
+});
+
+test('organizer cannot use one-click or bulk medical acceptance', function () {
+    $clearance = MedicalClearance::factory()->create(['status' => MedicalClearanceStatus::Pending]);
+    $organizer = User::factory()->organizer()->create();
+
+    $this->actingAs($organizer)->patch("/medical-clearances/{$clearance->id}/clear")->assertForbidden();
+    $this->actingAs($organizer)->patch('/medical-clearances/bulk-clear', [
+        'clearance_ids' => [$clearance->id],
+    ])->assertForbidden();
+
+    expect($clearance->fresh()->status)->toBe(MedicalClearanceStatus::Pending);
+});
+
 // --- Break-glass emergency access ---
 
 test('a coach who is not on the medical team can invoke emergency access, logged with a reason', function () {

@@ -37,7 +37,9 @@ class CompetitionAccessService
                     ->when($meetId !== null, fn (Builder $scope): Builder => $scope->where('meet_id', $meetId)),
             )
             ->orWhere(fn (Builder $registered): Builder => $registered
-                ->whereIn('registered_by', $coachIds)
+                ->where(fn (Builder $ownership): Builder => $ownership
+                    ->whereIn('registered_by', $coachIds)
+                    ->orWhereHas('coaches', fn (Builder $coaches): Builder => $coaches->whereKey($coachIds)))
                 ->whereHas('delegation', fn (Builder $delegations): Builder => $delegations->whereIn('meet_id', $meetIds))));
     }
 
@@ -80,7 +82,7 @@ class CompetitionAccessService
                     ->whereIn('sport_id', $sportIds))
                 ->exists();
 
-        if ($canAccessCompetition || $athlete->registered_by === null) {
+        if ($canAccessCompetition) {
             return $canAccessCompetition;
         }
 
@@ -91,7 +93,8 @@ class CompetitionAccessService
             $sportIds,
         );
 
-        return $coachIds->contains($athlete->registered_by);
+        return $athlete->coaches()->whereKey($coachIds)->exists()
+            || $coachIds->contains($athlete->registered_by);
     }
 
     /** @return list<string> */

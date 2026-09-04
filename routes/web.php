@@ -411,6 +411,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // DrrmPolicy.
     Route::post('medical-clearances', [MedicalClearanceController::class, 'store'])->name('medical-clearances.store');
     Route::put('medical-clearances/{medicalClearance}', [MedicalClearanceController::class, 'update'])->name('medical-clearances.update');
+    Route::patch('medical-clearances/{medicalClearance}/clear', [MedicalClearanceController::class, 'clear'])->name('medical-clearances.clear');
+    Route::patch('medical-clearances/bulk-clear', [MedicalClearanceController::class, 'bulkClear'])->name('medical-clearances.bulk-clear');
 
     Route::post('medical-access', [MedicalAccessController::class, 'store'])->name('medical-access.store');
     Route::patch('medical-access/{medicalAccessLog}/review', [MedicalAccessController::class, 'review'])->name('medical-access.review');

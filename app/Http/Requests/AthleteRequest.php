@@ -26,7 +26,7 @@ class AthleteRequest extends FormRequest
             return Gate::allows('update', $athlete)
                 || (Gate::allows('updateAssignments', $athlete)
                     && ($this->has('event_ids') || $this->has('meet_sport_ids')
-                        || $this->has('delegation_id') || $this->has('school_id') || $this->has('registered_by')))
+                        || $this->has('delegation_id') || $this->has('school_id') || $this->has('registered_by') || $this->has('coach_ids')))
                 || (Gate::allows('updateAssets', $athlete)
                     && ($this->allFiles() !== [] || $this->user()?->role === UserRole::TournamentICT));
         }
@@ -96,6 +96,12 @@ class AthleteRequest extends FormRequest
             'medical_certificate' => $this->documentRules(),
         ];
 
+        if ($athlete instanceof Athlete) {
+            foreach (['first_name', 'middle_name', 'last_name', 'name_extension', 'sex', 'birthdate', 'lrn', 'grade_level', 'age_division'] as $field) {
+                array_unshift($rules[$field], 'sometimes');
+            }
+        }
+
         if ($athlete instanceof Athlete && ! Gate::allows('update', $athlete)) {
             $allowedFields = [
                 'photo', 'sports_photo', 'athlete_history', 'form_10',
@@ -113,7 +119,9 @@ class AthleteRequest extends FormRequest
                 $rules['delegation_id'] = ['sometimes', 'required', 'integer', Rule::exists('delegations', 'id')];
                 $rules['school_id'] = ['sometimes', 'required', 'integer', Rule::exists('schools', 'id')->where('active', true)];
                 $rules['registered_by'] = ['sometimes', 'nullable', 'integer', Rule::exists('users', 'id')];
-                $allowedFields = [...$allowedFields, 'delegation_id', 'school_id', 'meet_sport_ids', 'meet_sport_ids.*', 'event_ids', 'event_ids.*', 'registered_by'];
+                $rules['coach_ids'] = ['sometimes', 'array', 'min:1', 'max:2'];
+                $rules['coach_ids.*'] = ['integer', 'distinct', Rule::exists('users', 'id')];
+                $allowedFields = [...$allowedFields, 'delegation_id', 'school_id', 'meet_sport_ids', 'meet_sport_ids.*', 'event_ids', 'event_ids.*', 'registered_by', 'coach_ids', 'coach_ids.*'];
             }
 
             return collect($rules)->only($allowedFields)->all();
@@ -141,6 +149,8 @@ class AthleteRequest extends FormRequest
             $rules['event_ids'] = ['sometimes', 'array'];
             $rules['event_ids.*'] = ['integer', 'distinct', Rule::exists('events', 'id')];
             $rules['registered_by'] = ['sometimes', 'nullable', 'integer', Rule::exists('users', 'id')];
+            $rules['coach_ids'] = ['sometimes', 'array', 'min:1', 'max:2'];
+            $rules['coach_ids.*'] = ['integer', 'distinct', Rule::exists('users', 'id')];
         }
 
         return $rules;

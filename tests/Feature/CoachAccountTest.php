@@ -124,6 +124,78 @@ function requiredCoachAthleteFields(): array
     return ['middle_name' => 'N/A', 'name_extension' => 'None'];
 }
 
+test('an athlete can be shared by two approved coaches and both can update the athlete', function () {
+    $delegation = Delegation::factory()->create(['status' => DelegationStatus::Draft]);
+    $firstCoach = coachFor($delegation);
+    $firstAssignment = $firstCoach->coachAssignmentRequests()->firstOrFail();
+    $secondCoach = User::factory()->coach()->create();
+    Personnel::factory()->coach()->create(['delegation_id' => $delegation->id, 'user_id' => $secondCoach->id]);
+    CoachAssignmentRequest::query()->create([
+        'user_id' => $secondCoach->id,
+        'meet_sport_id' => $firstAssignment->meet_sport_id,
+        'event_id' => $firstAssignment->event_id,
+        'delegation_id' => $delegation->id,
+        'school_id' => $firstAssignment->school_id,
+        'status' => 'approved',
+    ]);
+    $athlete = Athlete::factory()->create([
+        'delegation_id' => $delegation->id,
+        'school_id' => $firstAssignment->school_id,
+        'registered_by' => $firstCoach->id,
+        'sex' => 'male',
+        'grade_level' => 9,
+        'age_division' => 'secondary',
+    ]);
+    $athlete->coaches()->sync([$firstCoach->id, $secondCoach->id]);
+
+    foreach ([$firstCoach, $secondCoach] as $index => $coach) {
+        $this->actingAs($coach)->get('/athletes')->assertOk()
+            ->assertInertia(fn ($page) => $page->has('athletes.data', 1));
+        $this->actingAs($coach)->put("/athletes/{$athlete->id}", [
+            ...requiredCoachAthleteFields(),
+            'first_name' => 'Shared'.($index + 1),
+            'last_name' => $athlete->last_name,
+            'sex' => 'male',
+            'birthdate' => $athlete->birthdate->toDateString(),
+            'lrn' => $athlete->lrn,
+            'grade_level' => 9,
+            'age_division' => 'secondary',
+        ])->assertSessionDoesntHaveErrors();
+        $athlete->refresh();
+    }
+
+    expect($athlete->coaches()->count())->toBe(2)
+        ->and($athlete->first_name)->toBe('SHARED2');
+});
+
+test('athlete coach assignment rejects more than two coaches', function () {
+    $athlete = Athlete::factory()->create();
+    $coaches = User::factory()->coach()->count(3)->create();
+
+    $this->actingAs(User::factory()->admin()->create())->put("/athletes/{$athlete->id}", [
+        'coach_ids' => $coaches->modelKeys(),
+    ])->assertSessionHasErrors('coach_ids');
+
+    expect($athlete->coaches()->count())->toBe(0);
+});
+
+test('athlete event picker loads compatible mixed or same gender and division events in order', function () {
+    $athlete = Athlete::factory()->create(['sex' => 'male', 'grade_level' => 9, 'age_division' => 'secondary']);
+    $meet = $athlete->delegation->meet;
+    $sport = Sport::factory()->create();
+    $compatible = Event::factory()->create(['sport_id' => $sport->id, 'gender' => 'boys', 'age_division' => 'secondary', 'display_order' => 2]);
+    $mixed = Event::factory()->create(['sport_id' => $sport->id, 'gender' => 'mixed', 'age_division' => 'mixed', 'display_order' => 1]);
+    $wrongGender = Event::factory()->create(['sport_id' => $sport->id, 'gender' => 'girls', 'age_division' => 'secondary', 'display_order' => 0]);
+    $wrongDivision = Event::factory()->create(['sport_id' => $sport->id, 'gender' => 'boys', 'age_division' => 'elementary', 'display_order' => 0]);
+    $meet->events()->attach([$compatible->id, $mixed->id, $wrongGender->id, $wrongDivision->id]);
+
+    $this->actingAs(User::factory()->admin()->create())->get("/athletes/{$athlete->id}/edit")
+        ->assertInertia(fn ($page) => $page
+            ->has('events', 2)
+            ->where('events.0.id', $mixed->id)
+            ->where('events.1.id', $compatible->id));
+});
+
 test('a coach can view and register athletes for their own delegation', function () {
     $delegation = Delegation::factory()->create(['status' => DelegationStatus::Draft]);
     $coach = coachFor($delegation);
@@ -208,7 +280,7 @@ test('an administrator can suspend athlete registration by coaches', function ()
     $this->assertDatabaseMissing('athletes', ['lrn' => '998877665544']);
 });
 
-test('a coach can edit an assigned athlete until accreditation is approved', function () {
+test('a coach can edit an assigned athlete before and after eligibility approval', function () {
     $delegation = Delegation::factory()->create(['status' => DelegationStatus::Draft]);
     $coach = coachFor($delegation);
     $athlete = Athlete::factory()->create([
@@ -246,9 +318,10 @@ test('a coach can edit an assigned athlete until accreditation is approved', fun
             'lrn' => $athlete->lrn,
             'grade_level' => $athlete->grade_level,
         ])
-        ->assertForbidden();
+        ->assertRedirect()
+        ->assertSessionDoesntHaveErrors();
 
-    expect($athlete->fresh()->first_name)->toBe('BEFORE');
+    expect($athlete->fresh()->first_name)->toBe('AFTER');
 
     $existingAssignment = $coach->coachAssignmentRequests()->firstOrFail();
     $additionalEvent = Event::factory()->create(['sport_id' => $existingAssignment->event->sport_id]);
@@ -329,8 +402,8 @@ test('a coach registers an athlete only in an assigned event with photos and acc
     $this->actingAs($coach)->put("/athletes/{$athlete->id}", [
         'first_name' => 'Pedro Updated', 'last_name' => 'Santos', 'sex' => 'male',
         'birthdate' => now()->subYears(15)->toDateString(), 'lrn' => $athlete->lrn, 'grade_level' => 9,
-    ])->assertForbidden();
-    expect($athlete->fresh()->first_name)->toBe('ADMIN UPDATED');
+    ])->assertSessionDoesntHaveErrors();
+    expect($athlete->fresh()->first_name)->toBe('PEDRO UPDATED');
 
     $photoUploadId = $athlete->photo_upload_id;
     $this->actingAs($coach)->delete("/athletes/{$athlete->id}")
@@ -655,7 +728,7 @@ test('coaches and tournament ICT can replace athlete photos after identity appro
 
     $this->actingAs($coach)->get("/athletes/{$athlete->id}/edit")
         ->assertOk()->assertInertia(fn ($page) => $page
-            ->where('assignmentsOnly', true)
+            ->where('assignmentsOnly', false)
             ->where('assetsOnly', false));
     $this->actingAs($coach)->put("/athletes/{$athlete->id}", [
         'photo' => UploadedFile::fake()->image('coach-photo.jpg'),
@@ -685,7 +758,7 @@ test('coaches and tournament ICT can replace athlete photos after identity appro
 
     $this->actingAs($ict)->get("/athletes/{$athlete->id}/edit")
         ->assertOk()->assertInertia(fn ($page) => $page
-            ->where('assignmentsOnly', true)
+            ->where('assignmentsOnly', false)
             ->where('assetsOnly', false));
     $this->actingAs($ict)->put("/athletes/{$athlete->id}", [
         'sports_photo' => UploadedFile::fake()->image('ict-photo.jpg'),

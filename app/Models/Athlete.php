@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -96,8 +97,18 @@ class Athlete extends Model
         return $this->belongsTo(User::class, 'registered_by');
     }
 
+    /** @return BelongsToMany<User, $this> */
+    public function coaches(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'athlete_coach', 'athlete_id', 'coach_id')->withTimestamps();
+    }
+
     public function isOwnedBy(User $user): bool
     {
+        if ($this->coaches()->whereKey($user->id)->exists()) {
+            return true;
+        }
+
         if ($this->registered_by !== null) {
             return $this->registered_by === $user->id;
         }
@@ -113,7 +124,8 @@ class Athlete extends Model
     public function scopeOwnedBy(Builder $query, User $user): Builder
     {
         return $query->where(fn (Builder $athletes) => $athletes
-            ->where('registered_by', $user->id)
+            ->whereHas('coaches', fn (Builder $coaches) => $coaches->whereKey($user->id))
+            ->orWhere('registered_by', $user->id)
             ->orWhereExists(fn ($logs) => $logs
                 ->selectRaw('1')
                 ->from('audit_logs')

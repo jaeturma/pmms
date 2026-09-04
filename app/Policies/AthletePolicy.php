@@ -90,12 +90,11 @@ class AthletePolicy
 
         if ($user->role === UserRole::Coach) {
             return $athlete->isOwnedBy($user)
-                && $user->hasApprovedCoachScope($athlete->delegation)
-                && $this->isNotEligible($athlete);
+                && $user->hasApprovedCoachScope($athlete->delegation);
         }
 
         if ($this->isAssignedTournamentIct($user, $athlete)) {
-            return $this->isNotEligible($athlete);
+            return true;
         }
 
         return $athlete->delegation->hasOfficer($user)
