@@ -6,6 +6,7 @@ use App\Enums\GenderCategory;
 use App\Enums\MedicalClearanceStatus;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
+use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\Delegation;
 use App\Models\EligibilityReview;
@@ -90,6 +91,36 @@ test('a below-minimum team can be saved as submitted but cannot be finalized', f
 
     $this->actingAs($admin)->patch('/team-entries/'.TeamEntry::query()->sole()->id.'/confirm')
         ->assertSessionHasErrors('athlete_ids');
+});
+
+test('a team entry can be submitted without assigned athletes and completed later', function () {
+    [$delegation, $event, $athletes] = teamEntryContext(2);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->post('/team-entries', [
+        'event_id' => $event->id,
+        'delegation_id' => $delegation->id,
+        'athlete_ids' => [],
+    ])->assertRedirect()->assertSessionDoesntHaveErrors();
+
+    $team = TeamEntry::query()->sole();
+    expect($team->status->value)->toBe('submitted')
+        ->and($team->members()->count())->toBe(0);
+
+    $this->actingAs($admin)->patch("/team-entries/{$team->id}/confirm")
+        ->assertSessionHasErrors('athlete_ids');
+
+    $this->actingAs($admin)->post('/team-entries', [
+        'event_id' => $event->id,
+        'delegation_id' => $delegation->id,
+        'athlete_ids' => $athletes->pluck('id')->all(),
+    ])->assertSessionDoesntHaveErrors();
+
+    $this->actingAs($admin)->patch("/team-entries/{$team->id}/confirm")
+        ->assertSessionDoesntHaveErrors();
+
+    expect($team->refresh()->status->value)->toBe('confirmed')
+        ->and($team->members()->count())->toBe(2);
 });
 
 test('a team above the configured maximum is rejected', function () {
@@ -186,7 +217,7 @@ test('assigned ICT can update athletes on an official winning team entry without
         'level' => 'secondary',
         'gender' => 'boys',
     ]);
-    $ict = User::factory()->create(['role' => \App\Enums\UserRole::TournamentICT]);
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
     MeetSportAssignment::factory()->create([
         'user_id' => $ict->id,
         'meet_sport_id' => $meetSport->id,
@@ -209,7 +240,7 @@ test('assigned ICT can update athletes on an official winning team entry without
         ->and($result->placements()->sole()->rank)->toBe(1)
         ->and(collect(app(MedalTallyService::class)->standings($delegation->meet_id)['districts'])->sum('gold'))->toBe($goldBefore);
 
-    $this->actingAs(User::factory()->create(['role' => \App\Enums\UserRole::TournamentICT]))
+    $this->actingAs(User::factory()->create(['role' => UserRole::TournamentICT]))
         ->post('/team-entries', [
             'event_id' => $event->id,
             'athlete_ids' => $athletes->pluck('id')->all(),

@@ -48,7 +48,7 @@ test('unambiguous athlete school inconsistencies can be repaired automatically',
             ->where('type', 'athlete')->where('id', $athlete->id)->where('code', 'school_mismatch'))->toBeEmpty();
 });
 
-test('ambiguous municipality school inconsistencies require manual selection', function () {
+test('athlete municipality school differences are not treated as repair errors', function () {
     $municipality = District::factory()->create();
     $otherMunicipality = District::factory()->create();
     $delegation = Delegation::factory()->create(['school_id' => null, 'district_id' => $municipality->id]);
@@ -60,7 +60,7 @@ test('ambiguous municipality school inconsistencies require manual selection', f
     $issue = app(RegistrationDataConsistencyService::class)->issues()
         ->first(fn (array $issue): bool => $issue['type'] === 'athlete' && $issue['id'] === $athlete->id && $issue['code'] === 'municipality_mismatch');
 
-    expect($issue)->not->toBeNull()->and($issue['repair'])->toBeNull();
+    expect($issue)->toBeNull();
 });
 
 test('ordinary users cannot access data repair', function () {

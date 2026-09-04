@@ -204,11 +204,18 @@ class AthleteController extends Controller
                     'age' => $athlete->age(),
                     'grade_level' => $athlete->grade_level,
                     'age_division' => $athlete->ageDivision()->value,
-                    'school' => $athlete->school->name,
-                    'district' => $athlete->school->schoolDistrict?->name
-                        ?? $athlete->school->district?->name
+                    'school' => $athlete->school?->name ?? __('Not provided'),
+                    'district' => $athlete->school?->schoolDistrict?->name
+                        ?? $athlete->school?->district?->name
                         ?? __('Not assigned'),
                     'delegation' => $athlete->delegation->registrantName(),
+                    'registration_concern' => ($user->role === UserRole::Coach || $isIct)
+                        ? ($athlete->school === null
+                            ? __('School not provided. Processing is allowed; add a school later if available.')
+                            : ($athlete->delegation->district_id !== null && $athlete->school->district_id !== $athlete->delegation->district_id
+                                ? __('School municipality differs from the delegation. Processing is allowed.')
+                                : null))
+                        : null,
                     'coach' => $athlete->coaches->pluck('name')->whenEmpty(fn () => $athlete->registrar?->hasRole(UserRole::Coach)
                         ? collect([$athlete->registrar->name]) : collect())->join(', ') ?: null,
                     'photo_url' => $athlete->trashed() ? null : $athlete->photoUrl(),
@@ -431,7 +438,7 @@ class AthleteController extends Controller
                 'age' => $athlete->age(),
                 'lrn' => $athlete->lrn,
                 'grade_level' => $athlete->grade_level,
-                'school' => $athlete->school->name,
+                'school' => $athlete->school?->name ?? __('Not provided'),
                 'meet' => $athlete->delegation->meet->name,
                 'delegation' => $athlete->delegation->registrantName(),
                 'coach' => $athlete->coaches()->pluck('name')->whenEmpty(fn () => $athlete->registrar?->hasRole(UserRole::Coach)
@@ -670,7 +677,7 @@ class AthleteController extends Controller
 
         $this->audit->record($recalled === null ? 'athlete.created' : 'athlete.recalled', $athlete, [
             'name' => $athlete->fullName(),
-            'school' => $athlete->school->name,
+            'school' => $athlete->school?->name ?? __('Not provided'),
             'registrant' => $delegation->registrantName(),
         ]);
         if ($meetSport !== null) {
@@ -766,8 +773,8 @@ class AthleteController extends Controller
                     throw ValidationException::withMessages(['event_ids' => __('Tournament ICT may only assign sports and events within their active scope.')]);
                 }
                 $athlete->delegation_id = $delegation->id;
-                if ($request->filled('school_id')) {
-                    $athlete->school_id = $request->integer('school_id');
+                if ($request->has('school_id')) {
+                    $athlete->school_id = $request->filled('school_id') ? $request->integer('school_id') : null;
                 }
             }
             if ($isCoach) {

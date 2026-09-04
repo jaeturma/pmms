@@ -102,6 +102,7 @@ type AthleteRow = {
     school: string;
     district: string;
     delegation: string;
+    registration_concern: string | null;
     coach: string | null;
     photo_url: string | null;
     sports: string;
@@ -467,18 +468,19 @@ function AthleteFormDialog({
                                     )}
                                     <div className="space-y-2">
                                         <Label htmlFor="athlete-school">
-                                            School *
+                                            School (optional)
                                         </Label>
                                         <Select
-                                            value={data.school_id}
+                                            value={data.school_id || 'none'}
                                             onValueChange={(value) =>
-                                                setData('school_id', value)
+                                                setData('school_id', value === 'none' ? '' : value)
                                             }
                                         >
                                             <SelectTrigger id="athlete-school">
                                                 <SelectValue placeholder="Select a school" />
                                             </SelectTrigger>
                                             <SelectContent>
+                                                <SelectItem value="none">Not provided</SelectItem>
                                                 {allSchoolOptions.map(
                                                     (school) => (
                                                         <SelectItem
@@ -1367,7 +1369,12 @@ export default function Athletes({
                                                     'Not assigned'}
                                             </TableCell>
                                             <TableCell>
-                                                {athlete.delegation}
+                                                <div>{athlete.delegation}</div>
+                                                {athlete.registration_concern && (
+                                                    <div className="mt-1 max-w-xs text-xs text-amber-700 dark:text-amber-400">
+                                                        Remark: {athlete.registration_concern}
+                                                    </div>
+                                                )}
                                             </TableCell>
                                             <TableCell>
                                                 <Badge

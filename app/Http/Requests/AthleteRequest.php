@@ -117,7 +117,7 @@ class AthleteRequest extends FormRequest
             }
             if ($this->user()?->role === UserRole::TournamentICT) {
                 $rules['delegation_id'] = ['sometimes', 'required', 'integer', Rule::exists('delegations', 'id')];
-                $rules['school_id'] = ['sometimes', 'required', 'integer', Rule::exists('schools', 'id')->where('active', true)];
+                $rules['school_id'] = ['sometimes', 'nullable', 'integer', Rule::exists('schools', 'id')->where('active', true)];
                 $rules['registered_by'] = ['sometimes', 'nullable', 'integer', Rule::exists('users', 'id')];
                 $rules['coach_ids'] = ['sometimes', 'array', 'min:1', 'max:2'];
                 $rules['coach_ids.*'] = ['integer', 'distinct', Rule::exists('users', 'id')];
@@ -131,7 +131,7 @@ class AthleteRequest extends FormRequest
             $rules['middle_name'] = ['required', 'string', 'max:80'];
             $rules['name_extension'] = ['required', Rule::in(['None', 'Jr.', 'Sr.', 'II', 'III'])];
             $rules['delegation_id'] = ['required', 'integer', Rule::exists('delegations', 'id')];
-            $rules['school_id'] = ['required', 'integer', Rule::exists('schools', 'id')->where('active', true)];
+            $rules['school_id'] = ['nullable', 'integer', Rule::exists('schools', 'id')->where('active', true)];
             if ($this->user()?->role === UserRole::Coach) {
                 $rules['district_id'] = ['sometimes', 'required', 'integer', Rule::exists('districts', 'id')->where('active', true)];
                 $rules['school_district_id'] = ['sometimes', 'required', 'integer', Rule::exists('school_districts', 'id')->where('active', true)];
@@ -143,7 +143,7 @@ class AthleteRequest extends FormRequest
         } elseif ($this->user()?->isAdmin() || $this->user()?->canManageProductionAccounts()
             || Gate::allows('update', $athlete)) {
             $rules['delegation_id'] = ['sometimes', 'required', 'integer', Rule::exists('delegations', 'id')];
-            $rules['school_id'] = ['sometimes', 'required', 'integer', Rule::exists('schools', 'id')->where('active', true)];
+            $rules['school_id'] = ['sometimes', 'nullable', 'integer', Rule::exists('schools', 'id')->where('active', true)];
             $rules['meet_sport_ids'] = ['sometimes', 'array'];
             $rules['meet_sport_ids.*'] = ['integer', 'distinct', Rule::exists('meet_sports', 'id')];
             $rules['event_ids'] = ['sometimes', 'array'];
@@ -187,39 +187,20 @@ class AthleteRequest extends FormRequest
         $validator->after(function (Validator $validator): void {
             $athlete = $this->route('athlete');
             if ($athlete instanceof Athlete) {
-                if ($this->user()?->role === UserRole::TournamentICT
-                    && ($this->filled('delegation_id') || $this->filled('school_id'))) {
-                    $delegation = Delegation::find($this->integer('delegation_id') ?: $athlete->delegation_id);
-                    $school = School::find($this->integer('school_id') ?: $athlete->school_id);
-                    if ($delegation !== null && $school !== null) {
-                        $belongs = $delegation->school_id !== null
-                            ? $school->id === $delegation->school_id
-                            : $school->district_id === $delegation->district_id;
-                        if (! $belongs) {
-                            $validator->errors()->add('school_id', __('The selected School does not belong to the selected Delegation.'));
-                        }
-                    }
-                }
-
                 return;
             }
 
             $delegation = Delegation::find($this->integer('delegation_id'));
             $school = School::find($this->integer('school_id'));
 
-            if ($delegation === null || $school === null) {
+            if ($delegation === null) {
                 return;
             }
+            // A school outside the delegation municipality is permitted.
+            // The discrepancy is presented as a non-blocking registration
+            // concern to Coach and ICT users instead of rejecting the record.
 
-            $schoolBelongsToDelegation = $delegation->school_id !== null
-                ? $school->id === $delegation->school_id
-                : ($school->district_id === $delegation->district_id
-                    || ($this->filled('district_id') && $this->integer('district_id') === $delegation->district_id));
-            if ($this->user()?->role === UserRole::Coach && ! $schoolBelongsToDelegation) {
-                $validator->errors()->add('school_id', __('The selected School does not belong to the authorized Delegation.'));
-            }
-
-            if ($this->user()?->role === UserRole::Coach && $this->filled('district_id')) {
+            if ($this->user()?->role === UserRole::Coach && $school !== null && $this->filled('district_id')) {
                 $municipalityId = $this->integer('district_id');
                 $schoolDistrict = SchoolDistrict::find($this->integer('school_district_id'));
                 $delegationMunicipalityId = $delegation->district_id ?? $delegation->school?->district_id;

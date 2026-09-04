@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { formatTime } from '@/lib/format-time';
 import {
     Select,
     SelectContent,
@@ -477,7 +478,7 @@ export default function Schedule({
                                             {slot.date_label}
                                         </TableCell>
                                         <TableCell className="whitespace-nowrap">
-                                            {slot.starts_at}–{slot.ends_at}
+                                            {formatTime(slot.starts_at)}–{formatTime(slot.ends_at)}
                                         </TableCell>
                                         <TableCell>{slot.event}</TableCell>
                                         <TableCell>

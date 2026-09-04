@@ -418,7 +418,7 @@ class CoachAssignmentRequestController extends Controller
                 'certification_mime_type' => $coachOnboardingRequest->certification?->mime_type,
                 'selected_events' => $selectedEvents->pluck('name')->join(', '),
                 'registered_athletes' => $registeredAthletes->map(fn (Athlete $athlete): array => [
-                    'id' => $athlete->id, 'name' => $athlete->fullName(), 'school' => $athlete->school->name,
+                    'id' => $athlete->id, 'name' => $athlete->fullName(), 'school' => $athlete->school?->name ?? __('Not provided'),
                     'events' => $athlete->entries->pluck('event.name')->filter()->join(', '),
                     'profile_url' => route('athletes.show', $athlete),
                     'photo_url' => $athlete->photo_upload_id ? route('athletes.photo', $athlete) : null,
@@ -797,7 +797,7 @@ class CoachAssignmentRequestController extends Controller
                     ->map(fn (Athlete $athlete): array => [
                         'id' => $athlete->id,
                         'name' => $athlete->fullName(),
-                        'school' => $athlete->school->name,
+                        'school' => $athlete->school?->name ?? __('Not provided'),
                         'events' => $athlete->entries->pluck('event.name')->filter()->join(', '),
                         'profile_url' => route('athletes.show', $athlete),
                         'photo_url' => $athlete->photo_upload_id ? route('athletes.photo', $athlete) : null,

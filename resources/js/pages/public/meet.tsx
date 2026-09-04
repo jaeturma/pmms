@@ -8,6 +8,7 @@ import type { LiveMatch } from '@/components/public-live-matches';
 import { PublicMeetNav } from '@/components/public-meet-nav';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { formatTime } from '@/lib/format-time';
 import {
     Table,
     TableBody,
@@ -211,8 +212,8 @@ export default function PublicMeet({
                                                     {group.slots.map((slot) => (
                                                         <TableRow key={slot.id}>
                                                             <TableCell className="font-medium whitespace-nowrap">
-                                                                {slot.starts_at}
-                                                                –{slot.ends_at}
+                                                                {formatTime(slot.starts_at)}
+                                                                –{formatTime(slot.ends_at)}
                                                             </TableCell>
                                                             <TableCell>
                                                                 {slot.event}

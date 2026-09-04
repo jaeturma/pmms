@@ -183,8 +183,9 @@ class ResultWorkflowController extends Controller
     public function submit(Request $request, EventResult $result): RedirectResponse
     {
         $this->authorizeSportDocument($request->user(), $result);
+        $canDeferIssues = $request->user()->isAdmin() || $this->isAssignedTournamentIct($request->user(), $result);
         abort_unless(in_array($result->status, [ResultStatus::Encoded, ResultStatus::Returned, ResultStatus::Reopened], true), 422);
-        abort_if($result->match_id !== null && $result->tm_confirmed_at === null, 422, 'Tournament Manager confirmation is required before submission.');
+        abort_if(! $canDeferIssues && $result->match_id !== null && $result->tm_confirmed_at === null, 422, 'Tournament Manager confirmation is required before submission.');
 
         if ((bool) config('pmms.results.signed_result_form_required') && $result->currentSignedForm() === null) {
             throw ValidationException::withMessages(['file' => 'A signed Result Form for the current result version is required.']);
@@ -194,7 +195,7 @@ class ResultWorkflowController extends Controller
         // Historical event-level records remain operable. Every newly
         // created result is match-linked by ResultController/service.
         if ($result->match_id !== null) {
-            abort_unless($result->event_schedule_id !== null, 422, 'The result must belong to a scheduled competition.');
+            abort_unless($canDeferIssues || $result->event_schedule_id !== null, 422, 'The result must belong to a scheduled competition.');
             $this->competitionIsCompleted($result);
         }
 
@@ -213,7 +214,9 @@ class ResultWorkflowController extends Controller
 
         $this->audit->record($action, $result, $this->context($result));
 
-        return back()->with('success', 'Result submitted to the Event Secretariat.');
+        return back()->with('success', $canDeferIssues
+            ? 'Result submitted. Any incomplete participant, roster, schedule, or confirmation data is marked to resolve later.'
+            : 'Result submitted to the Event Secretariat.');
     }
 
     public function requestCancellation(Request $request, EventResult $result): RedirectResponse

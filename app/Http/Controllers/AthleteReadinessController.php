@@ -36,7 +36,7 @@ class AthleteReadinessController extends Controller
             $documentsComplete = collect($required)->every(fn ($type) => $athlete->eligibilityDocuments->contains(fn ($document) => $document->document_type === $type && ($type === EligibilityDocumentType::MedicalCertificate || $document->status === RequirementStatus::Verified)));
             $dsacApproved = $athlete->eligibilityReview?->status === EligibilityStatus::Approved;
             $medicalCleared = $athlete->eligibilityDocuments->contains(fn ($document) => $document->document_type === EligibilityDocumentType::MedicalCertificate);
-            return ['id' => $athlete->id, 'name' => $athlete->fullName(), 'school' => $athlete->school->name, 'school_district' => $athlete->school->schoolDistrict?->name ?? 'Unassigned School District',
+            return ['id' => $athlete->id, 'name' => $athlete->fullName(), 'school' => $athlete->school?->name ?? 'Not provided', 'school_district' => $athlete->school?->schoolDistrict?->name ?? 'Unassigned School District',
                 'documents_complete' => $documentsComplete, 'dsac_approved' => $dsacApproved, 'medical_cleared' => $medicalCleared, 'accredited' => $athlete->accreditation !== null,
                 'needs_attention' => ! $documentsComplete || ! $dsacApproved || ! $medicalCleared || $athlete->accreditation === null];
         });

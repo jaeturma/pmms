@@ -14,6 +14,7 @@ import { StatCard } from '@/components/stat-card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { formatTime } from '@/lib/format-time';
 import {
     athletics as publicAthletics,
     meet as publicMeet,
@@ -213,8 +214,8 @@ export default function PublicAthletics({
                                                             {slot.event}
                                                         </p>
                                                         <p className="text-sm text-muted-foreground">
-                                                            {slot.starts_at}–
-                                                            {slot.ends_at} ·{' '}
+                                                            {formatTime(slot.starts_at)}–
+                                                            {formatTime(slot.ends_at)} ·{' '}
                                                             {slot.venue}
                                                         </p>
                                                     </div>

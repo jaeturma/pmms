@@ -347,7 +347,7 @@ class DashboardController extends Controller
                 ->map(fn (EligibilityReview $review): array => [
                     'id' => $review->id,
                     'athlete' => $review->athlete->fullName(),
-                    'school' => $review->athlete->school->name,
+                    'school' => $review->athlete->school?->name ?? __('Not provided'),
                     'status' => $review->status->value,
                     'status_label' => $review->status->label(),
                 ])

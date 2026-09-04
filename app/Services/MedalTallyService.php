@@ -73,7 +73,7 @@ class MedalTallyService
     public function standings(?int $meetId = null, ?int $sportId = null, ?string $ageDivision = null): array
     {
         $placements = $this->basePlacements($meetId, $sportId, $ageDivision)
-            ->with('result.event', 'entry.delegation', 'entry.athlete.school.district', 'entry.athlete.school.schoolDistrict')
+            ->with('result.event', 'entry.delegation', 'entry.athlete.school.district', 'entry.athlete.school.schoolDistrict', 'teamEntry.delegation.district', 'teamEntry.delegation.school.district')
             ->get();
         $tallyPlacements = $this->medalUnits($placements);
 
@@ -95,7 +95,7 @@ class MedalTallyService
 
         // Placements remain authoritative and are included defensively for
         // historical data whose delegation may predate approval enforcement.
-        $placementSchools = $tallyPlacements->pluck('entry.athlete.school')->keyBy('id');
+        $placementSchools = $tallyPlacements->pluck('entry.athlete.school')->filter()->keyBy('id');
         // Once medals exist, retain the established medal-winner-only rows.
         // The approved-delegation fallback is specifically for the otherwise
         // blank pre-results state requested by the tally views.
@@ -113,6 +113,7 @@ class MedalTallyService
         // several schools it pools, and the district/municipality rollup
         // below (unchanged) sums them back up automatically.
         $medalsBySchool = $tallyPlacements
+            ->filter(fn (ResultPlacement $placement): bool => $placement->entry?->athlete?->school_id !== null)
             ->groupBy(fn (ResultPlacement $placement): int => $placement->entry->athlete->school_id)
             ->map(fn (Collection $group): array => $this->medals($group));
 
@@ -163,6 +164,27 @@ class MedalTallyService
                 ];
             });
 
+        $tallyPlacements
+            ->filter(fn (ResultPlacement $placement): bool => $placement->team_entry_id !== null)
+            ->groupBy(fn (ResultPlacement $placement): int|string => $placement->teamEntry?->delegation?->district_id
+                ?? $placement->teamEntry?->delegation?->school?->district_id
+                ?? 'unassigned')
+            ->each(function (Collection $group) use ($districts): void {
+                $delegation = $group->first()->teamEntry?->delegation;
+                $district = $delegation?->district ?? $delegation?->school?->district;
+                $name = $district?->name ?? __('Not assigned');
+                $medals = $this->medals($group);
+                $current = $districts->get($name, [
+                    'district' => $name, 'district_id' => $district?->id,
+                    'gold' => 0, 'silver' => 0, 'bronze' => 0, 'total' => 0, 'points' => 0,
+                ]);
+                foreach (['gold', 'silver', 'bronze', 'total'] as $key) {
+                    $current[$key] += $medals[$key];
+                }
+                $current['points'] = $this->points($current['gold'], $current['silver'], $current['bronze']);
+                $districts->put($name, $current);
+            });
+
         if ($placements->isEmpty()) {
             $delegations
                 ->map(fn (Delegation $delegation) => $delegation->district ?? $delegation->school?->district)
@@ -200,11 +222,11 @@ class MedalTallyService
     public function medalsBySport(?int $meetId = null, ?int $sportId = null, ?string $ageDivision = null): array
     {
         $placements = $this->basePlacements($meetId, $sportId, $ageDivision)
-            ->with('entry.event.sport')
+            ->with('result.event.sport')
             ->get();
 
         return $placements
-            ->groupBy(fn (ResultPlacement $placement): string => $placement->entry->event->sport->name)
+            ->groupBy(fn (ResultPlacement $placement): string => $placement->result->event->sport->name)
             ->map(function (Collection $group, string $sport): array {
                 $medals = $this->medals($group);
 
@@ -250,7 +272,7 @@ class MedalTallyService
                 'entry.athlete.school.schoolDistrict',
                 'entry.event.sport',
             ])
-            ->get();
+            ->whereNotNull('entry_id')->get();
 
         $multiDistrictMunicipalityIds = $this->multiDistrictMunicipalityIds($placements);
 
@@ -309,14 +331,14 @@ class MedalTallyService
             ->when(
                 $sportId !== null && $sportId > 0,
                 fn ($query) => $query->whereHas(
-                    'entry.event',
+                    'result.event',
                     fn ($event) => $event->where('sport_id', $sportId),
                 ),
             )
             ->when(
                 $ageDivision !== null && $ageDivision !== '',
                 fn ($query) => $query->whereHas(
-                    'entry.event',
+                    'result.event',
                     fn ($event) => $event->where('age_division', $ageDivision),
                 ),
             )
@@ -327,10 +349,11 @@ class MedalTallyService
             // of which pooled school the medalist actually attends.
             ->when(
                 $districtId !== null,
-                fn ($query) => $query->whereHas(
-                    'entry.athlete.school',
-                    fn ($school) => $school->where('district_id', $districtId),
-                ),
+                fn ($query) => $query->where(fn ($scope) => $scope
+                    ->whereHas('entry.athlete.school', fn ($school) => $school->where('district_id', $districtId))
+                    ->orWhereHas('teamEntry.delegation', fn ($delegation) => $delegation
+                        ->where('district_id', $districtId)
+                        ->orWhereHas('school', fn ($school) => $school->where('district_id', $districtId)))),
             )
             // Paragames is a real, seeded Sport-name prefix
             // ('Paragames - Athletics', 'Paragames - Swimming' —
@@ -342,11 +365,11 @@ class MedalTallyService
             // Secondary `age_division`); `null` (default) applies no filter
             // at all.
             ->when($paragames === true, fn ($query) => $query->whereHas(
-                'entry.event.sport',
+                'result.event.sport',
                 fn ($sport) => $sport->where('name', 'like', 'Paragames%'),
             ))
             ->when($paragames === false, fn ($query) => $query->whereHas(
-                'entry.event.sport',
+                'result.event.sport',
                 fn ($sport) => $sport->where('name', 'not like', 'Paragames%'),
             ));
     }
@@ -417,7 +440,8 @@ class MedalTallyService
                 $first = $group->first();
                 $event = $first->result->event;
                 $isTeam = $event->is_team_event;
-                $school = $first->entry->athlete->school;
+                $school = $first->entry?->athlete?->school ?? $first->teamEntry?->delegation?->school;
+                $delegation = $first->teamEntry?->delegation;
 
                 return [
                     'medal' => match ($first->rank) {
@@ -429,16 +453,16 @@ class MedalTallyService
                     'participant_type' => $isTeam ? 'team' : 'athlete',
                     'athlete_name' => $isTeam ? null : $first->entry->athlete->fullName(),
                     'team_name' => $isTeam
-                        ? sprintf('%s %s Team', $school->district?->name ?? $school->name, $event->sport->name)
+                        ? sprintf('%s %s Team', $delegation?->registrantName() ?? $school?->name ?? __('Delegation'), $event->sport->name)
                         : null,
                     'roster' => $isTeam
-                        ? $group->map(fn (ResultPlacement $p): string => $p->entry->athlete->fullName())->values()->all()
+                        ? $group->map(fn (ResultPlacement $p): ?string => $p->entry?->athlete?->fullName())->filter()->values()->all()
                         : [],
                     'sport' => $event->sport->name,
                     'event' => $event->name,
                     'gender' => $event->gender->label(),
                     'level' => $event->age_division->label(),
-                    'school' => $school->name,
+                    'school' => $school?->name,
                 ];
             })
             ->sortBy(fn (array $row): int => match ($row['medal']) {

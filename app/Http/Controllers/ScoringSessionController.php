@@ -100,7 +100,7 @@ class ScoringSessionController extends Controller
         $teamEntries = $match->teamEntries;
         $sideLabels = $match->event->is_team_event
             ? $teamEntries->map(fn ($team): string => $team->delegation->registrantName())->values()
-            : $entries->map(fn (Entry $entry): string => $entry->athlete->school->name)->values();
+            : $entries->map(fn (Entry $entry): string => $entry->athlete->school?->name ?? __('School not provided'))->values();
 
         return Inertia::render('scoring/show', [
             'match' => [
@@ -175,7 +175,7 @@ class ScoringSessionController extends Controller
         ]);
         $scheduledLabels = $match->event->is_team_event
             ? $match->teamEntries->map(fn ($team): string => $team->delegation->registrantName())->values()
-            : $match->entries->map(fn (Entry $entry): string => $entry->athlete->school->name)->values();
+            : $match->entries->map(fn (Entry $entry): string => $entry->athlete->school?->name ?? __('School not provided'))->values();
 
         if ($scheduledLabels->count() === 2) {
             $data['side_a_label'] = $scheduledLabels[0];

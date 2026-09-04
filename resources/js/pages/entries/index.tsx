@@ -285,18 +285,21 @@ function SubmitEntryDialog({
 function TeamEntryDialog({
     athleteOptions,
     eventOptionsByMeet,
+    delegationOptions,
     open,
     onOpenChange,
     team,
 }: {
     athleteOptions: AthleteOption[];
     eventOptionsByMeet: EventOption[];
+    delegationOptions: FilterOption[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
     team?: Props['teamEntries'][number];
 }) {
     const { data, setData, post, processing, errors, reset } = useForm({
         event_id: team ? String(team.event_id) : '',
+        delegation_id: team ? String(team.delegation_id) : '',
         athlete_ids: team ? team.members.map((member) => member.id) : [],
     });
     const teamEvents = eventOptionsByMeet.filter(
@@ -305,19 +308,17 @@ function TeamEntryDialog({
     const selectedEvent = teamEvents.find(
         (event) => String(event.id) === data.event_id,
     );
-    const athletes = team
-        ? athleteOptions.filter(
-              (athlete) =>
-                  athlete.meet_id === team.meet_id &&
-                  athlete.delegation_id === team.delegation_id,
+    const availableDelegations = selectedEvent
+        ? delegationOptions.filter((delegation) =>
+              selectedEvent.delegation_ids.includes(delegation.id),
           )
-        : selectedEvent
-          ? athleteOptions.filter(
-              (athlete) =>
-                  athlete.meet_id === selectedEvent.meet_id &&
-                  selectedEvent.delegation_ids.includes(athlete.delegation_id),
-            )
-          : [];
+        : [];
+    const athletes = athleteOptions.filter(
+        (athlete) =>
+            athlete.meet_id === (team?.meet_id ?? selectedEvent?.meet_id) &&
+            athlete.delegation_id ===
+                Number(team?.delegation_id ?? data.delegation_id),
+    );
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -342,31 +343,61 @@ function TeamEntryDialog({
                         });
                     }}
                 >
-                    {!team && <div className="space-y-2">
-                        <Label>Team, pair, doubles, or relay event</Label>
-                        <Select
-                            value={data.event_id}
-                            onValueChange={(value) => {
-                                setData('event_id', value);
-                                setData('athlete_ids', []);
-                            }}
-                        >
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select a team event" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {teamEvents.map((event) => (
-                                    <SelectItem
-                                        key={`${event.meet_id}-${event.id}`}
-                                        value={String(event.id)}
-                                    >
-                                        {event.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <InputError message={errors.event_id} />
-                    </div>}
+                    {!team && (
+                        <div className="space-y-2">
+                            <Label>Team, pair, doubles, or relay event</Label>
+                            <Select
+                                value={data.event_id}
+                                onValueChange={(value) => {
+                                    setData('event_id', value);
+                                    setData('delegation_id', '');
+                                    setData('athlete_ids', []);
+                                }}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select a team event" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {teamEvents.map((event) => (
+                                        <SelectItem
+                                            key={`${event.meet_id}-${event.id}`}
+                                            value={String(event.id)}
+                                        >
+                                            {event.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <InputError message={errors.event_id} />
+                        </div>
+                    )}
+                    {!team && selectedEvent && (
+                        <div className="space-y-2">
+                            <Label>Delegation / Team</Label>
+                            <Select
+                                value={data.delegation_id}
+                                onValueChange={(value) => {
+                                    setData('delegation_id', value);
+                                    setData('athlete_ids', []);
+                                }}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select a delegation" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {availableDelegations.map((delegation) => (
+                                        <SelectItem
+                                            key={delegation.id}
+                                            value={String(delegation.id)}
+                                        >
+                                            {delegation.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <InputError message={errors.delegation_id} />
+                        </div>
+                    )}
                     {team && (
                         <p className="text-sm text-muted-foreground">
                             {team.event} — {team.delegation}. Members can be
@@ -376,36 +407,52 @@ function TeamEntryDialog({
                     )}
                     <div className="space-y-2">
                         <Label>Official team members</Label>
+                        <p className="text-xs text-muted-foreground">
+                            Optional during submission. Athletes can be assigned
+                            before the team entry is finalized.
+                        </p>
                         <div className="max-h-72 space-y-1 overflow-y-auto rounded-md border p-3">
-                            {athletes.map((athlete) => (
-                                <label
-                                    key={athlete.id}
-                                    className="flex cursor-pointer items-center gap-3 rounded p-2 hover:bg-muted/50"
-                                >
-                                    <Checkbox
-                                        checked={data.athlete_ids.includes(
-                                            athlete.id,
-                                        )}
-                                        onCheckedChange={(checked) =>
-                                            setData(
-                                                'athlete_ids',
-                                                checked === true
-                                                    ? [
-                                                          ...data.athlete_ids,
-                                                          athlete.id,
-                                                      ]
-                                                    : data.athlete_ids.filter(
-                                                          (id) =>
-                                                              id !== athlete.id,
-                                                      ),
-                                            )
-                                        }
-                                    />
-                                    <span className="text-sm">
-                                        {athlete.label}
-                                    </span>
-                                </label>
-                            ))}
+                            {!team && !data.delegation_id ? (
+                                <p className="text-sm text-muted-foreground">
+                                    Select a delegation to load its athletes.
+                                </p>
+                            ) : athletes.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">
+                                    No athletes are assigned yet. You may still
+                                    submit this team entry.
+                                </p>
+                            ) : (
+                                athletes.map((athlete) => (
+                                    <label
+                                        key={athlete.id}
+                                        className="flex cursor-pointer items-center gap-3 rounded p-2 hover:bg-muted/50"
+                                    >
+                                        <Checkbox
+                                            checked={data.athlete_ids.includes(
+                                                athlete.id,
+                                            )}
+                                            onCheckedChange={(checked) =>
+                                                setData(
+                                                    'athlete_ids',
+                                                    checked === true
+                                                        ? [
+                                                              ...data.athlete_ids,
+                                                              athlete.id,
+                                                          ]
+                                                        : data.athlete_ids.filter(
+                                                              (id) =>
+                                                                  id !==
+                                                                  athlete.id,
+                                                          ),
+                                                )
+                                            }
+                                        />
+                                        <span className="text-sm">
+                                            {athlete.label}
+                                        </span>
+                                    </label>
+                                ))
+                            )}
                         </div>
                         <InputError message={errors.athlete_ids} />
                     </div>
@@ -413,10 +460,13 @@ function TeamEntryDialog({
                         <Button
                             type="submit"
                             disabled={
-                                processing || data.athlete_ids.length === 0
+                                processing ||
+                                !data.event_id ||
+                                !data.delegation_id
                             }
                         >
-                            {team ? 'Assign athletes' : 'Save team'} ({data.athlete_ids.length})
+                            {team ? 'Save athletes' : 'Submit team entry'} (
+                            {data.athlete_ids.length})
                         </Button>
                     </DialogFooter>
                 </form>
@@ -839,6 +889,7 @@ export default function Entries({
             <TeamEntryDialog
                 athleteOptions={athleteOptions}
                 eventOptionsByMeet={eventOptionsByMeet}
+                delegationOptions={delegationFilterOptions}
                 open={teamOpen}
                 onOpenChange={setTeamOpen}
             />
@@ -848,6 +899,7 @@ export default function Entries({
                     team={postedTeam}
                     athleteOptions={athleteOptions}
                     eventOptionsByMeet={eventOptionsByMeet}
+                    delegationOptions={delegationFilterOptions}
                     open
                     onOpenChange={(open) => {
                         if (!open) {

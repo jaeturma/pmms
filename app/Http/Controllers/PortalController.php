@@ -278,8 +278,8 @@ class PortalController extends Controller
                         ->map(fn (ResultPlacement $placement): array => [
                             'rank' => $placement->rank,
                             'athlete' => $placement->entry->athlete->fullName(),
-                            'school' => $placement->entry->athlete->school->name,
-                            'delegation' => $placement->entry->athlete->school->district->name,
+                            'school' => $placement->entry->athlete->school?->name ?? __('Not provided'),
+                            'delegation' => $placement->entry->athlete->school?->district?->name ?? $placement->entry->delegation->registrantName(),
                             'mark' => $placement->mark,
                             'is_tie' => $placement->is_tie,
                         ])
@@ -505,7 +505,7 @@ class PortalController extends Controller
                             ->map(fn (ResultPlacement $placement): array => [
                                 'rank' => $placement->rank,
                                 'athlete' => $placement->entry->athlete->fullName(),
-                                'school' => $placement->entry->athlete->school->name,
+                                'school' => $placement->entry->athlete->school?->name ?? __('Not provided'),
                                 'mark' => $placement->mark,
                             ])
                             ->values()
@@ -623,8 +623,8 @@ class PortalController extends Controller
                 ->map(fn (ResultPlacement $placement): array => [
                     'rank' => $placement->rank,
                     'athlete' => $placement->entry->athlete->fullName(),
-                    'school' => $placement->entry->athlete->school->name,
-                    'delegation' => $placement->entry->athlete->school->district->name,
+                    'school' => $placement->entry->athlete->school?->name ?? __('Not provided'),
+                    'delegation' => $placement->entry->athlete->school?->district?->name ?? $placement->entry->delegation->registrantName(),
                     'mark' => $placement->mark,
                     'is_tie' => $placement->is_tie,
                 ])
@@ -935,8 +935,8 @@ class PortalController extends Controller
                 'sport_id' => $placement->result->event->sport->id,
                 'rank' => $placement->rank,
                 'athlete' => $placement->entry->athlete->fullName(),
-                'school' => $placement->entry->athlete->school->name,
-                'delegation' => $placement->entry->athlete->school->district->name,
+                'school' => $placement->entry->athlete->school?->name ?? __('Not provided'),
+                'delegation' => $placement->entry->athlete->school?->district?->name ?? $placement->entry->delegation->registrantName(),
                 'mark' => $placement->mark,
                 'is_tie' => $placement->is_tie,
             ])
@@ -1538,7 +1538,7 @@ class PortalController extends Controller
             $winner = sprintf(
                 '1st: %s (%s)',
                 $placement->entry->athlete->fullName(),
-                $placement->entry->athlete->school->name,
+                $placement->entry->athlete->school?->name ?? __('Not provided'),
             );
             $mark = $placement->mark;
         }
@@ -1580,8 +1580,8 @@ class PortalController extends Controller
 
         if ($entries->count() === 2) {
             return [
-                $entries[0]->athlete->school->name,
-                $entries[1]->athlete->school->name,
+                $entries[0]->athlete->school?->name ?? __('Not provided'),
+                $entries[1]->athlete->school?->name ?? __('Not provided'),
             ];
         }
 
@@ -1866,8 +1866,8 @@ class PortalController extends Controller
                 ->map(fn (ResultPlacement $placement): array => [
                     'rank' => $placement->rank,
                     'athlete' => $placement->entry->athlete->fullName(),
-                    'school' => $placement->entry->athlete->school->name,
-                    'delegation' => $placement->entry->athlete->school->district->name,
+                    'school' => $placement->entry->athlete->school?->name ?? __('Not provided'),
+                    'delegation' => $placement->entry->athlete->school?->district?->name ?? $placement->entry->delegation->registrantName(),
                     'mark' => $placement->mark,
                     'is_tie' => $placement->is_tie,
                 ])

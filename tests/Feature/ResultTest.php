@@ -418,7 +418,7 @@ test('an event gets only one result per meet', function () {
         ->assertSessionHasErrors('match_id');
 });
 
-test('only confirmed entries of the meet event are placeable', function () {
+test('admin can defer entry confirmation issues but foreign event data remains blocked', function () {
     ['meet' => $meet, 'event' => $event, 'match' => $match, 'entries' => $entries] = resultFixture(1);
 
     $submitted = placeableEntry($meet, $event);
@@ -435,7 +435,13 @@ test('only confirmed entries of the meet event are placeable', function () {
                 ['entry_id' => $submitted->id, 'rank' => 1, 'mark' => null, 'is_tie' => false],
             ],
         ])
-        ->assertSessionHasErrors('placements');
+        ->assertSessionDoesntHaveErrors();
+
+    $this->actingAs($admin)->get('/results')->assertInertia(fn (AssertableInertia $page) => $page
+        ->where('results.data.0.data_issues', fn ($issues) => collect($issues)->contains('A participant entry is not confirmed.'))
+        ->where('results.data.0.can_defer_issues', true));
+
+    EventResult::query()->firstOrFail()->delete();
 
     $foreign = placeableEntry(Meet::factory()->active()->create(), Event::factory()->create());
 

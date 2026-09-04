@@ -74,6 +74,7 @@ type Match = {
     awards_medals: boolean;
     participants: Participant[];
     team_entry_ids: number[];
+    team_delegation_ids: number[];
     participant_slots: Array<{
         id: number;
         delegation_id: number;
@@ -107,6 +108,7 @@ type Props = {
     scheduleOptions: ScheduleOption[];
     entryOptions: EntryOption[];
     teamEntryOptions: EntryOption[];
+    teamDelegationOptions: Option[];
     athleteOptions: AthleteOption[];
     canManage: boolean;
 };
@@ -329,14 +331,14 @@ function MatchFormDialog({
 function ParticipantsDialog({
     match,
     entryOptions,
-    teamEntryOptions,
+    teamDelegationOptions,
     athleteOptions,
     open,
     onOpenChange,
 }: {
     match: Match;
     entryOptions: EntryOption[];
-    teamEntryOptions: EntryOption[];
+    teamDelegationOptions: Option[];
     athleteOptions: AthleteOption[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -347,27 +349,28 @@ function ParticipantsDialog({
             ? []
             : match.participants.map((p) => p.entry_id),
         team_entry_ids: match.team_entry_ids,
+        delegation_ids: match.team_delegation_ids,
         slot_assignments: match.participant_slots.map((slot) => ({
             slot_id: slot.id,
             athlete_id: slot.athlete_id ? String(slot.athlete_id) : '',
         })),
     });
 
-    const options = (data.participant_mode === 'team' ? teamEntryOptions : entryOptions).filter(
-        (option) => option.event_id === match.event_id,
-    );
+    const options = data.participant_mode === 'team'
+        ? teamDelegationOptions
+        : entryOptions.filter((option) => option.event_id === match.event_id);
     const selectedIds = data.participant_mode === 'team'
-        ? data.team_entry_ids
+        ? data.delegation_ids
         : data.entry_ids;
     const useParticipantSlots =
-        data.participant_mode === 'individual' && options.length === 0 && match.participant_slots.length > 0;
+        data.participant_mode === 'individual' && match.participant_slots.length > 0;
     const allChecked =
         options.length > 0 &&
         options.every((option) => selectedIds.includes(option.id));
 
     const toggle = (entryId: number, checked: boolean) => {
         setData(
-            data.participant_mode === 'team' ? 'team_entry_ids' : 'entry_ids',
+            data.participant_mode === 'team' ? 'delegation_ids' : 'entry_ids',
             checked
                 ? [...selectedIds, entryId]
                 : selectedIds.filter((id) => id !== entryId),
@@ -388,7 +391,7 @@ function ParticipantsDialog({
                       ),
                   }
                 : match.is_team_event
-                  ? { participant_mode: 'team', team_entry_ids: values.team_entry_ids }
+                  ? { participant_mode: 'team', delegation_ids: values.delegation_ids }
                   : { participant_mode: 'individual', entry_ids: values.entry_ids },
         );
         put(participantsRoute(match.id).url, {
@@ -412,6 +415,7 @@ function ParticipantsDialog({
                             setData('participant_mode', value);
                             setData('entry_ids', []);
                             setData('team_entry_ids', []);
+                            setData('delegation_ids', []);
                         }}>
                             <SelectTrigger><SelectValue placeholder="Choose Team or Individual first" /></SelectTrigger>
                             <SelectContent>
@@ -424,7 +428,7 @@ function ParticipantsDialog({
                     </div>
                     <p className="text-sm text-muted-foreground">
                         {data.participant_mode === 'team'
-                            ? 'Select one delegation team entry for each participant.'
+                            ? 'Select any delegation. A team entry is created when needed, and athletes can be attached later.'
                             : data.participant_mode === 'individual'
                               ? 'Select each individual athlete entry. Entries are shown as Delegation (Athlete).'
                               : 'Choose how participants will be entered before selecting them.'}
@@ -461,7 +465,7 @@ function ParticipantsDialog({
                         </div>
                     ) : options.length === 0 ? (
                         <p className="text-sm text-muted-foreground">
-                            No delegation sport rosters are available for this event yet.
+                            No delegations are available for this meet yet.
                         </p>
                     ) : (
                         <div className="max-h-72 space-y-2 overflow-y-auto rounded-lg border p-3">
@@ -470,7 +474,7 @@ function ParticipantsDialog({
                                     checked={allChecked}
                                     onCheckedChange={(checked) =>
                                         setData(
-                                            data.participant_mode === 'team' ? 'team_entry_ids' : 'entry_ids',
+                                            data.participant_mode === 'team' ? 'delegation_ids' : 'entry_ids',
                                             checked === true
                                                 ? options.map(
                                                       (option) => option.id,
@@ -501,6 +505,7 @@ function ParticipantsDialog({
                     )}
                     <InputError message={errors.entry_ids} />
                     <InputError message={errors.team_entry_ids} />
+                    <InputError message={errors.delegation_ids} />
                     <DialogFooter>
                         <Button
                             type="submit"
@@ -527,7 +532,7 @@ export default function Matches({
     eventOptions,
     scheduleOptions,
     entryOptions,
-    teamEntryOptions,
+    teamDelegationOptions,
     athleteOptions,
     canManage,
 }: Props) {
@@ -850,7 +855,7 @@ export default function Matches({
                     key={participantsFor.id}
                     match={participantsFor}
                     entryOptions={entryOptions}
-                    teamEntryOptions={teamEntryOptions}
+                    teamDelegationOptions={teamDelegationOptions}
                     athleteOptions={athleteOptions}
                     open={participantsFor !== null}
                     onOpenChange={(open) => {

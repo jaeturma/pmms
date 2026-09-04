@@ -564,7 +564,7 @@ class ReportController extends Controller
                 'sex_label' => $entry->athlete->sex->label(),
                 'age' => $entry->athlete->age(),
                 'grade_level' => $entry->athlete->grade_level,
-                'school' => $entry->athlete->school->name,
+                'school' => $entry->athlete->school?->name ?? __('Not provided'),
                 'status_label' => $entry->status->label(),
             ])
             ->sortBy([['school', 'asc'], ['last_name', 'asc']])

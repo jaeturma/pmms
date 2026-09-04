@@ -12,6 +12,7 @@ import type {
     PortalMedalTotals,
 } from '@/apps/portal/types';
 import { athletics as publicAthletics } from '@/routes/public';
+import { formatTime } from '@/lib/format-time';
 
 type Props = {
     meet: PortalMeetSummary;
@@ -83,7 +84,7 @@ export default function PortalAthletics({
                                         {statusLabel[slot.status]}
                                     </span>
                                     <span className="text-xs text-[var(--portal-muted-foreground)]">
-                                        {slot.starts_at}–{slot.ends_at} ·{' '}
+                                        {formatTime(slot.starts_at)}–{formatTime(slot.ends_at)} ·{' '}
                                         {slot.venue}
                                     </span>
                                 </div>

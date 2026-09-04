@@ -314,7 +314,7 @@ class AccreditationController extends Controller
     private function subjectSchoolName(Accreditation $accreditation): string
     {
         if ($accreditation->athlete !== null) {
-            return $accreditation->athlete->school->name;
+            return $accreditation->athlete->school?->name ?? __('Not provided');
         }
 
         if ($accreditation->personnel !== null) {

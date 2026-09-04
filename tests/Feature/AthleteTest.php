@@ -69,6 +69,19 @@ test('viewers have no access to athlete data', function () {
         ->assertForbidden();
 });
 
+test('an athlete can be registered without a school and continue processing', function () {
+    $delegation = Delegation::factory()->create(['school_id' => null]);
+    $payload = validAthletePayload($delegation);
+    $payload['school_id'] = null;
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/athletes', $payload)
+        ->assertRedirect()
+        ->assertSessionDoesntHaveErrors();
+
+    expect(Athlete::query()->sole()->school_id)->toBeNull();
+});
+
 test('assigned tournament operations can manually approve an athlete with incomplete documents', function (MeetSportAssignmentRole $role) {
     $athlete = Athlete::factory()->create();
     $meetSport = MeetSport::factory()->create(['meet_id' => $athlete->delegation->meet_id]);

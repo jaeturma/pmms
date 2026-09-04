@@ -4,12 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Enums\AgeDivision;
 use App\Enums\EligibilityStatus;
-use App\Enums\MeetSportAssignmentRole;
 use App\Enums\EntryStatus;
 use App\Enums\MedicalClearanceStatus;
+use App\Enums\MeetSportAssignmentRole;
 use App\Enums\ResultStatus;
 use App\Enums\UserRole;
 use App\Models\Athlete;
+use App\Models\Delegation;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\MeetSport;
@@ -34,15 +35,24 @@ class TeamEntryController extends Controller
     {
         $validated = $request->validate([
             'event_id' => ['required', 'integer', Rule::exists('events', 'id')],
-            'athlete_ids' => ['required', 'array', 'min:1'],
+            'delegation_id' => ['nullable', 'integer', Rule::exists('delegations', 'id')],
+            'athlete_ids' => ['nullable', 'array'],
             'athlete_ids.*' => ['required', 'integer', 'distinct', Rule::exists('athletes', 'id')],
         ]);
         $event = Event::query()->with(['sportCategory', 'meets'])->findOrFail($validated['event_id']);
+        $requestedAthleteIds = $validated['athlete_ids'] ?? [];
         $athletesById = Athlete::query()->with(['delegation.meet', 'eligibilityReview', 'medicalClearance'])
-            ->whereKey($validated['athlete_ids'])->get()->keyBy('id');
-        $athletes = collect($validated['athlete_ids'])->map(fn (int $id) => $athletesById->get($id))->filter()->values();
-        $this->assertRosterValid($request->user(), $event, $athletes, count($validated['athlete_ids']), false);
-        $delegation = $athletes->first()->delegation;
+            ->whereKey($requestedAthleteIds)->get()->keyBy('id');
+        $athletes = collect($requestedAthleteIds)->map(fn (int $id) => $athletesById->get($id))->filter()->values();
+        $delegation = isset($validated['delegation_id'])
+            ? Delegation::query()->with('meet')->findOrFail($validated['delegation_id'])
+            : $athletes->first()?->delegation;
+        if ($delegation === null) {
+            throw ValidationException::withMessages([
+                'delegation_id' => __('Select the delegation submitting this team entry.'),
+            ]);
+        }
+        $this->assertRosterValid($request->user(), $event, $delegation, $athletes, count($requestedAthleteIds), false);
         Gate::authorize('create', [Entry::class, $delegation, $event]);
 
         $team = DB::transaction(function () use ($request, $event, $athletes, $delegation): TeamEntry {
@@ -87,7 +97,7 @@ class TeamEntryController extends Controller
         $teamEntry->load(['delegation', 'event.sportCategory', 'event.meets', 'members.athlete.delegation.meet', 'members.athlete.eligibilityReview', 'members.athlete.medicalClearance']);
         Gate::authorize('create', [Entry::class, $teamEntry->delegation, $teamEntry->event]);
         $athletes = $teamEntry->members->pluck('athlete');
-        $this->assertRosterValid($request->user(), $teamEntry->event, $athletes, $athletes->count(), true);
+        $this->assertRosterValid($request->user(), $teamEntry->event, $teamEntry->delegation, $athletes, $athletes->count(), true);
         DB::transaction(function () use ($teamEntry): void {
             $teamEntry->members()->with('entry')->get()->each(
                 fn ($member) => $member->entry->forceFill(['status' => EntryStatus::Confirmed])->save(),
@@ -100,18 +110,30 @@ class TeamEntryController extends Controller
     }
 
     /** @param Collection<int, Athlete> $athletes */
-    private function assertRosterValid(User $user, Event $event, Collection $athletes, int $requestedCount, bool $finalizing): void
+    private function assertRosterValid(User $user, Event $event, Delegation $delegation, Collection $athletes, int $requestedCount, bool $finalizing): void
     {
         if (! $event->is_team_event) {
             throw ValidationException::withMessages(['event_id' => __('Select a team, pair, doubles, or relay event.')]);
         }
-        if ($athletes->count() !== $requestedCount || $athletes->isEmpty()) {
+        if ($athletes->count() !== $requestedCount) {
             throw ValidationException::withMessages(['athlete_ids' => __('Every selected athlete must exist.')]);
+        }
+        if ($athletes->isEmpty() && ! $finalizing) {
+            if (! $event->meets->contains('id', $delegation->meet_id)) {
+                throw ValidationException::withMessages(['event_id' => __('The team event is not part of the selected delegation’s meet.')]);
+            }
+
+            return;
+        }
+        if ($athletes->isEmpty()) {
+            throw ValidationException::withMessages(['athlete_ids' => __('Assign the required athletes before finalizing this team entry.')]);
         }
         if ($athletes->pluck('delegation_id')->unique()->count() !== 1) {
             throw ValidationException::withMessages(['athlete_ids' => __('All team members must belong to the same delegation.')]);
         }
-        $delegation = $athletes->first()->delegation;
+        if ($athletes->contains(fn (Athlete $athlete): bool => $athlete->delegation_id !== $delegation->id)) {
+            throw ValidationException::withMessages(['athlete_ids' => __('Every team member must belong to the selected delegation.')]);
+        }
         $isAssignedIct = app(CompetitionAccessService::class)->hasAssignmentRole(
             $user,
             [MeetSportAssignmentRole::TournamentICT->value],

@@ -364,7 +364,7 @@ class PortalTeamsController extends Controller
                         'event' => $entry->event->name,
                         'level' => $entry->event->age_division->value,
                         'category' => sprintf('%s %s', $entry->event->age_division->label(), $entry->event->gender->label()),
-                        'school' => $entry->athlete->school->name,
+                        'school' => $entry->athlete->school?->name ?? __('Not provided'),
                         'eligibility_status' => $entry->athlete->eligibilityReview?->status === EligibilityStatus::Approved
                             ? 'Eligible'
                             : ($entry->athlete->eligibilityReview?->status->label() ?? 'Not Submitted'),

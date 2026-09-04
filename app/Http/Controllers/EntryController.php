@@ -127,7 +127,7 @@ class EntryController extends Controller
                         $entry->event->gender->label(),
                         $entry->event->age_division->label(),
                     ),
-                    'school' => $entry->athlete->school->name,
+                    'school' => $entry->athlete->school?->name ?? __('Not provided'),
                     'delegation' => $entry->delegation->registrantName(),
                     'meet' => $entry->delegation->meet->name,
                     'status' => $entry->status->value,
@@ -177,7 +177,7 @@ class EntryController extends Controller
                     'id' => $athlete->id,
                     'meet_id' => $athlete->delegation->meet->id,
                     'delegation_id' => $athlete->delegation_id,
-                    'label' => "{$athlete->fullName()} — {$athlete->school->name}",
+                    'label' => $athlete->fullName().' — '.($athlete->school?->name ?? __('School not provided')),
                     'event_ids' => $athlete->entries
                         ->where('status', '!=', EntryStatus::Withdrawn)
                         ->pluck('event_id')->values()->all(),

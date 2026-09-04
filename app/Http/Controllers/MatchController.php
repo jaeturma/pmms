@@ -18,7 +18,6 @@ use App\Models\EventMatch;
 use App\Models\EventSchedule;
 use App\Models\Meet;
 use App\Models\MatchParticipantSlot;
-use App\Models\MeetSport;
 use App\Models\SportRosterMember;
 use App\Models\TeamEntry;
 use App\Models\User;
@@ -150,12 +149,13 @@ class MatchController extends Controller
                             'name' => $match->event->is_team_event
                                 ? $entry->delegation->registrantName()
                                 : $entry->delegation->registrantName().' ('.$entry->athlete->fullName().')',
-                            'school' => $match->event->is_team_event ? null : $entry->athlete->school->name,
+                            'school' => $match->event->is_team_event ? null : ($entry->athlete->school?->name ?? __('Not provided')),
                         ])
                         ->sortBy('name')
                         ->values()
                         ->all(),
                     'team_entry_ids' => $match->teamEntries->pluck('id')->values()->all(),
+                    'team_delegation_ids' => $match->teamEntries->pluck('delegation_id')->values()->all(),
                     'participant_slots' => $match->participantSlots
                         ->when($user->role === UserRole::Coach, fn ($slots) => $slots->whereIn('delegation_id', $coachDelegationIds))
                         ->map(fn (MatchParticipantSlot $slot): array => [
@@ -258,6 +258,18 @@ class MatchController extends Controller
                 ])
                 ->sortBy('label')
                 ->values(),
+            'teamDelegationOptions' => Delegation::query()
+                ->where('meet_id', Meet::current()->id)
+                ->when($user->role === UserRole::Coach, fn ($delegations) => $delegations
+                    ->whereIn('id', $coachDelegationIds))
+                ->with(['school:id,name', 'district:id,name'])
+                ->get()
+                ->map(fn (Delegation $delegation): array => [
+                    'id' => $delegation->id,
+                    'label' => $delegation->registrantName(),
+                ])
+                ->sortBy('label')
+                ->values(),
             'athleteOptions' => SportRosterMember::query()
                 ->whereHas('meetSport', fn ($meetSports) => $meetSports->where('meet_id', Meet::current()->id))
                 ->when($isTournamentScoped, fn ($members) => $members->whereHas(
@@ -270,7 +282,7 @@ class MatchController extends Controller
                     'id' => $member->athlete_id,
                     'sport_id' => $member->meetSport->sport_id,
                     'delegation_id' => $member->delegation_id,
-                    'label' => $member->athlete->fullName().' — '.$member->athlete->school->name,
+                    'label' => $member->athlete->fullName().' — '.($member->athlete->school?->name ?? __('School not provided')),
                 ])->unique(fn (array $option): string => $option['id'].'-'.$option['sport_id'])->values(),
             'canManage' => $canManageAll || $canManageAssignedCompetition,
         ]);
@@ -334,6 +346,8 @@ class MatchController extends Controller
             'entry_ids.*' => ['integer', 'distinct', Rule::exists('entries', 'id')],
             'team_entry_ids' => ['array'],
             'team_entry_ids.*' => ['integer', 'distinct', Rule::exists('team_entries', 'id')],
+            'delegation_ids' => ['array'],
+            'delegation_ids.*' => ['integer', 'distinct', Rule::exists('delegations', 'id')],
             'slot_assignments' => ['array'],
             'slot_assignments.*.slot_id' => ['required', 'integer', 'distinct', Rule::exists('match_participant_slots', 'id')],
             'slot_assignments.*.athlete_id' => ['nullable', 'integer', Rule::exists('athletes', 'id')],
@@ -367,6 +381,23 @@ class MatchController extends Controller
                 ]);
             }
             $teamEntryIds = $validated['team_entry_ids'] ?? [];
+            $delegationIds = $validated['delegation_ids'] ?? [];
+            if ($delegationIds !== []) {
+                $delegations = Delegation::query()
+                    ->where('meet_id', $match->meet_id)
+                    ->whereIn('id', $delegationIds)
+                    ->get();
+                if ($delegations->count() !== count($delegationIds)) {
+                    throw ValidationException::withMessages([
+                        'delegation_ids' => __('One or more selected delegations do not belong to this match’s meet.'),
+                    ]);
+                }
+                $teamEntryIds = $delegations->map(fn (Delegation $delegation): int => TeamEntry::query()
+                    ->firstOrCreate([
+                        'delegation_id' => $delegation->id,
+                        'event_id' => $match->event_id,
+                    ], ['status' => EntryStatus::Submitted->value])->id)->all();
+            }
             $teams = TeamEntry::query()
                 ->with('delegation:id,meet_id')
                 ->whereIn('id', $teamEntryIds)
@@ -472,18 +503,7 @@ class MatchController extends Controller
     private function ensureParticipantSlots(EventMatch $match): void
     {
         $match->loadMissing('event.sport');
-        $meetSportId = MeetSport::query()->where('meet_id', $match->meet_id)
-            ->where('sport_id', $match->event->sport_id)->value('id');
-        $isAthletics = str_contains(strtolower($match->event->sport->name), 'athletics');
-        $delegationIds = $isAthletics
-            ? Delegation::query()->where('meet_id', $match->meet_id)->pluck('id')
-            : SportRosterMember::query()
-                ->when($meetSportId !== null, fn ($members) => $members->where('meet_sport_id', $meetSportId), fn ($members) => $members->whereRaw('1 = 0'))
-                ->distinct()->pluck('delegation_id')
-                ->merge(Entry::query()->where('event_id', $match->event_id)
-                    ->where('status', '!=', EntryStatus::Withdrawn->value)
-                    ->pluck('delegation_id'))
-                ->unique();
+        $delegationIds = Delegation::query()->where('meet_id', $match->meet_id)->pluck('id');
         $configuredCount = $match->event->is_team_event
             ? 1
             : max(2, (int) $match->event->max_entries_per_delegation);
@@ -496,13 +516,6 @@ class MatchController extends Controller
                 ->orderBy('id')
                 ->get();
             $count = $match->event->is_team_event ? 1 : max($configuredCount, $entries->count());
-
-            if ($match->event->is_team_event) {
-                TeamEntry::query()->firstOrCreate([
-                    'delegation_id' => $delegationId,
-                    'event_id' => $match->event_id,
-                ], ['status' => EntryStatus::Submitted->value]);
-            }
 
             for ($position = 1; $position <= $count; $position++) {
                 MatchParticipantSlot::query()->firstOrCreate([

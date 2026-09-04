@@ -132,6 +132,24 @@ test('system administrator can submit an encoded result without a tournament ICT
         ->and($result->fresh()->submitted_by)->toBe($admin->id);
 });
 
+test('ICT can submit a completed unscheduled match result with deferred workflow issues', function () {
+    config()->set('pmms.results.signed_result_form_required', false);
+    $result = resultWithPlacement();
+    $result->forceFill(['match_id' => \App\Models\EventMatch::factory()->create([
+        'meet_id' => $result->meet_id,
+        'event_id' => $result->event_id,
+        'event_schedule_id' => null,
+        'status' => \App\Enums\MatchStatus::Completed,
+    ])->id, 'event_schedule_id' => null, 'tm_confirmed_at' => null])->save();
+    $ict = assignedResultUser($result, MeetSportAssignmentRole::TournamentICT);
+
+    $this->actingAs($ict)->post(route('results.submit', $result))
+        ->assertRedirect()->assertSessionDoesntHaveErrors();
+
+    expect($result->fresh()->status)->toBe(ResultStatus::Submitted)
+        ->and($result->fresh()->submitted_by)->toBe($ict->id);
+});
+
 test('authorized result staff can attach and replace a written result photo', function () {
     Storage::fake('local');
     config()->set('uploads.disk', 'local');

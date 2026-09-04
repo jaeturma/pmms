@@ -117,6 +117,7 @@ class ResultController extends Controller
                 'placements.entry.delegation.school:id,name',
                 'placements.teamEntry.delegation.school:id,name',
                 'placements.teamEntry.delegation.district:id,name',
+                'placements.teamEntry.members:id,team_entry_id,athlete_id',
             ])
             ->orderByDesc('id');
 
@@ -245,6 +246,8 @@ class ResultController extends Controller
                         'returned_by' => $result->returnedBy?->name,
                         'returned_at' => $result->returned_at?->toDayDateTimeString(),
                         'return_reason' => $result->return_reason,
+                        'data_issues' => $this->resultDataIssues($result),
+                        'can_defer_issues' => $user->isAdmin() || $user->role === UserRole::TournamentICT,
                         'official_by' => $result->officialBy?->name,
                         'official_at' => $result->official_at?->toDayDateTimeString(),
                         'competition_context' => $result->schedule === null
@@ -378,7 +381,9 @@ class ResultController extends Controller
                 : [],
             'entryOptions' => $canEncode
                 ? Entry::query()
-                    ->where('status', EntryStatus::Confirmed->value)
+                    ->whereIn('status', $user->isAdmin() || $user->role === UserRole::TournamentICT
+                        ? [EntryStatus::Submitted->value, EntryStatus::Confirmed->value]
+                        : [EntryStatus::Confirmed->value])
                     ->whereHas('athlete')
                     ->whereHas('event', fn ($events) => $events->where('is_team_event', false))
                     ->when(
@@ -487,7 +492,7 @@ class ResultController extends Controller
         $this->assertEncodable($meet, $event->id);
 
         if (! empty($data['match_id'])) {
-            $this->assertPlacementsValid($data['placements'], $meet->id, $event->id, $match);
+            $this->assertPlacementsValid($data['placements'], $meet->id, $event->id, $match, $this->canDeferDataIssues($user));
             $this->competitionResults->createManual($match, $data['placements'], $user);
         } else {
             $schedule = isset($data['event_schedule_id'])
@@ -498,7 +503,7 @@ class ResultController extends Controller
                     'event_schedule_id' => __('The selected schedule must belong to the selected Meet and Sports Event.'),
                 ]);
             }
-            $this->assertPlacementsValid($data['placements'], $meet->id, $event->id);
+            $this->assertPlacementsValid($data['placements'], $meet->id, $event->id, null, $this->canDeferDataIssues($user));
             $this->competitionResults->createFinalEventResult($meet, $event, $schedule, $data['placements'], $user);
         }
 
@@ -528,7 +533,7 @@ class ResultController extends Controller
         $data = $this->validatePayload($request);
 
         $this->assertEncodable($result->meet, $result->event_id);
-        $this->assertPlacementsValid($data['placements'], $result->meet_id, $result->event_id);
+        $this->assertPlacementsValid($data['placements'], $result->meet_id, $result->event_id, null, $this->canDeferDataIssues($request->user()));
 
         DB::transaction(function () use ($result, $data): void {
             $result->placements()->delete();
@@ -769,7 +774,7 @@ class ResultController extends Controller
      *
      * @param  array<int, array{entry_id: int, rank: int, mark?: string|null, is_tie?: bool}>  $placements
      */
-    private function assertPlacementsValid(array $placements, int $meetId, int $eventId, ?EventMatch $match = null): void
+    private function assertPlacementsValid(array $placements, int $meetId, int $eventId, ?EventMatch $match = null, bool $deferDataIssues = false): void
     {
         $event = Event::query()->findOrFail($eventId);
         $entries = Entry::query()
@@ -818,7 +823,7 @@ class ResultController extends Controller
                 ]);
             }
 
-            if ($entry->status !== EntryStatus::Confirmed) {
+            if (! $deferDataIssues && $entry->status !== EntryStatus::Confirmed) {
                 throw ValidationException::withMessages([
                     'placements' => __('Only confirmed entries can be placed (:name is :status).', [
                         'name' => $entry->athlete->fullName(),
@@ -831,7 +836,7 @@ class ResultController extends Controller
                 $teamEntryId = $entry->teamMemberships()
                     ->whereHas('teamEntry', fn ($team) => $team->where('status', EntryStatus::Confirmed->value))
                     ->value('team_entry_id');
-                if ($teamEntryId === null) {
+                if (! $deferDataIssues && $teamEntryId === null) {
                     throw ValidationException::withMessages([
                         'placements' => __('Team-event placements require a finalized team roster.'),
                     ]);
@@ -844,7 +849,7 @@ class ResultController extends Controller
                 $placedTeamIds[] = $teamEntryId;
             }
 
-            if ($match !== null && ! $match->entries->contains('id', $entry->id)) {
+            if (! $deferDataIssues && $match !== null && ! $match->entries->contains('id', $entry->id)) {
                 throw ValidationException::withMessages([
                     'placements' => __('Every placement must be a scheduled participant in this competition.'),
                 ]);
@@ -924,6 +929,33 @@ class ResultController extends Controller
             $event->gender->label(),
             $event->age_division->label(),
         );
+    }
+
+    private function canDeferDataIssues(User $user): bool
+    {
+        return $user->isAdmin() || $user->role === UserRole::TournamentICT;
+    }
+
+    /** @return array<int, string> */
+    private function resultDataIssues(EventResult $result): array
+    {
+        $issues = [];
+        if ($result->match_id !== null && $result->event_schedule_id === null) {
+            $issues[] = __('Schedule is not linked.');
+        }
+        if ($result->match_id !== null && $result->tm_confirmed_at === null) {
+            $issues[] = __('Tournament Manager confirmation is pending.');
+        }
+        foreach ($result->placements as $placement) {
+            if ($placement->entry !== null && $placement->entry->status !== EntryStatus::Confirmed) {
+                $issues[] = __('A participant entry is not confirmed.');
+            }
+            if ($placement->teamEntry !== null && $placement->teamEntry->members->isEmpty()) {
+                $issues[] = __('A team has no assigned athletes.');
+            }
+        }
+
+        return array_values(array_unique($issues));
     }
 
     private function isAssignedTournamentSecretary(User $user, EventResult $result): bool

@@ -211,7 +211,7 @@ class EligibilityController extends Controller
             ->get()
             ->map(fn (Athlete $athlete): array => [
                 'id' => $athlete->id,
-                'label' => "{$athlete->fullName()} — {$athlete->school->name}",
+                'label' => $athlete->fullName().' — '.($athlete->school?->name ?? __('School not provided')),
             ])
             ->values();
 
@@ -257,8 +257,8 @@ class EligibilityController extends Controller
                 'age' => $athlete->age(),
                 'grade_level' => $athlete->grade_level,
                 'lrn' => $athlete->lrn,
-                'school' => $athlete->school->name,
-                'district' => $athlete->school->schoolDistrict?->name ?? $athlete->school->district?->name,
+                'school' => $athlete->school?->name ?? __('Not provided'),
+                'district' => $athlete->school?->schoolDistrict?->name ?? $athlete->school?->district?->name ?? __('Not assigned'),
                 'delegation' => $athlete->delegation->registrantName(),
                 'sports' => $athlete->rosterSportNames()->join(', '),
             ],
@@ -313,7 +313,7 @@ class EligibilityController extends Controller
             'id' => $review->id,
             'athlete_id' => $review->athlete_id,
             'athlete' => $review->athlete->fullName(),
-            'school' => $review->athlete->school->name,
+            'school' => $review->athlete->school?->name ?? __('Not provided'),
             'meet' => $review->athlete->delegation->meet->name,
             'sports' => $review->athlete->rosterSportNames()
                 ->whenEmpty(fn () => $review->athlete->entries->pluck('event.sport.name')->filter()->unique()->sort()->values())

@@ -8,6 +8,7 @@ import {
     Radio,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { formatTime } from '@/lib/format-time';
 import { PortalDaySwitcher } from '@/apps/portal/components/day-switcher';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { PortalHero } from '@/apps/portal/components/hero';
@@ -192,8 +193,8 @@ export default function PortalSchedule({
                                                             aria-hidden="true"
                                                             className="size-3.5 shrink-0"
                                                         />
-                                                        {slot.starts_at}–
-                                                        {slot.ends_at}
+                                                        {formatTime(slot.starts_at)}–
+                                                        {formatTime(slot.ends_at)}
                                                     </span>
                                                     <span className="flex min-w-0 flex-col gap-1">
                                                         <span className="font-semibold">

@@ -30,8 +30,13 @@ class AthleteEligibilityChecker
         $gradeOk = $category === null || (($category->min_grade === null || $athlete->grade_level >= $category->min_grade) && ($category->max_grade === null || $athlete->grade_level <= $category->max_grade));
         $add('Grade Level', 'DSAC', 'Athlete must meet the category grade range.', $this->range($category?->min_grade, $category?->max_grade), 'Grade '.$athlete->grade_level, $gradeOk ? 'passed' : 'failed');
 
-        $delegationOk = $athlete->delegation->meet_id === $meet->id && ($athlete->delegation->district_id === null || $athlete->school?->district_id === $athlete->delegation->district_id);
-        $add('Municipality / Delegation', 'DSAC', 'School must belong to the registered meet delegation.', 'Matching delegation', $delegationOk ? 'Matched' : 'Mismatch', $delegationOk ? 'passed' : 'failed');
+        $delegationOk = $athlete->delegation->meet_id === $meet->id;
+        $schoolConcern = $athlete->school === null
+            ? 'School not provided; processing is allowed.'
+            : ($athlete->delegation->district_id !== null && $athlete->school->district_id !== $athlete->delegation->district_id
+                ? 'School municipality differs from the delegation; processing is allowed.'
+                : null);
+        $add('Municipality / Delegation', 'DSAC', 'Athlete must belong to the registered meet delegation.', 'Matching meet delegation', $delegationOk ? 'Matched' : 'Mismatch', $delegationOk ? 'passed' : 'failed', $schoolConcern);
 
         foreach ([EligibilityDocumentType::SchoolId, EligibilityDocumentType::BirthCertificate, EligibilityDocumentType::MedicalCertificate, EligibilityDocumentType::ParentalConsent] as $type) {
             $document = $athlete->eligibilityDocuments->sortByDesc('id')->firstWhere('document_type', $type);

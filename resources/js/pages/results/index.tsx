@@ -73,6 +73,8 @@ type Result = {
     returned_by: string | null;
     returned_at: string | null;
     return_reason: string | null;
+    data_issues: string[];
+    can_defer_issues: boolean;
     official_by: string | null;
     official_at: string | null;
     competition_context: string;
@@ -854,6 +856,18 @@ export default function Results({
                                                 Awaiting TM confirmation
                                             </Badge>
                                         ) : null}
+                                        {result.data_issues.length > 0 && (
+                                            <div className="w-full rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                                                <div className="font-medium text-amber-700 dark:text-amber-300">
+                                                    Submitted with issues — resolve later
+                                                </div>
+                                                <ul className="mt-1 list-disc pl-5 text-muted-foreground">
+                                                    {result.data_issues.map((issue) => (
+                                                        <li key={issue}>{issue}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
                                         {result.cancellation_request && (
                                             <div className="w-full rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
                                                 <div className="font-medium text-destructive">
@@ -890,7 +904,8 @@ export default function Results({
                                             )}
                                         {result.can_form &&
                                             (result.match_id === null ||
-                                                result.tm_confirmed) &&
+                                                result.tm_confirmed ||
+                                                result.can_defer_issues) &&
                                             !['official'].includes(
                                                 result.status,
                                             ) && (

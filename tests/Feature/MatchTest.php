@@ -427,6 +427,7 @@ test('creating and viewing a match does not automatically populate its entries',
         'active' => true,
     ]);
     $delegation = Delegation::factory()->approved()->create(['meet_id' => $match->meet_id]);
+    $delegationWithoutAthletes = Delegation::factory()->approved()->create(['meet_id' => $match->meet_id]);
     $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);
     \App\Models\SportRosterMember::query()->create([
         'meet_sport_id' => $meetSport->id,
@@ -446,6 +447,10 @@ test('creating and viewing a match does not automatically populate its entries',
 
     expect(\App\Models\MatchParticipantSlot::query()
         ->where('match_id', $match->id)->whereNotNull('entry_id')->exists())->toBeFalse()
+        ->and(\App\Models\MatchParticipantSlot::query()
+            ->where('match_id', $match->id)
+            ->where('delegation_id', $delegationWithoutAthletes->id)
+            ->exists())->toBeTrue()
         ->and($match->entries()->exists())->toBeFalse()
         ->and($entry->fresh()->status->value)->toBe('submitted');
 });
@@ -727,7 +732,7 @@ test('duplicate match round and sequence returns a clear validation error', func
     ])->assertSessionHasErrors('sequence');
 });
 
-test('team matches use one delegation entry regardless of roster size', function () {
+test('team matches show every delegation and create one team entry when selected', function () {
     $event = Event::factory()->create(['is_team_event' => true]);
     $match = EventMatch::factory()->create(['event_id' => $event->id]);
     $meetSport = MeetSport::factory()->create([
@@ -736,6 +741,7 @@ test('team matches use one delegation entry regardless of roster size', function
         'active' => true,
     ]);
     $delegation = Delegation::factory()->approved()->create(['meet_id' => $match->meet_id]);
+    $delegationWithoutEntries = Delegation::factory()->approved()->create(['meet_id' => $match->meet_id]);
     $athletes = Athlete::factory()->count(3)->create(['delegation_id' => $delegation->id]);
     foreach ($athletes as $athlete) {
         \App\Models\SportRosterMember::query()->create([
@@ -750,17 +756,21 @@ test('team matches use one delegation entry regardless of roster size', function
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin)->get('/matches')->assertInertia(
         fn (AssertableInertia $page) => $page
-            ->has('teamEntryOptions', 1)
-            ->where('teamEntryOptions.0.delegation_id', $delegation->id)
-            ->where('teamEntryOptions.0.label', $delegation->registrantName()),
+            ->where('teamDelegationOptions', fn ($options) => collect($options)
+                ->pluck('id')->contains($delegation->id)
+                && collect($options)->pluck('id')->contains($delegationWithoutEntries->id)),
     );
 
-    $team = TeamEntry::query()->sole();
+    expect(TeamEntry::query()->count())->toBe(0);
     $this->actingAs($admin)->put("/matches/{$match->id}/participants", [
-        'team_entry_ids' => [$team->id],
+        'participant_mode' => 'team',
+        'delegation_ids' => [$delegationWithoutEntries->id],
     ])->assertSessionHasNoErrors();
 
+    $team = TeamEntry::query()->sole();
     expect($match->teamEntries()->count())->toBe(1)
+        ->and($team->delegation_id)->toBe($delegationWithoutEntries->id)
+        ->and($team->members()->count())->toBe(0)
         ->and($match->entries()->count())->toBe(0)
-        ->and($match->participantSlots()->count())->toBe(1);
+        ->and($match->participantSlots()->count())->toBe(2);
 });

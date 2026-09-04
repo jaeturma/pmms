@@ -1,6 +1,7 @@
 import { CalendarDays, MapPin } from 'lucide-react';
 import { EmptyState } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
+import { formatTime } from '@/lib/format-time';
 
 export type SportPortalGame = {
     id: number;
@@ -117,7 +118,7 @@ export function SportPortalGameList({
                                 {game.scheduled_date
                                     ? `${game.scheduled_date}, `
                                     : ''}
-                                {game.starts_at}
+                                {formatTime(game.starts_at)}
                             </span>
                         )}
                         <Badge variant="outline">{game.status_label}</Badge>

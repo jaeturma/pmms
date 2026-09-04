@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { formatTime } from '@/lib/format-time';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { PublicAnnouncements } from '@/components/public-announcements';
@@ -657,8 +658,8 @@ function MeetOperations({ operations }: { operations: Operations }) {
                                             return (
                                                 <TableRow key={slot.id}>
                                                     <TableCell className="font-medium whitespace-nowrap">
-                                                        {slot.starts_at}–
-                                                        {slot.ends_at}
+                                                        {formatTime(slot.starts_at)}–
+                                                        {formatTime(slot.ends_at)}
                                                     </TableCell>
                                                     <TableCell>
                                                         {slot.event}

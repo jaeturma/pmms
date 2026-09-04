@@ -16,6 +16,7 @@ import {
 import { schedule } from '@/routes/reports';
 import { download } from '@/routes/reports/schedule';
 import { index as scheduleIndex } from '@/routes/schedule';
+import { formatTime } from '@/lib/format-time';
 
 type Slot = {
     id: number;
@@ -97,8 +98,8 @@ export default function ScheduleSheet({ date, venues, generatedAt }: Props) {
                                         {group.slots.map((slot) => (
                                             <TableRow key={slot.id}>
                                                 <TableCell className="font-medium whitespace-nowrap">
-                                                    {slot.starts_at}–
-                                                    {slot.ends_at}
+                                                    {formatTime(slot.starts_at)}–
+                                                    {formatTime(slot.ends_at)}
                                                 </TableCell>
                                                 <TableCell>
                                                     {slot.event}

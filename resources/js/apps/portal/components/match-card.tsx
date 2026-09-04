@@ -3,6 +3,7 @@ import { Clock, MapPin } from 'lucide-react';
 import { MunicipalityCrest, MunicipalityWatermark } from '@/apps/portal/components/municipality-crest';
 import { cn } from '@/apps/portal/lib/utils';
 import type { PortalGame } from '@/apps/portal/types';
+import { formatTime } from '@/lib/format-time';
 
 type PortalMatchCardProps = {
     game: PortalGame;
@@ -66,7 +67,7 @@ export function PortalMatchCard({ game, showScore = false, className, href }: Po
                     <span className="flex items-center gap-1">
                         <Clock aria-hidden="true" className="size-3.5" />
                         {game.scheduled_date}
-                        {game.starts_at && ` · ${game.starts_at}`}
+                        {game.starts_at && ` · ${formatTime(game.starts_at)}`}
                     </span>
                 )}
                 {game.venue && (

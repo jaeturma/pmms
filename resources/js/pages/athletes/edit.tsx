@@ -63,7 +63,7 @@ function DivisionSelect({
 type Athlete = {
     id: number;
     delegation_id: number;
-    school_id: number;
+    school_id: number | null;
     first_name: string;
     middle_name: string | null;
     last_name: string;
@@ -128,7 +128,7 @@ export default function EditAthlete({
 }: Props) {
     const form = useForm({
         delegation_id: String(athlete.delegation_id),
-        school_id: String(athlete.school_id),
+        school_id: athlete.school_id ? String(athlete.school_id) : '',
         first_name: athlete.first_name,
         middle_name: athlete.middle_name ?? '',
         last_name: athlete.last_name,
@@ -470,15 +470,16 @@ export default function EditAthlete({
                                     error={form.errors.school_id}
                                 >
                                     <Select
-                                        value={form.data.school_id}
+                                        value={form.data.school_id || 'none'}
                                         onValueChange={(value) =>
-                                            form.setData('school_id', value)
+                                            form.setData('school_id', value === 'none' ? '' : value)
                                         }
                                     >
                                         <SelectTrigger>
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
+                                            <SelectItem value="none">Not provided</SelectItem>
                                             {availableSchools.map((item) => (
                                                 <SelectItem
                                                     key={item.id}

@@ -34,13 +34,8 @@ class RegistrationDataConsistencyService
                     $add('missing_delegation', 'The athlete has no valid delegation.', 'Select the correct delegation manually.');
                     return $issues;
                 }
-                if ($athlete->school === null) {
-                    $repair = $athlete->delegation->school_id ? ['code' => 'use_delegation_school', 'label' => 'Use delegation school'] : null;
-                    $add('missing_school', 'The athlete has no valid school, so district information cannot be extracted.', $repair ? 'Use the delegation school.' : 'Select a school inside the delegation municipality.', $repair);
-                } elseif ($athlete->delegation->school_id !== null && $athlete->school_id !== $athlete->delegation->school_id) {
+                if ($athlete->school !== null && $athlete->delegation->school_id !== null && $athlete->school_id !== $athlete->delegation->school_id) {
                     $add('school_mismatch', 'The athlete school differs from the school delegation.', 'Use the delegation school or move the athlete to the correct delegation.', ['code' => 'use_delegation_school', 'label' => 'Use delegation school']);
-                } elseif ($athlete->delegation->district_id !== null && $athlete->school->district_id !== $athlete->delegation->district_id) {
-                    $add('municipality_mismatch', 'The athlete school belongs to a different municipality than the delegation.', 'Select a school within '.$athlete->delegation->registrantName().'.');
                 }
                 if ($athlete->school && $athlete->school->school_district_id !== null && $athlete->school->schoolDistrict?->district_id !== $athlete->school->district_id) {
                     $add('school_district_mismatch', 'The school district belongs to a different municipality than the school.', 'Repair the School master record before extracting this athlete.');
