@@ -101,11 +101,19 @@ class ResultController extends Controller
                 'event.medalConfig',
                 'medalAwards',
                 'encodedBy:id,name',
+                'submittedBy:id,name',
                 'validatedBy:id,name',
+                'returnedBy:id,name',
+                'officialBy:id,name',
                 'cancellationRequestedBy:id,name',
+                'schedule.venue:id,name',
+                'schedule.competitionArea:id,name',
                 'attachments.file:id,original_name,mime_type,size',
-                'placements.entry.athlete:id,first_name,last_name,school_id',
+                'placements.entry.athlete' => fn ($athletes) => $athletes
+                    ->withTrashed()
+                    ->select(['id', 'first_name', 'last_name', 'school_id']),
                 'placements.entry.athlete.school:id,name',
+                'placements.entry.delegation.school:id,name',
             ])
             ->orderByDesc('id');
 
@@ -179,6 +187,8 @@ class ResultController extends Controller
         return Inertia::render('results/index', [
             'results' => $query->paginate($this->registryPageSize)->withQueryString()
                 ->through(function (EventResult $result) use ($user, $canManage): array {
+                    $event = $result->event;
+                    $sportId = $event?->sport_id;
                     $canForm = $user->isAdmin() || $this->isCentralEventSecretariat($user, $result->meet_id) || $user->meetSportAssignments()
                         ->where('status', MeetSportAssignmentStatus::Active)
                         ->whereIn('role', [
@@ -189,7 +199,7 @@ class ResultController extends Controller
                         ])
                         ->whereHas('meetSport', fn ($scope) => $scope
                             ->where('meet_id', $result->meet_id)
-                            ->where('sport_id', $result->event->sport_id))
+                            ->where('sport_id', $sportId))
                         ->exists();
                     $isEventSecretariat = $user->isAdmin() || $user->managementTeamMemberships()
                         ->where('status', ManagementTeamMemberStatus::Active)
@@ -210,18 +220,34 @@ class ResultController extends Controller
                         'event_id' => $result->event_id,
                         'match_id' => $result->match_id,
                         'result_scope' => $result->result_scope,
-                        'meet' => $result->meet->name,
-                        'event' => $this->eventLabel($result->event),
+                        'meet' => $result->meet?->name ?? 'Unavailable meet',
+                        'event' => $event === null ? 'Unavailable event' : $this->eventLabel($event),
                         'status' => $result->status->value,
                         'status_label' => $result->status->label(),
                         'encoded_by' => $result->encodedBy?->name,
-                        'encoded_at' => $result->encoded_at->toDayDateTimeString(),
+                        'encoded_at' => $result->encoded_at?->toDayDateTimeString(),
+                        'submitted_by' => $result->submittedBy?->name,
+                        'submitted_at' => $result->submitted_at?->toDayDateTimeString(),
                         'validated_by' => $result->validatedBy?->name,
                         'validated_at' => $result->validated_at?->toDayDateTimeString(),
+                        'returned_by' => $result->returnedBy?->name,
+                        'returned_at' => $result->returned_at?->toDayDateTimeString(),
+                        'return_reason' => $result->return_reason,
+                        'official_by' => $result->officialBy?->name,
+                        'official_at' => $result->official_at?->toDayDateTimeString(),
+                        'competition_context' => $result->schedule === null
+                            ? 'Unscheduled result'
+                            : sprintf('%s · %s–%s · %s%s',
+                                $result->schedule->scheduled_date?->format('M j, Y') ?? 'Date unavailable',
+                                substr((string) $result->schedule->starts_at, 0, 5),
+                                substr((string) $result->schedule->ends_at, 0, 5),
+                                $result->schedule->venue?->name ?? 'Venue unavailable',
+                                $result->schedule->competitionArea ? ' / '.$result->schedule->competitionArea->name : ''),
                         'version' => $result->version,
                         'reference' => $result->referenceNumber(),
                         'can_form' => $canForm,
                         'can_review' => $isEventSecretariat,
+                        'can_cancel' => $isEventSecretariat && in_array($result->status, [ResultStatus::Submitted, ResultStatus::Returned, ResultStatus::Validated], true),
                         'can_request_cancellation' => $result->status === ResultStatus::Submitted
                             && $result->cancellation_requested_at === null
                             && $user->meetSportAssignments()
@@ -229,9 +255,10 @@ class ResultController extends Controller
                                 ->where('role', MeetSportAssignmentRole::TournamentICT->value)
                                 ->whereHas('meetSport', fn ($scope) => $scope
                                     ->where('meet_id', $result->meet_id)
-                                    ->where('sport_id', $result->event->sport_id))
+                                    ->where('sport_id', $sportId))
                                 ->exists()
-                            && app(CompetitionAccessService::class)->canAccessEvent($user, $result->event, $result->meet_id),
+                            && $event !== null
+                            && app(CompetitionAccessService::class)->canAccessEvent($user, $event, $result->meet_id),
                         'cancellation_request' => $result->cancellation_requested_at === null ? null : [
                             'reason' => $result->cancellation_request_reason,
                             'requested_by' => $result->cancellationRequestedBy?->name,
@@ -243,7 +270,7 @@ class ResultController extends Controller
                             && $attachment !== null,
                         'form_generated' => $result->form_generated_version === $result->version,
                         'tm_confirmed' => $result->tm_confirmed_at !== null,
-                        'can_tm_confirm' => $this->userManagedSportIds($user)->contains($result->event->sport_id)
+                        'can_tm_confirm' => $sportId !== null && $this->userManagedSportIds($user)->contains($sportId)
                             && in_array($result->status, [ResultStatus::Encoded, ResultStatus::Returned, ResultStatus::Reopened], true),
                         'signed_form' => $attachment === null ? null : [
                             'id' => $attachment->id,
@@ -256,7 +283,7 @@ class ResultController extends Controller
                         // validate/correct/delete their own sport's — a global
                         // boolean can't express that, so it's computed per row.
                         'can_manage' => $canManage,
-                        'awards_medals' => $result->event->resolvedMedalConfig()->awards_medals,
+                        'awards_medals' => $event?->resolvedMedalConfig()->awards_medals ?? false,
                         'medal_tally' => [
                             'gold' => $result->medalAwards->where('medal_type', 'gold')->sum('tally_quantity'),
                             'silver' => $result->medalAwards->where('medal_type', 'silver')->sum('tally_quantity'),
@@ -268,8 +295,12 @@ class ResultController extends Controller
                             ->map(fn (ResultPlacement $placement): array => [
                                 'entry_id' => $placement->entry_id,
                                 'rank' => $placement->rank,
-                                'athlete' => $placement->entry->athlete->fullName(),
-                                'school' => $placement->entry->athlete->school->name,
+                                'athlete' => $placement->entry?->athlete?->fullName()
+                                    ?? $placement->entry?->delegation?->school?->name
+                                    ?? 'Archived participant',
+                                'school' => $placement->entry?->athlete?->school?->name
+                                    ?? $placement->entry?->delegation?->school?->name
+                                    ?? 'School unavailable',
                                 'mark' => $placement->mark,
                                 'is_tie' => $placement->is_tie,
                             ])
@@ -304,9 +335,9 @@ class ResultController extends Controller
                     'meet_id' => $schedule->meet_id,
                     'event_id' => $schedule->event_id,
                     'label' => sprintf('%s · %s–%s · %s%s',
-                        $schedule->scheduled_date->format('M j, Y'),
+                        $schedule->scheduled_date?->format('M j, Y') ?? 'Date unavailable',
                         substr($schedule->starts_at, 0, 5), substr($schedule->ends_at, 0, 5),
-                        $schedule->venue->name,
+                        $schedule->venue?->name ?? 'Venue unavailable',
                         $schedule->competitionArea ? ' / '.$schedule->competitionArea->name : ''),
                 ])->values(),
             'activeMeets' => Meet::query()
@@ -327,6 +358,7 @@ class ResultController extends Controller
             'entryOptions' => $canEncode
                 ? Entry::query()
                     ->where('status', EntryStatus::Confirmed->value)
+                    ->whereHas('athlete')
                     ->when(
                         ! $canManage,
                         fn ($query) => $query->whereIn('event_id', $assignedEventIds),
@@ -350,7 +382,7 @@ class ResultController extends Controller
                         'delegation_id' => $entry->delegation_id,
                         'label' => $entry->event->is_team_event
                             ? $entry->delegation->registrantName()
-                            : "{$entry->delegation->registrantName()} — {$entry->athlete->fullName()}",
+                            : "{$entry->delegation->registrantName()} — {$entry->athlete?->fullName()}",
                     ])
                     ->unique(fn (array $option): string => $option['is_team_event']
                         ? 'team-'.$option['event_id'].'-'.$option['delegation_id']
@@ -378,7 +410,7 @@ class ResultController extends Controller
                             'delegation_id' => $entry->delegation_id,
                             'label' => $match->event->is_team_event
                                 ? $entry->delegation->registrantName()
-                                : "{$entry->delegation->registrantName()} — {$entry->athlete->fullName()}",
+                                : "{$entry->delegation->registrantName()} — ".($entry->athlete?->fullName() ?? __('Archived participant')),
                         ])->unique(fn (array $option): string => $match->event->is_team_event
                             ? 'team-'.$option['delegation_id']
                             : 'entry-'.$option['id'])->values(),
@@ -579,6 +611,7 @@ class ResultController extends Controller
     public function destroy(Request $request, EventResult $result): RedirectResponse
     {
         abort_unless($request->user()->isAdmin(), 403);
+        abort_unless($result->status === ResultStatus::Encoded, 422, 'Only an unsubmitted draft result may be permanently deleted. Use the audited result lifecycle for reviewed results.');
 
         $result->loadMissing('match', 'schedule');
         $context = [...$this->context($result),

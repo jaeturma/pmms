@@ -67,6 +67,27 @@ function resultFixture(int $entryCount = 2): array
     return ['meet' => $meet, 'event' => $event, 'match' => $match, 'entries' => $entries];
 }
 
+test('results index remains available when a historical placement athlete was archived', function () {
+    $admin = User::factory()->admin()->create();
+    $fixture = resultFixture(1);
+    $result = EventResult::factory()->create([
+        'meet_id' => $fixture['meet']->id,
+        'event_id' => $fixture['event']->id,
+    ]);
+    ResultPlacement::factory()->create([
+        'event_result_id' => $result->id,
+        'entry_id' => $fixture['entries'][0]->id,
+    ]);
+    $encoder = $result->encodedBy;
+    $encoderName = $encoder->name;
+    $encoder->delete();
+    $fixture['entries'][0]->athlete->delete();
+
+    $this->actingAs($admin)->get('/results')->assertInertia(fn (AssertableInertia $page) => $page
+        ->where('results.data.0.encoded_by', $encoderName)
+        ->where('results.data.0.placements.0.athlete', $fixture['entries'][0]->athlete->fullName()));
+});
+
 test('assigned tournament ICT encodes a schedule based final event result without creating a match', function () {
     $meet = Meet::factory()->active()->create();
     $sport = Sport::factory()->create();
@@ -541,7 +562,7 @@ test('encoded corrections are refused — editing is direct', function () {
         ->and(AuditLog::query()->where('action', 'result.corrected')->exists())->toBeFalse();
 });
 
-test('administrators can delete encoded and official results with their medal tally awards', function () {
+test('administrators can delete drafts but official results and medal awards are retained', function () {
     $encoded = EventResult::factory()->create();
     $validated = EventResult::factory()->validated()->create();
     $entry = placeableEntry($validated->meet, $validated->event);
@@ -575,10 +596,10 @@ test('administrators can delete encoded and official results with their medal ta
 
     $this->actingAs($admin)
         ->delete("/results/{$validated->id}")
-        ->assertRedirect();
+        ->assertStatus(422);
 
-    $this->assertDatabaseMissing('event_results', ['id' => $validated->id]);
-    $this->assertDatabaseMissing('medal_awards', ['id' => $award->id]);
+    $this->assertDatabaseHas('event_results', ['id' => $validated->id]);
+    $this->assertDatabaseHas('medal_awards', ['id' => $award->id]);
 });
 
 test('administrator result deletion removes its result-owned match but retains the competition schedule and setup', function () {
@@ -717,6 +738,33 @@ test('assigned ICT can request cancellation of a submitted result for secretaria
     $this->actingAs($ict)->get('/results')->assertInertia(fn (AssertableInertia $page) => $page
         ->where('results.data.0.can_request_cancellation', false)
         ->where('results.data.0.cancellation_request.reason', 'The final score was entered incorrectly.'));
+});
+
+test('administrator can cancel a reviewed result with a reason without deleting its records', function () {
+    $placement = ResultPlacement::factory()->create();
+    $result = $placement->result;
+    $result->forceFill(['status' => ResultStatus::Submitted])->save();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->post("/results/{$result->id}/cancel", [
+        'reason' => 'Duplicate result submitted for the same competition.',
+    ])->assertRedirect()->assertSessionDoesntHaveErrors();
+
+    $result->refresh();
+    expect($result->status)->toBe(ResultStatus::Cancelled)
+        ->and($result->return_reason)->toBe('Duplicate result submitted for the same competition.')
+        ->and($result->placements()->count())->toBe(1)
+        ->and(AuditLog::query()->where('action', 'result.cancelled')->exists())->toBeTrue();
+});
+
+test('unauthorized users cannot cancel reviewed results', function () {
+    $result = EventResult::factory()->create(['status' => ResultStatus::Submitted]);
+
+    $this->actingAs(User::factory()->create())
+        ->post("/results/{$result->id}/cancel", ['reason' => 'Not authorized'])
+        ->assertForbidden();
+
+    expect($result->fresh()->status)->toBe(ResultStatus::Submitted);
 });
 
 test('a technical official cannot encode a result for a sport they are not assigned to', function () {

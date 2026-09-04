@@ -339,6 +339,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('results/{result}/attachments/{attachment}', [ResultWorkflowController::class, 'download'])->name('results.attachments.download');
     Route::post('results/{result}/submit', [ResultWorkflowController::class, 'submit'])->name('results.submit');
     Route::post('results/{result}/request-cancellation', [ResultWorkflowController::class, 'requestCancellation'])->name('results.request-cancellation');
+    Route::post('results/{result}/cancel', [ResultWorkflowController::class, 'cancel'])->name('results.cancel');
     Route::post('results/{result}/tm-confirmation', [ResultWorkflowController::class, 'confirmByTournamentManager'])->name('results.tm-confirm');
     Route::post('results/{result}/return', [ResultWorkflowController::class, 'returnResult'])->name('results.return');
     Route::post('results/{result}/event-secretariat-validation', [ResultWorkflowController::class, 'validateResult'])->name('results.event-secretariat.validate');

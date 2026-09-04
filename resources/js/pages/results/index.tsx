@@ -42,7 +42,6 @@ import {
     index,
     store,
     update,
-    validate,
 } from '@/routes/results';
 
 type Placement = {
@@ -65,13 +64,22 @@ type Result = {
     status: string;
     status_label: string;
     encoded_by: string | null;
-    encoded_at: string;
+    encoded_at: string | null;
+    submitted_by: string | null;
+    submitted_at: string | null;
     validated_by: string | null;
     validated_at: string | null;
+    returned_by: string | null;
+    returned_at: string | null;
+    return_reason: string | null;
+    official_by: string | null;
+    official_at: string | null;
+    competition_context: string;
     version: number;
     reference: string;
     can_form: boolean;
     can_review: boolean;
+    can_cancel: boolean;
     can_request_cancellation: boolean;
     cancellation_request: {
         reason: string;
@@ -769,7 +777,7 @@ export default function Results({
                                         <p className="text-sm text-muted-foreground">
                                             {result.meet} · Encoded by{' '}
                                             {result.encoded_by ?? '—'}{' '}
-                                            {result.encoded_at}
+                                            {result.encoded_at ?? 'Date unavailable'}
                                             {result.validated_by && (
                                                 <>
                                                     {' '}
@@ -777,6 +785,15 @@ export default function Results({
                                                     {result.validated_by}{' '}
                                                     {result.validated_at}
                                                 </>
+                                            )}
+                                        </p>
+                                        <p className="text-sm text-muted-foreground">
+                                            {result.competition_context}
+                                            {result.submitted_by && (
+                                                <> · Submitted by {result.submitted_by} {result.submitted_at}</>
+                                            )}
+                                            {result.official_by && (
+                                                <> · Officialized by {result.official_by} {result.official_at}</>
                                             )}
                                         </p>
                                     </div>
@@ -992,6 +1009,27 @@ export default function Results({
                                                 Request cancellation
                                             </Button>
                                         )}
+                                        {result.can_cancel && (
+                                            <Button
+                                                variant="destructive"
+                                                size="sm"
+                                                onClick={() => {
+                                                    const reason = window.prompt(
+                                                        'Reason for cancelling this result',
+                                                    )?.trim();
+
+                                                    if (reason) {
+                                                        router.post(
+                                                            `/results/${result.id}/cancel`,
+                                                            { reason },
+                                                            { preserveScroll: true },
+                                                        );
+                                                    }
+                                                }}
+                                            >
+                                                Cancel result
+                                            </Button>
+                                        )}
                                         {result.can_officialize && (
                                             <ConfirmDialog
                                                 trigger={
@@ -1015,42 +1053,15 @@ export default function Results({
                                         )}
                                         {canEncode &&
                                             result.status === 'encoded' && (
-                                                <>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() =>
-                                                            openEdit(result)
-                                                        }
-                                                    >
-                                                        Edit
-                                                    </Button>
-                                                    {result.can_manage && (
-                                                        <>
-                                                            <ConfirmDialog
-                                                                trigger={
-                                                                    <Button size="sm">
-                                                                        Validate
-                                                                    </Button>
-                                                                }
-                                                                title="Validate result?"
-                                                                description="Validation forwards this unofficial standing for Top Management officialization."
-                                                                confirmLabel="Validate"
-                                                                onConfirm={() =>
-                                                                    router.patch(
-                                                                        validate(
-                                                                            result.id,
-                                                                        ).url,
-                                                                        {},
-                                                                        {
-                                                                            preserveScroll: true,
-                                                                        },
-                                                                    )
-                                                                }
-                                                            />
-                                                        </>
-                                                    )}
-                                                </>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        openEdit(result)
+                                                    }
+                                                >
+                                                    Edit
+                                                </Button>
                                             )}
                                         {result.status === 'validated' && (
                                             <Button
@@ -1080,7 +1091,8 @@ export default function Results({
                                                     Correct
                                                 </Button>
                                             )}
-                                        {result.can_manage && (
+                                        {result.can_manage &&
+                                            result.status === 'encoded' && (
                                             <ConfirmDialog
                                                 trigger={
                                                     <Button

@@ -183,6 +183,31 @@ class ResultWorkflowController extends Controller
         return back()->with('success', 'Cancellation requested. The submitted result remains locked while the Event Secretariat reviews the problem.');
     }
 
+    public function cancel(Request $request, EventResult $result): RedirectResponse
+    {
+        $this->authorizeEventSecretariat($request->user(), $result);
+        abort_unless(in_array($result->status, [ResultStatus::Submitted, ResultStatus::Returned, ResultStatus::Validated], true), 422, 'Only a result in review may be cancelled.');
+        $validated = $request->validate(['reason' => ['required', 'string', 'max:1000']]);
+
+        $previousStatus = $result->status->value;
+        $result->forceFill([
+            'status' => ResultStatus::Cancelled,
+            'returned_by' => $request->user()->id,
+            'returned_at' => now(),
+            'return_reason' => $validated['reason'],
+            'validated_by' => null,
+            'validated_at' => null,
+        ])->save();
+
+        $this->audit->record('result.cancelled', $result, [
+            ...$this->context($result),
+            'previous_status' => $previousStatus,
+            'reason' => $validated['reason'],
+        ]);
+
+        return back()->with('success', 'Result cancelled. Its placements, attachments, and audit history were retained.');
+    }
+
     public function confirmByTournamentManager(Request $request, EventResult $result): RedirectResponse
     {
         /** @var User $user */
@@ -251,7 +276,6 @@ class ResultWorkflowController extends Controller
             $locked = EventResult::query()->lockForUpdate()->findOrFail($result->id);
             abort_unless($locked->status === ResultStatus::Validated, 422, 'Only a validated result awaiting officialization may be marked official.');
             abort_unless($locked->isFinalEventResult(), 422, 'Only a final Sports Event Result may be marked official. Completed Match Results remain operational and unofficial.');
-            abort_unless($locked->submitted_at !== null && $locked->submitted_by !== null, 422, 'The final result must be submitted before officialization.');
             abort_unless($locked->submitted_at !== null && $locked->submitted_by !== null, 422, 'The final result must be submitted before officialization.');
             abort_if($locked->currentSignedForm() === null, 422, 'The signed Result Form is missing.');
             abort_unless($locked->placements()->exists(), 422, 'The final result has no placements.');

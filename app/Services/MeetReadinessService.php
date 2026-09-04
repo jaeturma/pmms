@@ -8,6 +8,7 @@ use App\Enums\MedicalClearanceStatus;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\Permission;
+use App\Enums\ResultStatus;
 use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\CoachAssignmentRequest;
@@ -16,6 +17,7 @@ use App\Models\Delegation;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\EventSchedule;
+use App\Models\EventResult;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
@@ -71,6 +73,8 @@ class MeetReadinessService
             ->with(['athlete:id', 'athlete.eligibilityReview:id,athlete_id,status', 'athlete.medicalClearance:id,athlete_id,status', 'athlete.accreditation:id,athlete_id'])
             ->get(['id', 'event_id', 'delegation_id', 'athlete_id']);
         $schedules = EventSchedule::query()->real()->where('meet_id', $meet->id)->whereIn('event_id', $eventIds)->get(['id', 'event_id']);
+        $results = EventResult::query()->real()->where('meet_id', $meet->id)->whereIn('event_id', $eventIds)
+            ->where('result_scope', 'event')->latest('id')->get(['id', 'event_id', 'status'])->unique('event_id')->keyBy('event_id');
         $assignments = MeetSportAssignment::query()->whereIn('meet_sport_id', $meetSports->modelKeys())
             ->where('status', MeetSportAssignmentStatus::Active->value)->get(['id', 'meet_sport_id', 'role']);
         $coachAssignments = CoachAssignmentRequest::query()->whereIn('delegation_id', $delegations->modelKeys())
@@ -100,7 +104,7 @@ class MeetReadinessService
         $directCoachAssignmentsByEvent = $coachAssignments->whereNotNull('event_id')->groupBy('event_id');
         $sportCoachAssignmentsByMeetSport = $coachAssignments->whereNull('event_id')->groupBy('meet_sport_id');
 
-        $eventRows = $events->map(function (Event $event) use ($entriesByEvent, $schedulesByEvent, $assignmentsByMeetSport, $rosterByMeetSport, $meetSportsBySport, $directCoachAssignmentsByEvent, $sportCoachAssignmentsByMeetSport, $delegations, $meet): array {
+        $eventRows = $events->map(function (Event $event) use ($entriesByEvent, $schedulesByEvent, $results, $assignmentsByMeetSport, $rosterByMeetSport, $meetSportsBySport, $directCoachAssignmentsByEvent, $sportCoachAssignmentsByMeetSport, $delegations, $meet): array {
             $eventEntries = $entriesByEvent->get($event->id, collect());
             $athletes = $eventEntries->pluck('athlete')->filter()->unique('id');
             $meetSportId = $meetSportsBySport->get($event->sport_id)?->id;
@@ -160,6 +164,16 @@ class MeetReadinessService
             if ($missingCoachDelegations->isNotEmpty()) {
                 $attention->push($missingCoachDelegations->count().' participating delegation(s) without an approved coach assignment');
             }
+            $resultStatus = $results->get($event->id)?->status;
+            if ($resultStatus === null) {
+                $attention->push('Result not yet encoded');
+            } elseif ($resultStatus === ResultStatus::Submitted) {
+                $attention->push('Submitted result awaiting review');
+            } elseif ($resultStatus === ResultStatus::Returned) {
+                $attention->push('Returned result awaiting correction');
+            } elseif ($resultStatus === ResultStatus::Validated) {
+                $attention->push('Validated result ready for officialization');
+            }
             $status = $critical->isNotEmpty() ? 'not_ready' : ($attention->isNotEmpty() ? 'needs_attention' : 'ready');
 
             return ['id' => $event->id, 'sport_id' => $event->sport_id, 'sport' => $event->sport->name, 'event' => $event->name,
@@ -212,6 +226,7 @@ class MeetReadinessService
                 str_contains($reason, 'medically cleared') => ['Medical', 'Medical Team', 'View Athletes', '/medical?event_id='.$row['id'], false],
                 str_contains($reason, 'eligible') => ['Eligibility', 'DSAC', 'View Concern', '/eligibility?event_id='.$row['id'], false],
                 str_contains($reason, 'tournament personnel') => ['Personnel', 'Meet Management', 'Manage Personnel', '/management', false],
+                str_contains($reason, 'result') || str_contains($reason, 'Result') => ['Results', 'Tournament ICT / Secretariat', 'Manage Results', '/results?event_id='.$row['id'], true],
                 default => ['Configuration', 'Meet Management', 'View Event', '/events?event_id='.$row['id'], false],
             };
 

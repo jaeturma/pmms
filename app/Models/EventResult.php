@@ -107,7 +107,7 @@ class EventResult extends Model
      */
     public function encodedBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'encoded_by');
+        return $this->belongsTo(User::class, 'encoded_by')->withTrashed();
     }
 
     /**
@@ -115,17 +115,27 @@ class EventResult extends Model
      */
     public function validatedBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'validated_by');
+        return $this->belongsTo(User::class, 'validated_by')->withTrashed();
+    }
+
+    public function submittedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'submitted_by')->withTrashed();
+    }
+
+    public function returnedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'returned_by')->withTrashed();
     }
 
     public function cancellationRequestedBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'cancellation_requested_by');
+        return $this->belongsTo(User::class, 'cancellation_requested_by')->withTrashed();
     }
 
     public function officialBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'official_by');
+        return $this->belongsTo(User::class, 'official_by')->withTrashed();
     }
 
     public function tmConfirmedBy(): BelongsTo
