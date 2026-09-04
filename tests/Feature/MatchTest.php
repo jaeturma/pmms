@@ -418,7 +418,7 @@ test('match participant slots are generated per sport delegation and assigning a
         ->and($match->entries()->whereKey($entry->id)->exists())->toBeTrue();
 });
 
-test('existing delegation event entries automatically fill generated match slots', function () {
+test('creating and viewing a match does not automatically populate its entries', function () {
     $match = EventMatch::factory()->create();
     $meetSport = MeetSport::factory()->create([
         'meet_id' => $match->meet_id,
@@ -444,9 +444,9 @@ test('existing delegation event entries automatically fill generated match slots
     $this->actingAs(User::factory()->admin()->create())->get('/matches')->assertOk();
 
     expect(\App\Models\MatchParticipantSlot::query()
-        ->where('match_id', $match->id)->where('entry_id', $entry->id)->exists())->toBeTrue()
-        ->and($match->entries()->whereKey($entry->id)->exists())->toBeTrue()
-        ->and($entry->fresh()->status->value)->toBe('confirmed');
+        ->where('match_id', $match->id)->whereNotNull('entry_id')->exists())->toBeFalse()
+        ->and($match->entries()->exists())->toBeFalse()
+        ->and($entry->fresh()->status->value)->toBe('submitted');
 });
 
 test('team events allow only one team entry per delegation in a match', function () {

@@ -109,6 +109,10 @@ class HandleInertiaRequests extends Middleware
                         && ! $user->hasRole(UserRole::Admin, UserRole::Organizer),
                 ],
             ],
+            'impersonation' => $request->session()->has('impersonator_user_id') ? [
+                'active' => true,
+                'administrator_id' => $request->session()->get('impersonator_user_id'),
+            ] : null,
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'division' => [
                 'type' => $division->type->value,

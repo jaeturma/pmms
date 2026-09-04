@@ -438,26 +438,7 @@ class MatchController extends Controller
                 ]);
             }
 
-            // Existing event registrations are the source of truth for
-            // pre-filling a delegation's match slots. Preserve explicit
-            // choices and distribute the remaining entries into empty slots.
-            $slots = MatchParticipantSlot::query()->where('match_id', $match->id)
-                ->where('delegation_id', $delegationId)->orderBy('position')->get();
-            $assignedIds = $slots->pluck('entry_id')->filter();
-            $availableEntries = $entries->whereNotIn('id', $assignedIds)->values();
-            foreach ($slots->whereNull('entry_id')->values() as $index => $slot) {
-                $entry = $availableEntries->get($index);
-                if ($entry === null) {
-                    break;
-                }
-                $entry->forceFill(['status' => EntryStatus::Confirmed->value])->save();
-                $slot->update(['entry_id' => $entry->id]);
-            }
         }
-
-        $match->entries()->syncWithoutDetaching(
-            $match->participantSlots()->whereNotNull('entry_id')->pluck('entry_id')->all(),
-        );
     }
 
     /** @return array<int, int> */

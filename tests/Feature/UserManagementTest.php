@@ -8,6 +8,7 @@ use App\Enums\UserRole;
 use App\Models\CoachAssignmentRequest;
 use App\Models\CoachOnboardingRequest;
 use App\Models\Athlete;
+use App\Models\AuditLog;
 use App\Models\Delegation;
 use App\Models\Event;
 use App\Models\ManagementTeam;
@@ -49,6 +50,34 @@ test('an administrator can manage user roles and reset passwords', function () {
         ->and(User::query()->where('username', 'new.secretary')->exists())->toBeTrue();
     expect($pending->fresh()->approval_status)->toBe('approved')
         ->and($pending->fresh()->approved_by)->toBe($admin->id);
+});
+
+test('only an administrator can switch into an active approved ICT account and return', function () {
+    $admin = User::factory()->admin()->create();
+    $ict = User::factory()->create([
+        'role' => UserRole::TournamentICT,
+        'approval_status' => 'approved',
+        'must_change_password' => true,
+    ]);
+
+    $this->actingAs($admin)->get('/system/users')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('users.data', fn ($users) => collect($users)
+                ->firstWhere('id', $ict->id)['can_impersonate'] === true));
+
+    $this->actingAs($admin)->post("/system/users/{$ict->id}/impersonate")
+        ->assertRedirect('/results')
+        ->assertSessionHas('impersonator_user_id', $admin->id);
+    $this->assertAuthenticatedAs($ict);
+    $this->get('/dashboard')->assertOk();
+
+    $this->post('/impersonation/stop')->assertRedirect('/system/users');
+    $this->assertAuthenticatedAs($admin);
+    expect(AuditLog::query()->where('action', 'user.impersonation_started')->exists())->toBeTrue()
+        ->and(AuditLog::query()->where('action', 'user.impersonation_stopped')->exists())->toBeTrue();
+
+    $nonAdmin = User::factory()->create();
+    $this->actingAs($nonAdmin)->post("/system/users/{$ict->id}/impersonate")->assertForbidden();
 });
 
 test('an administrator can assign multiple roles including tournament ICT and secretary', function () {

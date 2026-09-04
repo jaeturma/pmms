@@ -77,6 +77,11 @@ class UserManagementController extends Controller
                 'approval_status' => $user->approval_status,
                 'last_updated' => $user->updated_at?->format('M j, Y g:i A'),
                 'can_delete' => $request->user()->isAdmin() && ! $request->user()->is($user),
+                'can_impersonate' => $request->user()->isAdmin()
+                    && ! $request->user()->is($user)
+                    && $user->hasRole(UserRole::TournamentICT)
+                    && $user->approval_status === 'approved'
+                    && $user->disabled_at === null,
             ]);
 
         return Inertia::render('system/users', [

@@ -41,6 +41,12 @@ class BoxingLiveDemoSeeder extends Seeder
 {
     public function run(): void
     {
+        if (! app()->environment(['local', 'testing'])) {
+            $this->command?->warn('BoxingLiveDemoSeeder skipped: demo data is allowed only in local or testing environments.');
+
+            return;
+        }
+
         $sport = Sport::query()->firstOrCreate(['name' => 'Boxing'], ['active' => true]);
 
         $meet = Meet::query()->firstOrCreate(['name' => 'Boxing Scoreboard Demo'], [

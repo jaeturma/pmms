@@ -74,6 +74,7 @@ use App\Http\Controllers\TechnicalOfficialAccreditationController;
 use App\Http\Controllers\TransportRequestController;
 use App\Http\Controllers\TransportTripController;
 use App\Http\Controllers\UserManagementController;
+use App\Http\Controllers\UserImpersonationController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\VenueController;
 use App\Http\Controllers\VenueEmergencyPlanController;
@@ -241,6 +242,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('system/users/{user}/approve', [UserManagementController::class, 'approve'])->name('system.users.approve');
     Route::post('system/users/{user}/reset-password', [UserManagementController::class, 'resetPassword'])
         ->middleware('throttle:6,1')->name('system.users.reset-password');
+    Route::post('system/users/{user}/impersonate', [UserImpersonationController::class, 'store'])->name('system.users.impersonate');
+    Route::post('impersonation/stop', [UserImpersonationController::class, 'destroy'])->name('impersonation.stop');
     Route::post('accreditations', [AccreditationController::class, 'store'])->name('accreditation.store');
 
     Route::post('uploads', [FileUploadController::class, 'store'])->name('uploads.store');

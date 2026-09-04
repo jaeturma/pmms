@@ -89,6 +89,13 @@ type Result = {
      * prop, since a TM shares this list with every other sport's already-
      * visible validated results. */
     can_manage: boolean;
+    awards_medals: boolean;
+    medal_tally: {
+        gold: number;
+        silver: number;
+        bronze: number;
+        total: number;
+    };
     placements: Placement[];
 };
 
@@ -160,7 +167,7 @@ function EncodeDialog({
         useForm({
             meet_id: result ? String(result.meet_id) : '',
             event_id: result ? String(result.event_id) : '',
-            event_schedule_id: '',
+            event_schedule_id: 'none',
             match_id: result?.match_id ? String(result.match_id) : '',
             placements: (result
                 ? result.placements.map((placement) => ({
@@ -176,6 +183,10 @@ function EncodeDialog({
 
     transform((current) => ({
         ...current,
+        event_schedule_id:
+            current.event_schedule_id === 'none'
+                ? null
+                : current.event_schedule_id,
         placements: current.placements.map((row) => ({
             entry_id: row.entry_id,
             rank: row.rank,
@@ -292,7 +303,7 @@ function EncodeDialog({
                                             onValueChange={(value) => {
                                                 setData('meet_id', value);
                                                 setData('event_id', '');
-                                                setData('event_schedule_id', '');
+                                                setData('event_schedule_id', 'none');
                                             }}
                                         >
                                             <SelectTrigger>
@@ -319,7 +330,7 @@ function EncodeDialog({
                                             value={data.event_id}
                                             onValueChange={(value) => {
                                                 setData('event_id', value);
-                                                setData('event_schedule_id', '');
+                                                setData('event_schedule_id', 'none');
                                             }}
                                         >
                                             <SelectTrigger>
@@ -359,6 +370,9 @@ function EncodeDialog({
                                                 <SelectValue placeholder="Select the actual scheduled competition" />
                                             </SelectTrigger>
                                             <SelectContent>
+                                                <SelectItem value="none">
+                                                    Unscheduled event
+                                                </SelectItem>
                                                 {scheduleOptions
                                                     .filter(
                                                         (option) =>
@@ -776,6 +790,16 @@ export default function Results({
                                         >
                                             {result.status_label}
                                         </Badge>
+                                        {result.awards_medals && (
+                                            <Badge variant="outline">
+                                                <Award className="mr-1 size-3" />
+                                                Medal tally: G{' '}
+                                                {result.medal_tally.gold} · S{' '}
+                                                {result.medal_tally.silver} · B{' '}
+                                                {result.medal_tally.bronze} ·{' '}
+                                                Total {result.medal_tally.total}
+                                            </Badge>
+                                        )}
                                         {result.tm_confirmed ? (
                                             <Badge variant="secondary">
                                                 TM confirmed

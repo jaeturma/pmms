@@ -66,6 +66,7 @@ class ResultController extends Controller
             $access->resultEncoderRoles(),
             Meet::current()->id,
         );
+        $isCentralSecretariat = $this->isCentralEventSecretariat($user, Meet::current()->id);
         $assignedEventIds = $user->tournamentEventIds();
         $coachDelegationIds = collect();
         if ($user->role === UserRole::Coach) {
@@ -88,7 +89,7 @@ class ResultController extends Controller
         // per-row below instead of this global flag, since a TM's own
         // encoded results share this list with every other sport's
         // already-visible validated results.
-        $canEncode = $canManage || $isScopedResultEncoder;
+        $canEncode = $canManage || $isScopedResultEncoder || $isCentralSecretariat;
 
         $meetId = Meet::current()->id;
         $eventId = $request->integer('event_id');
@@ -97,6 +98,8 @@ class ResultController extends Controller
             ->with([
                 'meet:id,name',
                 'event.sport:id,code,name',
+                'event.medalConfig',
+                'medalAwards',
                 'encodedBy:id,name',
                 'validatedBy:id,name',
                 'cancellationRequestedBy:id,name',
@@ -117,9 +120,11 @@ class ResultController extends Controller
                 $visible->where('status', ResultStatus::Official->value)
                     ->orWhere(function ($secretariatResults) use ($user) {
                         $secretariatResults->whereIn('status', [
+                            ResultStatus::Encoded->value,
                             ResultStatus::Submitted->value,
                             ResultStatus::Validated->value,
                             ResultStatus::Returned->value,
+                            ResultStatus::Reopened->value,
                         ])->whereHas('meet.managementTeams', fn ($team) => $team
                             ->where('source_code', 'EVENT_SECRETARIAT')
                             ->whereHas('members', fn ($member) => $member
@@ -174,7 +179,7 @@ class ResultController extends Controller
         return Inertia::render('results/index', [
             'results' => $query->paginate($this->registryPageSize)->withQueryString()
                 ->through(function (EventResult $result) use ($user, $canManage): array {
-                    $canForm = $user->isAdmin() || $user->meetSportAssignments()
+                    $canForm = $user->isAdmin() || $this->isCentralEventSecretariat($user, $result->meet_id) || $user->meetSportAssignments()
                         ->where('status', MeetSportAssignmentStatus::Active)
                         ->whereIn('role', [
                             MeetSportAssignmentRole::TournamentManager,
@@ -251,6 +256,13 @@ class ResultController extends Controller
                         // validate/correct/delete their own sport's — a global
                         // boolean can't express that, so it's computed per row.
                         'can_manage' => $canManage,
+                        'awards_medals' => $result->event->resolvedMedalConfig()->awards_medals,
+                        'medal_tally' => [
+                            'gold' => $result->medalAwards->where('medal_type', 'gold')->sum('tally_quantity'),
+                            'silver' => $result->medalAwards->where('medal_type', 'silver')->sum('tally_quantity'),
+                            'bronze' => $result->medalAwards->where('medal_type', 'bronze')->sum('tally_quantity'),
+                            'total' => $result->medalAwards->sum('tally_quantity'),
+                        ],
                         'placements' => $result->placements
                             ->sortBy([['rank', 'asc']])
                             ->map(fn (ResultPlacement $placement): array => [
@@ -387,7 +399,7 @@ class ResultController extends Controller
         $data = $request->validate([
             'meet_id' => ['exclude_with:match_id', 'required_without:match_id', 'integer', Rule::exists('meets', 'id')],
             'event_id' => ['exclude_with:match_id', 'required_without:match_id', 'integer', Rule::exists('events', 'id')],
-            'event_schedule_id' => ['exclude_with:match_id', 'required_without:match_id', 'integer', Rule::exists('event_schedules', 'id')],
+            'event_schedule_id' => ['exclude_with:match_id', 'nullable', 'integer', Rule::exists('event_schedules', 'id')],
             'match_id' => ['nullable', 'integer', Rule::exists('matches', 'id')],
             'placements' => ['required', 'array', 'min:1'],
             'placements.*.entry_id' => ['required', 'integer', 'distinct', Rule::exists('entries', 'id')],
@@ -409,8 +421,10 @@ class ResultController extends Controller
             $this->assertPlacementsValid($data['placements'], $meet->id, $event->id, $match);
             $this->competitionResults->createManual($match, $data['placements'], $user);
         } else {
-            $schedule = EventSchedule::query()->real()->findOrFail((int) $data['event_schedule_id']);
-            if ($schedule->meet_id !== $meet->id || $schedule->event_id !== $event->id) {
+            $schedule = isset($data['event_schedule_id'])
+                ? EventSchedule::query()->real()->findOrFail((int) $data['event_schedule_id'])
+                : null;
+            if ($schedule !== null && ($schedule->meet_id !== $meet->id || $schedule->event_id !== $event->id)) {
                 throw ValidationException::withMessages([
                     'event_schedule_id' => __('The selected schedule must belong to the selected Meet and Sports Event.'),
                 ]);
@@ -631,8 +645,9 @@ class ResultController extends Controller
         $access = app(CompetitionAccessService::class);
 
         abort_unless(
-            $access->hasAssignmentRole($user, $access->resultEncoderRoles(), Meet::current()->id)
-                && $access->canAccessEvent($user, $event, Meet::current()->id),
+            $this->isCentralEventSecretariat($user, Meet::current()->id)
+                || ($access->hasAssignmentRole($user, $access->resultEncoderRoles(), Meet::current()->id)
+                    && $access->canAccessEvent($user, $event, Meet::current()->id)),
             403,
         );
     }
@@ -814,6 +829,16 @@ class ResultController extends Controller
                 ->where('sport_id', $result->event->sport_id))
             ->exists()
             && app(CompetitionAccessService::class)->canAccessEvent($user, $result->event, $result->meet_id);
+    }
+
+    private function isCentralEventSecretariat(User $user, int $meetId): bool
+    {
+        return $user->managementTeamMemberships()
+            ->where('status', ManagementTeamMemberStatus::Active)
+            ->whereHas('managementTeam', fn ($team) => $team
+                ->where('meet_id', $meetId)
+                ->where('source_code', 'EVENT_SECRETARIAT'))
+            ->exists();
     }
 
     /**

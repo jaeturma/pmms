@@ -317,6 +317,10 @@ class ResultWorkflowController extends Controller
             return true;
         }
 
+        if ($this->isEventSecretariat($user, $result)) {
+            return true;
+        }
+
         $hasRole = $user->meetSportAssignments()
             ->where('status', MeetSportAssignmentStatus::Active)
             ->whereIn('role', [

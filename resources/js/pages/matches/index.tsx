@@ -350,6 +350,9 @@ function ParticipantsDialog({
     );
     const useParticipantSlots =
         options.length === 0 && match.participant_slots.length > 0;
+    const allChecked =
+        options.length > 0 &&
+        options.every((option) => data.entry_ids.includes(option.id));
 
     const toggle = (entryId: number, checked: boolean) => {
         setData(
@@ -430,6 +433,22 @@ function ParticipantsDialog({
                         </p>
                     ) : (
                         <div className="max-h-72 space-y-2 overflow-y-auto rounded-lg border p-3">
+                            <label className="flex items-center gap-2 border-b pb-2 text-sm font-medium">
+                                <Checkbox
+                                    checked={allChecked}
+                                    onCheckedChange={(checked) =>
+                                        setData(
+                                            'entry_ids',
+                                            checked === true
+                                                ? options.map(
+                                                      (option) => option.id,
+                                                  )
+                                                : [],
+                                        )
+                                    }
+                                />
+                                Check all entries
+                            </label>
                             {options.map((option) => (
                                 <label
                                     key={option.id}

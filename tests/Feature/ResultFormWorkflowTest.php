@@ -107,6 +107,18 @@ test('sport personnel cannot generate a result form for an unrelated sport', fun
     $this->actingAs($user)->get(route('results.form', $other))->assertForbidden();
 });
 
+test('central Event Secretariat can submit an encoded Event Result', function () {
+    config()->set('pmms.results.signed_result_form_required', false);
+    $result = resultWithPlacement();
+    $secretariat = eventSecretariatFor($result);
+
+    $this->actingAs($secretariat)->post("/results/{$result->id}/submit")
+        ->assertSessionDoesntHaveErrors();
+
+    expect($result->fresh()->status)->toBe(ResultStatus::Submitted)
+        ->and($result->fresh()->submitted_by)->toBe($secretariat->id);
+});
+
 test('draft result may exist without attachment but cannot be submitted when signed form is required', function () {
     $result = resultWithPlacement();
     $user = assignedResultUser($result, MeetSportAssignmentRole::TournamentManager);

@@ -36,7 +36,7 @@ class CompetitionResultService
         return $result;
     }
 
-    public function createFinalEventResult(Meet $meet, Event $event, EventSchedule $schedule, array $placements, User $user): EventResult
+    public function createFinalEventResult(Meet $meet, Event $event, ?EventSchedule $schedule, array $placements, User $user): EventResult
     {
         if (EventResult::query()->where('meet_id', $meet->id)->where('event_id', $event->id)->where('result_scope', 'event')->exists()) {
             throw ValidationException::withMessages(['event_id' => __('This Sports Event already has a final result.')]);
@@ -46,8 +46,8 @@ class CompetitionResultService
             $result = new EventResult([
                 'meet_id' => $meet->id,
                 'event_id' => $event->id,
-                'event_schedule_id' => $schedule->id,
-                'result_source' => 'schedule',
+                'event_schedule_id' => $schedule?->id,
+                'result_source' => $schedule === null ? 'manual' : 'schedule',
                 'result_scope' => 'event',
             ]);
             $result->forceFill(['status' => ResultStatus::Encoded, 'encoded_by' => $user->id, 'encoded_at' => now()])->save();
@@ -57,9 +57,9 @@ class CompetitionResultService
 
             return $result;
         });
-        $this->audit->record('event_result.schedule_entered', $result, [
+        $this->audit->record($schedule === null ? 'event_result.manually_entered' : 'event_result.schedule_entered', $result, [
             'event_id' => $event->id,
-            'event_schedule_id' => $schedule->id,
+            'event_schedule_id' => $schedule?->id,
         ]);
 
         return $result;

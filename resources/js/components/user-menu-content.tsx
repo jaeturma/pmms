@@ -1,5 +1,5 @@
-import { Link, router } from '@inertiajs/react';
-import { LogOut, Settings } from 'lucide-react';
+import { Link, router, usePage } from '@inertiajs/react';
+import { LogOut, RotateCcw, Settings } from 'lucide-react';
 import {
     DropdownMenuGroup,
     DropdownMenuItem,
@@ -18,6 +18,10 @@ type Props = {
 
 export function UserMenuContent({ user }: Props) {
     const cleanup = useMobileNavigation();
+    const impersonation = usePage().props.impersonation as
+        | { active: boolean }
+        | null
+        | undefined;
 
     const handleLogout = () => {
         cleanup();
@@ -46,6 +50,18 @@ export function UserMenuContent({ user }: Props) {
                 </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
+            {impersonation?.active && (
+                <>
+                    <DropdownMenuItem
+                        className="cursor-pointer"
+                        onClick={() => router.post('/impersonation/stop')}
+                    >
+                        <RotateCcw className="mr-2" />
+                        Return to Admin
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                </>
+            )}
             <DropdownMenuItem asChild>
                 <Link
                     className="block w-full cursor-pointer"

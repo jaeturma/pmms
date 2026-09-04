@@ -101,6 +101,71 @@ test('assigned tournament ICT encodes a schedule based final event result withou
         ->and(EventMatch::query()->where('event_id', $event->id)->doesntExist())->toBeTrue();
 });
 
+test('assigned tournament ICT can encode an unscheduled final event result', function () {
+    $meet = Meet::factory()->active()->create();
+    $sport = Sport::factory()->create();
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+    $meet->events()->attach($event);
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $sport->id]);
+    $entry = placeableEntry($meet, $event);
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+    MeetSportAssignment::factory()->create([
+        'user_id' => $ict->id,
+        'meet_sport_id' => $meetSport->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($ict)->post('/results', [
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+        'event_schedule_id' => null,
+        'placements' => [['entry_id' => $entry->id, 'rank' => 1]],
+    ])->assertSessionDoesntHaveErrors();
+
+    $result = EventResult::query()->where('event_id', $event->id)->sole();
+    expect($result->event_schedule_id)->toBeNull()
+        ->and($result->result_source)->toBe('manual');
+});
+
+test('administrator can manage submitted results and sees medal tally details for medal events', function () {
+    $meet = Meet::factory()->active()->create(['is_active' => true]);
+    $event = Event::factory()->create(['is_medal_event' => true]);
+    $meet->events()->attach($event);
+    $entry = placeableEntry($meet, $event);
+    $result = EventResult::factory()->create([
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+        'status' => ResultStatus::Submitted,
+    ]);
+    $placement = ResultPlacement::factory()->create([
+        'event_result_id' => $result->id,
+        'entry_id' => $entry->id,
+        'rank' => 1,
+    ]);
+    $admin = User::factory()->admin()->create();
+    MedalAward::query()->create([
+        'event_result_id' => $result->id,
+        'result_placement_id' => $placement->id,
+        'delegation_id' => $entry->delegation_id,
+        'rank' => 1,
+        'medal_type' => 'gold',
+        'physical_quantity' => 1,
+        'tally_quantity' => 1,
+        'result_version' => 1,
+        'snapshotted_by' => $admin->id,
+        'snapshotted_at' => now(),
+    ]);
+
+    $this->actingAs($admin)->get('/results')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('results.data.0.id', $result->id)
+            ->where('results.data.0.can_review', true)
+            ->where('results.data.0.awards_medals', true)
+            ->where('results.data.0.medal_tally.gold', 1)
+            ->where('results.data.0.medal_tally.total', 1));
+});
+
 test('schedule based results reject schedules from another event and ICT outside scope', function () {
     $meet = Meet::factory()->active()->create();
     $sport = Sport::factory()->create();

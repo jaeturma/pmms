@@ -1,6 +1,7 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import {
     KeyRound,
+    LogIn,
     Network,
     Pencil,
     Search,
@@ -11,8 +12,8 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import InputError from '@/components/input-error';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
 import { PaginationControls } from '@/components/pagination-controls';
 import type { Paginated } from '@/components/pagination-controls';
@@ -59,6 +60,7 @@ type UserRow = {
     disabled: boolean;
     approval_status: string;
     can_delete: boolean;
+    can_impersonate: boolean;
 };
 type RoleOption = {
     value: string;
@@ -561,6 +563,25 @@ export default function Users({
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex justify-end gap-2">
+                                            {user.can_impersonate && (
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        if (
+                                                            window.confirm(
+                                                                `Login as ${user.name}? You can return to Admin from the account menu.`,
+                                                            )
+                                                        ) {
+                                                            router.post(
+                                                                `/system/users/${user.id}/impersonate`,
+                                                            );
+                                                        }
+                                                    }}
+                                                >
+                                                    <LogIn className="size-4" />
+                                                    Login as ICT
+                                                </Button>
+                                            )}
                                             <Button
                                                 size="sm"
                                                 variant="outline"
