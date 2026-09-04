@@ -370,6 +370,8 @@ test('sport ICT can fully manage a coach registration and view all of its athlet
     $this->actingAs($ict)->patch("/coach/onboarding-requests/{$onboarding->id}/information", [
         'name' => 'Updated Coach',
         'email' => 'updated-coach@example.test',
+        'district_id' => schoolForDelegation($delegation)->district_id,
+        'school_id' => schoolForDelegation($delegation)->id,
     ])->assertSessionDoesntHaveErrors();
     $this->actingAs($ict)->post("/coach/onboarding-requests/{$onboarding->id}/documents/profile", [
         'document' => UploadedFile::fake()->image('coach-profile.jpg'),

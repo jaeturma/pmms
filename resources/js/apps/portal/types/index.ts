@@ -60,6 +60,8 @@ export type PortalResultPlacement = {
 
 export type PortalLatestResult = {
     event: string;
+    status?: string;
+    status_label?: string;
     official_as_of: string | null;
     placements: PortalResultPlacement[];
 };
@@ -194,6 +196,8 @@ export type PortalResultRow = {
     id: number;
     event: string;
     age_division: 'elementary' | 'secondary';
+    status: string;
+    status_label: string;
     official_as_of: string | null;
     placements: PortalResultPlacement[];
 };

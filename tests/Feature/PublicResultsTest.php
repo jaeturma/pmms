@@ -49,7 +49,9 @@ test('secretariat accepted results are published as unofficial', function () {
     $this->get("/meets/{$meet->id}/results")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('results', 1)
-            ->where('results.0.id', $result->id));
+            ->where('results.0.id', $result->id)
+            ->where('results.0.status', ResultStatus::Validated->value)
+            ->where('results.0.status_label', 'Unofficial'));
 });
 
 test('unpublished meets have no public results page', function () {
@@ -96,10 +98,9 @@ test('public placements carry no sensitive or internal fields', function () {
     $this->get("/meets/{$meet->id}/results")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('results.0', fn (AssertableInertia $result) => $result
-                ->hasAll(['id', 'event', 'age_division', 'official_as_of', 'placements'])
+                ->hasAll(['id', 'event', 'age_division', 'status', 'status_label', 'official_as_of', 'placements'])
                 ->missing('validated_by')
-                ->missing('encoded_by')
-                ->missing('status'))
+                ->missing('encoded_by'))
             ->has('results.0.placements.0', fn (AssertableInertia $placement) => $placement
                 ->hasAll(['rank', 'athlete', 'school', 'delegation', 'mark', 'is_tie'])
                 ->missing('entry_id')

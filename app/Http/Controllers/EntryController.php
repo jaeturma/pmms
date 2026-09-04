@@ -217,13 +217,16 @@ class EntryController extends Controller
                     ->whereIn('event_id', $user->tournamentEventIds()))
                 ->orderByDesc('id')
                 ->get()
-                ->map(function (TeamEntry $team): array {
+                ->map(function (TeamEntry $team) use ($user): array {
                     $minimum = $team->event->sportCategory?->min_players ?? $team->event->team_size;
                     $maximum = $team->event->sportCategory?->max_players ?? $team->event->team_size;
                     $count = $team->members->count();
 
                     return [
                         'id' => $team->id,
+                        'event_id' => $team->event_id,
+                        'meet_id' => $team->delegation->meet_id,
+                        'delegation_id' => $team->delegation_id,
                         'event' => $team->event->sport->name.' — '.$team->event->name,
                         'delegation' => $team->delegation->registrantName(),
                         'member_count' => $count,
@@ -231,6 +234,10 @@ class EntryController extends Controller
                         'maximum' => $maximum,
                         'complete' => $minimum === null || $count >= $minimum,
                         'locked' => $team->isRosterLocked(),
+                        'can_assign_after_posting' => $this->isAssignedIct($user, $team->delegation->meet_id)
+                            && app(CompetitionAccessService::class)->canAccessEvent($user, $team->event, $team->delegation->meet_id)
+                            && $team->placements()->whereHas('result', fn ($results) => $results
+                                ->where('status', \App\Enums\ResultStatus::Official->value))->exists(),
                         'status' => $team->status->label(),
                         'members' => $team->members->map(fn ($member): array => [
                             'id' => $member->athlete_id,

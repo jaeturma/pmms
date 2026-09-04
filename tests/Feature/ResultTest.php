@@ -67,6 +67,68 @@ function resultFixture(int $entryCount = 2): array
     return ['meet' => $meet, 'event' => $event, 'match' => $match, 'entries' => $entries];
 }
 
+test('assigned tournament ICT encodes a schedule based final event result without creating a match', function () {
+    $meet = Meet::factory()->active()->create();
+    $sport = Sport::factory()->create();
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+    $meet->events()->attach($event);
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $sport->id]);
+    $schedule = EventSchedule::factory()->create(['meet_id' => $meet->id, 'event_id' => $event->id]);
+    $entries = [placeableEntry($meet, $event), placeableEntry($meet, $event)];
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+    MeetSportAssignment::factory()->create([
+        'user_id' => $ict->id,
+        'meet_sport_id' => $meetSport->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($ict)->post('/results', [
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+        'event_schedule_id' => $schedule->id,
+        'placements' => [
+            ['entry_id' => $entries[0]->id, 'rank' => 1, 'mark' => '10', 'is_tie' => false],
+            ['entry_id' => $entries[1]->id, 'rank' => 2, 'mark' => '8', 'is_tie' => false],
+        ],
+    ])->assertRedirect()->assertSessionDoesntHaveErrors();
+
+    $result = EventResult::query()->where('event_id', $event->id)->where('result_scope', 'event')->firstOrFail();
+    expect($result->match_id)->toBeNull()
+        ->and($result->event_schedule_id)->toBe($schedule->id)
+        ->and($result->result_source)->toBe('schedule')
+        ->and($result->status)->toBe(ResultStatus::Encoded)
+        ->and(EventMatch::query()->where('event_id', $event->id)->doesntExist())->toBeTrue();
+});
+
+test('schedule based results reject schedules from another event and ICT outside scope', function () {
+    $meet = Meet::factory()->active()->create();
+    $sport = Sport::factory()->create();
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+    $otherEvent = Event::factory()->create();
+    $meet->events()->attach([$event->id, $otherEvent->id]);
+    $meetSport = MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $sport->id]);
+    $wrongSchedule = EventSchedule::factory()->create(['meet_id' => $meet->id, 'event_id' => $otherEvent->id]);
+    $entry = placeableEntry($meet, $event);
+    $payload = [
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+        'event_schedule_id' => $wrongSchedule->id,
+        'placements' => [['entry_id' => $entry->id, 'rank' => 1]],
+    ];
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+    MeetSportAssignment::factory()->create([
+        'user_id' => $ict->id,
+        'meet_sport_id' => $meetSport->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($ict)->post('/results', $payload)->assertSessionHasErrors('event_schedule_id');
+    $this->actingAs(User::factory()->create(['role' => UserRole::TournamentICT]))
+        ->post('/results', $payload)->assertForbidden();
+});
+
 test('a placement shows the athlete\'s own school, not the municipal delegation\'s', function () {
     $meet = Meet::factory()->active()->create();
     $event = Event::factory()->create();
@@ -454,7 +516,7 @@ test('administrators can delete encoded and official results with their medal ta
     $this->assertDatabaseMissing('medal_awards', ['id' => $award->id]);
 });
 
-test('administrator result deletion cascades to its match and schedule but retains athletes and setup', function () {
+test('administrator result deletion removes its result-owned match but retains the competition schedule and setup', function () {
     $meet = Meet::factory()->active()->create();
     $event = Event::factory()->create();
     $meet->events()->attach($event);
@@ -487,7 +549,7 @@ test('administrator result deletion cascades to its match and schedule but retai
 
     $this->assertDatabaseMissing('event_results', ['id' => $result->id]);
     $this->assertDatabaseMissing('matches', ['id' => $match->id]);
-    $this->assertDatabaseMissing('event_schedules', ['id' => $schedule->id]);
+    $this->assertDatabaseHas('event_schedules', ['id' => $schedule->id]);
     $this->assertDatabaseHas('athletes', ['id' => $entry->athlete_id]);
     $this->assertDatabaseHas('events', ['id' => $event->id]);
 });

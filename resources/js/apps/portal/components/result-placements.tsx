@@ -14,9 +14,24 @@ export function PortalResultPlacements({ result, className }: PortalResultPlacem
         <div className={className}>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <p className="font-semibold">{result.event}</p>
-                {result.official_as_of && (
-                    <p className="text-xs text-[var(--portal-muted-foreground)]">Official as of {result.official_as_of}</p>
-                )}
+                <div className="flex items-center gap-2">
+                    {result.status_label && (
+                        <span
+                            className={
+                                result.status === 'official'
+                                    ? 'rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800'
+                                    : 'rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800'
+                            }
+                        >
+                            {result.status_label}
+                        </span>
+                    )}
+                    {result.official_as_of && (
+                        <p className="text-xs text-[var(--portal-muted-foreground)]">
+                            {result.status === 'official' ? 'Official' : 'Accepted'} as of {result.official_as_of}
+                        </p>
+                    )}
+                </div>
             </div>
             <ol className="mt-3 space-y-1.5 text-sm">
                 {result.placements.map((placement) => (

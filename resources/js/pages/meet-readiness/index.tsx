@@ -1,4 +1,4 @@
-import { Head, router } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import {
     AlertTriangle,
     CheckCircle2,
@@ -91,9 +91,15 @@ type Props = {
     }>;
     issues: Page<{
         severity: string;
+        domain: string;
         sport: string;
         event: string;
         message: string;
+        responsible: string;
+        can_act: boolean;
+        action: string;
+        target: string;
+        last_updated: string | null;
     }>;
     options: {
         sports: Array<{ id: number; name: string }>;
@@ -146,6 +152,8 @@ const summaryLabels: Record<string, string> = {
 
 function StatusBadge({ status }: { status: Status }) {
     const Icon = icons[status];
+
+
     return (
         <Badge
             variant={
@@ -175,6 +183,8 @@ export default function Readiness(props: Props) {
             },
             { preserveState: true, replace: true },
         );
+
+
     return (
         <div
             className={
@@ -534,6 +544,28 @@ export default function Readiness(props: Props) {
                                     {i.sport} — {i.event}
                                 </b>
                                 <div className="mt-1 text-sm">{i.message}</div>
+                                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                    <span>Domain: {i.domain}</span>
+                                    <span>·</span>
+                                    <span>Responsible: {i.responsible}</span>
+                                    {i.last_updated && (
+                                        <span>· Updated {i.last_updated}</span>
+                                    )}
+                                </div>
+                                {!props.print && (
+                                    <Button
+                                        className="mt-3"
+                                        size="sm"
+                                        variant="outline"
+                                        asChild
+                                    >
+                                        <Link href={i.target}>
+                                            {i.can_act
+                                                ? i.action
+                                                : 'View Concern'}
+                                        </Link>
+                                    </Button>
+                                )}
                             </div>
                         ))
                     )}
@@ -557,13 +589,17 @@ function Pager({
     param: string;
     filters: Props['filters'];
 }) {
-    if (page.last_page <= 1) return null;
+    if (page.last_page <= 1) {
+        return null;
+    }
+
     const go = (value: number) =>
         router.get(
             '/monitoring/readiness',
             { ...filters, [param]: value },
             { preserveState: true, preserveScroll: true, replace: true },
         );
+
     return (
         <div className="mt-4 flex items-center justify-between border-t pt-3 text-sm">
             <span>

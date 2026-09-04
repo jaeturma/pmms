@@ -94,6 +94,9 @@ type Props = {
     eventOptionsByMeet: EventOption[];
     teamEntries: Array<{
         id: number;
+        event_id: number;
+        meet_id: number;
+        delegation_id: number;
         event: string;
         delegation: string;
         member_count: number;
@@ -101,6 +104,7 @@ type Props = {
         maximum: number | null;
         complete: boolean;
         locked: boolean;
+        can_assign_after_posting: boolean;
         status: string;
         members: Array<{ id: number; name: string }>;
     }>;
@@ -283,15 +287,17 @@ function TeamEntryDialog({
     eventOptionsByMeet,
     open,
     onOpenChange,
+    team,
 }: {
     athleteOptions: AthleteOption[];
     eventOptionsByMeet: EventOption[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    team?: Props['teamEntries'][number];
 }) {
     const { data, setData, post, processing, errors, reset } = useForm({
-        event_id: '',
-        athlete_ids: [] as number[],
+        event_id: team ? String(team.event_id) : '',
+        athlete_ids: team ? team.members.map((member) => member.id) : [],
     });
     const teamEvents = eventOptionsByMeet.filter(
         (event) => event.is_team_event,
@@ -299,19 +305,29 @@ function TeamEntryDialog({
     const selectedEvent = teamEvents.find(
         (event) => String(event.id) === data.event_id,
     );
-    const athletes = selectedEvent
+    const athletes = team
         ? athleteOptions.filter(
+              (athlete) =>
+                  athlete.meet_id === team.meet_id &&
+                  athlete.delegation_id === team.delegation_id,
+          )
+        : selectedEvent
+          ? athleteOptions.filter(
               (athlete) =>
                   athlete.meet_id === selectedEvent.meet_id &&
                   selectedEvent.delegation_ids.includes(athlete.delegation_id),
-          )
-        : [];
+            )
+          : [];
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-xl">
                 <DialogHeader>
-                    <DialogTitle>Create team / pair entry</DialogTitle>
+                    <DialogTitle>
+                        {team
+                            ? 'Assign athletes to posted winning entry'
+                            : 'Create team / pair entry'}
+                    </DialogTitle>
                 </DialogHeader>
                 <form
                     className="space-y-4"
@@ -326,7 +342,7 @@ function TeamEntryDialog({
                         });
                     }}
                 >
-                    <div className="space-y-2">
+                    {!team && <div className="space-y-2">
                         <Label>Team, pair, doubles, or relay event</Label>
                         <Select
                             value={data.event_id}
@@ -350,7 +366,14 @@ function TeamEntryDialog({
                             </SelectContent>
                         </Select>
                         <InputError message={errors.event_id} />
-                    </div>
+                    </div>}
+                    {team && (
+                        <p className="text-sm text-muted-foreground">
+                            {team.event} — {team.delegation}. Athlete names can
+                            be updated without changing the posted placement or
+                            medal tally.
+                        </p>
+                    )}
                     <div className="space-y-2">
                         <Label>Official team members</Label>
                         <div className="max-h-72 space-y-1 overflow-y-auto rounded-md border p-3">
@@ -393,7 +416,7 @@ function TeamEntryDialog({
                                 processing || data.athlete_ids.length === 0
                             }
                         >
-                            Save team ({data.athlete_ids.length})
+                            {team ? 'Assign athletes' : 'Save team'} ({data.athlete_ids.length})
                         </Button>
                     </DialogFooter>
                 </form>
@@ -413,6 +436,9 @@ export default function Entries({
 }: Props) {
     const [submitOpen, setSubmitOpen] = useState(false);
     const [teamOpen, setTeamOpen] = useState(false);
+    const [postedTeam, setPostedTeam] = useState<
+        Props['teamEntries'][number] | null
+    >(null);
     const isTournamentScoped =
         usePage().props.auth.user?.is_tournament_scoped ?? false;
 
@@ -548,6 +574,17 @@ export default function Entries({
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="text-right">
+                                            {team.can_assign_after_posting && (
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() =>
+                                                        setPostedTeam(team)
+                                                    }
+                                                >
+                                                    Assign athletes
+                                                </Button>
+                                            )}
                                             {!team.locked && team.complete && (
                                                 <Button
                                                     size="sm"
@@ -805,6 +842,20 @@ export default function Entries({
                 open={teamOpen}
                 onOpenChange={setTeamOpen}
             />
+            {postedTeam && (
+                <TeamEntryDialog
+                    key={postedTeam.id}
+                    team={postedTeam}
+                    athleteOptions={athleteOptions}
+                    eventOptionsByMeet={eventOptionsByMeet}
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            setPostedTeam(null);
+                        }
+                    }}
+                />
+            )}
         </>
     );
 }

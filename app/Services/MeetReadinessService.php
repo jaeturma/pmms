@@ -41,7 +41,16 @@ class MeetReadinessService
         }
         $eventIds = $user->tournamentEventIds($meet->id);
         if ($eventIds->isNotEmpty()) {
-            return ['label' => 'Assigned tournament functions', 'event_ids' => $eventIds->all(), 'delegation_ids' => null];
+            return [
+                'label' => 'Assigned tournament functions',
+                'event_ids' => $eventIds->all(),
+                'delegation_ids' => null,
+                'ict_scope' => $user->meetSportAssignments()
+                    ->where('status', MeetSportAssignmentStatus::Active)
+                    ->where('role', MeetSportAssignmentRole::TournamentICT->value)
+                    ->whereHas('meetSport', fn ($sports) => $sports->where('meet_id', $meet->id))
+                    ->exists(),
+            ];
         }
 
         return null;
@@ -193,7 +202,34 @@ class MeetReadinessService
         ])->filter();
         $weightTotal = $domains->filter(fn ($d) => $d['applicable'])->keys()->sum(fn ($key) => self::WEIGHTS[$key]);
         $overall = $weightTotal === 0 ? 0 : (int) round($domains->filter(fn ($d) => $d['applicable'])->sum(fn ($d, $key) => $d['score'] * self::WEIGHTS[$key]) / $weightTotal);
-        $issues = $eventRows->flatMap(fn ($row) => collect($row['reasons'])->map(fn ($reason) => ['severity' => $row['status'] === 'not_ready' ? 'critical' : 'attention', 'sport_id' => $row['sport_id'], 'sport' => $row['sport'], 'event' => $row['event'], 'message' => $reason, 'event_id' => $row['id']]))->values();
+        $ictScope = (bool) ($filters['ict_scope'] ?? false);
+        $issues = $eventRows->flatMap(fn ($row) => collect($row['reasons'])->map(function ($reason) use ($row, $ictScope, $meet): array {
+            [$domain, $responsible, $action, $target, $ictCanAct] = match (true) {
+                $reason === 'No schedule' => ['Schedule', 'Tournament ICT', 'Manage Schedule', '/schedule?event_id='.$row['id'], true],
+                $reason === 'No submitted entry' => ['Entries', 'Tournament ICT / Secretariat', 'Review Entries', '/entries?event_id='.$row['id'], true],
+                str_starts_with($reason, 'No approved Coach'), str_contains($reason, 'without an approved coach') => ['Coach coverage', 'Tournament ICT', 'Manage Coach Assignment', '/coach/assignment-requests?sport_id='.$row['sport_id'], true],
+                $reason === 'No venue assigned' => ['Venue', 'Meet Management', 'Manage Venue', '/events?event_id='.$row['id'], false],
+                str_contains($reason, 'medically cleared') => ['Medical', 'Medical Team', 'View Athletes', '/medical?event_id='.$row['id'], false],
+                str_contains($reason, 'eligible') => ['Eligibility', 'DSAC', 'View Concern', '/eligibility?event_id='.$row['id'], false],
+                str_contains($reason, 'tournament personnel') => ['Personnel', 'Meet Management', 'Manage Personnel', '/management', false],
+                default => ['Configuration', 'Meet Management', 'View Event', '/events?event_id='.$row['id'], false],
+            };
+
+            return [
+                'severity' => $row['status'] === 'not_ready' ? 'critical' : 'attention',
+                'domain' => $domain,
+                'sport_id' => $row['sport_id'],
+                'sport' => $row['sport'],
+                'event' => $row['event'],
+                'message' => $reason,
+                'event_id' => $row['id'],
+                'responsible' => $responsible,
+                'can_act' => $ictScope && $ictCanAct,
+                'action' => $action,
+                'target' => $target,
+                'last_updated' => $meet->updated_at?->toDayDateTimeString(),
+            ];
+        }))->values();
 
         $filteredEvents = $eventRows->when($filters['sport_id'] ?? null, fn ($rows, $id) => $rows->where('sport_id', (int) $id))
             ->when($filters['event_id'] ?? null, fn ($rows, $id) => $rows->where('id', (int) $id))
@@ -221,7 +257,7 @@ class MeetReadinessService
                 'athletes_total' => $rosterAthletes->count(), 'athletes_eligible' => $rosterAthletes->filter(fn ($a) => $a->eligibilityReview?->status === EligibilityStatus::Approved)->count(),
                 'athletes_with_entries' => $athletes->count(), 'athletes_pending_eligibility' => $rosterAthletes->filter(fn ($a) => $a->eligibilityReview?->status !== EligibilityStatus::Approved)->count(),
                 'medical_cleared' => $athletes->filter(fn ($a) => $a->medicalClearance?->status === MedicalClearanceStatus::Cleared)->count(), 'schedules_ready' => $eventRows->where('schedule', true)->count(), 'open_issues' => $issues->count()],
-            'scope_label' => $filters['scope_label'] ?? 'Meet-wide', 'options' => ['sports' => $meetSports->map(fn ($s) => ['id' => $s->sport_id, 'name' => $s->sport->name])->values(), 'events' => $events->map(fn ($e) => ['id' => $e->id, 'name' => $e->sport->name.' — '.$e->name])->values()], 'filters' => collect($filters)->except(['event_ids', 'delegation_ids', 'scope_label'])->all()];
+            'scope_label' => $filters['scope_label'] ?? 'Meet-wide', 'options' => ['sports' => $meetSports->map(fn ($s) => ['id' => $s->sport_id, 'name' => $s->sport->name])->values(), 'events' => $events->map(fn ($e) => ['id' => $e->id, 'name' => $e->sport->name.' — '.$e->name])->values()], 'filters' => collect($filters)->except(['event_ids', 'delegation_ids', 'scope_label', 'ict_scope'])->all()];
     }
 
     private function domain(string $label, int $total, int $ready): array

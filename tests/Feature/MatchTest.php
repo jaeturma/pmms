@@ -449,7 +449,7 @@ test('existing delegation event entries automatically fill generated match slots
         ->and($entry->fresh()->status->value)->toBe('confirmed');
 });
 
-test('team events allow only one entry per school in a match', function () {
+test('team events allow only one team entry per delegation in a match', function () {
     $event = Event::factory()->create(['is_team_event' => true]);
     $match = EventMatch::factory()->create(['event_id' => $event->id]);
 
@@ -471,7 +471,7 @@ test('team events allow only one entry per school in a match', function () {
     expect($match->entries()->count())->toBe(0);
 });
 
-test('team events allow entries from different schools under the same municipal delegation', function () {
+test('team events treat different schools under one municipal delegation as one team entry', function () {
     $event = Event::factory()->create(['is_team_event' => true]);
     $match = EventMatch::factory()->create(['event_id' => $event->id]);
 
@@ -499,9 +499,9 @@ test('team events allow entries from different schools under the same municipal 
         ->put("/matches/{$match->id}/participants", [
             'entry_ids' => [$entryA->id, $entryB->id],
         ])
-        ->assertSessionHasNoErrors();
+        ->assertSessionHasErrors('entry_ids');
 
-    expect($match->entries()->count())->toBe(2);
+    expect($match->entries()->count())->toBe(0);
 });
 
 test('team events still block two entries from the same school even under a municipal delegation', function () {
@@ -552,6 +552,36 @@ test('individual events accept several entries from one school', function () {
         ->assertSessionHasNoErrors();
 
     expect($match->entries()->count())->toBe(2);
+});
+
+test('match participant choices identify individual athletes but collapse team entries to one delegation', function () {
+    $meet = Meet::factory()->active()->create(['is_active' => true]);
+    $individual = Event::factory()->create(['is_team_event' => false]);
+    $team = Event::factory()->create(['is_team_event' => true]);
+    $meet->events()->attach([$individual->id, $team->id]);
+    $delegation = Delegation::factory()->approved()->create(['meet_id' => $meet->id]);
+    $athletes = Athlete::factory()->count(2)->create(['delegation_id' => $delegation->id]);
+    $individualEntry = Entry::factory()->confirmed()->create([
+        'athlete_id' => $athletes->first()->id,
+        'delegation_id' => $delegation->id,
+        'event_id' => $individual->id,
+    ]);
+    foreach ($athletes as $athlete) {
+        Entry::factory()->confirmed()->create([
+            'athlete_id' => $athlete->id,
+            'delegation_id' => $delegation->id,
+            'event_id' => $team->id,
+        ]);
+    }
+
+    $this->actingAs(User::factory()->admin()->create())->get('/matches')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('entryOptions', fn ($options) => collect($options)
+                ->where('event_id', $individual->id)->sole()['label']
+                    === $delegation->registrantName().' ('.$individualEntry->athlete->fullName().')'
+                && collect($options)->where('event_id', $team->id)->count() === 1
+                && collect($options)->where('event_id', $team->id)->sole()['label']
+                    === $delegation->registrantName()));
 });
 
 test('participants are locked once the match leaves scheduled', function () {

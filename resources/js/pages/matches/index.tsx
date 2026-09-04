@@ -48,7 +48,7 @@ import { board as scoringBoard } from '@/routes/scoring';
 type Participant = {
     entry_id: number;
     name: string;
-    school: string;
+    school: string | null;
 };
 
 type Transition = {
@@ -60,6 +60,7 @@ type Match = {
     id: number;
     event_id: number;
     sport_id: number;
+    is_team_event: boolean;
     event_schedule_id: number | null;
     event: string;
     round_label: string;
@@ -91,7 +92,11 @@ type Option = { id: number; label: string; live_score_available?: boolean };
 
 type ScheduleOption = Option & { event_id: number };
 
-type EntryOption = Option & { event_id: number };
+type EntryOption = Option & {
+    event_id: number;
+    delegation_id: number;
+    is_team_event: boolean;
+};
 type AthleteOption = Option & { sport_id: number; delegation_id: number };
 
 type Props = {
@@ -188,6 +193,7 @@ function MatchFormDialog({
                             onValueChange={(value) => {
                                 setData('event_id', value);
                                 setData('event_schedule_id', 'none');
+
                                 if (
                                     !eventOptions.find(
                                         (option) => String(option.id) === value,
@@ -342,6 +348,8 @@ function ParticipantsDialog({
     const options = entryOptions.filter(
         (option) => option.event_id === match.event_id,
     );
+    const useParticipantSlots =
+        options.length === 0 && match.participant_slots.length > 0;
 
     const toggle = (entryId: number, checked: boolean) => {
         setData(
@@ -354,13 +362,18 @@ function ParticipantsDialog({
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        transform((values) => ({
-            ...values,
-            slot_assignments: values.slot_assignments.map((assignment) => ({
-                slot_id: assignment.slot_id,
-                athlete_id: assignment.athlete_id || null,
-            })),
-        }));
+        transform((values) =>
+            useParticipantSlots
+                ? {
+                      slot_assignments: values.slot_assignments.map(
+                          (assignment) => ({
+                              slot_id: assignment.slot_id,
+                              athlete_id: assignment.athlete_id || null,
+                          }),
+                      ),
+                  }
+                : { entry_ids: values.entry_ids },
+        );
         put(participantsRoute(match.id).url, {
             preserveScroll: true,
             onSuccess: () => onOpenChange(false),
@@ -376,7 +389,12 @@ function ParticipantsDialog({
                     </DialogTitle>
                 </DialogHeader>
                 <form onSubmit={submit} className="space-y-4">
-                    {match.participant_slots.length > 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                        {match.is_team_event
+                            ? 'Select one delegation team entry for each participant.'
+                            : 'Select each individual athlete entry. Entries are shown as Delegation (Athlete).'}
+                    </p>
+                    {useParticipantSlots ? (
                         <div className="max-h-96 space-y-3 overflow-y-auto rounded-lg border p-3">
                             {match.participant_slots.map((slot, index) => {
                                 const athletes = athleteOptions.filter(
@@ -384,6 +402,7 @@ function ParticipantsDialog({
                                         athlete.sport_id === match.sport_id &&
                                         athlete.delegation_id === slot.delegation_id,
                                 );
+
                                 return (
                                     <div key={slot.id} className="grid items-center gap-2 sm:grid-cols-[minmax(10rem,1fr)_minmax(14rem,2fr)]">
                                         <Label>{slot.delegation}{match.participant_slots.filter((item) => item.delegation_id === slot.delegation_id).length > 1 ? ` · Entry ${slot.position}` : ''}</Label>
@@ -433,7 +452,11 @@ function ParticipantsDialog({
                     <DialogFooter>
                         <Button
                             type="submit"
-                            disabled={processing || (options.length === 0 && match.participant_slots.length === 0)}
+                            disabled={
+                                processing ||
+                                (options.length === 0 &&
+                                    match.participant_slots.length === 0)
+                            }
                         >
                             Save participants
                         </Button>
@@ -595,13 +618,12 @@ export default function Matches({
                                                                 {
                                                                     participant.name
                                                                 }{' '}
-                                                                <span className="text-muted-foreground">
-                                                                    (
-                                                                    {
-                                                                        participant.school
-                                                                    }
-                                                                    )
-                                                                </span>
+                                                                {participant.school && (
+                                                                    <span className="text-muted-foreground">
+                                                                        {' — '}
+                                                                        {participant.school}
+                                                                    </span>
+                                                                )}
                                                             </li>
                                                         ),
                                                     )}

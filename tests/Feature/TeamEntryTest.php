@@ -4,6 +4,8 @@ use App\Enums\AgeDivision;
 use App\Enums\EligibilityStatus;
 use App\Enums\GenderCategory;
 use App\Enums\MedicalClearanceStatus;
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
 use App\Models\Athlete;
 use App\Models\Delegation;
 use App\Models\EligibilityReview;
@@ -11,6 +13,7 @@ use App\Models\Event;
 use App\Models\EventResult;
 use App\Models\MedicalClearance;
 use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
 use App\Models\SportRosterMember;
 use App\Models\TeamEntry;
 use App\Models\User;
@@ -144,6 +147,70 @@ test('finalizing a complete team locks the snapshot and confirms member entries'
         'event_id' => $event->id,
         'athlete_ids' => [$athletes->first()->id],
     ])->assertSessionHasErrors('athlete_ids');
+});
+
+test('assigned ICT can update athletes on an official winning team entry without changing its tally', function () {
+    [$delegation, $event, $athletes] = teamEntryContext();
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin)->post('/team-entries', [
+        'event_id' => $event->id,
+        'athlete_ids' => $athletes->pluck('id')->all(),
+    ]);
+    $team = TeamEntry::query()->sole();
+    $this->actingAs($admin)->patch("/team-entries/{$team->id}/confirm");
+    $result = EventResult::factory()->validated()->create([
+        'meet_id' => $delegation->meet_id,
+        'event_id' => $event->id,
+    ]);
+    $result->placements()->create([
+        'entry_id' => $team->members()->firstOrFail()->entry_id,
+        'team_entry_id' => $team->id,
+        'rank' => 1,
+    ]);
+
+    $replacement = Athlete::factory()->create([
+        'delegation_id' => $delegation->id,
+        'school_id' => $delegation->school_id,
+        'sex' => 'male',
+        'grade_level' => 8,
+    ]);
+    $meetSport = MeetSport::query()->where('meet_id', $delegation->meet_id)
+        ->where('sport_id', $event->sport_id)->sole();
+    SportRosterMember::query()->create([
+        'meet_sport_id' => $meetSport->id,
+        'delegation_id' => $delegation->id,
+        'athlete_id' => $replacement->id,
+        'level' => 'secondary',
+        'gender' => 'boys',
+    ]);
+    $ict = User::factory()->create(['role' => \App\Enums\UserRole::TournamentICT]);
+    MeetSportAssignment::factory()->create([
+        'user_id' => $ict->id,
+        'meet_sport_id' => $meetSport->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+    $goldBefore = collect(app(MedalTallyService::class)->standings($delegation->meet_id)['districts'])->sum('gold');
+
+    $this->actingAs($ict)->get('/entries')->assertInertia(fn ($page) => $page
+        ->where('teamEntries.0.id', $team->id)
+        ->where('teamEntries.0.can_assign_after_posting', true));
+
+    $this->actingAs($ict)->post('/team-entries', [
+        'event_id' => $event->id,
+        'athlete_ids' => [$athletes->last()->id, $replacement->id],
+    ])->assertSessionDoesntHaveErrors();
+
+    expect($team->members()->pluck('athlete_id')->all())
+        ->toEqualCanonicalizing([$athletes->last()->id, $replacement->id])
+        ->and($result->placements()->sole()->rank)->toBe(1)
+        ->and(collect(app(MedalTallyService::class)->standings($delegation->meet_id)['districts'])->sum('gold'))->toBe($goldBefore);
+
+    $this->actingAs(User::factory()->create(['role' => \App\Enums\UserRole::TournamentICT]))
+        ->post('/team-entries', [
+            'event_id' => $event->id,
+            'athlete_ids' => $athletes->pluck('id')->all(),
+        ])->assertForbidden();
 });
 
 test('a team gold counts once in delegation standings and appears for every snapshotted member', function () {

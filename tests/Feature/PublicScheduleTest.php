@@ -101,9 +101,10 @@ test('a slot dated outside the meet\'s own starts_at/ends_at window is never the
     // A live-scoring demo slot dated to "today" regardless of when the real
     // meet runs (Ddopaa2026ShowcaseSeeder's own pattern) must not hijack the
     // default landing day away from the meet's real, announced schedule.
+    $meetStart = today()->addMonth()->startOfMonth();
     $meet = Meet::factory()->active()->published()->create([
-        'starts_at' => '2026-09-04',
-        'ends_at' => '2026-09-08',
+        'starts_at' => $meetStart->toDateString(),
+        'ends_at' => $meetStart->copy()->addDays(4)->toDateString(),
     ]);
 
     EventSchedule::factory()->create([
@@ -112,13 +113,13 @@ test('a slot dated outside the meet\'s own starts_at/ends_at window is never the
     ]);
     EventSchedule::factory()->create([
         'meet_id' => $meet->id,
-        'scheduled_date' => '2026-09-04',
+        'scheduled_date' => $meetStart->toDateString(),
     ]);
 
     $this->get("/meets/{$meet->id}")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('days', 2)
-            ->where('selectedDay', '2026-09-04'));
+            ->where('selectedDay', $meetStart->toDateString()));
 
     // The stray day is still real and reachable, just never the default.
     $this->get("/meets/{$meet->id}?date=".today()->toDateString())

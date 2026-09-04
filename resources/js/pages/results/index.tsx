@@ -95,6 +95,7 @@ type Result = {
 type Option = { id: number; label: string };
 
 type EventOption = Option & { meet_id: number };
+type ScheduleOption = Option & { meet_id: number; event_id: number };
 
 type EntryOption = Option & { meet_id: number; event_id: number };
 type CompetitionOption = Option & {
@@ -116,6 +117,7 @@ type Props = {
     filters: { meet_id: number | null; event_id: number | null };
     meetOptions: Option[];
     eventOptionsByMeet: EventOption[];
+    scheduleOptions: ScheduleOption[];
     activeMeets: Option[];
     encodedEventKeys: string[];
     entryOptions: EntryOption[];
@@ -138,6 +140,7 @@ function EncodeDialog({
     competitionOptions,
     activeMeets,
     eventOptions,
+    scheduleOptions,
     open,
     onOpenChange,
 }: {
@@ -146,6 +149,7 @@ function EncodeDialog({
     competitionOptions: CompetitionOption[];
     activeMeets: Option[];
     eventOptions: EventOption[];
+    scheduleOptions: ScheduleOption[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
@@ -156,6 +160,7 @@ function EncodeDialog({
         useForm({
             meet_id: result ? String(result.meet_id) : '',
             event_id: result ? String(result.event_id) : '',
+            event_schedule_id: '',
             match_id: result?.match_id ? String(result.match_id) : '',
             placements: (result
                 ? result.placements.map((placement) => ({
@@ -287,6 +292,7 @@ function EncodeDialog({
                                             onValueChange={(value) => {
                                                 setData('meet_id', value);
                                                 setData('event_id', '');
+                                                setData('event_schedule_id', '');
                                             }}
                                         >
                                             <SelectTrigger>
@@ -311,9 +317,10 @@ function EncodeDialog({
                                         <Label>Sports Event</Label>
                                         <Select
                                             value={data.event_id}
-                                            onValueChange={(value) =>
-                                                setData('event_id', value)
-                                            }
+                                            onValueChange={(value) => {
+                                                setData('event_id', value);
+                                                setData('event_schedule_id', '');
+                                            }}
                                         >
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Select Sports Event" />
@@ -340,6 +347,33 @@ function EncodeDialog({
                                         </Select>
                                         <InputError message={errors.event_id} />
                                     </div>
+                                    <div className="space-y-2 sm:col-span-2">
+                                        <Label>Competition Schedule</Label>
+                                        <Select
+                                            value={data.event_schedule_id}
+                                            onValueChange={(value) =>
+                                                setData('event_schedule_id', value)
+                                            }
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select the actual scheduled competition" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {scheduleOptions
+                                                    .filter(
+                                                        (option) =>
+                                                            String(option.meet_id) === data.meet_id &&
+                                                            String(option.event_id) === data.event_id,
+                                                    )
+                                                    .map((option) => (
+                                                        <SelectItem key={option.id} value={String(option.id)}>
+                                                            {option.label}
+                                                        </SelectItem>
+                                                    ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <InputError message={errors.event_schedule_id} />
+                                    </div>
                                 </div>
                             )}
                             {scope === 'match' && (
@@ -355,8 +389,9 @@ function EncodeDialog({
                                                     (option) =>
                                                         String(option.id) ===
                                                         value,
-                                                );
+                                            );
                                             setData('match_id', value);
+
                                             if (selected) {
                                                 setData(
                                                     'meet_id',
@@ -367,6 +402,7 @@ function EncodeDialog({
                                                     String(selected.event_id),
                                                 );
                                             }
+
                                             setData('placements', [
                                                 {
                                                     entry_id: '',
@@ -576,8 +612,8 @@ export default function Results({
     results,
     filters,
     eventOptionsByMeet,
+    scheduleOptions,
     activeMeets,
-    encodedEventKeys,
     entryOptions,
     competitionOptions,
     canEncode,
@@ -817,12 +853,14 @@ export default function Results({
                                                                 const file =
                                                                     event.target
                                                                         .files?.[0];
+
                                                                 if (file) {
                                                                     uploadSignedForm(
                                                                         result,
                                                                         file,
                                                                     );
                                                                 }
+
                                                                 event.target.value =
                                                                     '';
                                                             }}
@@ -893,6 +931,7 @@ export default function Results({
                                                                 window.prompt(
                                                                     'Reason for returning this result',
                                                                 );
+
                                                             if (reason) {
                                                                 router.post(
                                                                     `/results/${result.id}/return`,
@@ -916,6 +955,7 @@ export default function Results({
                                                     const reason = window.prompt(
                                                         'Describe the problem requiring cancellation or correction',
                                                     )?.trim();
+
                                                     if (reason) {
                                                         router.post(
                                                             `/results/${result.id}/request-cancellation`,
@@ -1104,6 +1144,7 @@ export default function Results({
                     competitionOptions={competitionOptions}
                     activeMeets={activeMeets}
                     eventOptions={eventOptionsByMeet}
+                    scheduleOptions={scheduleOptions}
                     open={formOpen}
                     onOpenChange={setFormOpen}
                 />

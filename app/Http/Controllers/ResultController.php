@@ -16,6 +16,7 @@ use App\Models\Entry;
 use App\Models\Event;
 use App\Models\EventMatch;
 use App\Models\EventResult;
+use App\Models\EventSchedule;
 use App\Models\FileUpload;
 use App\Models\Meet;
 use App\Models\ResultAttachment;
@@ -281,6 +282,21 @@ class ResultController extends Controller
                     'label' => $this->eventLabel($event),
                 ]))
                 ->values(),
+            'scheduleOptions' => EventSchedule::query()->real()
+                ->when($isTournamentScoped, fn ($schedules) => $schedules->whereIn('event_id', $assignedEventIds))
+                ->with(['venue:id,name', 'competitionArea:id,name'])
+                ->orderBy('scheduled_date')->orderBy('starts_at')
+                ->get(['id', 'meet_id', 'event_id', 'venue_id', 'competition_area_id', 'scheduled_date', 'starts_at', 'ends_at'])
+                ->map(fn (EventSchedule $schedule): array => [
+                    'id' => $schedule->id,
+                    'meet_id' => $schedule->meet_id,
+                    'event_id' => $schedule->event_id,
+                    'label' => sprintf('%s · %s–%s · %s%s',
+                        $schedule->scheduled_date->format('M j, Y'),
+                        substr($schedule->starts_at, 0, 5), substr($schedule->ends_at, 0, 5),
+                        $schedule->venue->name,
+                        $schedule->competitionArea ? ' / '.$schedule->competitionArea->name : ''),
+                ])->values(),
             'activeMeets' => Meet::query()
                 ->where('status', MeetStatus::Active->value)
                 ->orderBy('name')
@@ -371,6 +387,7 @@ class ResultController extends Controller
         $data = $request->validate([
             'meet_id' => ['exclude_with:match_id', 'required_without:match_id', 'integer', Rule::exists('meets', 'id')],
             'event_id' => ['exclude_with:match_id', 'required_without:match_id', 'integer', Rule::exists('events', 'id')],
+            'event_schedule_id' => ['exclude_with:match_id', 'required_without:match_id', 'integer', Rule::exists('event_schedules', 'id')],
             'match_id' => ['nullable', 'integer', Rule::exists('matches', 'id')],
             'placements' => ['required', 'array', 'min:1'],
             'placements.*.entry_id' => ['required', 'integer', 'distinct', Rule::exists('entries', 'id')],
@@ -392,8 +409,14 @@ class ResultController extends Controller
             $this->assertPlacementsValid($data['placements'], $meet->id, $event->id, $match);
             $this->competitionResults->createManual($match, $data['placements'], $user);
         } else {
+            $schedule = EventSchedule::query()->real()->findOrFail((int) $data['event_schedule_id']);
+            if ($schedule->meet_id !== $meet->id || $schedule->event_id !== $event->id) {
+                throw ValidationException::withMessages([
+                    'event_schedule_id' => __('The selected schedule must belong to the selected Meet and Sports Event.'),
+                ]);
+            }
             $this->assertPlacementsValid($data['placements'], $meet->id, $event->id);
-            $this->competitionResults->createFinalEventResult($meet, $event, $data['placements'], $user);
+            $this->competitionResults->createFinalEventResult($meet, $event, $schedule, $data['placements'], $user);
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Result encoded.')]);
@@ -538,7 +561,7 @@ class ResultController extends Controller
         return back();
     }
 
-    /** Delete a result, its match and schedule, while retaining athletes and setup. */
+    /** Delete a result and any result-owned match while retaining competition setup. */
     public function destroy(Request $request, EventResult $result): RedirectResponse
     {
         abort_unless($request->user()->isAdmin(), 403);
@@ -552,14 +575,12 @@ class ResultController extends Controller
 
         DB::transaction(function () use ($result): void {
             $match = $result->match;
-            $schedule = $result->schedule;
             $result->medalAwards()->delete();
             $result->attachments()->delete();
             $result->placements()->delete();
             $result->delete();
             $match?->scoringSessions()->delete();
             $match?->delete();
-            $schedule?->delete();
         }, 3);
 
         FileUpload::query()->whereIn('id', $attachmentUploadIds)->get()
@@ -567,7 +588,7 @@ class ResultController extends Controller
 
         $this->audit->record('result.deleted', $result, $context);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Result, related match, schedule, and tally contribution deleted. Athletes and competition setup were retained.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Result, related match, and tally contribution deleted. Schedule and competition setup were retained.')]);
 
         return back();
     }

@@ -7,6 +7,10 @@ use App\Models\EventSchedule;
 use App\Models\EventVenue;
 use App\Models\Meet;
 use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
+use App\Enums\UserRole;
 use App\Models\SportRosterMember;
 use App\Models\User;
 use App\Models\Venue;
@@ -34,6 +38,30 @@ test('unassigned viewers cannot view executive readiness', function () {
     [$meet] = readinessFixture();
     $this->withoutVite();
     $this->actingAs(User::factory()->create())->get('/monitoring/readiness?meet_id='.$meet->id)->assertForbidden();
+});
+
+test('tournament ICT readiness is scoped to assigned sport and exposes safe actions', function () {
+    [$meet, $event] = readinessFixture();
+    $otherEvent = Event::factory()->create(['active' => true]);
+    $meet->events()->attach($otherEvent);
+    MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $otherEvent->sport_id, 'active' => true]);
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+    $meetSport = MeetSport::query()->where('meet_id', $meet->id)->where('sport_id', $event->sport_id)->firstOrFail();
+    MeetSportAssignment::factory()->create([
+        'user_id' => $ict->id,
+        'meet_sport_id' => $meetSport->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->withoutVite();
+    $this->actingAs($ict)->get('/monitoring/readiness?meet_id='.$meet->id)
+        ->assertOk()->assertInertia(fn ($page) => $page
+            ->where('summary.events_total', 1)
+            ->where('events.data.0.id', $event->id)
+            ->where('issues.data', fn ($issues) => collect($issues)->contains(fn ($issue) => $issue['domain'] === 'Schedule'
+                && $issue['can_act'] === true
+                && str_starts_with($issue['target'], '/schedule'))));
 });
 
 test('readiness identifies venue entry and schedule prerequisites deterministically', function () {

@@ -7,6 +7,7 @@ use App\Enums\EligibilityStatus;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\EntryStatus;
 use App\Enums\MedicalClearanceStatus;
+use App\Enums\ResultStatus;
 use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\Entry;
@@ -44,12 +45,14 @@ class TeamEntryController extends Controller
         $delegation = $athletes->first()->delegation;
         Gate::authorize('create', [Entry::class, $delegation, $event]);
 
-        $team = DB::transaction(function () use ($event, $athletes, $delegation): TeamEntry {
+        $team = DB::transaction(function () use ($request, $event, $athletes, $delegation): TeamEntry {
             $team = TeamEntry::query()->firstOrCreate([
                 'delegation_id' => $delegation->id,
                 'event_id' => $event->id,
             ], ['status' => EntryStatus::Submitted]);
-            if ($team->isRosterLocked()) {
+            $latePostedAssignment = $team->isRosterLocked()
+                && $this->canAssignAfterPosting($request->user(), $team);
+            if ($team->isRosterLocked() && ! $latePostedAssignment) {
                 throw ValidationException::withMessages(['athlete_ids' => __('This team roster is locked.')]);
             }
             $members = [];
@@ -65,9 +68,18 @@ class TeamEntryController extends Controller
 
             return $team->refresh();
         });
-        $this->audit->record('team_entry.submitted', $team, ['event' => $event->name, 'members' => $athletes->pluck('id')->all()]);
+        $latePostedAssignment = $team->placements()
+            ->whereHas('result', fn ($results) => $results->where('status', ResultStatus::Official->value))
+            ->exists();
+        $this->audit->record(
+            $latePostedAssignment ? 'team_entry.athletes_assigned_after_posting' : 'team_entry.submitted',
+            $team,
+            ['event' => $event->name, 'members' => $athletes->pluck('id')->all()],
+        );
 
-        return back()->with('success', __('Team entry saved.'));
+        return back()->with('success', $latePostedAssignment
+            ? __('Athletes assigned to the posted winning entry. The official placement and medal tally were unchanged.')
+            : __('Team entry saved.'));
     }
 
     public function confirm(Request $request, TeamEntry $teamEntry): RedirectResponse
@@ -156,5 +168,18 @@ class TeamEntryController extends Controller
         if ($finalizing && $minimum !== null && $athletes->count() < $minimum) {
             throw ValidationException::withMessages(['athlete_ids' => __('This team requires at least :count members.', ['count' => $minimum])]);
         }
+    }
+
+    private function canAssignAfterPosting(User $user, TeamEntry $team): bool
+    {
+        return app(CompetitionAccessService::class)->hasAssignmentRole(
+            $user,
+            [MeetSportAssignmentRole::TournamentICT->value],
+            $team->delegation->meet_id,
+        )
+            && app(CompetitionAccessService::class)->canAccessEvent($user, $team->event, $team->delegation->meet_id)
+            && $team->placements()
+                ->whereHas('result', fn ($results) => $results->where('status', ResultStatus::Official->value))
+                ->exists();
     }
 }
