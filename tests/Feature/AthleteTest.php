@@ -958,3 +958,26 @@ test('delegations with athletes cannot be deleted', function () {
 
     $this->assertDatabaseHas('delegations', ['id' => $athlete->delegation_id]);
 });
+
+test('ICT athlete totals match the complete current meet registration table', function () {
+    $meet = Meet::factory()->active()->create();
+    $delegations = Delegation::factory()->count(2)->approved()->create(['meet_id' => $meet->id]);
+    Athlete::factory()->count(2)->create(['delegation_id' => $delegations[0]->id]);
+    Athlete::factory()->count(3)->create(['delegation_id' => $delegations[1]->id]);
+
+    $otherMeet = Meet::factory()->create(['is_active' => false]);
+    $otherDelegation = Delegation::factory()->approved()->create(['meet_id' => $otherMeet->id]);
+    Athlete::factory()->create(['delegation_id' => $otherDelegation->id]);
+
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+
+    $this->actingAs($ict)->get('/athletes')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page->has('athletes.data', 5));
+
+    $this->actingAs($ict)->get('/dashboard')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('stats.0.key', 'athletes')
+            ->where('stats.0.value', 5));
+});

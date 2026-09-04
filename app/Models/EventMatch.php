@@ -86,6 +86,17 @@ class EventMatch extends Model
         return $this->belongsToMany(Entry::class, 'match_entries', 'match_id')->withTimestamps();
     }
 
+    /**
+     * Delegation-level participants for team events. A team remains one
+     * match entry regardless of how many athletes are assigned to it.
+     *
+     * @return BelongsToMany<TeamEntry, $this>
+     */
+    public function teamEntries(): BelongsToMany
+    {
+        return $this->belongsToMany(TeamEntry::class, 'match_team_entries', 'match_id')->withTimestamps();
+    }
+
     public function participantSlots(): HasMany
     {
         return $this->hasMany(MatchParticipantSlot::class, 'match_id');

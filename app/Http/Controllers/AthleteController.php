@@ -70,6 +70,8 @@ class AthleteController extends Controller
 
         /** @var User $user */
         $user = $request->user();
+        $isIct = $user->role === UserRole::TournamentICT
+            || (! $user->isAdmin() && $user->canManageProductionAccounts());
 
         $search = $this->searchTerm($request);
         $municipalityId = $request->integer('municipality_id') ?: null;
@@ -118,6 +120,10 @@ class AthleteController extends Controller
         } elseif ($user->role === UserRole::Coach) {
             $query->whereHas('delegation.personnel', fn ($personnel) => $personnel->where('user_id', $user->id))
                 ->ownedBy($user);
+        } elseif ($isIct) {
+            // ICT registration totals and rows must describe the same meet-wide
+            // athlete population, including athletes not assigned to a sport yet.
+            $query->whereHas('delegation', fn ($delegation) => $delegation->where('meet_id', Meet::current()->id));
         } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer)
             && $user->hasPermission(Permission::AthleteEligibilityReview, Meet::current())) {
             $query->whereHas('delegation', fn ($delegation) => $delegation->where('meet_id', Meet::current()->id));
@@ -174,6 +180,8 @@ class AthleteController extends Controller
             );
         } elseif ($user->role === UserRole::Coach) {
             $delegations->whereHas('personnel', fn ($personnel) => $personnel->where('user_id', $user->id));
+        } elseif ($isIct) {
+            $delegations->where('meet_id', Meet::current()->id);
         }
 
         $availableDelegations = $delegations->get()
@@ -306,15 +314,8 @@ class AthleteController extends Controller
             ->with('sport:id,name')->orderBy('display_order')->get();
         $events = $athlete->delegation->meet->events()
             ->when($allowedEventIds !== null, fn ($query) => $query->whereIn('events.id', $allowedEventIds))
-            ->whereIn('gender', [
-                $athlete->sex->value === 'male' ? 'boys' : 'girls',
-                'mixed',
-            ])
             ->with(['sport:id,name', 'sportCategory:id,display_name'])
-            ->orderBy('display_order')->orderBy('name')->get()
-            ->filter(fn (Event $event): bool => $event->age_division->accepts($athlete->ageDivision())
-                || $event->age_division->value === 'mixed')
-            ->values();
+            ->orderBy('display_order')->orderBy('name')->get();
         $allowedSportIds = $allowedEventIds === null
             ? collect()
             : Event::query()->whereKey($allowedEventIds)->pluck('sport_id')->unique();

@@ -333,9 +333,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('matches', [MatchController::class, 'index'])->name('matches.index');
     Route::get('matches/{match}/scoring-session', [ScoringSessionController::class, 'show'])->name('scoring.show');
     Route::get('matches/{match}/scoreboard', [ScoringSessionController::class, 'board'])->name('scoring.board');
+    // Match controllers perform precise assignment/ICT authorization. Keeping
+    // these outside a flat-role middleware also admits ICT management-team
+    // accounts whose base user role is intentionally different.
+    Route::post('matches', [MatchController::class, 'store'])->name('matches.store');
+    Route::put('matches/{match}', [MatchController::class, 'update'])->name('matches.update');
+    Route::patch('matches/{match}/status', [MatchController::class, 'updateStatus'])->name('matches.status');
+    Route::delete('matches/{match}', [MatchController::class, 'destroy'])->name('matches.destroy');
+    Route::put('matches/{match}/participants', [MatchController::class, 'syncParticipants'])->name('matches.participants');
     Route::get('results', [ResultController::class, 'index'])->name('results.index');
     Route::get('results/{result}/form', [ResultWorkflowController::class, 'form'])->name('results.form');
     Route::post('results/{result}/attachments', [ResultWorkflowController::class, 'upload'])->name('results.attachments.store');
+    Route::post('results/{result}/photo', [ResultWorkflowController::class, 'uploadPhoto'])->name('results.photo.store');
+    Route::get('results/{result}/photo/{attachment}', [ResultWorkflowController::class, 'photo'])->name('results.photo.show');
     Route::get('results/{result}/attachments/{attachment}', [ResultWorkflowController::class, 'download'])->name('results.attachments.download');
     Route::post('results/{result}/submit', [ResultWorkflowController::class, 'submit'])->name('results.submit');
     Route::post('results/{result}/request-cancellation', [ResultWorkflowController::class, 'requestCancellation'])->name('results.request-cancellation');
@@ -609,18 +619,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('schedule/{schedule}', [ScheduleController::class, 'update'])->name('schedule.update');
         Route::delete('schedule/{schedule}', [ScheduleController::class, 'destroy'])->name('schedule.destroy');
 
-        Route::post('matches', [MatchController::class, 'store'])->name('matches.store');
-        Route::put('matches/{match}', [MatchController::class, 'update'])->name('matches.update');
-        Route::patch('matches/{match}/status', [MatchController::class, 'updateStatus'])->name('matches.status');
-        Route::delete('matches/{match}', [MatchController::class, 'destroy'])->name('matches.destroy');
-
         Route::patch('results/{result}/validate', [ResultController::class, 'validateResult'])->name('results.validate');
         Route::patch('results/{result}/correct', [ResultController::class, 'correct'])->name('results.correct');
         Route::delete('results/{result}', [ResultController::class, 'destroy'])->name('results.destroy');
-    });
-
-    Route::middleware('role:admin,organizer,coach,technical_official,tournament_manager,tournament_ict,tournament_secretary')->group(function () {
-        Route::put('matches/{match}/participants', [MatchController::class, 'syncParticipants'])->name('matches.participants');
     });
 
     // Live scoring mutations are their own role group, not folded into the

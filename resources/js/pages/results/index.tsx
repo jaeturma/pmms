@@ -78,6 +78,7 @@ type Result = {
     version: number;
     reference: string;
     can_form: boolean;
+    can_upload_photo: boolean;
     can_review: boolean;
     can_cancel: boolean;
     can_request_cancellation: boolean;
@@ -91,6 +92,7 @@ type Result = {
     tm_confirmed: boolean;
     can_tm_confirm: boolean;
     signed_form: { id: number; name: string } | null;
+    result_photo: { id: number; name: string; url: string } | null;
     /** Superset of the page-level `canManage` prop — also true for a
      * Tournament Manager on their own sport's result (Phase 13). Gates the
      * per-row Validate/Delete/Correct actions instead of the page-level
@@ -664,6 +666,14 @@ export default function Results({
         );
     };
 
+    const uploadResultPhoto = (result: Result, photo: File) => {
+        router.post(
+            `/results/${result.id}/photo`,
+            { photo },
+            { forceFormData: true, preserveScroll: true },
+        );
+    };
+
     const applyFilters = (overrides: {
         meet_id?: string;
         event_id?: string;
@@ -1119,6 +1129,61 @@ export default function Results({
                                     </div>
                                 </div>
                                 <div className="overflow-x-auto">
+                                    {result.result_photo && (
+                                        <div
+                                            className={
+                                                result.awards_medals
+                                                    ? 'border-b bg-amber-50/40 p-4 dark:bg-amber-950/10'
+                                                    : 'border-b p-4'
+                                            }
+                                        >
+                                            <p className="mb-2 text-sm font-medium">
+                                                Written game result photo
+                                                {result.awards_medals &&
+                                                    ' · Medal event'}
+                                            </p>
+                                            <a
+                                                href={result.result_photo.url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                            >
+                                                <img
+                                                    src={result.result_photo.url}
+                                                    alt={`Written result for ${result.event}`}
+                                                    className="max-h-96 w-auto rounded-lg border object-contain"
+                                                />
+                                            </a>
+                                        </div>
+                                    )}
+                                    {result.can_upload_photo && (
+                                        <div className="border-b p-3">
+                                            <label className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-accent">
+                                                <FileUp className="size-4" />
+                                                {result.result_photo
+                                                    ? 'Replace result photo'
+                                                    : 'Attach written result photo'}
+                                                <input
+                                                    className="sr-only"
+                                                    type="file"
+                                                    accept="image/jpeg,image/png,image/webp"
+                                                    onChange={(event) => {
+                                                        const photo =
+                                                            event.target
+                                                                .files?.[0];
+
+                                                        if (photo) {
+                                                            uploadResultPhoto(
+                                                                result,
+                                                                photo,
+                                                            );
+                                                        }
+
+                                                        event.target.value = '';
+                                                    }}
+                                                />
+                                            </label>
+                                        </div>
+                                    )}
                                     <Table>
                                         <TableHeader>
                                             <TableRow>

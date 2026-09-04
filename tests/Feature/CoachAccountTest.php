@@ -179,21 +179,23 @@ test('athlete coach assignment rejects more than two coaches', function () {
     expect($athlete->coaches()->count())->toBe(0);
 });
 
-test('athlete event picker loads compatible mixed or same gender and division events in order', function () {
+test('athlete event picker does not filter by gender or division and loads events in order', function () {
     $athlete = Athlete::factory()->create(['sex' => 'male', 'grade_level' => 9, 'age_division' => 'secondary']);
     $meet = $athlete->delegation->meet;
     $sport = Sport::factory()->create();
-    $compatible = Event::factory()->create(['sport_id' => $sport->id, 'gender' => 'boys', 'age_division' => 'secondary', 'display_order' => 2]);
-    $mixed = Event::factory()->create(['sport_id' => $sport->id, 'gender' => 'mixed', 'age_division' => 'mixed', 'display_order' => 1]);
-    $wrongGender = Event::factory()->create(['sport_id' => $sport->id, 'gender' => 'girls', 'age_division' => 'secondary', 'display_order' => 0]);
-    $wrongDivision = Event::factory()->create(['sport_id' => $sport->id, 'gender' => 'boys', 'age_division' => 'elementary', 'display_order' => 0]);
+    $compatible = Event::factory()->create(['sport_id' => $sport->id, 'gender' => 'boys', 'age_division' => 'secondary', 'display_order' => 4]);
+    $mixed = Event::factory()->create(['sport_id' => $sport->id, 'gender' => 'mixed', 'age_division' => 'mixed', 'display_order' => 3]);
+    $wrongGender = Event::factory()->create(['sport_id' => $sport->id, 'gender' => 'girls', 'age_division' => 'secondary', 'display_order' => 2]);
+    $wrongDivision = Event::factory()->create(['sport_id' => $sport->id, 'gender' => 'boys', 'age_division' => 'elementary', 'display_order' => 1]);
     $meet->events()->attach([$compatible->id, $mixed->id, $wrongGender->id, $wrongDivision->id]);
 
     $this->actingAs(User::factory()->admin()->create())->get("/athletes/{$athlete->id}/edit")
         ->assertInertia(fn ($page) => $page
-            ->has('events', 2)
-            ->where('events.0.id', $mixed->id)
-            ->where('events.1.id', $compatible->id));
+            ->has('events', 4)
+            ->where('events.0.id', $wrongDivision->id)
+            ->where('events.1.id', $wrongGender->id)
+            ->where('events.2.id', $mixed->id)
+            ->where('events.3.id', $compatible->id));
 });
 
 test('a coach can view and register athletes for their own delegation', function () {

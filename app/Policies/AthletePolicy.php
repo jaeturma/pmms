@@ -21,6 +21,7 @@ class AthletePolicy
     public function viewAny(User $user): bool
     {
         return $user->hasRole(UserRole::Admin, UserRole::Organizer, UserRole::DelegationOfficer, UserRole::Coach)
+            || $user->role === UserRole::TournamentICT
             || $user->canManageProductionAccounts()
             || $user->hasPermission(Permission::AthleteEligibilityReview)
             || $user->hasPermission(Permission::DistrictAthletesView)
@@ -35,6 +36,11 @@ class AthletePolicy
     public function view(User $user, Athlete $athlete): bool
     {
         if ($user->hasRole(UserRole::Admin, UserRole::Organizer) || $user->canManageProductionAccounts()) {
+            return true;
+        }
+
+        if ($user->role === UserRole::TournamentICT
+            && $athlete->delegation->meet_id === \App\Models\Meet::current()->id) {
             return true;
         }
 

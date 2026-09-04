@@ -20,6 +20,7 @@ use App\Models\Meet;
 use App\Models\MatchParticipantSlot;
 use App\Models\MeetSport;
 use App\Models\SportRosterMember;
+use App\Models\TeamEntry;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\CompetitionAccessService;
@@ -52,11 +53,12 @@ class MatchController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        if ($user->tournamentEventIds()->isEmpty()) {
+        if (! $this->isIct($user) && $user->tournamentEventIds()->isEmpty()) {
             Gate::authorize('viewAny', Entry::class);
         }
 
-        $canManageAll = Gate::allows('manage-meet-data');
+        $isIct = $this->isIct($user);
+        $canManageAll = Gate::allows('manage-meet-data') || $isIct;
         $visibleEventIds = $user->tournamentEventIds();
         $coachDelegationIds = collect();
         if ($user->role === UserRole::Coach) {
@@ -64,7 +66,7 @@ class MatchController extends Controller
             $coachDelegationIds = $user->approvedCoachDelegationIds();
         }
         $isTournamentScoped = $user->role === UserRole::Coach
-            || (! $user->isAdmin() && $visibleEventIds->isNotEmpty());
+            || (! $user->isAdmin() && ! $isIct && $visibleEventIds->isNotEmpty());
         $access = app(CompetitionAccessService::class);
         $canManageAssignedCompetition = $access->hasAssignmentRole(
             $user,
@@ -85,6 +87,8 @@ class MatchController extends Controller
                 'result:id,match_id',
                 'entries.athlete:id,first_name,last_name,school_id',
                 'entries.athlete.school:id,name',
+                'teamEntries.delegation.school:id,name',
+                'teamEntries.delegation.district:id,name',
             ])
             ->orderBy('event_id')
             ->orderBy('sequence')
@@ -141,8 +145,8 @@ class MatchController extends Controller
                             ? ' / '.$match->schedule->competitionArea->name
                             : ''),
                     ),
-                    'participants' => $match->entries
-                        ->map(fn (Entry $entry): array => [
+                    'participants' => ($match->event->is_team_event ? $match->teamEntries : $match->entries)
+                        ->map(fn (Entry|TeamEntry $entry): array => [
                             'entry_id' => $entry->id,
                             'name' => $match->event->is_team_event
                                 ? $entry->delegation->registrantName()
@@ -152,6 +156,7 @@ class MatchController extends Controller
                         ->sortBy('name')
                         ->values()
                         ->all(),
+                    'team_entry_ids' => $match->teamEntries->pluck('id')->values()->all(),
                     'participant_slots' => $match->participantSlots
                         ->when($user->role === UserRole::Coach, fn ($slots) => $slots->whereIn('delegation_id', $coachDelegationIds))
                         ->map(fn (MatchParticipantSlot $slot): array => [
@@ -240,6 +245,20 @@ class MatchController extends Controller
                         : 'entry-'.$option['id'])
                 ->sortBy('label')
                 ->values(),
+            'teamEntryOptions' => TeamEntry::query()
+                ->whereHas('event', fn ($events) => $events->where('is_team_event', true)
+                    ->whereHas('meets', fn ($meets) => $meets->whereKey(Meet::current()->id)))
+                ->with(['delegation.school:id,name', 'delegation.district:id,name'])
+                ->get()
+                ->map(fn (TeamEntry $team): array => [
+                    'id' => $team->id,
+                    'event_id' => $team->event_id,
+                    'delegation_id' => $team->delegation_id,
+                    'is_team_event' => true,
+                    'label' => $team->delegation->registrantName(),
+                ])
+                ->sortBy('label')
+                ->values(),
             'athleteOptions' => SportRosterMember::query()
                 ->whereHas('meetSport', fn ($meetSports) => $meetSports->where('meet_id', Meet::current()->id))
                 ->when($isTournamentScoped, fn ($members) => $members->whereHas(
@@ -313,6 +332,8 @@ class MatchController extends Controller
         $validated = $request->validate([
             'entry_ids' => ['array'],
             'entry_ids.*' => ['integer', 'distinct', Rule::exists('entries', 'id')],
+            'team_entry_ids' => ['array'],
+            'team_entry_ids.*' => ['integer', 'distinct', Rule::exists('team_entries', 'id')],
             'slot_assignments' => ['array'],
             'slot_assignments.*.slot_id' => ['required', 'integer', 'distinct', Rule::exists('match_participant_slots', 'id')],
             'slot_assignments.*.athlete_id' => ['nullable', 'integer', Rule::exists('athletes', 'id')],
@@ -329,6 +350,42 @@ class MatchController extends Controller
 
         /** @var array<int, int> $entryIds */
         $entryIds = $validated['entry_ids'] ?? [];
+
+        if ($match->event->is_team_event) {
+            if ($entryIds !== []) {
+                throw ValidationException::withMessages([
+                    'entry_ids' => __('Team matches use delegation team entries, not individual athlete entries.'),
+                ]);
+            }
+            $teamEntryIds = $validated['team_entry_ids'] ?? [];
+            $teams = TeamEntry::query()
+                ->with('delegation:id,meet_id')
+                ->whereIn('id', $teamEntryIds)
+                ->get();
+
+            if ($teams->count() !== count($teamEntryIds)) {
+                throw ValidationException::withMessages(['team_entry_ids' => __('One or more selected team entries no longer exist.')]);
+            }
+
+            foreach ($teams as $team) {
+                if ($team->event_id !== $match->event_id || $team->delegation->meet_id !== $match->meet_id) {
+                    throw ValidationException::withMessages([
+                        'team_entry_ids' => __('A selected delegation team belongs to a different event or meet.'),
+                    ]);
+                }
+            }
+
+            $match->teamEntries()->sync($teamEntryIds);
+            $match->entries()->detach();
+            $this->audit->record('match.participants_updated', $match, [
+                ...$this->context($match),
+                'participants' => count($teamEntryIds),
+                'participant_type' => 'delegation_team',
+            ]);
+            Inertia::flash('toast', ['type' => 'success', 'message' => __('Match team entries updated.')]);
+
+            return back();
+        }
 
         if (array_key_exists('slot_assignments', $validated)) {
             $entryIds = $this->assignParticipantSlots($match, $validated['slot_assignments'], $request->user());
@@ -369,6 +426,7 @@ class MatchController extends Controller
         }
 
         $match->entries()->sync($entryIds);
+        $match->teamEntries()->detach();
 
         $this->audit->record('match.participants_updated', $match, [
             ...$this->context($match),
@@ -384,7 +442,7 @@ class MatchController extends Controller
     private function authorizeParticipantManagement(Request $request, EventMatch $match): void
     {
         $user = $request->user();
-        if ($user->isAdmin()) {
+        if ($user->isAdmin() || $this->isIct($user)) {
             return;
         }
 
@@ -428,7 +486,14 @@ class MatchController extends Controller
                 ->orderByRaw("CASE WHEN status = ? THEN 0 ELSE 1 END", [EntryStatus::Confirmed->value])
                 ->orderBy('id')
                 ->get();
-            $count = max($configuredCount, $entries->count());
+            $count = $match->event->is_team_event ? 1 : max($configuredCount, $entries->count());
+
+            if ($match->event->is_team_event) {
+                TeamEntry::query()->firstOrCreate([
+                    'delegation_id' => $delegationId,
+                    'event_id' => $match->event_id,
+                ], ['status' => EntryStatus::Submitted->value]);
+            }
 
             for ($position = 1; $position <= $count; $position++) {
                 MatchParticipantSlot::query()->firstOrCreate([
@@ -563,7 +628,7 @@ class MatchController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        if ($user->isAdmin()) {
+        if ($user->isAdmin() || $this->isIct($user)) {
             return;
         }
 
@@ -584,7 +649,7 @@ class MatchController extends Controller
 
     private function canRemoveMatch(User $user, EventMatch $match): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->isAdmin() || $this->isIct($user)) {
             return true;
         }
 
@@ -621,6 +686,12 @@ class MatchController extends Controller
                 ]);
             }
         }
+    }
+
+    private function isIct(User $user): bool
+    {
+        return $user->role === UserRole::TournamentICT
+            || (! $user->isAdmin() && $user->canManageProductionAccounts());
     }
 
     private function eventLabel(Event $event): string

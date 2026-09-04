@@ -57,6 +57,12 @@ class DashboardController extends Controller
                     ->whereDoesntHave('entries')
                     ->orWhereHas('entries', fn ($ownedEntries) => $ownedEntries->whereIn('event_id', $eventIds)));
             $entries->whereIn('delegation_id', $delegationIds)->whereIn('event_id', $eventIds);
+        } elseif ($user->role === UserRole::TournamentICT
+            || (! $user->isAdmin() && $user->canManageProductionAccounts())) {
+            // Keep the ICT dashboard total identical to the Registration â€”
+            // Athletes table, including athletes without event entries.
+            $athletes->whereHas('delegation', fn ($query) => $query->where('meet_id', $currentMeet->id));
+            $entries->whereHas('delegation', fn ($query) => $query->where('meet_id', $currentMeet->id));
         } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer)
             && $user->hasPermission(Permission::AthleteEligibilityReview, $currentMeet)) {
             $athletes->whereHas('delegation', fn ($query) => $query->where('meet_id', $currentMeet->id));
@@ -230,7 +236,9 @@ class DashboardController extends Controller
             && ! $user->canManageProductionAccounts()) {
             // Tournament managers, assistants, secretaries, ICT, and
             // technical officials see only events granted by active scopes.
-            $eventQuery->whereKey($user->tournamentEventIds($meet->id));
+            if ($user->role !== UserRole::TournamentICT) {
+                $eventQuery->whereKey($user->tournamentEventIds($meet->id));
+            }
         }
 
         $events = $eventQuery->get();

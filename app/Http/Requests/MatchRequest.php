@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Enums\ScoreboardType;
 use App\Models\Event;
 use App\Models\Meet;
+use App\Enums\UserRole;
 use App\Services\CompetitionAccessService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -18,6 +19,8 @@ class MatchRequest extends FormRequest
         $access = app(CompetitionAccessService::class);
 
         return $user !== null && ($user->isAdmin()
+            || $user->role === UserRole::TournamentICT
+            || $user->canManageProductionAccounts()
             || $access->hasAssignmentRole($user, $access->competitionManagerRoles(), Meet::current()->id));
     }
 
@@ -52,6 +55,20 @@ class MatchRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
+            $duplicate = \App\Models\EventMatch::query()
+                ->where('meet_id', $this->integer('meet_id'))
+                ->where('event_id', $this->integer('event_id'))
+                ->where('round_label', trim((string) $this->input('round_label')))
+                ->where('sequence', $this->integer('sequence'))
+                ->when($this->route('match'), fn ($matches, $match) => $matches->whereKeyNot($match->getKey()))
+                ->exists();
+            if ($duplicate) {
+                $validator->errors()->add(
+                    'sequence',
+                    __('This event already has a match with the same round and sequence. Change the round or match number.'),
+                );
+            }
+
             if (! $this->boolean('live_scoring_enabled')) {
                 return;
             }

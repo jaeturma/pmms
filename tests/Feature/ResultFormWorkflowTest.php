@@ -119,6 +119,43 @@ test('central Event Secretariat can submit an encoded Event Result', function ()
         ->and($result->fresh()->submitted_by)->toBe($secretariat->id);
 });
 
+test('system administrator can submit an encoded result without a tournament ICT assignment', function () {
+    config()->set('pmms.results.signed_result_form_required', false);
+    $result = resultWithPlacement();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->get('/results')->assertOk();
+    $this->actingAs($admin)->post("/results/{$result->id}/submit")
+        ->assertRedirect()->assertSessionDoesntHaveErrors();
+
+    expect($result->fresh()->status)->toBe(ResultStatus::Submitted)
+        ->and($result->fresh()->submitted_by)->toBe($admin->id);
+});
+
+test('authorized result staff can attach and replace a written result photo', function () {
+    Storage::fake('local');
+    config()->set('uploads.disk', 'local');
+    $result = resultWithPlacement();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->post(route('results.photo.store', $result), [
+        'photo' => UploadedFile::fake()->image('written-result.jpg'),
+    ])->assertRedirect()->assertSessionDoesntHaveErrors();
+    $first = $result->attachments()->where('attachment_type', ResultAttachment::RESULT_PHOTO)->sole();
+
+    $this->actingAs($admin)->get(route('results.photo.show', [$result, $first]))->assertOk();
+    $this->actingAs($admin)->post(route('results.photo.store', $result), [
+        'photo' => UploadedFile::fake()->image('corrected-result.png'),
+    ])->assertRedirect()->assertSessionDoesntHaveErrors();
+
+    expect($first->fresh()->is_current)->toBeFalse()
+        ->and($result->attachments()->where('attachment_type', ResultAttachment::RESULT_PHOTO)->where('is_current', true)->count())->toBe(1)
+        ->and(AuditLog::query()->where('action', 'result_photo.uploaded')->count())->toBe(2);
+
+    $this->actingAs($admin)->get('/results')->assertInertia(fn ($page) => $page
+        ->where('results.data.0.result_photo.name', 'corrected-result.png'));
+});
+
 test('draft result may exist without attachment but cannot be submitted when signed form is required', function () {
     $result = resultWithPlacement();
     $user = assignedResultUser($result, MeetSportAssignmentRole::TournamentManager);

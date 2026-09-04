@@ -73,6 +73,7 @@ type Match = {
     live_score_available: boolean;
     awards_medals: boolean;
     participants: Participant[];
+    team_entry_ids: number[];
     participant_slots: Array<{
         id: number;
         delegation_id: number;
@@ -105,6 +106,7 @@ type Props = {
     eventOptions: Option[];
     scheduleOptions: ScheduleOption[];
     entryOptions: EntryOption[];
+    teamEntryOptions: EntryOption[];
     athleteOptions: AthleteOption[];
     canManage: boolean;
 };
@@ -327,39 +329,47 @@ function MatchFormDialog({
 function ParticipantsDialog({
     match,
     entryOptions,
+    teamEntryOptions,
     athleteOptions,
     open,
     onOpenChange,
 }: {
     match: Match;
     entryOptions: EntryOption[];
+    teamEntryOptions: EntryOption[];
     athleteOptions: AthleteOption[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
     const { data, setData, put, processing, errors, transform } = useForm({
-        entry_ids: match.participants.map((p) => p.entry_id),
+        entry_ids: match.is_team_event
+            ? []
+            : match.participants.map((p) => p.entry_id),
+        team_entry_ids: match.team_entry_ids,
         slot_assignments: match.participant_slots.map((slot) => ({
             slot_id: slot.id,
             athlete_id: slot.athlete_id ? String(slot.athlete_id) : '',
         })),
     });
 
-    const options = entryOptions.filter(
+    const options = (match.is_team_event ? teamEntryOptions : entryOptions).filter(
         (option) => option.event_id === match.event_id,
     );
+    const selectedIds = match.is_team_event
+        ? data.team_entry_ids
+        : data.entry_ids;
     const useParticipantSlots =
         options.length === 0 && match.participant_slots.length > 0;
     const allChecked =
         options.length > 0 &&
-        options.every((option) => data.entry_ids.includes(option.id));
+        options.every((option) => selectedIds.includes(option.id));
 
     const toggle = (entryId: number, checked: boolean) => {
         setData(
-            'entry_ids',
+            match.is_team_event ? 'team_entry_ids' : 'entry_ids',
             checked
-                ? [...data.entry_ids, entryId]
-                : data.entry_ids.filter((id) => id !== entryId),
+                ? [...selectedIds, entryId]
+                : selectedIds.filter((id) => id !== entryId),
         );
     };
 
@@ -375,7 +385,9 @@ function ParticipantsDialog({
                           }),
                       ),
                   }
-                : { entry_ids: values.entry_ids },
+                : match.is_team_event
+                  ? { team_entry_ids: values.team_entry_ids }
+                  : { entry_ids: values.entry_ids },
         );
         put(participantsRoute(match.id).url, {
             preserveScroll: true,
@@ -438,7 +450,7 @@ function ParticipantsDialog({
                                     checked={allChecked}
                                     onCheckedChange={(checked) =>
                                         setData(
-                                            'entry_ids',
+                                            match.is_team_event ? 'team_entry_ids' : 'entry_ids',
                                             checked === true
                                                 ? options.map(
                                                       (option) => option.id,
@@ -455,7 +467,7 @@ function ParticipantsDialog({
                                     className="flex items-center gap-2 text-sm"
                                 >
                                     <Checkbox
-                                        checked={data.entry_ids.includes(
+                                        checked={selectedIds.includes(
                                             option.id,
                                         )}
                                         onCheckedChange={(checked) =>
@@ -468,6 +480,7 @@ function ParticipantsDialog({
                         </div>
                     )}
                     <InputError message={errors.entry_ids} />
+                    <InputError message={errors.team_entry_ids} />
                     <DialogFooter>
                         <Button
                             type="submit"
@@ -492,6 +505,7 @@ export default function Matches({
     eventOptions,
     scheduleOptions,
     entryOptions,
+    teamEntryOptions,
     athleteOptions,
     canManage,
 }: Props) {
@@ -814,6 +828,7 @@ export default function Matches({
                     key={participantsFor.id}
                     match={participantsFor}
                     entryOptions={entryOptions}
+                    teamEntryOptions={teamEntryOptions}
                     athleteOptions={athleteOptions}
                     open={participantsFor !== null}
                     onOpenChange={(open) => {

@@ -18,6 +18,7 @@ use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
 use App\Models\School;
 use App\Models\User;
+use App\Models\TeamEntry;
 use Inertia\Testing\AssertableInertia;
 
 function confirmedEntryFor(EventMatch $match): Entry
@@ -687,4 +688,79 @@ test('entries that took part in a match cannot be deleted', function () {
         ->assertRedirect();
 
     $this->assertDatabaseHas('entries', ['id' => $entry->id]);
+});
+
+test('all tournament ICT accounts can see and manage every match in the current meet', function () {
+    $meet = Meet::factory()->active()->create();
+    $events = Event::factory()->count(2)->create();
+    $meet->events()->attach($events->modelKeys());
+    EventMatch::factory()->create(['meet_id' => $meet->id, 'event_id' => $events[0]->id]);
+    EventMatch::factory()->create(['meet_id' => $meet->id, 'event_id' => $events[1]->id]);
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+
+    $this->actingAs($ict)->get('/matches')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('matches.data', 2)
+            ->where('canManage', true));
+
+    $this->actingAs($ict)->post('/matches', [
+        'event_id' => $events[1]->id,
+        'round_label' => 'Final',
+        'sequence' => 2,
+    ])->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('matches', [
+        'event_id' => $events[1]->id,
+        'round_label' => 'Final',
+        'sequence' => 2,
+    ]);
+});
+
+test('duplicate match round and sequence returns a clear validation error', function () {
+    $match = EventMatch::factory()->create(['round_label' => 'Final', 'sequence' => 1]);
+
+    $this->actingAs(User::factory()->admin()->create())->post('/matches', [
+        'event_id' => $match->event_id,
+        'round_label' => 'Final',
+        'sequence' => 1,
+    ])->assertSessionHasErrors('sequence');
+});
+
+test('team matches use one delegation entry regardless of roster size', function () {
+    $event = Event::factory()->create(['is_team_event' => true]);
+    $match = EventMatch::factory()->create(['event_id' => $event->id]);
+    $meetSport = MeetSport::factory()->create([
+        'meet_id' => $match->meet_id,
+        'sport_id' => $event->sport_id,
+        'active' => true,
+    ]);
+    $delegation = Delegation::factory()->approved()->create(['meet_id' => $match->meet_id]);
+    $athletes = Athlete::factory()->count(3)->create(['delegation_id' => $delegation->id]);
+    foreach ($athletes as $athlete) {
+        \App\Models\SportRosterMember::query()->create([
+            'meet_sport_id' => $meetSport->id,
+            'delegation_id' => $delegation->id,
+            'athlete_id' => $athlete->id,
+            'level' => $event->age_division->value,
+            'gender' => $event->gender->value,
+        ]);
+    }
+
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin)->get('/matches')->assertInertia(
+        fn (AssertableInertia $page) => $page
+            ->has('teamEntryOptions', 1)
+            ->where('teamEntryOptions.0.delegation_id', $delegation->id)
+            ->where('teamEntryOptions.0.label', $delegation->registrantName()),
+    );
+
+    $team = TeamEntry::query()->sole();
+    $this->actingAs($admin)->put("/matches/{$match->id}/participants", [
+        'team_entry_ids' => [$team->id],
+    ])->assertSessionHasNoErrors();
+
+    expect($match->teamEntries()->count())->toBe(1)
+        ->and($match->entries()->count())->toBe(0)
+        ->and($match->participantSlots()->count())->toBe(1);
 });

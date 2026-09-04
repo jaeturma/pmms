@@ -213,6 +213,12 @@ class ResultController extends Controller
                         ->where('is_current', true)
                         ->sortByDesc('id')
                         ->first();
+                    $resultPhoto = $result->attachments
+                        ->where('attachment_type', ResultAttachment::RESULT_PHOTO)
+                        ->where('result_version', $result->version)
+                        ->where('is_current', true)
+                        ->sortByDesc('id')
+                        ->first();
 
                     return [
                         'id' => $result->id,
@@ -246,6 +252,7 @@ class ResultController extends Controller
                         'version' => $result->version,
                         'reference' => $result->referenceNumber(),
                         'can_form' => $canForm,
+                        'can_upload_photo' => $canForm,
                         'can_review' => $isEventSecretariat,
                         'can_cancel' => $isEventSecretariat && in_array($result->status, [ResultStatus::Submitted, ResultStatus::Returned, ResultStatus::Validated], true),
                         'can_request_cancellation' => $result->status === ResultStatus::Submitted
@@ -275,6 +282,11 @@ class ResultController extends Controller
                         'signed_form' => $attachment === null ? null : [
                             'id' => $attachment->id,
                             'name' => $attachment->file->original_name,
+                        ],
+                        'result_photo' => $resultPhoto === null ? null : [
+                            'id' => $resultPhoto->id,
+                            'name' => $resultPhoto->file?->original_name ?? 'Written result photo',
+                            'url' => route('results.photo.show', [$result, $resultPhoto]),
                         ],
                         // Superset of the page-level `canManage` prop: also true
                         // for a Tournament Manager on their own sport's results

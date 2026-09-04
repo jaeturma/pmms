@@ -23,6 +23,7 @@ use Illuminate\Validation\Rules\File;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ResultWorkflowController extends Controller
 {
@@ -103,6 +104,60 @@ class ResultWorkflowController extends Controller
         );
 
         return back()->with('success', 'Signed Result Form uploaded.');
+    }
+
+    public function uploadPhoto(Request $request, EventResult $result): RedirectResponse
+    {
+        $this->authorizeSportDocument($request->user(), $result);
+        $validated = $request->validate([
+            'photo' => ['required', File::image()->types(['jpg', 'jpeg', 'png', 'webp'])->max((int) config('uploads.max_kb'))],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+        $upload = $this->uploads->store($request->file('photo'), $request->user(), 'result_photo');
+        $stream = Storage::disk($upload->disk)->readStream($upload->path);
+        abort_if($stream === false, 500, 'The uploaded result photo could not be verified.');
+        $hash = hash_init('sha256');
+        hash_update_stream($hash, $stream);
+        fclose($stream);
+        $checksum = hash_final($hash);
+
+        $attachment = DB::transaction(function () use ($result, $upload, $request, $validated, $checksum): ResultAttachment {
+            $result->attachments()->where('attachment_type', ResultAttachment::RESULT_PHOTO)
+                ->where('is_current', true)->update(['is_current' => false]);
+
+            return $result->attachments()->create([
+                'file_upload_id' => $upload->id,
+                'attachment_type' => ResultAttachment::RESULT_PHOTO,
+                'result_version' => $result->version,
+                'checksum_sha256' => $checksum,
+                'uploaded_by' => $request->user()->id,
+                'is_current' => true,
+                'notes' => $validated['notes'] ?? null,
+            ]);
+        });
+
+        $this->audit->record('result_photo.uploaded', $result, [
+            ...$this->context($result), 'attachment_id' => $attachment->id,
+        ]);
+
+        return back()->with('success', 'Written result photo attached.');
+    }
+
+    public function photo(Request $request, EventResult $result, ResultAttachment $attachment): StreamedResponse|BinaryFileResponse
+    {
+        abort_unless($attachment->event_result_id === $result->id
+            && $attachment->attachment_type === ResultAttachment::RESULT_PHOTO, 404);
+        abort_unless($this->canManageSportDocument($request->user(), $result)
+            || $this->isEventSecretariat($request->user(), $result)
+            || $request->user()->hasPermission(Permission::ResultsOfficialize, $result->meet)
+            || $result->status === ResultStatus::Official, 403);
+        $attachment->loadMissing('file');
+
+        return Storage::disk($attachment->file->disk)->response(
+            $attachment->file->path,
+            $attachment->file->original_name,
+            ['Content-Type' => $attachment->file->mime_type, 'Cache-Control' => 'private, max-age=300'],
+        );
     }
 
     public function download(Request $request, EventResult $result, ResultAttachment $attachment): StreamedResponse

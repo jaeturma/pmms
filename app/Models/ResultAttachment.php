@@ -11,6 +11,8 @@ class ResultAttachment extends Model
 {
     public const SIGNED_RESULT_FORM = 'signed_result_form';
 
+    public const RESULT_PHOTO = 'result_photo';
+
     protected function casts(): array
     {
         return ['result_version' => 'integer', 'is_current' => 'boolean'];
