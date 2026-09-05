@@ -96,7 +96,7 @@ type Result = {
     form_generated: boolean;
     tm_confirmed: boolean;
     can_tm_confirm: boolean;
-    signed_form: { id: number; name: string } | null;
+    signed_form: { id: number; name: string; type: string } | null;
     result_photo: { id: number; name: string; url: string } | null;
     /** Superset of the page-level `canManage` prop — also true for a
      * Tournament Manager on their own sport's result (Phase 13). Gates the
@@ -156,7 +156,53 @@ type Props = {
      * Governs the encode form and the "Edit" action. Tournament Manager
      * does not gain this — encoding stays a Technical Official job. */
     canEncode: boolean;
+    canDirectResult: boolean;
+    delegationOptions: Option[];
 };
+
+function DirectResultDialog({ open, onOpenChange, events, delegations }: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    events: EventOption[];
+    delegations: Option[];
+}) {
+    const { data, setData, post, processing, errors, reset } = useForm({
+        event_id: '', gold_delegation_id: '', silver_delegation_id: '', bronze_delegation_id: '', evidence: null as File | null,
+    });
+    const [preview, setPreview] = useState<string | null>(null);
+    const submit = (event: FormEvent) => {
+        event.preventDefault();
+        post('/results/direct', { forceFormData: true, preserveScroll: true, onSuccess: () => { reset(); setPreview(null); onOpenChange(false); } });
+    };
+    const medalSelect = (label: string, field: 'gold_delegation_id' | 'silver_delegation_id' | 'bronze_delegation_id') => (
+        <div className="space-y-2">
+            <Label>{label}</Label>
+            <Select value={data[field]} onValueChange={(value) => setData(field, value)}>
+                <SelectTrigger><SelectValue placeholder={`Select ${label} Delegation`} /></SelectTrigger>
+                <SelectContent>{delegations.map((option) => <SelectItem key={option.id} value={String(option.id)}>{option.label}</SelectItem>)}</SelectContent>
+            </Select>
+            <InputError message={errors[field]} />
+        </div>
+    );
+    return <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
+            <DialogHeader><DialogTitle>Submit Event Result</DialogTitle></DialogHeader>
+            <form onSubmit={submit} className="space-y-4">
+                <div className="space-y-2"><Label>Sports Event</Label><Select value={data.event_id} onValueChange={(value) => setData('event_id', value)}><SelectTrigger><SelectValue placeholder="Select Sports Event" /></SelectTrigger><SelectContent>{events.map((option) => <SelectItem key={option.id} value={String(option.id)}>{option.label}</SelectItem>)}</SelectContent></Select><InputError message={errors.event_id} /></div>
+                {medalSelect('Gold', 'gold_delegation_id')}
+                {medalSelect('Silver', 'silver_delegation_id')}
+                {medalSelect('Bronze', 'bronze_delegation_id')}
+                <div className="space-y-2">
+                    <Label htmlFor="direct-result-evidence">Result document or photo</Label>
+                    <Input id="direct-result-evidence" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" onChange={(e) => { const file = e.target.files?.[0] ?? null; setData('evidence', file); setPreview(file?.type.startsWith('image/') ? URL.createObjectURL(file) : null); }} />
+                    {preview && <img src={preview} alt="Result evidence preview" className="max-h-56 w-full rounded-md border object-contain" />}
+                    <InputError message={errors.evidence} />
+                </div>
+                <DialogFooter><Button type="submit" disabled={processing}>{processing ? 'Submitting…' : 'Submit Result'}</Button></DialogFooter>
+            </form>
+        </DialogContent>
+    </Dialog>;
+}
 
 function EncodeDialog({
     result,
@@ -663,17 +709,15 @@ export default function Results({
     teamEntryOptions,
     competitionOptions,
     canEncode,
+    canDirectResult,
+    delegationOptions,
 }: Props) {
     const [formOpen, setFormOpen] = useState(false);
+    const [directOpen, setDirectOpen] = useState(false);
     const [editing, setEditing] = useState<Result | null>(null);
     const [correcting, setCorrecting] = useState<Result | null>(null);
     const isTournamentScoped =
         usePage().props.auth.user?.is_tournament_scoped ?? false;
-
-    const openCreate = () => {
-        setEditing(null);
-        setFormOpen(true);
-    };
 
     const openEdit = (result: Result) => {
         setEditing(result);
@@ -745,11 +789,11 @@ export default function Results({
                             : 'Validated results per meet event.'
                     }
                     actions={
-                        canEncode &&
+                        canDirectResult &&
                         activeMeets.length > 0 && (
-                            <Button onClick={openCreate}>
+                            <Button onClick={() => setDirectOpen(true)}>
                                 <Plus />
-                                Encode result
+                                Submit Event Result
                             </Button>
                         )
                     }
@@ -994,7 +1038,10 @@ export default function Results({
                                                 <a
                                                     href={`/results/${result.id}/attachments/${result.signed_form.id}`}
                                                 >
-                                                    Signed form
+                                                    {result.signed_form.type ===
+                                                    'direct_result_evidence'
+                                                        ? 'Result evidence'
+                                                        : 'Signed form'}
                                                 </a>
                                             </Button>
                                         )}
@@ -1013,7 +1060,7 @@ export default function Results({
                                                             )
                                                         }
                                                     >
-                                                        Accept
+                                                        Validate
                                                     </Button>
                                                     <Button
                                                         variant="destructive"
@@ -1085,12 +1132,12 @@ export default function Results({
                                             <ConfirmDialog
                                                 trigger={
                                                     <Button size="sm">
-                                                        Mark as official
+                                                        Accept
                                                     </Button>
                                                 }
-                                                title="Mark this Sports Event Result as OFFICIAL?"
-                                                description="This will make the result authoritative and may update the official medal tally."
-                                                confirmLabel="Mark as official"
+                                                title="Accept this Event Result?"
+                                                description="This posts the accepted result and its medals to the official public tally."
+                                                confirmLabel="Accept result"
                                                 onConfirm={() =>
                                                     router.post(
                                                         `/results/${result.id}/official`,
@@ -1290,6 +1337,15 @@ export default function Results({
                     scheduleOptions={scheduleOptions}
                     open={formOpen}
                     onOpenChange={setFormOpen}
+                />
+            )}
+
+            {canDirectResult && (
+                <DirectResultDialog
+                    open={directOpen}
+                    onOpenChange={setDirectOpen}
+                    events={eventOptionsByMeet.filter((option) => option.meet_id === filters.meet_id)}
+                    delegations={delegationOptions}
                 />
             )}
 

@@ -252,7 +252,7 @@ test('unauthorized personnel cannot upload a signed result form', function () {
         ->assertForbidden();
 });
 
-test('event secretariat validates and only top management can make a submitted event result official', function () {
+test('event secretariat validates and accepts a submitted event result', function () {
     Storage::fake('local');
     config()->set('uploads.disk', 'local');
     $result = resultWithPlacement();
@@ -274,16 +274,16 @@ test('event secretariat validates and only top management can make a submitted e
         ->assertSessionHasNoErrors();
     $this->actingAs($secretariat)
         ->post(route('results.official', $result))
-        ->assertForbidden();
+        ->assertSessionHasNoErrors();
 
-    expect($result->fresh()->status)->toBe(ResultStatus::Validated);
+    expect($result->fresh()->status)->toBe(ResultStatus::Official);
 
     $this->actingAs($topManagement)
         ->post(route('results.official', $result))
         ->assertSessionHasNoErrors();
 
     expect($result->fresh()->status)->toBe(ResultStatus::Official)
-        ->and($result->fresh()->official_by)->toBe($topManagement->id)
+        ->and($result->fresh()->official_by)->toBe($secretariat->id)
         ->and($result->fresh()->official_at)->not->toBeNull()
         ->and($result->fresh()->currentSignedForm()?->id)->toBe($attachment->id)
         ->and(AuditLog::query()->where('action', 'result.made_official')->exists())->toBeTrue();

@@ -22,7 +22,7 @@ class MedalAwardService
         $result->loadMissing(['event.medalConfig', 'placements.entry.athlete', 'placements.teamEntry', 'placements.delegation']);
         $config = $result->event->resolvedMedalConfig();
 
-        if ($config->awards_medals && ! $config->isComplete()) {
+        if ($config->awards_medals && ! $config->isComplete() && $result->result_source !== 'direct') {
             throw ValidationException::withMessages([
                 'medal_configuration' => __('This medal-producing event needs complete physical and official tally quantities before its result can become official.'),
             ]);
@@ -44,8 +44,8 @@ class MedalAwardService
                     'medal_type' => match ($placement->rank) {
                         1 => 'gold', 2 => 'silver', default => 'bronze'
                     },
-                    'physical_quantity' => $config->physicalQuantityForRank($placement->rank),
-                    'tally_quantity' => $config->tallyQuantityForRank($placement->rank),
+                    'physical_quantity' => $config->isComplete() ? $config->physicalQuantityForRank($placement->rank) : 1,
+                    'tally_quantity' => $config->isComplete() ? $config->tallyQuantityForRank($placement->rank) : 1,
                     'result_version' => (int) ($result->version ?? 1),
                     'snapshotted_by' => $actor->id,
                     'snapshotted_at' => now(),

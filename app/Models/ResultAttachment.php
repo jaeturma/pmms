@@ -13,6 +13,8 @@ class ResultAttachment extends Model
 
     public const RESULT_PHOTO = 'result_photo';
 
+    public const DIRECT_RESULT_EVIDENCE = 'direct_result_evidence';
+
     protected function casts(): array
     {
         return ['result_version' => 'integer', 'is_current' => 'boolean'];

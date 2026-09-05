@@ -349,6 +349,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('matches/{match}/manual-outcome', [MatchController::class, 'saveManualOutcome'])->name('matches.manual-outcome');
     Route::post('matches/{match}/result', [MatchController::class, 'createResult'])->name('matches.result.store');
     Route::get('results', [ResultController::class, 'index'])->name('results.index');
+    Route::post('results/direct', [ResultWorkflowController::class, 'storeDirect'])->name('results.direct.store');
     Route::get('results/{result}/form', [ResultWorkflowController::class, 'form'])->name('results.form');
     Route::post('results/{result}/attachments', [ResultWorkflowController::class, 'upload'])->name('results.attachments.store');
     Route::post('results/{result}/photo', [ResultWorkflowController::class, 'uploadPhoto'])->name('results.photo.store');

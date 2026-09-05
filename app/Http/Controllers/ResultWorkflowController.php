@@ -2,13 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\DelegationStatus;
 use App\Enums\ManagementTeamMemberStatus;
 use App\Enums\MatchStatus;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\Permission;
 use App\Enums\ResultStatus;
+use App\Models\Delegation;
+use App\Models\Event;
 use App\Models\EventResult;
+use App\Models\Meet;
 use App\Models\ResultAttachment;
 use App\Models\User;
 use App\Services\AuditLogger;
@@ -20,6 +24,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\File;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -33,6 +38,65 @@ class ResultWorkflowController extends Controller
         private readonly AuditLogger $audit,
         private readonly MedalAwardService $medalAwards,
     ) {}
+
+    public function storeDirect(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'event_id' => ['required', 'integer', Rule::exists('events', 'id')],
+            'gold_delegation_id' => ['required', 'integer', 'different:silver_delegation_id', 'different:bronze_delegation_id', Rule::exists('delegations', 'id')],
+            'silver_delegation_id' => ['required', 'integer', 'different:gold_delegation_id', 'different:bronze_delegation_id', Rule::exists('delegations', 'id')],
+            'bronze_delegation_id' => ['required', 'integer', 'different:gold_delegation_id', 'different:silver_delegation_id', Rule::exists('delegations', 'id')],
+            'evidence' => ['required', File::types(['pdf', 'jpg', 'jpeg', 'png', 'webp'])->max((int) config('uploads.max_kb'))],
+        ]);
+        $meet = Meet::current();
+        $event = Event::query()->findOrFail((int) $data['event_id']);
+        $user = $request->user();
+        $access = app(CompetitionAccessService::class);
+        $authorized = $user->isAdmin() || $this->isCentralSecretariatForMeet($user, $meet->id)
+            || ($this->isAssignedIctForEvent($user, $event, $meet->id) && $access->canAccessEvent($user, $event, $meet->id));
+        abort_unless($authorized, 403);
+        abort_unless($event->meets()->whereKey($meet->id)->exists(), 422, 'The selected Sports Event is not part of the current Meet.');
+
+        $delegationIds = collect([$data['gold_delegation_id'], $data['silver_delegation_id'], $data['bronze_delegation_id']])->map(fn ($id) => (int) $id);
+        abort_unless(Delegation::query()->where('meet_id', $meet->id)->whereIn('status', [DelegationStatus::Submitted->value, DelegationStatus::Approved->value])->whereKey($delegationIds)->count() === 3, 422, 'Every medal Delegation must be active in the current Meet.');
+        abort_if(EventResult::query()->real()->where('meet_id', $meet->id)->where('event_id', $event->id)
+            ->whereNotIn('status', [ResultStatus::Cancelled->value])->exists(), 422, 'An active Result already exists for this Sports Event. Return, cancel, or correct it instead.');
+
+        $upload = $this->uploads->store($request->file('evidence'), $user, 'evidence');
+        $stream = Storage::disk($upload->disk)->readStream($upload->path);
+        abort_if($stream === false, 500, 'The uploaded result evidence could not be verified.');
+        $hash = hash_init('sha256');
+        hash_update_stream($hash, $stream);
+        fclose($stream);
+        $checksum = hash_final($hash);
+
+        $result = DB::transaction(function () use ($meet, $event, $user, $delegationIds, $upload, $checksum): EventResult {
+            $result = new EventResult([
+                'meet_id' => $meet->id, 'event_id' => $event->id, 'result_source' => 'direct',
+                'result_scope' => 'event', 'operational_remarks' => 'Direct Event Result submitted from delegation medal placements.',
+            ]);
+            $result->forceFill([
+                'status' => ResultStatus::Submitted, 'encoded_by' => $user->id, 'encoded_at' => now(),
+                'submitted_by' => $user->id, 'submitted_at' => now(),
+                'version' => 1,
+            ])->save();
+            foreach ($delegationIds as $index => $delegationId) {
+                $result->placements()->create(['delegation_id' => $delegationId, 'rank' => $index + 1, 'is_tie' => false]);
+            }
+            $result->attachments()->create([
+                'file_upload_id' => $upload->id, 'attachment_type' => ResultAttachment::DIRECT_RESULT_EVIDENCE,
+                'result_version' => $result->version, 'checksum_sha256' => $checksum,
+                'uploaded_by' => $user->id, 'is_current' => true,
+            ]);
+
+            return $result;
+        });
+
+        $this->audit->record('direct_result.created', $result, $this->context($result));
+        $this->audit->record('result.submitted', $result, $this->context($result));
+
+        return back()->with('success', 'Direct Event Result submitted to the Event Secretariat.');
+    }
 
     public function form(Request $request, EventResult $result): View
     {
@@ -373,7 +437,7 @@ class ResultWorkflowController extends Controller
         $this->authorizeEventSecretariat($request->user(), $result);
 
         if ($result->status === ResultStatus::Validated) {
-            return back()->with('success', 'Result was already accepted. Its medal contribution remains unchanged.');
+            return back()->with('success', 'Result was already validated. It remains pending acceptance.');
         }
 
         abort_unless($result->status === ResultStatus::Submitted, 422, 'Only a submitted result may be accepted.');
@@ -389,6 +453,10 @@ class ResultWorkflowController extends Controller
             abort_unless($locked->status === ResultStatus::Submitted, 422, 'Only a submitted result may be accepted.');
             abort_unless($locked->event !== null && $locked->event->meets()->whereKey($locked->meet_id)->exists(), 409, 'The Result Event is not linked to its Meet. Repair this integrity issue before acceptance.');
 
+            if ($locked->result_source === 'direct') {
+                $this->assertDirectResultIntegrity($locked);
+            }
+
             $concerns = $this->operationalConcerns($locked);
             if ($this->reconstructMissingPlacements($locked)) {
                 $concerns->push('Placements were reconstructed from match delegations. Athlete/team links may be completed later.');
@@ -398,7 +466,7 @@ class ResultWorkflowController extends Controller
             }
 
             $config = $locked->event->resolvedMedalConfig();
-            if ($config->awards_medals && $config->isComplete() && $locked->placements()->exists()) {
+            if ($locked->result_source !== 'direct' && $config->awards_medals && $config->isComplete() && $locked->placements()->exists()) {
                 $this->medalAwards->synchronize($locked, $request->user());
             } elseif ($config->awards_medals && ! $config->isComplete()) {
                 $concerns->push('Medal configuration is incomplete; the operational tally uses placements until the snapshot can be reconciled.');
@@ -416,11 +484,15 @@ class ResultWorkflowController extends Controller
             ]);
         });
 
-        return back()->with('success', 'Result accepted with operational remarks. Its medal contribution remains reconciled and counted once.');
+        return back()->with('success', 'Result validated. It will remain internal until the Event Secretariat accepts it.');
     }
 
     private function operationalConcerns(EventResult $result): Collection
     {
+        if ($result->result_source === 'direct') {
+            return collect();
+        }
+
         return collect([
             $result->event_schedule_id === null ? 'Schedule is not linked.' : null,
             $result->match_id !== null && $result->tm_confirmed_at === null ? 'Tournament Manager confirmation is pending.' : null,
@@ -460,16 +532,32 @@ class ResultWorkflowController extends Controller
 
     public function makeOfficial(Request $request, EventResult $result): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission(Permission::ResultsOfficialize, $result->meet), 403);
+        abort_unless($request->user()->hasPermission(Permission::ResultsOfficialize, $result->meet)
+            || $request->user()->isAdmin() || $this->isEventSecretariat($request->user(), $result), 403);
+
+        if ($result->status === ResultStatus::Official) {
+            return back()->with('success', 'Result was already accepted. Its medal tally remains unchanged.');
+        }
 
         DB::transaction(function () use ($result, $request): void {
-            $locked = EventResult::query()->lockForUpdate()->findOrFail($result->id);
+            $locked = EventResult::query()->lockForUpdate()->with(['event.medalConfig', 'placements', 'attachments'])->findOrFail($result->id);
+            if ($locked->status === ResultStatus::Official) {
+                return;
+            }
             abort_unless($locked->status === ResultStatus::Validated, 422, 'Only a validated result awaiting officialization may be marked official.');
             abort_unless($locked->isFinalEventResult(), 422, 'Only a final Sports Event Result may be marked official. Completed Match Results remain operational and unofficial.');
             abort_unless($locked->submitted_at !== null && $locked->submitted_by !== null, 422, 'The final result must be submitted before officialization.');
             abort_if($locked->currentSignedForm() === null
+                && $locked->result_source !== 'direct'
                 && ! ($locked->result_source === 'manual' && $locked->event_schedule_id === null), 422, 'The signed Result Form is missing.');
             abort_unless($locked->placements()->exists(), 422, 'The final result has no placements.');
+
+            if ($locked->result_source === 'direct') {
+                $this->assertDirectResultIntegrity($locked);
+                abort_if(EventResult::query()->where('meet_id', $locked->meet_id)->where('event_id', $locked->event_id)
+                    ->where('status', ResultStatus::Official->value)->whereKeyNot($locked->id)->exists(), 422,
+                    'Another accepted Result already owns this Sports Event medal allocation. Reopen or correct it first.');
+            }
 
             $duplicateRanks = $locked->placements()->select('rank')->groupBy('rank')->havingRaw('COUNT(*) > 1')->pluck('rank');
             foreach ($duplicateRanks as $rank) {
@@ -486,7 +574,23 @@ class ResultWorkflowController extends Controller
             $this->audit->record('result.made_official', $locked, $this->context($locked));
         });
 
-        return back()->with('success', 'Result marked official.');
+        return back()->with('success', 'Result accepted and posted to the official public medal tally.');
+    }
+
+    private function assertDirectResultIntegrity(EventResult $result): void
+    {
+        abort_unless($result->event !== null && $result->event->meets()->whereKey($result->meet_id)->exists(), 409,
+            'The direct Result Event is not linked to its Meet.');
+        abort_unless($result->attachments->contains('attachment_type', ResultAttachment::DIRECT_RESULT_EVIDENCE), 422,
+            'Direct Result evidence is required.');
+        $placements = $result->placements->whereIn('rank', [1, 2, 3]);
+        abort_unless($placements->count() === 3
+            && $placements->pluck('rank')->unique()->count() === 3
+            && $placements->pluck('delegation_id')->filter()->unique()->count() === 3, 422,
+            'Direct Results require three distinct Gold, Silver, and Bronze Delegations.');
+        abort_unless(Delegation::query()->where('meet_id', $result->meet_id)
+            ->whereKey($placements->pluck('delegation_id'))->count() === 3, 409,
+            'A medal Delegation no longer belongs to the Result Meet.');
     }
 
     public function reopen(Request $request, EventResult $result): RedirectResponse
@@ -588,6 +692,22 @@ class ResultWorkflowController extends Controller
                 ->where('sport_id', $result->event->sport_id))
             ->exists()
             && app(CompetitionAccessService::class)->canAccessEvent($user, $result->event, $result->meet_id);
+    }
+
+    private function isAssignedIctForEvent(User $user, Event $event, int $meetId): bool
+    {
+        return $user->meetSportAssignments()
+            ->where('status', MeetSportAssignmentStatus::Active)
+            ->where('role', MeetSportAssignmentRole::TournamentICT->value)
+            ->whereHas('meetSport', fn ($meetSport) => $meetSport
+                ->where('meet_id', $meetId)->where('sport_id', $event->sport_id))->exists();
+    }
+
+    private function isCentralSecretariatForMeet(User $user, int $meetId): bool
+    {
+        return $user->managementTeamMemberships()->where('status', ManagementTeamMemberStatus::Active)
+            ->whereHas('managementTeam', fn ($team) => $team
+                ->where('meet_id', $meetId)->where('source_code', 'EVENT_SECRETARIAT'))->exists();
     }
 
     private function isEventSecretariat(User $user, EventResult $result): bool

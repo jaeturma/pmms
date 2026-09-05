@@ -60,7 +60,7 @@ test('guests can view the public tally; unpublished meets 404', function () {
     $this->get("/meets/{$hidden->id}/tally")->assertNotFound();
 });
 
-test('accepted results immediately contribute to the operational medal tally', function () {
+test('validated but unaccepted results do not contribute to the official medal tally', function () {
     $meet = Meet::factory()->active()->published()->create();
     $unofficial = EventResult::factory()->create([
         'meet_id' => $meet->id,
@@ -72,7 +72,7 @@ test('accepted results immediately contribute to the operational medal tally', f
 
     $this->get("/meets/{$meet->id}/tally")
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('totals.gold', 1)
+            ->where('totals.gold', 0)
             ->where('totals.silver', 0)
             ->where('totals.bronze', 0));
 });

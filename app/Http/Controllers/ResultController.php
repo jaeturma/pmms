@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\DelegationStatus;
 use App\Enums\EntryStatus;
 use App\Enums\ManagementTeamMemberStatus;
 use App\Enums\MeetSportAssignmentRole;
@@ -12,6 +13,7 @@ use App\Enums\ResultStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\ScopesToAssignedSport;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
+use App\Models\Delegation;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\EventMatch;
@@ -91,6 +93,8 @@ class ResultController extends Controller
         // encoded results share this list with every other sport's
         // already-visible validated results.
         $canEncode = $canManage || $isScopedResultEncoder || $isCentralSecretariat;
+        $canDirectResult = $user->isAdmin() || $isCentralSecretariat
+            || $access->hasAssignmentRole($user, [MeetSportAssignmentRole::TournamentICT->value], Meet::current()->id);
 
         $meetId = Meet::current()->id;
         $eventId = $request->integer('event_id');
@@ -222,6 +226,10 @@ class ResultController extends Controller
                         ->where('is_current', true)
                         ->sortByDesc('id')
                         ->first();
+                    $attachment ??= $result->attachments
+                        ->where('attachment_type', ResultAttachment::DIRECT_RESULT_EVIDENCE)
+                        ->where('result_version', $result->version)
+                        ->where('is_current', true)->sortByDesc('id')->first();
                     $resultPhoto = $result->attachments
                         ->where('attachment_type', ResultAttachment::RESULT_PHOTO)
                         ->where('result_version', $result->version)
@@ -283,7 +291,7 @@ class ResultController extends Controller
                             'requested_by' => $result->cancellationRequestedBy?->name,
                             'requested_at' => $result->cancellation_requested_at->toDayDateTimeString(),
                         ],
-                        'can_officialize' => $user->hasPermission(Permission::ResultsOfficialize, $result->meet)
+                        'can_officialize' => ($isEventSecretariat || $user->hasPermission(Permission::ResultsOfficialize, $result->meet))
                             && $result->isFinalEventResult()
                             && $result->status === ResultStatus::Validated
                             && ($attachment !== null || ($result->result_source === 'manual' && $result->event_schedule_id === null)),
@@ -294,6 +302,7 @@ class ResultController extends Controller
                         'signed_form' => $attachment === null ? null : [
                             'id' => $attachment->id,
                             'name' => $attachment->file->original_name,
+                            'type' => $attachment->attachment_type,
                         ],
                         'result_photo' => $resultPhoto === null ? null : [
                             'id' => $resultPhoto->id,
@@ -465,6 +474,14 @@ class ResultController extends Controller
                 : [],
             'canManage' => $canManage,
             'canEncode' => $canEncode,
+            'canDirectResult' => $canDirectResult,
+            'delegationOptions' => Delegation::query()
+                ->where('meet_id', $meetId)
+                ->whereIn('status', [DelegationStatus::Submitted->value, DelegationStatus::Approved->value])
+                ->with(['school:id,name', 'district:id,name'])
+                ->get()->map(fn (Delegation $delegation): array => [
+                    'id' => $delegation->id, 'label' => $delegation->registrantName(),
+                ])->sortBy('label')->values(),
         ]);
     }
 

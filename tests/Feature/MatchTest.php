@@ -809,10 +809,10 @@ test('urgent meet-day workflow records delegation-only result without fabricatin
     $this->actingAs($admin)->post("/results/{$result->id}/submit")
         ->assertSessionHasNoErrors();
     expect($result->fresh()->status->value)->toBe('submitted');
-    expect(collect(app(MedalTallyService::class)->standings($meet->id)['districts'])->sum('gold'))->toBe(1);
+    expect(collect(app(MedalTallyService::class)->standings($meet->id)['districts'])->sum('gold'))->toBe(0);
     $this->actingAs($admin)->post("/results/{$result->id}/event-secretariat-validation")
         ->assertSessionHasNoErrors();
-    expect(collect(app(MedalTallyService::class)->standings($meet->id)['districts'])->sum('gold'))->toBe(1);
+    expect(collect(app(MedalTallyService::class)->standings($meet->id)['districts'])->sum('gold'))->toBe(0);
     $remarks = $result->fresh()->operational_remarks;
     expect($result->fresh()->status)->toBe(ResultStatus::Validated)
         ->and($result->fresh()->validated_by)->toBe($admin->id)
@@ -820,7 +820,7 @@ test('urgent meet-day workflow records delegation-only result without fabricatin
         ->and($remarks)->toContain('Signed Result Form is pending.');
     $this->actingAs($admin)->post("/results/{$result->id}/event-secretariat-validation")
         ->assertSessionHasNoErrors();
-    expect(collect(app(MedalTallyService::class)->standings($meet->id)['districts'])->sum('gold'))->toBe(1)
+    expect(collect(app(MedalTallyService::class)->standings($meet->id)['districts'])->sum('gold'))->toBe(0)
         ->and($result->fresh()->operational_remarks)->toBe($remarks)
         ->and(AuditLog::query()->where('action', 'result.validated')->where('auditable_id', $result->id)->count())->toBe(1);
     $this->get("/meets/{$meet->id}/results")->assertOk();

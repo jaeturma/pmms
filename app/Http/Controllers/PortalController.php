@@ -241,7 +241,7 @@ class PortalController extends Controller
 
         $results = EventResult::query()->real()
             ->where('meet_id', $meet->id)
-            ->whereIn('status', [ResultStatus::Submitted->value, ResultStatus::Validated->value, ResultStatus::Official->value])
+            ->where('status', ResultStatus::Official->value)
             ->when($sportId > 0, fn ($query) => $query->whereHas(
                 'event',
                 fn ($event) => $event->where('sport_id', $sportId),
@@ -442,7 +442,7 @@ class PortalController extends Controller
 
         $validatedResults = EventResult::query()->real()
             ->where('meet_id', $meet->id)
-            ->whereIn('status', [ResultStatus::Submitted->value, ResultStatus::Validated->value, ResultStatus::Official->value])
+            ->where('status', ResultStatus::Official->value)
             ->when(
                 $athleticsSportId !== null,
                 fn ($query) => $query->whereHas('event', fn ($event) => $event->where('sport_id', $athleticsSportId)),
@@ -600,7 +600,7 @@ class PortalController extends Controller
     {
         $result = EventResult::query()->real()
             ->where('event_id', $match->event_id)
-            ->whereIn('status', [ResultStatus::Submitted->value, ResultStatus::Validated->value, ResultStatus::Official->value])
+            ->where('status', ResultStatus::Official->value)
             ->with([
                 'event.sport:id,name',
                 'placements' => fn ($placements) => $placements->orderBy('rank'),
@@ -910,7 +910,7 @@ class PortalController extends Controller
         $placements = ResultPlacement::query()
             ->whereHas('result', fn ($query) => $query
                 ->where('meet_id', $meet->id)
-                ->whereIn('status', [ResultStatus::Submitted->value, ResultStatus::Validated->value, ResultStatus::Official->value]))
+                ->where('status', ResultStatus::Official->value))
             ->where(function ($query) use ($term) {
                 $query->whereHas('entry.athlete', fn ($athlete) => $athlete
                     ->where('first_name', 'like', "%{$term}%")
@@ -1470,7 +1470,7 @@ class PortalController extends Controller
 
         $results = EventResult::query()->real()
             ->where('meet_id', $meet->id)
-            ->whereIn('status', [ResultStatus::Submitted->value, ResultStatus::Validated->value, ResultStatus::Official->value])
+            ->where('status', ResultStatus::Official->value)
             ->whereHas('event', fn ($query) => $query->where('sport_id', $sport->id))
             ->with([
                 'placements' => fn ($placements) => $placements->orderBy('rank')->limit(1),
@@ -1660,7 +1660,7 @@ class PortalController extends Controller
     {
         return EventResult::query()->real()
             ->where('meet_id', $meet->id)
-            ->whereIn('status', [ResultStatus::Submitted->value, ResultStatus::Validated->value, ResultStatus::Official->value])
+            ->where('status', ResultStatus::Official->value)
             ->with('event.sport:id,name')
             ->get()
             ->map(fn (EventResult $result): array => [
@@ -1843,7 +1843,7 @@ class PortalController extends Controller
     {
         $result = EventResult::query()->real()
             ->where('meet_id', $meet->id)
-            ->whereIn('status', [ResultStatus::Submitted->value, ResultStatus::Validated->value, ResultStatus::Official->value])
+            ->where('status', ResultStatus::Official->value)
             ->with([
                 'event.sport:id,name',
                 'placements' => fn ($placements) => $placements->orderBy('rank')->limit(3),
