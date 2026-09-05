@@ -808,6 +808,7 @@ test('urgent meet-day workflow records delegation-only result without fabricatin
     $this->actingAs($admin)->post("/results/{$result->id}/submit")
         ->assertSessionHasNoErrors();
     expect($result->fresh()->status->value)->toBe('submitted');
+    expect(collect(app(MedalTallyService::class)->standings($meet->id)['districts'])->sum('gold'))->toBe(1);
     $this->actingAs($admin)->post("/results/{$result->id}/event-secretariat-validation")
         ->assertSessionHasNoErrors();
     expect(collect(app(MedalTallyService::class)->standings($meet->id)['districts'])->sum('gold'))->toBe(1);

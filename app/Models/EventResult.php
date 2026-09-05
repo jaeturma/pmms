@@ -26,7 +26,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['meet_id', 'event_id', 'match_id', 'event_schedule_id', 'scoring_session_id', 'result_source', 'result_scope'])]
+#[Fillable(['meet_id', 'event_id', 'match_id', 'event_schedule_id', 'scoring_session_id', 'result_source', 'result_scope', 'operational_remarks'])]
 class EventResult extends Model
 {
     /** @use HasFactory<EventResultFactory> */
@@ -54,9 +54,20 @@ class EventResult extends Model
         ];
     }
 
-    public function scopeReal($query) { return $query->whereNull('demo_scenario_id'); }
-    public function scopeDemo($query) { return $query->whereNotNull('demo_scenario_id'); }
-    public function demoScenario(): BelongsTo { return $this->belongsTo(DemoScenario::class); }
+    public function scopeReal($query)
+    {
+        return $query->whereNull('demo_scenario_id');
+    }
+
+    public function scopeDemo($query)
+    {
+        return $query->whereNotNull('demo_scenario_id');
+    }
+
+    public function demoScenario(): BelongsTo
+    {
+        return $this->belongsTo(DemoScenario::class);
+    }
 
     /**
      * @return BelongsTo<Meet, $this>

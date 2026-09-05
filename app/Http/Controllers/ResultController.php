@@ -248,6 +248,7 @@ class ResultController extends Controller
                         'returned_by' => $result->returnedBy?->name,
                         'returned_at' => $result->returned_at?->toDayDateTimeString(),
                         'return_reason' => $result->return_reason,
+                        'operational_remarks' => $result->operational_remarks,
                         'data_issues' => $this->resultDataIssues($result),
                         'can_defer_issues' => $user->isAdmin() || $user->role === UserRole::TournamentICT,
                         'official_by' => $result->officialBy?->name,

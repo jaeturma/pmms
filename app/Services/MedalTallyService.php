@@ -327,7 +327,7 @@ class MedalTallyService
             ->whereIn('rank', [1, 2, 3])
             ->whereHas('result', fn ($result) => $result
                 ->whereNull('demo_scenario_id')
-                ->whereIn('status', [ResultStatus::Validated->value, ResultStatus::Official->value])
+                ->whereIn('status', [ResultStatus::Submitted->value, ResultStatus::Validated->value, ResultStatus::Official->value])
                 ->where(fn ($eligible) => $eligible
                     ->whereNull('match_id')
                     ->orWhereHas('match', fn ($match) => $match->where('awards_medals', true)))

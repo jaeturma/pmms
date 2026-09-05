@@ -74,6 +74,7 @@ type Result = {
     returned_by: string | null;
     returned_at: string | null;
     return_reason: string | null;
+    operational_remarks: string | null;
     data_issues: string[];
     can_defer_issues: boolean;
     official_by: string | null;
@@ -867,6 +868,12 @@ export default function Results({
                                                         <li key={issue}>{issue}</li>
                                                     ))}
                                                 </ul>
+                                            </div>
+                                        )}
+                                        {result.operational_remarks && (
+                                            <div className="w-full rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                                                <div className="font-medium text-amber-700 dark:text-amber-300">Operational remarks</div>
+                                                <div className="mt-1 whitespace-pre-line text-muted-foreground">{result.operational_remarks}</div>
                                             </div>
                                         )}
                                         {result.cancellation_request && (

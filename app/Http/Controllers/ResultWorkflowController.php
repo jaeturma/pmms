@@ -184,9 +184,16 @@ class ResultWorkflowController extends Controller
     public function submit(Request $request, EventResult $result): RedirectResponse
     {
         $this->authorizeSportDocument($request->user(), $result);
-        $canDeferIssues = $request->user()->isAdmin() || $this->isAssignedTournamentIct($request->user(), $result);
+        $canDeferIssues = $request->user()->isAdmin()
+            || $this->isAssignedTournamentIct($request->user(), $result)
+            || $this->isEventSecretariat($request->user(), $result);
         abort_unless(in_array($result->status, [ResultStatus::Encoded, ResultStatus::Returned, ResultStatus::Reopened], true), 422);
-        abort_if(! $canDeferIssues && $result->match_id !== null && $result->tm_confirmed_at === null, 422, 'Tournament Manager confirmation is required before submission.');
+
+        if ($canDeferIssues) {
+            return $this->acceptWithDeferredIssues($request, $result);
+        }
+
+        abort_if($result->match_id !== null && $result->tm_confirmed_at === null, 422, 'Tournament Manager confirmation is required before submission.');
 
         $urgentManualResult = $result->result_source === 'manual' && $result->event_schedule_id === null;
         if (! $urgentManualResult && (bool) config('pmms.results.signed_result_form_required') && $result->currentSignedForm() === null) {
@@ -216,9 +223,71 @@ class ResultWorkflowController extends Controller
 
         $this->audit->record($action, $result, $this->context($result));
 
-        return back()->with('success', $canDeferIssues
-            ? 'Result submitted. Any incomplete participant, roster, schedule, or confirmation data is marked to resolve later.'
-            : 'Result submitted to the Event Secretariat.');
+        return back()->with('success', 'Result submitted to the Event Secretariat.');
+    }
+
+    private function acceptWithDeferredIssues(Request $request, EventResult $result): RedirectResponse
+    {
+        $result->loadMissing(['match.participantSlots', 'match.teamEntries', 'match.entries']);
+        $issues = collect();
+
+        if ($result->event_schedule_id === null) {
+            $issues->push('Schedule is not linked.');
+        }
+        if ($result->match_id !== null && $result->tm_confirmed_at === null) {
+            $issues->push('Tournament Manager confirmation is pending.');
+        }
+        if ($result->currentSignedForm() === null) {
+            $issues->push('Signed Result Form is pending.');
+        }
+
+        DB::transaction(function () use ($request, $result, $issues): void {
+            if (! $result->placements()->exists() && $result->match !== null) {
+                $delegationIds = $result->match->participantSlots->where('is_selected', true)->pluck('delegation_id')
+                    ->merge($result->match->teamEntries->pluck('delegation_id'))
+                    ->merge($result->match->entries->pluck('delegation_id'))
+                    ->unique()->values();
+                $winnerId = $result->match->winner_delegation_id;
+                $nextRank = 2;
+                foreach ($delegationIds as $delegationId) {
+                    $result->placements()->create([
+                        'delegation_id' => $delegationId,
+                        'rank' => (int) $delegationId === (int) $winnerId ? 1 : $nextRank++,
+                        'mark' => collect([$result->match->manual_score_a, $result->match->manual_score_b])->filter()->implode(' - ') ?: null,
+                        'is_tie' => false,
+                    ]);
+                }
+                if ($delegationIds->isNotEmpty()) {
+                    $issues->push('Placements were reconstructed from match delegations. Athlete/team links may be completed later.');
+                }
+            }
+
+            if (! $result->placements()->exists()) {
+                $issues->push('No placement is linked yet. Add the winning delegation later so its medal can be attributed.');
+            }
+
+            $now = now();
+            $result->forceFill([
+                'status' => ResultStatus::Submitted,
+                'submitted_by' => $request->user()->id,
+                'submitted_at' => $now,
+                'operational_remarks' => $issues->unique()->implode("\n"),
+                'returned_by' => null,
+                'returned_at' => null,
+                'return_reason' => null,
+                'cancellation_requested_by' => null,
+                'cancellation_requested_at' => null,
+                'cancellation_request_reason' => null,
+            ])->save();
+        });
+
+        $this->audit->record('result.accepted_with_deferred_issues', $result, [
+            ...$this->context($result),
+            'remarks' => $issues->unique()->values()->all(),
+        ]);
+        $this->audit->record('result.submitted', $result, $this->context($result));
+
+        return back()->with('success', 'Result accepted and posted. Incomplete information is recorded in backend remarks for later resolution, and available medal placements now count in the tally.');
     }
 
     public function requestCancellation(Request $request, EventResult $result): RedirectResponse
