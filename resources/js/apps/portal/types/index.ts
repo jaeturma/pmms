@@ -50,6 +50,9 @@ export type PortalUpcomingEvent = {
 };
 
 export type PortalResultPlacement = {
+    id?: number;
+    delegation_id?: number | null;
+    medal?: string | null;
     rank: number;
     athlete: string;
     school: string;
@@ -58,7 +61,15 @@ export type PortalResultPlacement = {
     is_tie: boolean;
 };
 
+export type PortalResultDocument = {
+    id: number;
+    name: string;
+    mime_type: string;
+    url: string;
+};
+
 export type PortalLatestResult = {
+    documents?: PortalResultDocument[];
     event: string;
     status?: string;
     status_label?: string;
@@ -281,6 +292,7 @@ export type PortalAthleticsSlot = {
 };
 
 export type PortalContestedSport = {
+    events: Array<{ id: number; label: string; url: string }>;
     id: number;
     name: string;
     event_count: number;
@@ -408,6 +420,7 @@ export type PortalMatchSummary = {
 /** `PortalSportsController::sportCards()` — one card per catalog sport
  * on the `/sports-directory` browse page. */
 export type PortalSportCard = {
+    events: Array<{ id: number; label: string; url: string }>;
     id: number;
     slug: string;
     name: string;
@@ -464,6 +477,7 @@ export type PortalSport = {
     description: string | null;
     photo_url: string | null;
     categories: PortalSportCategorySummary[];
+    events: Array<{ id: number; label: string; url: string }>;
     tournament_management: PortalSportPersonnelAssignment[];
     technical_officials: PortalTechnicalOfficial[];
 };

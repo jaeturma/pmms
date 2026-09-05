@@ -48,7 +48,7 @@ export default function PortalResults({
             <div className="flex flex-col gap-6">
                 <PortalHero
                     title="Results"
-                    description="Accepted results are published as unofficial until final officialization."
+                    description="Accepted medal results. Non-medal results appear in the team standings for their sports event."
                 />
 
                 <PortalSectionHeader
@@ -99,7 +99,7 @@ export default function PortalResults({
                     <PortalEmptyState
                         icon={Award}
                         title="No results yet"
-                        description="Validated results will appear here."
+                        description="Accepted medal results will appear here."
                     />
                 ) : (
                     <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

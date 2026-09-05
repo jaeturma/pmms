@@ -31,6 +31,7 @@ use App\Models\Sport;
 use App\Models\SportCategory;
 use App\Models\Venue;
 use App\Services\MedalTallyService;
+use App\Services\PublicEventResults;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -239,7 +240,7 @@ class PortalController extends Controller
 
         $sportId = $request->integer('sport_id');
 
-        $results = EventResult::query()->real()
+        $results = app(PublicEventResults::class)->withMedals(EventResult::query())
             ->where('meet_id', $meet->id)
             ->where('status', ResultStatus::Official->value)
             ->when($sportId > 0, fn ($query) => $query->whereHas(
@@ -258,38 +259,9 @@ class PortalController extends Controller
 
         return Inertia::render('portal/results', [
             'meet' => $this->meetSummary($meet),
-            'results' => $results
-                ->map(fn (EventResult $result): array => [
-                    'id' => $result->id,
-                    'event' => sprintf(
-                        '%s — %s (%s, %s)',
-                        $result->event->sport->name,
-                        $result->event->name,
-                        $result->event->gender->label(),
-                        $result->event->age_division->label(),
-                    ),
-                    'age_division' => $result->event->age_division->value,
-                    'status' => $result->status->value,
-                    'status_label' => $result->status === ResultStatus::Official
-                        ? __('Official')
-                        : __('Unofficial'),
-                    'official_as_of' => ($result->official_at ?? $result->validated_at)?->format('M j, Y g:i A'),
-                    'placements' => $result->placements
-                        ->sortBy([['rank', 'asc']])
-                        ->map(fn (ResultPlacement $placement): array => [
-                            'rank' => $placement->rank,
-                            'athlete' => $this->placementParticipantName($placement),
-                            'school' => $this->placementSchoolName($placement),
-                            'delegation' => $this->placementDelegationName($placement),
-                            'mark' => $placement->mark,
-                            'is_tie' => $placement->is_tie,
-                        ])
-                        ->values()
-                        ->all(),
-                ])
-                ->values(),
+            'results' => $results->map(fn (EventResult $result): array => app(PublicEventResults::class)->row($result))->values(),
             'filters' => ['sport_id' => $sportId > 0 ? $sportId : null],
-            'sportOptions' => $this->validatedSportOptions($meet),
+            'sportOptions' => $this->validatedSportOptions($meet, true),
         ]);
     }
 
@@ -701,6 +673,10 @@ class PortalController extends Controller
                 'id' => $events->first()->sport->id,
                 'name' => $events->first()->sport->name,
                 'event_count' => $events->count(),
+                'events' => $events->sortBy('name')->map(fn ($event) => [
+                    'id' => $event->id, 'label' => $event->name.' ('.$event->gender->label().', '.$event->age_division->label().')',
+                    'url' => route('public.sport-event', ['event' => $event, 'meet_id' => $meet->id]),
+                ])->values()->all(),
                 'photo_url' => $events->first()->sport->photoUrl(),
             ])
             ->sortBy('name')
@@ -1080,6 +1056,10 @@ class PortalController extends Controller
             'description' => $sport->description,
             'photo_url' => $sport->photoUrl(),
             'categories' => $this->sportProfileCategories($sport, $meetSport),
+            'events' => $sport->events()->orderBy('name')->get()->map(fn ($event) => [
+                'id' => $event->id, 'label' => $event->name.' ('.$event->gender->label().', '.$event->age_division->label().')',
+                'url' => route('public.sport-event', ['event' => $event, 'meet_id' => $meet?->id]),
+            ])->all(),
             'tournament_management' => $meetSport === null ? [] : $this->sportProfileTournamentManagement($meetSport),
             'technical_officials' => $this->sportProfileTechnicalOfficials($sport, $meetSport),
         ];
@@ -1098,6 +1078,7 @@ class PortalController extends Controller
             'description' => null,
             'photo_url' => null,
             'categories' => [],
+            'events' => [],
             'tournament_management' => [],
             'technical_officials' => [],
         ];
@@ -1656,9 +1637,10 @@ class PortalController extends Controller
      *
      * @return array<int, array{id: int, label: string}>
      */
-    private function validatedSportOptions(Meet $meet): array
+    private function validatedSportOptions(Meet $meet, bool $medalsOnly = false): array
     {
         return EventResult::query()->real()
+            ->when($medalsOnly, fn ($query) => app(PublicEventResults::class)->withMedals($query))
             ->where('meet_id', $meet->id)
             ->where('status', ResultStatus::Official->value)
             ->with('event.sport:id,name')
@@ -1841,7 +1823,7 @@ class PortalController extends Controller
      */
     private function latestResult(Meet $meet): ?array
     {
-        $result = EventResult::query()->real()
+        $result = app(PublicEventResults::class)->withMedals(EventResult::query())
             ->where('meet_id', $meet->id)
             ->where('status', ResultStatus::Official->value)
             ->with([

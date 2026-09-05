@@ -9,6 +9,22 @@ use App\Models\Sport;
 use App\Models\SportCategory;
 use Inertia\Testing\AssertableInertia;
 
+test('every catalog event links from its sport to its own standings and results page', function () {
+    $this->withoutVite();
+    $meet = Meet::factory()->active()->published()->create();
+    $sport = Sport::query()->create(['name' => 'Basketball']);
+    $events = Event::factory()->count(2)->create(['sport_id' => $sport->id]);
+    $meet->events()->attach($events[0]);
+
+    $this->get('/sports-directory')->assertOk()->assertInertia(fn ($page) => $page->has('sports.0.events', 2));
+    $this->get('/basketball')->assertOk()->assertInertia(fn ($page) => $page->has('sport.events', 2));
+    foreach ($events as $event) {
+        $this->get(route('public.sport-event', ['event' => $event, 'meet_id' => $meet->id]))
+            ->assertOk()->assertInertia(fn ($page) => $page->component('portal/sport-event')
+            ->where('event.id', $event->id)->has('standings', 0)->has('results', 0));
+    }
+});
+
 test('guests can browse the sports directory even with no active meet', function () {
     Sport::query()->create(['name' => 'Basketball', 'short_description' => 'Team sport.']);
 

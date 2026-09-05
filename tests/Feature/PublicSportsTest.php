@@ -61,7 +61,7 @@ test('sport rows carry no internal or unrelated fields', function () {
     $this->get("/meets/{$meet->id}/sports")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('sports.0', fn (AssertableInertia $row) => $row
-                ->hasAll(['id', 'name', 'event_count', 'photo_url'])
+                ->hasAll(['id', 'name', 'event_count', 'photo_url', 'events'])
                 ->missing('active')
                 ->missing('created_at')
                 ->missing('updated_at')));

@@ -2,6 +2,7 @@ import { Head, Link } from '@inertiajs/react';
 import { Trophy } from 'lucide-react';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { PortalHero } from '@/apps/portal/components/hero';
+import { PortalSportEvents } from '@/apps/portal/components/sport-events';
 import type {
     PortalContestedSport,
     PortalMeetSummary,
@@ -51,6 +52,16 @@ export default function PortalSports({ meet, sports }: Props) {
                                     {sport.event_count} event
                                     {sport.event_count === 1 ? '' : 's'}
                                 </p>
+                                <details className="mt-3">
+                                    <summary className="cursor-pointer font-semibold">
+                                        Sports Events
+                                    </summary>
+                                    <div className="mt-3">
+                                        <PortalSportEvents
+                                            events={sport.events}
+                                        />
+                                    </div>
+                                </details>
                                 <div className="mt-3 flex gap-3 text-sm">
                                     <Link
                                         href={

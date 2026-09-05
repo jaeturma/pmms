@@ -44,8 +44,8 @@ class ResultWorkflowController extends Controller
         $data = $request->validate([
             'event_id' => ['required', 'integer', Rule::exists('events', 'id')],
             'gold_delegation_id' => ['required', 'integer', Rule::exists('delegations', 'id')],
-            'silver_delegation_id' => ['required', 'integer', Rule::exists('delegations', 'id')],
-            'bronze_delegation_id' => ['required', 'integer', Rule::exists('delegations', 'id')],
+            'silver_delegation_id' => ['nullable', 'integer', Rule::exists('delegations', 'id')],
+            'bronze_delegation_id' => ['nullable', 'integer', Rule::exists('delegations', 'id')],
             ...collect(['gold', 'silver', 'bronze'])->flatMap(fn ($medal) => [
                 $medal.'_mark' => ['nullable', 'string', 'max:60'],
                 $medal.'_count' => ['sometimes', 'required', 'integer', 'min:0', 'max:65535'],
@@ -66,7 +66,7 @@ class ResultWorkflowController extends Controller
             abort_unless(in_array($result->status, [ResultStatus::Encoded, ResultStatus::Submitted, ResultStatus::Returned, ResultStatus::Reopened], true), 422, 'Reopen an accepted Result before editing it.');
         }
 
-        $delegationIds = collect([$data['gold_delegation_id'], $data['silver_delegation_id'], $data['bronze_delegation_id']])->map(fn ($id) => (int) $id);
+        $delegationIds = collect([$data['gold_delegation_id'], $data['silver_delegation_id'] ?? null, $data['bronze_delegation_id'] ?? null])->filter()->map(fn ($id) => (int) $id);
         abort_unless(Delegation::query()->where('meet_id', $meet->id)->whereIn('status', [DelegationStatus::Submitted->value, DelegationStatus::Approved->value])->whereKey($delegationIds)->count() === $delegationIds->unique()->count(), 422, 'Every medal Delegation must be active in the current Meet.');
         abort_if(EventResult::query()->real()->where('meet_id', $meet->id)->where('event_id', $event->id)
             ->when($result !== null, fn ($query) => $query->whereKeyNot($result->id))
@@ -107,7 +107,7 @@ class ResultWorkflowController extends Controller
                 $medal = ['gold', 'silver', 'bronze'][$index];
                 $result->placements()->create([
                     'delegation_id' => $delegationId, 'rank' => $index + 1, 'is_tie' => false,
-                    'mark' => $data[$medal.'_mark'] ?? null, 'tally_quantity' => $data[$medal.'_count'] ?? 1,
+                    'mark' => $data[$medal.'_mark'] ?? null, 'tally_quantity' => $data[$medal.'_count'] ?? 0,
                 ]);
             }
             if ($upload !== null) {
@@ -125,7 +125,7 @@ class ResultWorkflowController extends Controller
             return $result;
         });
 
-        return back()->with('success', 'Direct Event Result submitted to the Event Secretariat.');
+        return redirect()->route('results.index')->with('success', 'Direct Event Result submitted to the Event Secretariat.');
     }
 
     public function form(Request $request, EventResult $result): View
@@ -615,10 +615,10 @@ class ResultWorkflowController extends Controller
         abort_unless($result->attachments->where('is_current', true)->contains('attachment_type', ResultAttachment::DIRECT_RESULT_EVIDENCE), 422,
             'Direct Result evidence is required.');
         $placements = $result->placements->whereIn('rank', [1, 2, 3]);
-        abort_unless($placements->count() === 3
-            && $placements->pluck('rank')->unique()->count() === 3
-            && $placements->pluck('delegation_id')->filter()->count() === 3, 422,
-            'Direct Results require one delegation for each Gold, Silver, and Bronze placement.');
+        abort_unless($placements->isNotEmpty()
+            && $placements->pluck('rank')->unique()->count() === $placements->count()
+            && $placements->pluck('delegation_id')->filter()->count() === $placements->count(), 422,
+            'Direct Results require at least one participant delegation with a unique place.');
         abort_unless(Delegation::query()->where('meet_id', $result->meet_id)
             ->whereKey($placements->pluck('delegation_id'))->count() === $placements->pluck('delegation_id')->unique()->count(), 409,
             'A medal Delegation no longer belongs to the Result Meet.');

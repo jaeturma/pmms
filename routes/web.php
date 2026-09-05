@@ -54,6 +54,7 @@ use App\Http\Controllers\MeetSportAssignmentController;
 use App\Http\Controllers\NewsController;
 use App\Http\Controllers\PersonnelController;
 use App\Http\Controllers\PortalController;
+use App\Http\Controllers\PortalEventController;
 use App\Http\Controllers\PortalSportsController;
 use App\Http\Controllers\PortalTeamsController;
 use App\Http\Controllers\ProtestController;
@@ -129,6 +130,9 @@ Route::middleware(['throttle:60,1', PreventStalePublicResults::class])->group(fu
     Route::get('meets/{meet}/results', [PortalController::class, 'results'])
         ->whereNumber('meet')
         ->name('public.results');
+    // Accepted results only; the controller rejects unaccepted documents.
+    Route::get('sports-events/{event}', [PortalEventController::class, 'show'])->name('public.sport-event');
+    Route::get('result-documents/{result}/{attachment}', [PortalEventController::class, 'document'])->name('public.result-document');
     Route::get('meets/{meet}/tally', [PortalController::class, 'tally'])
         ->whereNumber('meet')
         ->name('public.tally');
@@ -350,6 +354,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('matches/{match}/manual-outcome', [MatchController::class, 'saveManualOutcome'])->name('matches.manual-outcome');
     Route::post('matches/{match}/result', [MatchController::class, 'createResult'])->name('matches.result.store');
     Route::get('results', [ResultController::class, 'index'])->name('results.index');
+    Route::get('results/submit', [ResultController::class, 'index'])->name('results.create');
     Route::post('results/direct', [ResultWorkflowController::class, 'storeDirect'])->name('results.direct.store');
     Route::post('results/{result}/direct', [ResultWorkflowController::class, 'storeDirect'])->name('results.direct.update');
     Route::get('results/{result}/form', [ResultWorkflowController::class, 'form'])->name('results.form');

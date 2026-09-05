@@ -71,6 +71,7 @@ test('ICT submits a direct Event Result and Secretariat posts each medal exactly
         'gold_delegation_id' => $delegations[0]->id,
         'silver_delegation_id' => $delegations[1]->id,
         'bronze_delegation_id' => $delegations[2]->id,
+        'gold_count' => 1, 'silver_count' => 1, 'bronze_count' => 1,
         'evidence' => UploadedFile::fake()->image('result.jpg'),
     ])->assertRedirect()->assertSessionDoesntHaveErrors();
 
@@ -98,6 +99,31 @@ test('ICT submits a direct Event Result and Secretariat posts each medal exactly
     expect($result->medalAwards()->count())->toBe(3)
         ->and(AuditLog::query()->where('action', 'result.made_official')->where('auditable_id', $result->id)->count())->toBe(1);
     $this->get("/meets/{$meet->id}/results")->assertOk()->assertSee($delegations[0]->registrantName());
+});
+
+test('accepted medal results keep their public document preview and do not populate non-medal standings', function () {
+    $this->withoutVite();
+    Storage::fake('local');
+    config()->set('uploads.disk', 'local');
+    $context = directResultContext();
+    $this->actingAs($context['ict'])->post('/results/direct', directPayload($context))->assertSessionDoesntHaveErrors();
+    $result = EventResult::query()->sole();
+    $this->actingAs($context['secretariat'])->post(route('results.official', $result))->assertSessionDoesntHaveErrors();
+    $attachment = $result->attachments()->sole();
+    $url = route('public.result-document', [$result, $attachment]);
+    auth()->logout();
+    $this->get(route('public.sport-event', ['event' => $result->event_id, 'meet_id' => $result->meet_id]))
+        ->assertInertia(fn ($page) => $page->has('standings', 0)->has('results', 1)
+            ->where('results.0.documents.0.url', $url));
+    $this->get($url)->assertOk()->assertHeader('Content-Type', 'image/png');
+    $attachment->update(['is_current' => false]);
+    $this->get($url)->assertNotFound();
+    $attachment->update(['is_current' => true]);
+    $context['meet']->forceFill(['is_published' => false])->save();
+    $this->get($url)->assertNotFound();
+    $context['meet']->forceFill(['is_published' => true])->save();
+    $result->forceFill(['status' => ResultStatus::Reopened])->save();
+    $this->get($url)->assertNotFound();
 });
 
 test('direct Event Result permits repeated Delegations but requires evidence', function () {
@@ -151,7 +177,11 @@ test('accepting submitted direct result awards same Delegation Gold Silver Bronz
     }
     $totals = collect(app(MedalTallyService::class)->standings($meet->id)['districts']);
     expect($totals->sum('gold'))->toBe(1)->and($totals->sum('silver'))->toBe(1)->and($totals->sum('bronze'))->toBe(1)->and($totals->sum('total'))->toBe(3);
-    $this->get("/meets/{$meet->id}/results")->assertInertia(fn ($page) => $page->has('results', 1)->where('results.0.placements.0.mark', '56.81 seconds'))
+    $this->get("/meets/{$meet->id}/results")->assertInertia(fn ($page) => $page->has('results', 1)
+        ->where('results.0.placements.0.mark', '56.81 seconds')
+        ->where('results.0.placements.0.medal', 'gold')
+        ->where('results.0.placements.1.medal', 'silver')
+        ->where('results.0.placements.2.medal', 'bronze'))
         ->assertHeader('Cache-Control', 'must-revalidate, no-cache, no-store, private');
     $this->post(route('results.official', $result))->assertSessionDoesntHaveErrors();
     expect($result->medalAwards()->count())->toBe(3)
@@ -270,4 +300,50 @@ test('reopen correction and cancellation replace and reverse accepted direct awa
     $this->post(route('results.cancel', $result), ['reason' => 'Cancelled event'])->assertSessionDoesntHaveErrors();
     expect($result->fresh()->status)->toBe(ResultStatus::Cancelled)->and($result->medalAwards()->count())->toBe(0)
         ->and(collect(app(MedalTallyService::class)->standings($context['meet']->id)['districts'])->sum('total'))->toBe(0);
+});
+
+test('a single participant result defaults to no medals and can be accepted', function () {
+    $this->withoutVite();
+    Storage::fake('local');
+    config()->set('uploads.disk', 'local');
+    $context = directResultContext();
+    $this->actingAs($context['ict'])->get('/results/submit')->assertOk();
+    $this->post('/results/direct', [
+        'event_id' => $context['event']->id,
+        'gold_delegation_id' => $context['delegations'][0]->id,
+        'gold_mark' => '12.45 seconds',
+        'evidence' => UploadedFile::fake()->image('single.png'),
+    ])->assertRedirect('/results')->assertSessionDoesntHaveErrors();
+    $result = EventResult::query()->sole();
+    expect($result->placements()->count())->toBe(1)
+        ->and($result->placements()->sole()->tally_quantity)->toBe(0);
+    $document = $result->attachments()->sole();
+    $eventUrl = route('public.sport-event', ['event' => $result->event_id, 'meet_id' => $result->meet_id]);
+    $documentUrl = route('public.result-document', [$result, $document]);
+    auth()->logout();
+    $this->get($eventUrl)->assertOk()->assertInertia(fn ($page) => $page->has('standings', 0)->has('results', 0));
+    $this->get($documentUrl)->assertNotFound();
+    $this->actingAs($context['secretariat'])->post(route('results.official', $result))->assertSessionDoesntHaveErrors();
+    expect($result->fresh()->status)->toBe(ResultStatus::Official)
+        ->and($result->medalAwards()->count())->toBe(0);
+    $this->get('/results')->assertInertia(fn ($page) => $page
+        ->where('results.data.0.placements.0.mark', '12.45 seconds')
+        ->where('results.data.0.placements.0.tally_quantity', 0));
+    auth()->logout();
+    $this->get($eventUrl)->assertInertia(fn ($page) => $page
+        ->component('portal/sport-event')->has('standings', 1)
+        ->where('standings.0.mark', '12.45 seconds')->where('standings.0.medal', null)
+        ->has('results', 0));
+    $this->get("/meets/{$result->meet_id}/results")->assertInertia(fn ($page) => $page->has('results', 0)->has('sportOptions', 0));
+    $this->get($documentUrl)->assertNotFound();
+    $document->update(['is_current' => false]);
+    $this->get($documentUrl)->assertNotFound();
+    $document->update(['is_current' => true]);
+    $context['meet']->forceFill(['is_published' => false])->save();
+    $this->get($documentUrl)->assertNotFound();
+    $this->get($eventUrl)->assertNotFound();
+    $context['meet']->forceFill(['is_published' => true])->save();
+    $result->forceFill(['status' => ResultStatus::Reopened])->save();
+    $this->get($documentUrl)->assertNotFound();
+    $this->get($eventUrl)->assertInertia(fn ($page) => $page->has('standings', 0)->has('results', 0));
 });

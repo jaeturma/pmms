@@ -318,7 +318,8 @@ class ResultController extends Controller
                         // validate/correct/delete their own sport's — a global
                         // boolean can't express that, so it's computed per row.
                         'can_manage' => $canManage,
-                        'awards_medals' => $event?->resolvedMedalConfig()->awards_medals ?? false,
+                        'awards_medals' => ($event?->resolvedMedalConfig()->awards_medals ?? false)
+                            && ($result->result_source !== 'direct' || $result->placements->contains(fn ($placement) => ($placement->tally_quantity ?? 1) > 0)),
                         'medal_tally' => [
                             'gold' => $result->medalAwards->where('medal_type', 'gold')->sum('tally_quantity'),
                             'silver' => $result->medalAwards->where('medal_type', 'silver')->sum('tally_quantity'),

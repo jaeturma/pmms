@@ -51,12 +51,12 @@ class PortalSportsController extends Controller
      */
     private function sportCards(?Meet $meet): array
     {
-        $sports = Sport::query()->orderBy('name')->get();
+        $sports = Sport::query()->with('events')->orderBy('name')->get();
         $meetSportsBySportId = $meet === null ? collect() : $this->meetSportsForMeet($meet);
         $liveSportIds = $meet === null ? collect() : $this->liveSportIds($meet);
 
         return $sports
-            ->map(function (Sport $sport) use ($meetSportsBySportId, $liveSportIds): ?array {
+            ->map(function (Sport $sport) use ($meetSportsBySportId, $liveSportIds, $meet): ?array {
                 $slug = SportPortalSlug::fromSportName($sport->name);
 
                 if ($slug === null) {
@@ -75,6 +75,10 @@ class PortalSportsController extends Controller
                     'icon_key' => $sport->icon_key,
                     'is_paragames' => $sport->classification === 'paragames',
                     'category_count' => $this->categoryCount($sport, $meetSport),
+                    'events' => $sport->events->sortBy('name')->map(fn ($event) => [
+                        'id' => $event->id, 'label' => $event->name.' ('.$event->gender->label().', '.$event->age_division->label().')',
+                        'url' => route('public.sport-event', ['event' => $event, 'meet_id' => $meet?->id]),
+                    ])->values()->all(),
                     'is_live' => $liveSportIds->contains($sport->id),
                 ];
             })

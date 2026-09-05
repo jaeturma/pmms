@@ -1,6 +1,6 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { Award, FileUp, Plus, Printer, Send, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
@@ -157,45 +157,92 @@ type Props = {
     delegationOptions: Option[];
 };
 
-function DirectResultDialog({
-    open,
+function DirectResultForm({
     onOpenChange,
     events,
     delegations,
     result,
 }: {
     result?: Result | null;
-    open: boolean;
     onOpenChange: (open: boolean) => void;
     events: EventOption[];
     delegations: Option[];
 }) {
-    const { data, setData, post, processing, errors, reset } = useForm({
-        event_id: result ? String(result.event_id) : '',
-        gold_delegation_id: String(
-            result?.placements.find((p) => p.rank === 1)?.delegation_id ?? '',
+    const { data, setData, post, processing, errors, reset, transform } =
+        useForm({
+            event_id: result ? String(result.event_id) : '',
+            gold_delegation_id: String(
+                result?.placements.find((p) => p.rank === 1)?.delegation_id ??
+                    '',
+            ),
+            silver_delegation_id: String(
+                result?.placements.find((p) => p.rank === 2)?.delegation_id ??
+                    '',
+            ),
+            bronze_delegation_id: String(
+                result?.placements.find((p) => p.rank === 3)?.delegation_id ??
+                    '',
+            ),
+            evidence: null as File | null,
+            gold_mark: result?.placements.find((p) => p.rank === 1)?.mark ?? '',
+            silver_mark:
+                result?.placements.find((p) => p.rank === 2)?.mark ?? '',
+            bronze_mark:
+                result?.placements.find((p) => p.rank === 3)?.mark ?? '',
+            gold_count: String(
+                result?.placements.find((p) => p.rank === 1)?.tally_quantity ??
+                    0,
+            ),
+            silver_count: String(
+                result?.placements.find((p) => p.rank === 2)?.tally_quantity ??
+                    0,
+            ),
+            bronze_count: String(
+                result?.placements.find((p) => p.rank === 3)?.tally_quantity ??
+                    0,
+            ),
+        });
+    const [withMedals, setWithMedals] = useState(() =>
+        [data.gold_count, data.silver_count, data.bronze_count].some(
+            (count) => Number(count) > 0,
         ),
-        silver_delegation_id: String(
-            result?.placements.find((p) => p.rank === 2)?.delegation_id ?? '',
-        ),
-        bronze_delegation_id: String(
-            result?.placements.find((p) => p.rank === 3)?.delegation_id ?? '',
-        ),
-        evidence: null as File | null,
-        gold_mark: result?.placements.find((p) => p.rank === 1)?.mark ?? '',
-        silver_mark: result?.placements.find((p) => p.rank === 2)?.mark ?? '',
-        bronze_mark: result?.placements.find((p) => p.rank === 3)?.mark ?? '',
-        gold_count: String(
-            result?.placements.find((p) => p.rank === 1)?.tally_quantity ?? 1,
-        ),
-        silver_count: String(
-            result?.placements.find((p) => p.rank === 2)?.tally_quantity ?? 1,
-        ),
-        bronze_count: String(
-            result?.placements.find((p) => p.rank === 3)?.tally_quantity ?? 1,
-        ),
-    });
+    );
     const [preview, setPreview] = useState<string | null>(null);
+
+    useEffect(
+        () => () => {
+            if (preview) {
+                URL.revokeObjectURL(preview);
+            }
+        },
+        [preview],
+    );
+
+    transform((current) => ({
+        ...current,
+        gold_count:
+            withMedals && current.gold_delegation_id ? current.gold_count : '0',
+        silver_count:
+            withMedals && current.silver_delegation_id
+                ? current.silver_count
+                : '0',
+        bronze_count:
+            withMedals && current.bronze_delegation_id
+                ? current.bronze_count
+                : '0',
+    }));
+
+    const toggleMedals = () => {
+        const enabled = !withMedals;
+        setWithMedals(enabled);
+        setData((current) => ({
+            ...current,
+            gold_count: enabled ? '1' : '0',
+            silver_count: enabled ? '1' : '0',
+            bronze_count: enabled ? '1' : '0',
+        }));
+    };
+
     const submit = (event: FormEvent) => {
         event.preventDefault();
         post(result ? `/results/${result.id}/direct` : '/results/direct', {
@@ -208,169 +255,339 @@ function DirectResultDialog({
             },
         });
     };
-    const medalSelect = (
-        label: string,
-        field:
-            | 'gold_delegation_id'
-            | 'silver_delegation_id'
-            | 'bronze_delegation_id',
-    ) => (
-        <div className="space-y-2">
-            <Label>{label}</Label>
-            <Select
-                value={data[field]}
-                onValueChange={(value) => setData(field, value)}
-            >
-                <SelectTrigger>
-                    <SelectValue placeholder={`Select ${label} Delegation`} />
-                </SelectTrigger>
-                <SelectContent>
-                    {delegations.map((option) => (
-                        <SelectItem key={option.id} value={String(option.id)}>
-                            {option.label}
-                        </SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-            <InputError message={errors[field]} />
-            <Label htmlFor={`${field}-mark`}>Score / Points / Time</Label>
-            <Input
-                id={`${field}-mark`}
-                maxLength={60}
-                value={
-                    data[
-                        `${field.split('_')[0]}_mark` as
-                            'gold_mark' | 'silver_mark' | 'bronze_mark'
-                    ]
-                }
-                onChange={(e) =>
-                    setData(
-                        `${field.split('_')[0]}_mark` as
-                            'gold_mark' | 'silver_mark' | 'bronze_mark',
-                        e.target.value,
-                    )
-                }
-            />
-            <InputError
-                message={
-                    errors[
-                        `${field.split('_')[0]}_mark` as
-                            'gold_mark' | 'silver_mark' | 'bronze_mark'
-                    ]
-                }
-            />
-            <Label htmlFor={`${field}-count`}>{label} Count</Label>
-            <Input
-                id={`${field}-count`}
-                type="number"
-                min={0}
-                max={65535}
-                step={1}
-                required
-                value={
-                    data[
-                        `${field.split('_')[0]}_count` as
-                            'gold_count' | 'silver_count' | 'bronze_count'
-                    ]
-                }
-                onChange={(e) =>
-                    setData(
-                        `${field.split('_')[0]}_count` as
-                            'gold_count' | 'silver_count' | 'bronze_count',
-                        e.target.value,
-                    )
-                }
-            />
-            <InputError
-                message={
-                    errors[
-                        `${field.split('_')[0]}_count` as
-                            'gold_count' | 'silver_count' | 'bronze_count'
-                    ]
-                }
-            />
-        </div>
-    );
+
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
-                <DialogHeader>
-                    <DialogTitle>Submit Event Result</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={submit} className="space-y-4">
-                    <div className="space-y-2">
-                        <Label>Sports Event</Label>
-                        <Select
-                            value={data.event_id}
-                            onValueChange={(value) =>
-                                setData('event_id', value)
-                            }
+        <div className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
+            <Head title="Submit Event Result" />
+            <PageHeader
+                title="Submit Event Result"
+                description="Choose an event, record the placements, and attach the result document."
+            />
+            <div className="flex flex-wrap items-center gap-3">
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => onOpenChange(false)}
+                    disabled={processing}
+                >
+                    Back to Results
+                </Button>
+                <Button
+                    type="button"
+                    aria-pressed={withMedals}
+                    aria-controls="result-participants"
+                    disabled={processing}
+                    className={
+                        withMedals
+                            ? 'border border-orange-700 bg-orange-700 text-white hover:bg-orange-800 focus-visible:ring-orange-500'
+                            : 'border border-orange-300 bg-orange-100 text-orange-900 hover:bg-orange-200 focus-visible:ring-orange-500 dark:border-orange-700 dark:bg-orange-950 dark:text-orange-100 dark:hover:bg-orange-900'
+                    }
+                    onClick={toggleMedals}
+                >
+                    <Award className="size-4" /> With Medals:{' '}
+                    {withMedals ? 'On' : 'Off'}
+                </Button>
+            </div>
+            <form onSubmit={submit} className="space-y-6">
+                <section className="space-y-3 rounded-xl border bg-card p-4 sm:p-5">
+                    <Label
+                        htmlFor="result-event"
+                        className="text-base font-semibold"
+                    >
+                        Sports Event
+                    </Label>
+                    <Select
+                        value={data.event_id}
+                        onValueChange={(value) => setData('event_id', value)}
+                        disabled={processing || !!result}
+                    >
+                        <SelectTrigger
+                            id="result-event"
+                            className="h-auto min-h-11 w-full [&>span]:text-left [&>span]:whitespace-normal"
                         >
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select Sports Event" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {events.map((option) => (
-                                    <SelectItem
-                                        key={option.id}
-                                        value={String(option.id)}
+                            <SelectValue placeholder="Select a sports event" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {events.map((option) => (
+                                <SelectItem
+                                    key={option.id}
+                                    value={String(option.id)}
+                                >
+                                    {option.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <InputError message={errors.event_id} />
+                </section>
+                <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+                    <section
+                        id="result-participants"
+                        className="min-w-0 overflow-hidden rounded-xl border bg-card"
+                    >
+                        <div className="space-y-1 border-b p-4 sm:p-5">
+                            <h2 className="font-semibold">
+                                Participants and Results
+                            </h2>
+                            <p className="text-sm text-muted-foreground">
+                                One participant is enough. Second and third
+                                places are optional.
+                            </p>
+                        </div>
+                        <div className="divide-y">
+                            {(
+                                [
+                                    {
+                                        key: 'gold',
+                                        place: '1st place',
+                                        label: 'Gold',
+                                        optional: false,
+                                    },
+                                    {
+                                        key: 'silver',
+                                        place: '2nd place',
+                                        label: 'Silver',
+                                        optional: true,
+                                    },
+                                    {
+                                        key: 'bronze',
+                                        place: '3rd place',
+                                        label: 'Bronze',
+                                        optional: true,
+                                    },
+                                ] as const
+                            ).map(({ key, place, label, optional }) => {
+                                const delegationField =
+                                    `${key}_delegation_id` as const;
+                                const markField = `${key}_mark` as const;
+                                const countField = `${key}_count` as const;
+
+                                return (
+                                    <div
+                                        key={key}
+                                        className="space-y-3 p-4 sm:p-5"
                                     >
-                                        {option.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <InputError message={errors.event_id} />
-                    </div>
-                    {medalSelect('Gold', 'gold_delegation_id')}
-                    {medalSelect('Silver', 'silver_delegation_id')}
-                    {medalSelect('Bronze', 'bronze_delegation_id')}
-                    <div className="space-y-2">
-                        <Label htmlFor="direct-result-evidence">
-                            Result document or photo
-                        </Label>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <h3 className="text-sm font-semibold">
+                                                {place}
+                                            </h3>
+                                            {optional && (
+                                                <span className="text-xs text-muted-foreground">
+                                                    Optional
+                                                </span>
+                                            )}
+                                            {withMedals && (
+                                                <Badge variant="outline">
+                                                    <Award className="mr-1 size-3 text-orange-600" />
+                                                    {label}
+                                                </Badge>
+                                            )}
+                                        </div>
+                                        <div
+                                            className={`grid gap-4 ${withMedals ? 'md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_7rem]' : 'md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]'}`}
+                                        >
+                                            <div className="min-w-0 space-y-2">
+                                                <Label
+                                                    htmlFor={`${key}-delegation`}
+                                                >
+                                                    Delegation / Team
+                                                </Label>
+                                                <Select
+                                                    value={
+                                                        data[delegationField] ||
+                                                        'none'
+                                                    }
+                                                    onValueChange={(value) =>
+                                                        setData(
+                                                            delegationField,
+                                                            value === 'none'
+                                                                ? ''
+                                                                : value,
+                                                        )
+                                                    }
+                                                    disabled={processing}
+                                                >
+                                                    <SelectTrigger
+                                                        id={`${key}-delegation`}
+                                                        className="h-auto min-h-10 w-full [&>span]:text-left [&>span]:whitespace-normal"
+                                                    >
+                                                        <SelectValue placeholder="Select a delegation" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="none">
+                                                            {optional
+                                                                ? 'No participant'
+                                                                : 'Select a delegation'}
+                                                        </SelectItem>
+                                                        {delegations.map(
+                                                            (option) => (
+                                                                <SelectItem
+                                                                    key={
+                                                                        option.id
+                                                                    }
+                                                                    value={String(
+                                                                        option.id,
+                                                                    )}
+                                                                >
+                                                                    {
+                                                                        option.label
+                                                                    }
+                                                                </SelectItem>
+                                                            ),
+                                                        )}
+                                                    </SelectContent>
+                                                </Select>
+                                                <InputError
+                                                    message={
+                                                        errors[delegationField]
+                                                    }
+                                                />
+                                            </div>
+                                            <div className="min-w-0 space-y-2">
+                                                <Label htmlFor={`${key}-mark`}>
+                                                    Score / Points / Time
+                                                </Label>
+                                                <Input
+                                                    id={`${key}-mark`}
+                                                    className="h-10"
+                                                    maxLength={60}
+                                                    value={data[markField]}
+                                                    placeholder="e.g. 98 points or 12.45 s"
+                                                    disabled={processing}
+                                                    onChange={(event) =>
+                                                        setData(
+                                                            markField,
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                                <InputError
+                                                    message={errors[markField]}
+                                                />
+                                            </div>
+                                            {withMedals && (
+                                                <div className="space-y-2">
+                                                    <Label
+                                                        htmlFor={`${key}-count`}
+                                                    >
+                                                        Medal count
+                                                    </Label>
+                                                    <Input
+                                                        id={`${key}-count`}
+                                                        aria-label={`${label} medal count`}
+                                                        className="h-10"
+                                                        type="number"
+                                                        min={0}
+                                                        max={65535}
+                                                        step={1}
+                                                        required={
+                                                            !!data[
+                                                                delegationField
+                                                            ]
+                                                        }
+                                                        disabled={
+                                                            processing ||
+                                                            !data[
+                                                                delegationField
+                                                            ]
+                                                        }
+                                                        value={data[countField]}
+                                                        onChange={(event) =>
+                                                            setData(
+                                                                countField,
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                    />
+                                                    <InputError
+                                                        message={
+                                                            errors[countField]
+                                                        }
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+                    <aside className="min-w-0 space-y-4 rounded-xl border bg-card p-4 sm:p-5">
+                        <div className="space-y-1">
+                            <h2 className="font-semibold">Result Document</h2>
+                            <p className="text-sm text-muted-foreground">
+                                Attach a photo or PDF of the recorded result.
+                            </p>
+                        </div>
                         {result && (
                             <p className="text-sm text-muted-foreground">
-                                Existing evidence is retained unless you upload
-                                a replacement.
+                                Your existing document is retained unless you
+                                replace it.
                             </p>
                         )}
-                        <Input
-                            id="direct-result-evidence"
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp,application/pdf"
-                            capture="environment"
-                            onChange={(e) => {
-                                const file = e.target.files?.[0] ?? null;
-                                setData('evidence', file);
-                                setPreview(
-                                    file?.type.startsWith('image/')
-                                        ? URL.createObjectURL(file)
-                                        : null,
-                                );
-                            }}
-                        />
+                        <div className="space-y-2 rounded-lg border border-dashed p-3">
+                            <Label htmlFor="direct-result-evidence">
+                                Document or photo
+                            </Label>
+                            <Input
+                                id="direct-result-evidence"
+                                className="h-auto min-h-10 min-w-0 text-sm"
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp,application/pdf"
+                                capture="environment"
+                                disabled={processing}
+                                onChange={(event) => {
+                                    const file =
+                                        event.target.files?.[0] ?? null;
+                                    setData('evidence', file);
+                                    setPreview(
+                                        file?.type.startsWith('image/')
+                                            ? URL.createObjectURL(file)
+                                            : null,
+                                    );
+                                }}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                PDF, JPG, PNG or WebP
+                            </p>
+                        </div>
                         {preview && (
                             <img
                                 src={preview}
                                 alt="Result evidence preview"
-                                className="max-h-56 w-full rounded-md border object-contain"
+                                className="max-h-64 w-full rounded-lg border object-contain"
                             />
                         )}
+                        {data.evidence && (
+                            <p className="text-sm break-all text-muted-foreground">
+                                {data.evidence.name}
+                            </p>
+                        )}
                         <InputError message={errors.evidence} />
-                    </div>
-                    <DialogFooter>
-                        <Button type="submit" disabled={processing}>
-                            {processing ? 'Submitting…' : 'Submit Result'}
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
+                    </aside>
+                </div>
+                <div className="flex flex-col gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm text-muted-foreground">
+                        Review the event, placements and document before
+                        submitting.
+                    </p>
+                    <Button
+                        type="submit"
+                        size="lg"
+                        disabled={processing}
+                        className="w-full sm:w-auto"
+                    >
+                        <Send className="size-4" />
+                        {processing ? 'Submitting?' : 'Submit Result'}
+                    </Button>
+                </div>
+            </form>
+        </div>
     );
 }
 
-function EncodeDialog({
+function EncodeForm({
     result,
     entryOptions,
     teamEntryOptions,
@@ -378,7 +595,6 @@ function EncodeDialog({
     activeMeets,
     eventOptions,
     scheduleOptions,
-    open,
     onOpenChange,
 }: {
     result: Result | null;
@@ -388,7 +604,6 @@ function EncodeDialog({
     activeMeets: Option[];
     eventOptions: EventOption[];
     scheduleOptions: ScheduleOption[];
-    open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
     const [scope, setScope] = useState<'match' | 'event'>(
@@ -511,15 +726,18 @@ function EncodeDialog({
     )?.[1];
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-2xl">
-                <DialogHeader>
-                    <DialogTitle>
+        <div className="mx-auto w-full max-w-4xl space-y-4 p-4">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Back to Results
+            </Button>
+            <div>
+                <div>
+                    <h1 className="text-xl font-semibold">
                         {result
                             ? `Edit result — ${result.event}`
                             : 'Encode result'}
-                    </DialogTitle>
-                </DialogHeader>
+                    </h1>
+                </div>
                 <form onSubmit={submit} className="space-y-4">
                     {!result && (
                         <div className="space-y-2">
@@ -835,14 +1053,14 @@ function EncodeDialog({
                         <InputError message={placementError} />
                     </div>
 
-                    <DialogFooter>
+                    <div className="flex justify-end">
                         <Button type="submit" disabled={processing}>
                             {result ? 'Save changes' : 'Encode result'}
                         </Button>
-                    </DialogFooter>
+                    </div>
                 </form>
-            </DialogContent>
-        </Dialog>
+            </div>
+        </div>
     );
 }
 
@@ -924,7 +1142,10 @@ export default function Results({
     delegationOptions,
 }: Props) {
     const [formOpen, setFormOpen] = useState(false);
-    const [directOpen, setDirectOpen] = useState(false);
+    const pageUrl = usePage().url;
+    const [directOpen, setDirectOpen] = useState(
+        pageUrl.split('?')[0] === '/results/submit',
+    );
     const [directEditing, setDirectEditing] = useState<Result | null>(null);
     const [editing, setEditing] = useState<Result | null>(null);
     const [correcting, setCorrecting] = useState<Result | null>(null);
@@ -989,6 +1210,43 @@ export default function Results({
                   all.findIndex((other) => other.id === option.id) === i,
           );
 
+    if (canEncode && formOpen) {
+        return (
+            <EncodeForm
+                key={editing?.id ?? 'create'}
+                result={editing}
+                entryOptions={entryOptions}
+                teamEntryOptions={teamEntryOptions}
+                competitionOptions={competitionOptions}
+                activeMeets={activeMeets}
+                eventOptions={eventOptionsByMeet}
+                scheduleOptions={scheduleOptions}
+                onOpenChange={setFormOpen}
+            />
+        );
+    }
+
+    if (canDirectResult && directOpen) {
+        return (
+            <DirectResultForm
+                key={
+                    directEditing
+                        ? `${directEditing.id}-${directEditing.version}`
+                        : 'new'
+                }
+                result={directEditing}
+                onOpenChange={() => {
+                    setDirectOpen(false);
+                    router.get('/results');
+                }}
+                events={eventOptionsByMeet.filter(
+                    (option) => option.meet_id === filters.meet_id,
+                )}
+                delegations={delegationOptions}
+            />
+        );
+    }
+
     return (
         <>
             <Head title="Results" />
@@ -1006,7 +1264,7 @@ export default function Results({
                             <Button
                                 onClick={() => {
                                     setDirectEditing(null);
-                                    setDirectOpen(true);
+                                    router.get('/results/submit');
                                 }}
                             >
                                 <Plus />
@@ -1435,7 +1693,8 @@ export default function Results({
                                                                 'Reason for reopening this accepted Result',
                                                             )
                                                             ?.trim();
-                                                        if (reason)
+
+                                                        if (reason) {
                                                             router.post(
                                                                 `/results/${result.id}/reopen`,
                                                                 { reason },
@@ -1443,6 +1702,7 @@ export default function Results({
                                                                     preserveScroll: true,
                                                                 },
                                                             );
+                                                        }
                                                     }}
                                                 >
                                                     Reopen for correction
@@ -1518,6 +1778,16 @@ export default function Results({
                                     </div>
                                 </div>
                                 <div className="overflow-x-auto">
+                                    {result.result_source === 'direct' &&
+                                        result.placements.every(
+                                            (placement) =>
+                                                (placement.tally_quantity ??
+                                                    0) === 0,
+                                        ) && (
+                                            <h3 className="border-b p-4 font-semibold">
+                                                Team Standing
+                                            </h3>
+                                        )}
                                     {result.result_photo && (
                                         <div
                                             className={
@@ -1593,9 +1863,7 @@ export default function Results({
                                                 </TableHead>
                                                 {result.result_source ===
                                                     'direct' && (
-                                                    <TableHead>
-                                                        Medal Count
-                                                    </TableHead>
+                                                    <TableHead>Medal</TableHead>
                                                 )}
                                             </TableRow>
                                         </TableHeader>
@@ -1623,8 +1891,10 @@ export default function Results({
                                                         {result.result_source ===
                                                             'direct' && (
                                                             <TableCell>
-                                                                {placement.tally_quantity ??
-                                                                    1}
+                                                                {(placement.tally_quantity ??
+                                                                    0) > 0
+                                                                    ? `${['Gold', 'Silver', 'Bronze'][placement.rank - 1]} x ${placement.tally_quantity}`
+                                                                    : 'No medal'}
                                                             </TableCell>
                                                         )}
                                                     </TableRow>
@@ -1645,38 +1915,6 @@ export default function Results({
                     params={filterParams}
                 />
             </div>
-
-            {canEncode && (
-                <EncodeDialog
-                    key={editing?.id ?? 'create'}
-                    result={editing}
-                    entryOptions={entryOptions}
-                    teamEntryOptions={teamEntryOptions}
-                    competitionOptions={competitionOptions}
-                    activeMeets={activeMeets}
-                    eventOptions={eventOptionsByMeet}
-                    scheduleOptions={scheduleOptions}
-                    open={formOpen}
-                    onOpenChange={setFormOpen}
-                />
-            )}
-
-            {canDirectResult && (
-                <DirectResultDialog
-                    key={
-                        directEditing
-                            ? `${directEditing.id}-${directEditing.version}`
-                            : 'new'
-                    }
-                    result={directEditing}
-                    open={directOpen}
-                    onOpenChange={setDirectOpen}
-                    events={eventOptionsByMeet.filter(
-                        (option) => option.meet_id === filters.meet_id,
-                    )}
-                    delegations={delegationOptions}
-                />
-            )}
 
             {correcting && (
                 <CorrectDialog

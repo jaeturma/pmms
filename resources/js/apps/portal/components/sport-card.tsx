@@ -53,9 +53,9 @@ export function PortalSportCard({ sport }: { sport: PortalSportCardData }) {
 
             <div className="mt-auto flex items-center justify-between pt-2 text-sm">
                 <span className="text-[var(--portal-muted-foreground)]">
-                    {sport.category_count === 0
-                        ? 'No categories yet'
-                        : `${sport.category_count} ${sport.category_count === 1 ? 'category' : 'categories'}`}
+                    {sport.events.length === 0
+                        ? 'No sports events yet'
+                        : `${sport.events.length} ${sport.events.length === 1 ? 'sports event' : 'sports events'}`}
                 </span>
                 <span className="font-semibold text-[var(--portal-accent)] group-hover:underline">
                     View Sport →

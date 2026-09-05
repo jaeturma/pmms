@@ -6,9 +6,9 @@ import { PortalHero } from '@/apps/portal/components/hero';
 import { PortalLeadingScorers } from '@/apps/portal/components/leading-scorers';
 import { PortalScheduleList } from '@/apps/portal/components/schedule-list';
 import { PortalSectionHeader } from '@/apps/portal/components/section-header';
-import { PortalSportCategories } from '@/apps/portal/components/sport-categories';
 import { PortalSportDescription } from '@/apps/portal/components/sport-description';
 import { PortalSportEventStrip } from '@/apps/portal/components/sport-event-strip';
+import { PortalSportEvents } from '@/apps/portal/components/sport-events';
 import { PortalSportIcon } from '@/apps/portal/components/sport-icon';
 import { PortalStandingsTable } from '@/apps/portal/components/standings-table';
 import { PortalTechnicalOfficials } from '@/apps/portal/components/technical-officials';
@@ -162,8 +162,8 @@ export default function PortalSportPortal({
         <>
             <span>{sport.is_paragames ? 'Paragames' : 'Regular Sport'}</span>
             <span>
-                {sport.categories.length}{' '}
-                {sport.categories.length === 1 ? 'category' : 'categories'}
+                {sport.events.length}{' '}
+                {sport.events.length === 1 ? 'sports event' : 'sports events'}
             </span>
         </>
     );
@@ -193,8 +193,8 @@ export default function PortalSportPortal({
                         />
                     </section>
                     <section className="space-y-3">
-                        <PortalSectionHeader title="Competition categories" />
-                        <PortalSportCategories categories={sport.categories} />
+                        <PortalSectionHeader title="Sports Events in this Sport" />
+                        <PortalSportEvents events={sport.events} />
                     </section>
                     <section className="space-y-3">
                         <PortalSectionHeader title="Technical officials" />
@@ -289,8 +289,8 @@ export default function PortalSportPortal({
                 </section>
 
                 <section className="space-y-3">
-                    <PortalSectionHeader title="Competition categories" />
-                    <PortalSportCategories categories={sport.categories} />
+                    <PortalSectionHeader title="Sports Events in this Sport" />
+                    <PortalSportEvents events={sport.events} />
                 </section>
 
                 <section className="space-y-3">
