@@ -3,10 +3,12 @@
 use App\Enums\ManagementTeamMemberStatus;
 use App\Enums\ManagementTeamStatus;
 use App\Enums\ManagementTeamType;
+use App\Enums\MatchStatus;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\ResultStatus;
 use App\Models\AuditLog;
+use App\Models\EventMatch;
 use App\Models\EventResult;
 use App\Models\ManagementTeam;
 use App\Models\ManagementTeamMember;
@@ -132,14 +134,44 @@ test('system administrator can submit an encoded result without a tournament ICT
         ->and($result->fresh()->submitted_by)->toBe($admin->id);
 });
 
+test('Event Secretariat accepts an operational fallback result and preserves its remarks', function () {
+    $result = resultWithPlacement();
+    $result->forceFill([
+        'status' => ResultStatus::Submitted,
+        'submitted_at' => now(),
+        'operational_remarks' => "Athlete assignment is pending.\nTeam roster is pending.",
+    ])->save();
+    $secretariat = eventSecretariatFor($result);
+
+    $this->actingAs($secretariat)->post(route('results.event-secretariat.validate', $result))
+        ->assertRedirect()->assertSessionDoesntHaveErrors();
+
+    expect($result->fresh()->status)->toBe(ResultStatus::Validated)
+        ->and($result->fresh()->validated_by)->toBe($secretariat->id)
+        ->and($result->fresh()->operational_remarks)->toContain('Athlete assignment is pending.')
+        ->and($result->fresh()->operational_remarks)->toContain('Schedule is not linked.')
+        ->and(AuditLog::query()->where('action', 'result.validated')->where('auditable_id', $result->id)->exists())->toBeTrue();
+});
+
+test('unauthorized user cannot accept a submitted operational result', function () {
+    $result = resultWithPlacement();
+    $result->forceFill(['status' => ResultStatus::Submitted, 'submitted_at' => now()])->save();
+
+    $this->actingAs(User::factory()->create())
+        ->post(route('results.event-secretariat.validate', $result))
+        ->assertForbidden();
+
+    expect($result->fresh()->status)->toBe(ResultStatus::Submitted);
+});
+
 test('ICT can submit a completed unscheduled match result with deferred workflow issues', function () {
     config()->set('pmms.results.signed_result_form_required', false);
     $result = resultWithPlacement();
-    $result->forceFill(['match_id' => \App\Models\EventMatch::factory()->create([
+    $result->forceFill(['match_id' => EventMatch::factory()->create([
         'meet_id' => $result->meet_id,
         'event_id' => $result->event_id,
         'event_schedule_id' => null,
-        'status' => \App\Enums\MatchStatus::Completed,
+        'status' => MatchStatus::Completed,
     ])->id, 'event_schedule_id' => null, 'tm_confirmed_at' => null])->save();
     $ict = assignedResultUser($result, MeetSportAssignmentRole::TournamentICT);
 

@@ -3,6 +3,7 @@
 use App\Enums\MatchStatus;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
+use App\Enums\ResultStatus;
 use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\AuditLog;
@@ -812,6 +813,16 @@ test('urgent meet-day workflow records delegation-only result without fabricatin
     $this->actingAs($admin)->post("/results/{$result->id}/event-secretariat-validation")
         ->assertSessionHasNoErrors();
     expect(collect(app(MedalTallyService::class)->standings($meet->id)['districts'])->sum('gold'))->toBe(1);
+    $remarks = $result->fresh()->operational_remarks;
+    expect($result->fresh()->status)->toBe(ResultStatus::Validated)
+        ->and($result->fresh()->validated_by)->toBe($admin->id)
+        ->and($remarks)->toContain('Schedule is not linked.')
+        ->and($remarks)->toContain('Signed Result Form is pending.');
+    $this->actingAs($admin)->post("/results/{$result->id}/event-secretariat-validation")
+        ->assertSessionHasNoErrors();
+    expect(collect(app(MedalTallyService::class)->standings($meet->id)['districts'])->sum('gold'))->toBe(1)
+        ->and($result->fresh()->operational_remarks)->toBe($remarks)
+        ->and(AuditLog::query()->where('action', 'result.validated')->where('auditable_id', $result->id)->count())->toBe(1);
     $this->get("/meets/{$meet->id}/results")->assertOk();
     $this->assertDatabaseHas('audit_logs', ['action' => 'match.manual_outcome_saved']);
     $this->assertDatabaseHas('audit_logs', ['action' => 'result.created_from_manual_match']);

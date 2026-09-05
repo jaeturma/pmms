@@ -17,6 +17,7 @@ use App\Services\FileUploadService;
 use App\Services\MedalAwardService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rules\File;
@@ -242,24 +243,8 @@ class ResultWorkflowController extends Controller
         }
 
         DB::transaction(function () use ($request, $result, $issues): void {
-            if (! $result->placements()->exists() && $result->match !== null) {
-                $delegationIds = $result->match->participantSlots->where('is_selected', true)->pluck('delegation_id')
-                    ->merge($result->match->teamEntries->pluck('delegation_id'))
-                    ->merge($result->match->entries->pluck('delegation_id'))
-                    ->unique()->values();
-                $winnerId = $result->match->winner_delegation_id;
-                $nextRank = 2;
-                foreach ($delegationIds as $delegationId) {
-                    $result->placements()->create([
-                        'delegation_id' => $delegationId,
-                        'rank' => (int) $delegationId === (int) $winnerId ? 1 : $nextRank++,
-                        'mark' => collect([$result->match->manual_score_a, $result->match->manual_score_b])->filter()->implode(' - ') ?: null,
-                        'is_tie' => false,
-                    ]);
-                }
-                if ($delegationIds->isNotEmpty()) {
-                    $issues->push('Placements were reconstructed from match delegations. Athlete/team links may be completed later.');
-                }
+            if ($this->reconstructMissingPlacements($result)) {
+                $issues->push('Placements were reconstructed from match delegations. Athlete/team links may be completed later.');
             }
 
             if (! $result->placements()->exists()) {
@@ -386,16 +371,91 @@ class ResultWorkflowController extends Controller
     public function validateResult(Request $request, EventResult $result): RedirectResponse
     {
         $this->authorizeEventSecretariat($request->user(), $result);
-        abort_unless($result->status === ResultStatus::Submitted, 422);
 
-        $result->forceFill([
-            'status' => ResultStatus::Validated,
-            'validated_by' => $request->user()->id,
-            'validated_at' => now(),
-        ])->save();
-        $this->audit->record('result.validated', $result, $this->context($result));
+        if ($result->status === ResultStatus::Validated) {
+            return back()->with('success', 'Result was already accepted. Its medal contribution remains unchanged.');
+        }
 
-        return back()->with('success', 'Result validated. It is ready to be made official.');
+        abort_unless($result->status === ResultStatus::Submitted, 422, 'Only a submitted result may be accepted.');
+
+        DB::transaction(function () use ($request, $result): void {
+            $locked = EventResult::query()->lockForUpdate()->with([
+                'event.medalConfig', 'match.participantSlots', 'match.teamEntries', 'match.entries',
+            ])->findOrFail($result->id);
+
+            if ($locked->status === ResultStatus::Validated) {
+                return;
+            }
+            abort_unless($locked->status === ResultStatus::Submitted, 422, 'Only a submitted result may be accepted.');
+            abort_unless($locked->event !== null && $locked->event->meets()->whereKey($locked->meet_id)->exists(), 409, 'The Result Event is not linked to its Meet. Repair this integrity issue before acceptance.');
+
+            $concerns = $this->operationalConcerns($locked);
+            if ($this->reconstructMissingPlacements($locked)) {
+                $concerns->push('Placements were reconstructed from match delegations. Athlete/team links may be completed later.');
+            }
+            if (! $locked->placements()->exists()) {
+                $concerns->push('No placement is linked yet. Add the winning delegation later so its medal can be attributed.');
+            }
+
+            $config = $locked->event->resolvedMedalConfig();
+            if ($config->awards_medals && $config->isComplete() && $locked->placements()->exists()) {
+                $this->medalAwards->synchronize($locked, $request->user());
+            } elseif ($config->awards_medals && ! $config->isComplete()) {
+                $concerns->push('Medal configuration is incomplete; the operational tally uses placements until the snapshot can be reconciled.');
+            }
+
+            $locked->forceFill([
+                'status' => ResultStatus::Validated,
+                'validated_by' => $request->user()->id,
+                'validated_at' => now(),
+                'operational_remarks' => $this->mergeOperationalRemarks($locked->operational_remarks, $concerns),
+            ])->save();
+            $this->audit->record('result.validated', $locked, [
+                ...$this->context($locked),
+                'operational_concerns' => $concerns->unique()->values()->all(),
+            ]);
+        });
+
+        return back()->with('success', 'Result accepted with operational remarks. Its medal contribution remains reconciled and counted once.');
+    }
+
+    private function operationalConcerns(EventResult $result): Collection
+    {
+        return collect([
+            $result->event_schedule_id === null ? 'Schedule is not linked.' : null,
+            $result->match_id !== null && $result->tm_confirmed_at === null ? 'Tournament Manager confirmation is pending.' : null,
+            $result->currentSignedForm() === null ? 'Signed Result Form is pending.' : null,
+        ])->filter()->values();
+    }
+
+    private function reconstructMissingPlacements(EventResult $result): bool
+    {
+        if ($result->placements()->exists() || $result->match === null) {
+            return false;
+        }
+
+        $result->loadMissing(['match.participantSlots', 'match.teamEntries', 'match.entries']);
+        $delegationIds = $result->match->participantSlots->where('is_selected', true)->pluck('delegation_id')
+            ->merge($result->match->teamEntries->pluck('delegation_id'))
+            ->merge($result->match->entries->pluck('delegation_id'))->unique()->values();
+        $winnerId = $result->match->winner_delegation_id;
+        $nextRank = 2;
+        foreach ($delegationIds as $delegationId) {
+            $result->placements()->create([
+                'delegation_id' => $delegationId,
+                'rank' => (int) $delegationId === (int) $winnerId ? 1 : $nextRank++,
+                'mark' => collect([$result->match->manual_score_a, $result->match->manual_score_b])->filter()->implode(' - ') ?: null,
+                'is_tie' => false,
+            ]);
+        }
+
+        return $delegationIds->isNotEmpty();
+    }
+
+    private function mergeOperationalRemarks(?string $existing, Collection $concerns): ?string
+    {
+        return collect(preg_split('/\R/', (string) $existing) ?: [])
+            ->merge($concerns)->map(fn ($remark) => trim((string) $remark))->filter()->unique()->implode("\n") ?: null;
     }
 
     public function makeOfficial(Request $request, EventResult $result): RedirectResponse

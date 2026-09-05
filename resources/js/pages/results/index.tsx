@@ -1013,7 +1013,7 @@ export default function Results({
                                                             )
                                                         }
                                                     >
-                                                        Validate
+                                                        Accept
                                                     </Button>
                                                     <Button
                                                         variant="destructive"
