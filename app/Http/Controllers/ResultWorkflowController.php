@@ -39,14 +39,18 @@ class ResultWorkflowController extends Controller
         private readonly MedalAwardService $medalAwards,
     ) {}
 
-    public function storeDirect(Request $request): RedirectResponse
+    public function storeDirect(Request $request, ?EventResult $result = null): RedirectResponse
     {
         $data = $request->validate([
             'event_id' => ['required', 'integer', Rule::exists('events', 'id')],
-            'gold_delegation_id' => ['required', 'integer', 'different:silver_delegation_id', 'different:bronze_delegation_id', Rule::exists('delegations', 'id')],
-            'silver_delegation_id' => ['required', 'integer', 'different:gold_delegation_id', 'different:bronze_delegation_id', Rule::exists('delegations', 'id')],
-            'bronze_delegation_id' => ['required', 'integer', 'different:gold_delegation_id', 'different:silver_delegation_id', Rule::exists('delegations', 'id')],
-            'evidence' => ['required', File::types(['pdf', 'jpg', 'jpeg', 'png', 'webp'])->max((int) config('uploads.max_kb'))],
+            'gold_delegation_id' => ['required', 'integer', Rule::exists('delegations', 'id')],
+            'silver_delegation_id' => ['required', 'integer', Rule::exists('delegations', 'id')],
+            'bronze_delegation_id' => ['required', 'integer', Rule::exists('delegations', 'id')],
+            ...collect(['gold', 'silver', 'bronze'])->flatMap(fn ($medal) => [
+                $medal.'_mark' => ['nullable', 'string', 'max:60'],
+                $medal.'_count' => ['sometimes', 'required', 'integer', 'min:0', 'max:65535'],
+            ])->all(),
+            'evidence' => [$result === null ? 'required' : 'nullable', File::types(['pdf', 'jpg', 'jpeg', 'png', 'webp'])->max((int) config('uploads.max_kb'))],
         ]);
         $meet = Meet::current();
         $event = Event::query()->findOrFail((int) $data['event_id']);
@@ -57,43 +61,69 @@ class ResultWorkflowController extends Controller
         abort_unless($authorized, 403);
         abort_unless($event->meets()->whereKey($meet->id)->exists(), 422, 'The selected Sports Event is not part of the current Meet.');
 
+        if ($result !== null) {
+            abort_unless($result->result_source === 'direct' && $result->meet_id === $meet->id && $result->event_id === $event->id, 422);
+            abort_unless(in_array($result->status, [ResultStatus::Encoded, ResultStatus::Submitted, ResultStatus::Returned, ResultStatus::Reopened], true), 422, 'Reopen an accepted Result before editing it.');
+        }
+
         $delegationIds = collect([$data['gold_delegation_id'], $data['silver_delegation_id'], $data['bronze_delegation_id']])->map(fn ($id) => (int) $id);
-        abort_unless(Delegation::query()->where('meet_id', $meet->id)->whereIn('status', [DelegationStatus::Submitted->value, DelegationStatus::Approved->value])->whereKey($delegationIds)->count() === 3, 422, 'Every medal Delegation must be active in the current Meet.');
+        abort_unless(Delegation::query()->where('meet_id', $meet->id)->whereIn('status', [DelegationStatus::Submitted->value, DelegationStatus::Approved->value])->whereKey($delegationIds)->count() === $delegationIds->unique()->count(), 422, 'Every medal Delegation must be active in the current Meet.');
         abort_if(EventResult::query()->real()->where('meet_id', $meet->id)->where('event_id', $event->id)
+            ->when($result !== null, fn ($query) => $query->whereKeyNot($result->id))
             ->whereNotIn('status', [ResultStatus::Cancelled->value])->exists(), 422, 'An active Result already exists for this Sports Event. Return, cancel, or correct it instead.');
 
-        $upload = $this->uploads->store($request->file('evidence'), $user, 'evidence');
-        $stream = Storage::disk($upload->disk)->readStream($upload->path);
-        abort_if($stream === false, 500, 'The uploaded result evidence could not be verified.');
-        $hash = hash_init('sha256');
-        hash_update_stream($hash, $stream);
-        fclose($stream);
-        $checksum = hash_final($hash);
+        $upload = null;
+        $checksum = null;
+        if ($request->hasFile('evidence')) {
+            $upload = $this->uploads->store($request->file('evidence'), $user, 'evidence');
+            $stream = Storage::disk($upload->disk)->readStream($upload->path);
+            abort_if($stream === false, 500, 'The uploaded result evidence could not be verified.');
+            $hash = hash_init('sha256');
+            hash_update_stream($hash, $stream);
+            fclose($stream);
+            $checksum = hash_final($hash);
+        }
 
-        $result = DB::transaction(function () use ($meet, $event, $user, $delegationIds, $upload, $checksum): EventResult {
-            $result = new EventResult([
+        $result = DB::transaction(function () use ($meet, $event, $user, $delegationIds, $upload, $checksum, $data, $result): EventResult {
+            $previous = null;
+            if ($result !== null) {
+                $result = EventResult::query()->lockForUpdate()->findOrFail($result->id);
+                abort_unless(in_array($result->status, [ResultStatus::Encoded, ResultStatus::Submitted, ResultStatus::Returned, ResultStatus::Reopened], true), 422, 'Reopen an accepted Result before editing it.');
+                $previous = $result->placements()->get()->toArray();
+                $result->medalAwards()->delete();
+                $result->placements()->delete();
+            }
+            $result ??= new EventResult([
                 'meet_id' => $meet->id, 'event_id' => $event->id, 'result_source' => 'direct',
                 'result_scope' => 'event', 'operational_remarks' => 'Direct Event Result submitted from delegation medal placements.',
             ]);
             $result->forceFill([
                 'status' => ResultStatus::Submitted, 'encoded_by' => $user->id, 'encoded_at' => now(),
                 'submitted_by' => $user->id, 'submitted_at' => now(),
-                'version' => 1,
+                'version' => $result->exists ? $result->version + 1 : 1,
+                'validated_by' => null, 'validated_at' => null, 'official_by' => null, 'official_at' => null,
             ])->save();
             foreach ($delegationIds as $index => $delegationId) {
-                $result->placements()->create(['delegation_id' => $delegationId, 'rank' => $index + 1, 'is_tie' => false]);
+                $medal = ['gold', 'silver', 'bronze'][$index];
+                $result->placements()->create([
+                    'delegation_id' => $delegationId, 'rank' => $index + 1, 'is_tie' => false,
+                    'mark' => $data[$medal.'_mark'] ?? null, 'tally_quantity' => $data[$medal.'_count'] ?? 1,
+                ]);
             }
-            $result->attachments()->create([
-                'file_upload_id' => $upload->id, 'attachment_type' => ResultAttachment::DIRECT_RESULT_EVIDENCE,
-                'result_version' => $result->version, 'checksum_sha256' => $checksum,
-                'uploaded_by' => $user->id, 'is_current' => true,
-            ]);
+            if ($upload !== null) {
+                $result->attachments()->where('attachment_type', ResultAttachment::DIRECT_RESULT_EVIDENCE)->update(['is_current' => false]);
+                $result->attachments()->create([
+                    'file_upload_id' => $upload->id, 'attachment_type' => ResultAttachment::DIRECT_RESULT_EVIDENCE,
+                    'result_version' => $result->version, 'checksum_sha256' => $checksum,
+                    'uploaded_by' => $user->id, 'is_current' => true,
+                ]);
+
+            }
+            $this->audit->record($previous === null ? 'direct_result.created' : 'direct_result.updated', $result, [...$this->context($result), 'superseded_placements' => $previous]);
+            $this->audit->record('result.submitted', $result, $this->context($result));
 
             return $result;
         });
-
-        $this->audit->record('direct_result.created', $result, $this->context($result));
-        $this->audit->record('result.submitted', $result, $this->context($result));
 
         return back()->with('success', 'Direct Event Result submitted to the Event Secretariat.');
     }
@@ -365,24 +395,22 @@ class ResultWorkflowController extends Controller
     public function cancel(Request $request, EventResult $result): RedirectResponse
     {
         $this->authorizeEventSecretariat($request->user(), $result);
-        abort_unless(in_array($result->status, [ResultStatus::Submitted, ResultStatus::Returned, ResultStatus::Validated], true), 422, 'Only a result in review may be cancelled.');
         $validated = $request->validate(['reason' => ['required', 'string', 'max:1000']]);
-
-        $previousStatus = $result->status->value;
-        $result->forceFill([
-            'status' => ResultStatus::Cancelled,
-            'returned_by' => $request->user()->id,
-            'returned_at' => now(),
-            'return_reason' => $validated['reason'],
-            'validated_by' => null,
-            'validated_at' => null,
-        ])->save();
-
-        $this->audit->record('result.cancelled', $result, [
-            ...$this->context($result),
-            'previous_status' => $previousStatus,
-            'reason' => $validated['reason'],
-        ]);
+        DB::transaction(function () use ($result, $validated): void {
+            $result = EventResult::query()->lockForUpdate()->findOrFail($result->id);
+            abort_unless(in_array($result->status, [ResultStatus::Submitted, ResultStatus::Returned, ResultStatus::Validated], true)
+                || ($result->result_source === 'direct' && $result->status === ResultStatus::Official), 422);
+            $previousStatus = $result->status->value;
+            $result->medalAwards()->delete();
+            $result->forceFill([
+                'status' => ResultStatus::Cancelled,
+                'returned_by' => auth()->id(), 'returned_at' => now(), 'return_reason' => $validated['reason'],
+                'validated_by' => null, 'validated_at' => null, 'official_by' => null, 'official_at' => null,
+            ])->save();
+            $this->audit->record('result.cancelled', $result, [
+                ...$this->context($result), 'previous_status' => $previousStatus, 'reason' => $validated['reason'],
+            ]);
+        });
 
         return back()->with('success', 'Result cancelled. Its placements, attachments, and audit history were retained.');
     }
@@ -535,16 +563,19 @@ class ResultWorkflowController extends Controller
         abort_unless($request->user()->hasPermission(Permission::ResultsOfficialize, $result->meet)
             || $request->user()->isAdmin() || $this->isEventSecretariat($request->user(), $result), 403);
 
-        if ($result->status === ResultStatus::Official) {
-            return back()->with('success', 'Result was already accepted. Its medal tally remains unchanged.');
-        }
-
         DB::transaction(function () use ($result, $request): void {
             $locked = EventResult::query()->lockForUpdate()->with(['event.medalConfig', 'placements', 'attachments'])->findOrFail($result->id);
             if ($locked->status === ResultStatus::Official) {
+                if ($locked->result_source === 'direct') {
+                    $this->assertDirectResultIntegrity($locked);
+                    $this->medalAwards->synchronize($locked, $request->user());
+                }
+
                 return;
             }
-            abort_unless($locked->status === ResultStatus::Validated, 422, 'Only a validated result awaiting officialization may be marked official.');
+            abort_unless($locked->status === ResultStatus::Validated
+                || ($locked->result_source === 'direct' && $locked->status === ResultStatus::Submitted), 422,
+                'Only a submitted direct Result or validated Result may be accepted.');
             abort_unless($locked->isFinalEventResult(), 422, 'Only a final Sports Event Result may be marked official. Completed Match Results remain operational and unofficial.');
             abort_unless($locked->submitted_at !== null && $locked->submitted_by !== null, 422, 'The final result must be submitted before officialization.');
             abort_if($locked->currentSignedForm() === null
@@ -581,15 +612,15 @@ class ResultWorkflowController extends Controller
     {
         abort_unless($result->event !== null && $result->event->meets()->whereKey($result->meet_id)->exists(), 409,
             'The direct Result Event is not linked to its Meet.');
-        abort_unless($result->attachments->contains('attachment_type', ResultAttachment::DIRECT_RESULT_EVIDENCE), 422,
+        abort_unless($result->attachments->where('is_current', true)->contains('attachment_type', ResultAttachment::DIRECT_RESULT_EVIDENCE), 422,
             'Direct Result evidence is required.');
         $placements = $result->placements->whereIn('rank', [1, 2, 3]);
         abort_unless($placements->count() === 3
             && $placements->pluck('rank')->unique()->count() === 3
-            && $placements->pluck('delegation_id')->filter()->unique()->count() === 3, 422,
-            'Direct Results require three distinct Gold, Silver, and Bronze Delegations.');
+            && $placements->pluck('delegation_id')->filter()->count() === 3, 422,
+            'Direct Results require one delegation for each Gold, Silver, and Bronze placement.');
         abort_unless(Delegation::query()->where('meet_id', $result->meet_id)
-            ->whereKey($placements->pluck('delegation_id'))->count() === 3, 409,
+            ->whereKey($placements->pluck('delegation_id'))->count() === $placements->pluck('delegation_id')->unique()->count(), 409,
             'A medal Delegation no longer belongs to the Result Meet.');
     }
 
@@ -599,13 +630,18 @@ class ResultWorkflowController extends Controller
         abort_unless($result->status === ResultStatus::Official, 422);
         $validated = $request->validate(['reason' => ['required', 'string', 'max:1000']]);
 
-        $result->forceFill([
-            'status' => ResultStatus::Reopened,
-            'version' => $result->version + 1,
-            'tm_confirmed_by' => null,
-            'tm_confirmed_at' => null,
-        ])->save();
-        $this->audit->record('result.reopened', $result, [...$this->context($result), 'reason' => $validated['reason']]);
+        DB::transaction(function () use ($result, $validated): void {
+            $result = EventResult::query()->lockForUpdate()->findOrFail($result->id);
+            abort_unless($result->status === ResultStatus::Official, 422);
+            $result->medalAwards()->delete();
+            $result->forceFill([
+                'status' => ResultStatus::Reopened,
+                'version' => $result->version + 1,
+                'tm_confirmed_by' => null, 'tm_confirmed_at' => null,
+                'official_by' => null, 'official_at' => null,
+            ])->save();
+            $this->audit->record('result.reopened', $result, [...$this->context($result), 'reason' => $validated['reason']]);
+        });
 
         return back()->with('success', 'Official result reopened for correction.');
     }
@@ -616,7 +652,11 @@ class ResultWorkflowController extends Controller
         abort_unless($result->status === ResultStatus::Official, 422);
         $validated = $request->validate(['reason' => ['required', 'string', 'max:1000']]);
 
-        DB::transaction(fn () => $this->medalAwards->synchronize($result, $request->user()));
+        DB::transaction(function () use ($result, $request): void {
+            $locked = EventResult::query()->lockForUpdate()->findOrFail($result->id);
+            abort_unless($locked->status === ResultStatus::Official, 422);
+            $this->medalAwards->synchronize($locked, $request->user());
+        });
         $this->audit->record('result.medal_awards_recalculated', $result, [
             ...$this->context($result),
             'reason' => $validated['reason'],

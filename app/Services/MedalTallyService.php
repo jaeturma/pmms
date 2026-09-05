@@ -325,6 +325,9 @@ class MedalTallyService
         return ResultPlacement::query()
             ->with('medalAward')
             ->whereIn('rank', [1, 2, 3])
+            // Direct results contribute only their canonical award snapshots.
+            ->where(fn ($placements) => $placements->whereHas('medalAward')
+                ->orWhereHas('result', fn ($result) => $result->where('result_source', '!=', 'direct')->orWhereNull('result_source')))
             ->whereHas('result', fn ($result) => $result
                 ->whereNull('demo_scenario_id')
                 ->where('status', ResultStatus::Official->value)

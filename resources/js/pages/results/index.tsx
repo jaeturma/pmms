@@ -36,13 +36,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { resultSheet } from '@/routes/reports';
-import {
-    correct,
-    destroy,
-    index,
-    store,
-    update,
-} from '@/routes/results';
+import { correct, destroy, index, store, update } from '@/routes/results';
 
 type Placement = {
     entry_id: number | null;
@@ -52,10 +46,13 @@ type Placement = {
     athlete: string;
     school: string;
     mark: string | null;
+    tally_quantity: number | null;
     is_tie: boolean;
 };
 
 type Result = {
+    result_source: string;
+    can_reopen: boolean;
     id: number;
     meet_id: number;
     event_id: number;
@@ -160,48 +157,217 @@ type Props = {
     delegationOptions: Option[];
 };
 
-function DirectResultDialog({ open, onOpenChange, events, delegations }: {
+function DirectResultDialog({
+    open,
+    onOpenChange,
+    events,
+    delegations,
+    result,
+}: {
+    result?: Result | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;
     events: EventOption[];
     delegations: Option[];
 }) {
     const { data, setData, post, processing, errors, reset } = useForm({
-        event_id: '', gold_delegation_id: '', silver_delegation_id: '', bronze_delegation_id: '', evidence: null as File | null,
+        event_id: result ? String(result.event_id) : '',
+        gold_delegation_id: String(
+            result?.placements.find((p) => p.rank === 1)?.delegation_id ?? '',
+        ),
+        silver_delegation_id: String(
+            result?.placements.find((p) => p.rank === 2)?.delegation_id ?? '',
+        ),
+        bronze_delegation_id: String(
+            result?.placements.find((p) => p.rank === 3)?.delegation_id ?? '',
+        ),
+        evidence: null as File | null,
+        gold_mark: result?.placements.find((p) => p.rank === 1)?.mark ?? '',
+        silver_mark: result?.placements.find((p) => p.rank === 2)?.mark ?? '',
+        bronze_mark: result?.placements.find((p) => p.rank === 3)?.mark ?? '',
+        gold_count: String(
+            result?.placements.find((p) => p.rank === 1)?.tally_quantity ?? 1,
+        ),
+        silver_count: String(
+            result?.placements.find((p) => p.rank === 2)?.tally_quantity ?? 1,
+        ),
+        bronze_count: String(
+            result?.placements.find((p) => p.rank === 3)?.tally_quantity ?? 1,
+        ),
     });
     const [preview, setPreview] = useState<string | null>(null);
     const submit = (event: FormEvent) => {
         event.preventDefault();
-        post('/results/direct', { forceFormData: true, preserveScroll: true, onSuccess: () => { reset(); setPreview(null); onOpenChange(false); } });
+        post(result ? `/results/${result.id}/direct` : '/results/direct', {
+            forceFormData: true,
+            preserveScroll: true,
+            onSuccess: () => {
+                reset();
+                setPreview(null);
+                onOpenChange(false);
+            },
+        });
     };
-    const medalSelect = (label: string, field: 'gold_delegation_id' | 'silver_delegation_id' | 'bronze_delegation_id') => (
+    const medalSelect = (
+        label: string,
+        field:
+            | 'gold_delegation_id'
+            | 'silver_delegation_id'
+            | 'bronze_delegation_id',
+    ) => (
         <div className="space-y-2">
             <Label>{label}</Label>
-            <Select value={data[field]} onValueChange={(value) => setData(field, value)}>
-                <SelectTrigger><SelectValue placeholder={`Select ${label} Delegation`} /></SelectTrigger>
-                <SelectContent>{delegations.map((option) => <SelectItem key={option.id} value={String(option.id)}>{option.label}</SelectItem>)}</SelectContent>
+            <Select
+                value={data[field]}
+                onValueChange={(value) => setData(field, value)}
+            >
+                <SelectTrigger>
+                    <SelectValue placeholder={`Select ${label} Delegation`} />
+                </SelectTrigger>
+                <SelectContent>
+                    {delegations.map((option) => (
+                        <SelectItem key={option.id} value={String(option.id)}>
+                            {option.label}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
             </Select>
             <InputError message={errors[field]} />
+            <Label htmlFor={`${field}-mark`}>Score / Points / Time</Label>
+            <Input
+                id={`${field}-mark`}
+                maxLength={60}
+                value={
+                    data[
+                        `${field.split('_')[0]}_mark` as
+                            'gold_mark' | 'silver_mark' | 'bronze_mark'
+                    ]
+                }
+                onChange={(e) =>
+                    setData(
+                        `${field.split('_')[0]}_mark` as
+                            'gold_mark' | 'silver_mark' | 'bronze_mark',
+                        e.target.value,
+                    )
+                }
+            />
+            <InputError
+                message={
+                    errors[
+                        `${field.split('_')[0]}_mark` as
+                            'gold_mark' | 'silver_mark' | 'bronze_mark'
+                    ]
+                }
+            />
+            <Label htmlFor={`${field}-count`}>{label} Count</Label>
+            <Input
+                id={`${field}-count`}
+                type="number"
+                min={0}
+                max={65535}
+                step={1}
+                required
+                value={
+                    data[
+                        `${field.split('_')[0]}_count` as
+                            'gold_count' | 'silver_count' | 'bronze_count'
+                    ]
+                }
+                onChange={(e) =>
+                    setData(
+                        `${field.split('_')[0]}_count` as
+                            'gold_count' | 'silver_count' | 'bronze_count',
+                        e.target.value,
+                    )
+                }
+            />
+            <InputError
+                message={
+                    errors[
+                        `${field.split('_')[0]}_count` as
+                            'gold_count' | 'silver_count' | 'bronze_count'
+                    ]
+                }
+            />
         </div>
     );
-    return <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
-            <DialogHeader><DialogTitle>Submit Event Result</DialogTitle></DialogHeader>
-            <form onSubmit={submit} className="space-y-4">
-                <div className="space-y-2"><Label>Sports Event</Label><Select value={data.event_id} onValueChange={(value) => setData('event_id', value)}><SelectTrigger><SelectValue placeholder="Select Sports Event" /></SelectTrigger><SelectContent>{events.map((option) => <SelectItem key={option.id} value={String(option.id)}>{option.label}</SelectItem>)}</SelectContent></Select><InputError message={errors.event_id} /></div>
-                {medalSelect('Gold', 'gold_delegation_id')}
-                {medalSelect('Silver', 'silver_delegation_id')}
-                {medalSelect('Bronze', 'bronze_delegation_id')}
-                <div className="space-y-2">
-                    <Label htmlFor="direct-result-evidence">Result document or photo</Label>
-                    <Input id="direct-result-evidence" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" onChange={(e) => { const file = e.target.files?.[0] ?? null; setData('evidence', file); setPreview(file?.type.startsWith('image/') ? URL.createObjectURL(file) : null); }} />
-                    {preview && <img src={preview} alt="Result evidence preview" className="max-h-56 w-full rounded-md border object-contain" />}
-                    <InputError message={errors.evidence} />
-                </div>
-                <DialogFooter><Button type="submit" disabled={processing}>{processing ? 'Submitting…' : 'Submit Result'}</Button></DialogFooter>
-            </form>
-        </DialogContent>
-    </Dialog>;
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>Submit Event Result</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={submit} className="space-y-4">
+                    <div className="space-y-2">
+                        <Label>Sports Event</Label>
+                        <Select
+                            value={data.event_id}
+                            onValueChange={(value) =>
+                                setData('event_id', value)
+                            }
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select Sports Event" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {events.map((option) => (
+                                    <SelectItem
+                                        key={option.id}
+                                        value={String(option.id)}
+                                    >
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <InputError message={errors.event_id} />
+                    </div>
+                    {medalSelect('Gold', 'gold_delegation_id')}
+                    {medalSelect('Silver', 'silver_delegation_id')}
+                    {medalSelect('Bronze', 'bronze_delegation_id')}
+                    <div className="space-y-2">
+                        <Label htmlFor="direct-result-evidence">
+                            Result document or photo
+                        </Label>
+                        {result && (
+                            <p className="text-sm text-muted-foreground">
+                                Existing evidence is retained unless you upload
+                                a replacement.
+                            </p>
+                        )}
+                        <Input
+                            id="direct-result-evidence"
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,application/pdf"
+                            capture="environment"
+                            onChange={(e) => {
+                                const file = e.target.files?.[0] ?? null;
+                                setData('evidence', file);
+                                setPreview(
+                                    file?.type.startsWith('image/')
+                                        ? URL.createObjectURL(file)
+                                        : null,
+                                );
+                            }}
+                        />
+                        {preview && (
+                            <img
+                                src={preview}
+                                alt="Result evidence preview"
+                                className="max-h-56 w-full rounded-md border object-contain"
+                            />
+                        )}
+                        <InputError message={errors.evidence} />
+                    </div>
+                    <DialogFooter>
+                        <Button type="submit" disabled={processing}>
+                            {processing ? 'Submitting…' : 'Submit Result'}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
 }
 
 function EncodeDialog({
@@ -247,7 +413,13 @@ function EncodeDialog({
                       is_tie: placement.is_tie,
                   }))
                 : [
-                      { entry_id: '', team_entry_id: '', rank: '1', mark: '', is_tie: false },
+                      {
+                          entry_id: '',
+                          team_entry_id: '',
+                          rank: '1',
+                          mark: '',
+                          is_tie: false,
+                      },
                   ]) as PlacementRow[],
         });
 
@@ -271,7 +443,16 @@ function EncodeDialog({
     );
     const availableEntries =
         result || scope === 'event'
-            ? [...entryOptions.map((option) => ({ ...option, participant_type: 'entry' as const })), ...teamEntryOptions.map((option) => ({ ...option, participant_type: 'team' as const }))].filter(
+            ? [
+                  ...entryOptions.map((option) => ({
+                      ...option,
+                      participant_type: 'entry' as const,
+                  })),
+                  ...teamEntryOptions.map((option) => ({
+                      ...option,
+                      participant_type: 'team' as const,
+                  })),
+              ].filter(
                   (option) =>
                       String(option.meet_id) === data.meet_id &&
                       String(option.event_id) === data.event_id,
@@ -358,7 +539,8 @@ function EncodeDialog({
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="match">
-                                            Match result — scheduled or non-scheduled
+                                            Match result — scheduled or
+                                            non-scheduled
                                         </SelectItem>
                                         <SelectItem value="event">
                                             Final Sports Event result
@@ -375,7 +557,10 @@ function EncodeDialog({
                                             onValueChange={(value) => {
                                                 setData('meet_id', value);
                                                 setData('event_id', '');
-                                                setData('event_schedule_id', 'none');
+                                                setData(
+                                                    'event_schedule_id',
+                                                    'none',
+                                                );
                                             }}
                                         >
                                             <SelectTrigger>
@@ -402,7 +587,10 @@ function EncodeDialog({
                                             value={data.event_id}
                                             onValueChange={(value) => {
                                                 setData('event_id', value);
-                                                setData('event_schedule_id', 'none');
+                                                setData(
+                                                    'event_schedule_id',
+                                                    'none',
+                                                );
                                             }}
                                         >
                                             <SelectTrigger>
@@ -435,7 +623,10 @@ function EncodeDialog({
                                         <Select
                                             value={data.event_schedule_id}
                                             onValueChange={(value) =>
-                                                setData('event_schedule_id', value)
+                                                setData(
+                                                    'event_schedule_id',
+                                                    value,
+                                                )
                                             }
                                         >
                                             <SelectTrigger>
@@ -448,17 +639,29 @@ function EncodeDialog({
                                                 {scheduleOptions
                                                     .filter(
                                                         (option) =>
-                                                            String(option.meet_id) === data.meet_id &&
-                                                            String(option.event_id) === data.event_id,
+                                                            String(
+                                                                option.meet_id,
+                                                            ) ===
+                                                                data.meet_id &&
+                                                            String(
+                                                                option.event_id,
+                                                            ) === data.event_id,
                                                     )
                                                     .map((option) => (
-                                                        <SelectItem key={option.id} value={String(option.id)}>
+                                                        <SelectItem
+                                                            key={option.id}
+                                                            value={String(
+                                                                option.id,
+                                                            )}
+                                                        >
                                                             {option.label}
                                                         </SelectItem>
                                                     ))}
                                             </SelectContent>
                                         </Select>
-                                        <InputError message={errors.event_schedule_id} />
+                                        <InputError
+                                            message={errors.event_schedule_id}
+                                        />
                                     </div>
                                 </div>
                             )}
@@ -475,7 +678,7 @@ function EncodeDialog({
                                                     (option) =>
                                                         String(option.id) ===
                                                         value,
-                                            );
+                                                );
                                             setData('match_id', value);
 
                                             if (selected) {
@@ -548,12 +751,20 @@ function EncodeDialog({
                                         }
                                     />
                                     <Select
-                                        value={row.team_entry_id ? `team:${row.team_entry_id}` : row.entry_id ? `entry:${row.entry_id}` : ''}
+                                        value={
+                                            row.team_entry_id
+                                                ? `team:${row.team_entry_id}`
+                                                : row.entry_id
+                                                  ? `entry:${row.entry_id}`
+                                                  : ''
+                                        }
                                         onValueChange={(value) => {
                                             const [type, id] = value.split(':');
                                             setRow(i, {
-                                                entry_id: type === 'entry' ? id : '',
-                                                team_entry_id: type === 'team' ? id : '',
+                                                entry_id:
+                                                    type === 'entry' ? id : '',
+                                                team_entry_id:
+                                                    type === 'team' ? id : '',
                                             });
                                         }}
                                         disabled={
@@ -714,6 +925,7 @@ export default function Results({
 }: Props) {
     const [formOpen, setFormOpen] = useState(false);
     const [directOpen, setDirectOpen] = useState(false);
+    const [directEditing, setDirectEditing] = useState<Result | null>(null);
     const [editing, setEditing] = useState<Result | null>(null);
     const [correcting, setCorrecting] = useState<Result | null>(null);
     const isTournamentScoped =
@@ -791,7 +1003,12 @@ export default function Results({
                     actions={
                         canDirectResult &&
                         activeMeets.length > 0 && (
-                            <Button onClick={() => setDirectOpen(true)}>
+                            <Button
+                                onClick={() => {
+                                    setDirectEditing(null);
+                                    setDirectOpen(true);
+                                }}
+                            >
                                 <Plus />
                                 Submit Event Result
                             </Button>
@@ -853,7 +1070,8 @@ export default function Results({
                                         <p className="text-sm text-muted-foreground">
                                             {result.meet} · Encoded by{' '}
                                             {result.encoded_by ?? '—'}{' '}
-                                            {result.encoded_at ?? 'Date unavailable'}
+                                            {result.encoded_at ??
+                                                'Date unavailable'}
                                             {result.validated_by && (
                                                 <>
                                                     {' '}
@@ -866,10 +1084,20 @@ export default function Results({
                                         <p className="text-sm text-muted-foreground">
                                             {result.competition_context}
                                             {result.submitted_by && (
-                                                <> · Submitted by {result.submitted_by} {result.submitted_at}</>
+                                                <>
+                                                    {' '}
+                                                    · Submitted by{' '}
+                                                    {result.submitted_by}{' '}
+                                                    {result.submitted_at}
+                                                </>
                                             )}
                                             {result.official_by && (
-                                                <> · Officialized by {result.official_by} {result.official_at}</>
+                                                <>
+                                                    {' '}
+                                                    · Officialized by{' '}
+                                                    {result.official_by}{' '}
+                                                    {result.official_at}
+                                                </>
                                             )}
                                         </p>
                                     </div>
@@ -905,19 +1133,28 @@ export default function Results({
                                         {result.data_issues.length > 0 && (
                                             <div className="w-full rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
                                                 <div className="font-medium text-amber-700 dark:text-amber-300">
-                                                    Submitted with issues — resolve later
+                                                    Submitted with issues —
+                                                    resolve later
                                                 </div>
                                                 <ul className="mt-1 list-disc pl-5 text-muted-foreground">
-                                                    {result.data_issues.map((issue) => (
-                                                        <li key={issue}>{issue}</li>
-                                                    ))}
+                                                    {result.data_issues.map(
+                                                        (issue) => (
+                                                            <li key={issue}>
+                                                                {issue}
+                                                            </li>
+                                                        ),
+                                                    )}
                                                 </ul>
                                             </div>
                                         )}
                                         {result.operational_remarks && (
                                             <div className="w-full rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-                                                <div className="font-medium text-amber-700 dark:text-amber-300">Operational remarks</div>
-                                                <div className="mt-1 whitespace-pre-line text-muted-foreground">{result.operational_remarks}</div>
+                                                <div className="font-medium text-amber-700 dark:text-amber-300">
+                                                    Operational remarks
+                                                </div>
+                                                <div className="mt-1 whitespace-pre-line text-muted-foreground">
+                                                    {result.operational_remarks}
+                                                </div>
                                             </div>
                                         )}
                                         {result.cancellation_request && (
@@ -926,14 +1163,23 @@ export default function Results({
                                                     Cancellation requested
                                                 </div>
                                                 <div className="mt-1">
-                                                    {result.cancellation_request.reason}
+                                                    {
+                                                        result
+                                                            .cancellation_request
+                                                            .reason
+                                                    }
                                                 </div>
                                                 <div className="mt-1 text-xs text-muted-foreground">
                                                     Requested by{' '}
-                                                    {result.cancellation_request.requested_by ??
+                                                    {result.cancellation_request
+                                                        .requested_by ??
                                                         'ICT'}{' '}
                                                     ·{' '}
-                                                    {result.cancellation_request.requested_at}
+                                                    {
+                                                        result
+                                                            .cancellation_request
+                                                            .requested_at
+                                                    }
                                                 </div>
                                             </div>
                                         )}
@@ -1091,15 +1337,19 @@ export default function Results({
                                                 variant="destructive"
                                                 size="sm"
                                                 onClick={() => {
-                                                    const reason = window.prompt(
-                                                        'Describe the problem requiring cancellation or correction',
-                                                    )?.trim();
+                                                    const reason = window
+                                                        .prompt(
+                                                            'Describe the problem requiring cancellation or correction',
+                                                        )
+                                                        ?.trim();
 
                                                     if (reason) {
                                                         router.post(
                                                             `/results/${result.id}/request-cancellation`,
                                                             { reason },
-                                                            { preserveScroll: true },
+                                                            {
+                                                                preserveScroll: true,
+                                                            },
                                                         );
                                                     }
                                                 }}
@@ -1112,15 +1362,19 @@ export default function Results({
                                                 variant="destructive"
                                                 size="sm"
                                                 onClick={() => {
-                                                    const reason = window.prompt(
-                                                        'Reason for cancelling this result',
-                                                    )?.trim();
+                                                    const reason = window
+                                                        .prompt(
+                                                            'Reason for cancelling this result',
+                                                        )
+                                                        ?.trim();
 
                                                     if (reason) {
                                                         router.post(
                                                             `/results/${result.id}/cancel`,
                                                             { reason },
-                                                            { preserveScroll: true },
+                                                            {
+                                                                preserveScroll: true,
+                                                            },
                                                         );
                                                     }
                                                 }}
@@ -1149,7 +1403,53 @@ export default function Results({
                                                 }
                                             />
                                         )}
+                                        {result.result_source === 'direct' &&
+                                            canDirectResult &&
+                                            [
+                                                'encoded',
+                                                'submitted',
+                                                'returned',
+                                                'reopened',
+                                            ].includes(result.status) && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        setDirectEditing(
+                                                            result,
+                                                        );
+                                                        setDirectOpen(true);
+                                                    }}
+                                                >
+                                                    Edit Result
+                                                </Button>
+                                            )}
+                                        {result.result_source === 'direct' &&
+                                            result.can_reopen && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        const reason = window
+                                                            .prompt(
+                                                                'Reason for reopening this accepted Result',
+                                                            )
+                                                            ?.trim();
+                                                        if (reason)
+                                                            router.post(
+                                                                `/results/${result.id}/reopen`,
+                                                                { reason },
+                                                                {
+                                                                    preserveScroll: true,
+                                                                },
+                                                            );
+                                                    }}
+                                                >
+                                                    Reopen for correction
+                                                </Button>
+                                            )}
                                         {canEncode &&
+                                            result.result_source !== 'direct' &&
                                             result.status === 'encoded' && (
                                                 <Button
                                                     variant="outline"
@@ -1191,29 +1491,30 @@ export default function Results({
                                             )}
                                         {result.can_manage &&
                                             result.status === 'encoded' && (
-                                            <ConfirmDialog
-                                                trigger={
-                                                    <Button
-                                                        variant="destructive"
-                                                        size="sm"
-                                                    >
-                                                        Delete
-                                                    </Button>
-                                                }
-                                                title="Delete result?"
-                                                description="Admin-only action: this permanently removes the result, its placements, attachments, and all medal-tally awards derived from it."
-                                                confirmLabel="Delete result and tally"
-                                                destructive
-                                                onConfirm={() =>
-                                                    router.delete(
-                                                        destroy(result.id).url,
-                                                        {
-                                                            preserveScroll: true,
-                                                        },
-                                                    )
-                                                }
-                                            />
-                                        )}
+                                                <ConfirmDialog
+                                                    trigger={
+                                                        <Button
+                                                            variant="destructive"
+                                                            size="sm"
+                                                        >
+                                                            Delete
+                                                        </Button>
+                                                    }
+                                                    title="Delete result?"
+                                                    description="Admin-only action: this permanently removes the result, its placements, attachments, and all medal-tally awards derived from it."
+                                                    confirmLabel="Delete result and tally"
+                                                    destructive
+                                                    onConfirm={() =>
+                                                        router.delete(
+                                                            destroy(result.id)
+                                                                .url,
+                                                            {
+                                                                preserveScroll: true,
+                                                            },
+                                                        )
+                                                    }
+                                                />
+                                            )}
                                     </div>
                                 </div>
                                 <div className="overflow-x-auto">
@@ -1236,7 +1537,9 @@ export default function Results({
                                                 rel="noreferrer"
                                             >
                                                 <img
-                                                    src={result.result_photo.url}
+                                                    src={
+                                                        result.result_photo.url
+                                                    }
                                                     alt={`Written result for ${result.event}`}
                                                     className="max-h-96 w-auto rounded-lg border object-contain"
                                                 />
@@ -1278,18 +1581,29 @@ export default function Results({
                                                 <TableHead className="w-16">
                                                     Rank
                                                 </TableHead>
-                                                <TableHead>Athlete</TableHead>
+                                                <TableHead>
+                                                    {result.result_source ===
+                                                    'direct'
+                                                        ? 'Delegation / Team'
+                                                        : 'Athlete'}
+                                                </TableHead>
                                                 <TableHead>School</TableHead>
                                                 <TableHead>
-                                                    Score / mark
+                                                    Score / Points / Time
                                                 </TableHead>
+                                                {result.result_source ===
+                                                    'direct' && (
+                                                    <TableHead>
+                                                        Medal Count
+                                                    </TableHead>
+                                                )}
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {result.placements.map(
                                                 (placement) => (
                                                     <TableRow
-                                                        key={placement.entry_id}
+                                                        key={`${placement.rank}-${placement.entry_id ?? placement.team_entry_id ?? placement.delegation_id}`}
                                                     >
                                                         <TableCell className="font-medium">
                                                             {placement.rank}
@@ -1306,6 +1620,13 @@ export default function Results({
                                                             {placement.mark ??
                                                                 '—'}
                                                         </TableCell>
+                                                        {result.result_source ===
+                                                            'direct' && (
+                                                            <TableCell>
+                                                                {placement.tally_quantity ??
+                                                                    1}
+                                                            </TableCell>
+                                                        )}
                                                     </TableRow>
                                                 ),
                                             )}
@@ -1342,9 +1663,17 @@ export default function Results({
 
             {canDirectResult && (
                 <DirectResultDialog
+                    key={
+                        directEditing
+                            ? `${directEditing.id}-${directEditing.version}`
+                            : 'new'
+                    }
+                    result={directEditing}
                     open={directOpen}
                     onOpenChange={setDirectOpen}
-                    events={eventOptionsByMeet.filter((option) => option.meet_id === filters.meet_id)}
+                    events={eventOptionsByMeet.filter(
+                        (option) => option.meet_id === filters.meet_id,
+                    )}
                     delegations={delegationOptions}
                 />
             )}

@@ -22,7 +22,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['event_result_id', 'entry_id', 'team_entry_id', 'delegation_id', 'rank', 'mark', 'is_tie'])]
+#[Fillable(['event_result_id', 'entry_id', 'team_entry_id', 'delegation_id', 'rank', 'mark', 'tally_quantity', 'is_tie'])]
 class ResultPlacement extends Model
 {
     /** @use HasFactory<ResultPlacementFactory> */
@@ -37,6 +37,7 @@ class ResultPlacement extends Model
     {
         return [
             'rank' => 'integer',
+            'tally_quantity' => 'integer',
             'is_tie' => 'boolean',
         ];
     }

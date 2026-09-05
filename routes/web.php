@@ -80,6 +80,7 @@ use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\VenueController;
 use App\Http\Controllers\VenueEmergencyPlanController;
+use App\Http\Middleware\PreventStalePublicResults;
 use Illuminate\Support\Facades\Route;
 
 Route::get('health', HealthController::class)
@@ -104,7 +105,7 @@ Route::middleware('auth')->group(function () {
 });
 
 // Public portal — guest routes, throttled, published data only.
-Route::middleware('throttle:60,1')->group(function () {
+Route::middleware(['throttle:60,1', PreventStalePublicResults::class])->group(function () {
     Route::get('/', [PortalController::class, 'home'])->name('home');
     Route::get('about', [PortalController::class, 'currentAbout'])->name('about');
     Route::get('news', [PortalController::class, 'currentNews'])->name('news');
@@ -350,6 +351,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('matches/{match}/result', [MatchController::class, 'createResult'])->name('matches.result.store');
     Route::get('results', [ResultController::class, 'index'])->name('results.index');
     Route::post('results/direct', [ResultWorkflowController::class, 'storeDirect'])->name('results.direct.store');
+    Route::post('results/{result}/direct', [ResultWorkflowController::class, 'storeDirect'])->name('results.direct.update');
     Route::get('results/{result}/form', [ResultWorkflowController::class, 'form'])->name('results.form');
     Route::post('results/{result}/attachments', [ResultWorkflowController::class, 'upload'])->name('results.attachments.store');
     Route::post('results/{result}/photo', [ResultWorkflowController::class, 'uploadPhoto'])->name('results.photo.store');

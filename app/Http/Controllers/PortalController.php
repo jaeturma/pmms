@@ -273,7 +273,7 @@ class PortalController extends Controller
                     'status_label' => $result->status === ResultStatus::Official
                         ? __('Official')
                         : __('Unofficial'),
-                    'official_as_of' => $result->validated_at?->format('M j, Y g:i A'),
+                    'official_as_of' => ($result->official_at ?? $result->validated_at)?->format('M j, Y g:i A'),
                     'placements' => $result->placements
                         ->sortBy([['rank', 'asc']])
                         ->map(fn (ResultPlacement $placement): array => [

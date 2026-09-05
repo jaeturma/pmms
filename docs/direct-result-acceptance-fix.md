@@ -1,0 +1,39 @@
+Direct Event Result acceptance repair — 2026-09-05
+
+1. **Diagnosis and limits.** The exact Accept route is `POST /results/{result}/official` → `ResultWorkflowController::makeOfficial()` → `MedalAwardService::synchronize()` → `medal_awards`; `MedalTallyService::basePlacements()` and public Results select `official` results. The original two direct-result tests passed before changes: a validated result accepted through this route already produced three medals with complete, positive event configuration. Therefore a blanket claim that this route never called synchronization would be incorrect. Confirmed defects were: the older validation endpoint claimed acceptance/publication while storing only `validated`; direct acceptance required a separate validation step; the award service took quantities exclusively from event configuration (including zero); no placement count/performance inputs existed in the direct form; and direct validation rejected repeated delegations. No production record was inspected, so the particular reported production record's cause remains unverified.
+
+2. **Files changed.** `app/Http/Controllers/ResultWorkflowController.php`, `app/Http/Controllers/ResultController.php`, `app/Http/Controllers/PortalController.php`, `app/Models/ResultPlacement.php`, `app/Services/MedalAwardService.php`, `app/Services/MedalTallyService.php`, `app/Http/Middleware/PreventStalePublicResults.php`, `resources/js/pages/results/index.tsx`, `routes/web.php`, `database/migrations/2026_09_05_000002_add_direct_result_tally_quantity.php`, `tests/Feature/DirectEventResultTest.php`, and this report.
+
+3. **Shared service/query.** The existing `MedalAwardService` now honors explicit direct-placement tally quantities. The existing `MedalTallyService` requires a canonical snapshot for direct contributions, preventing zero-count/non-medal direct placements from receiving the historical fallback of one medal. Legacy non-direct fallback behavior remains available.
+
+4. **Acceptance.** Secretariat/Admin may accept a submitted or validated direct result. The action authorizes the reviewer, locks/reloads the result, checks evidence and placement integrity, reconciles awards, stores the public status and reviewer/time, and audits in one transaction. The repository's canonical accepted/public status remains `official`, with `official_by` and `official_at`; direct rows display “Accepted.” There is no new status enum or additional officialization step. `validated` alone remains internal.
+
+5. **Gold/Silver/Bronze storage.** Three existing `result_placements` rows use ranks 1/2/3 and `delegation_id`. They need no match, schedule, athlete, entry, roster, venue, or TM confirmation.
+
+6. **Performance storage.** Existing nullable `result_placements.mark` stores general text up to 60 characters, such as `56.81 seconds`, separately from counts. Public Results already expose this field. The form and review table label it “Score / Points / Time.”
+
+7. **Counts.** Nullable `result_placements.tally_quantity` stores the entered integer; new submissions default to 1 and accept 0–65535. Acceptance copies it to `medal_awards.tally_quantity`. Zero direct counts create no award. Events explicitly configured not to award medals create no awards. Physical quantities remain separate and use each configured physical quantity, defaulting to 1 when absent. Historical null placement counts retain configuration/fallback handling.
+
+8. **Repeated delegations.** The three selectors use the same complete active current-Meet delegation list independently. Direct-only distinct-delegation checks were removed; active membership checks compare unique requested IDs against matching delegations. Match participant validation was not relaxed.
+
+9. **Uniqueness/idempotency.** The existing unique index `(event_result_id, result_placement_id, rank)` already distinguishes medal placements and needs no change. Synchronization replaces only the locked result's snapshots inside the transaction. Repeated acceptance also reconciles missing historical direct snapshots without creating a second allocation or a second acceptance audit. No mutable delegation medal counters were introduced.
+
+10. **Corrections/reversals.** Accepted results require the existing permitted, audited reopen action before editing. Reopen and cancellation remove snapshots transactionally. Direct editing replaces placements and resubmits; later acceptance creates only the corrected allocation. Evidence is retained unless replaced, and superseded placements are audited. A submitted result can be edited through the direct form; validated/accepted records cannot bypass the review lock. Cancellation retains placements, attachments, and audit history.
+
+11. **Public publishing.** Existing public Results and tally queries see the accepted transaction on their next request. Public Results display delegation and performance fields without exposing operational remarks. The public timestamp uses acceptance time, with the historical validation-time fallback.
+
+12. **Cache behavior.** Source inspection found no server/Redis result, tally, landing-summary, or meet-progress cache in these paths. They query committed records per request, so there are no keys to invalidate after commit. New public HTML/JSON `no-store, no-cache, must-revalidate` headers prevent subsequent browser/proxy caching. Static image/file caching is preserved. An already-open page still needs its normal reload/poll; this change adds no push channel.
+
+13. **Regression coverage.** Direct tests cover distinct and repeated delegations, all active choices, inactive/other-Meet rejection, performance/count separation, evidence upload/download/retention, submitted and validated exclusion, accepted public Results/tally, all medal quantities and totals, retries, correction, reopen/cancellation, zero/non-medal cases, historical null counts and snapshot repair, ICT acceptance denial, transaction rollback, and zero/incomplete event defaults. Existing match, snapshot, tally, and public-result tests were also run.
+
+14. **Mandatory same-delegation case.** Passed: one delegation receives Gold 1, Silver 1, Bronze 1, Total 3 immediately after accepting a submitted direct result. Repeated acceptance remains Total 3.
+
+15. **Targeted verification.** `php artisan test tests/Feature/DirectEventResultTest.php tests/Feature/ConfigurableMedalQuantityTest.php tests/Feature/MedalTallyTest.php tests/Feature/PublicResultsTest.php` passed: 44 tests, 607 assertions. Pint and `git diff --check` also passed.
+
+16. **Full Laravel suite.** Final sequential `php artisan test` passed: 1,818 tests, 10,586 assertions. Tests use the configured in-memory SQLite database. Earlier overlapping verification runs encountered shared temporary-upload/build-asset interference; the final run was isolated from those operations.
+
+17. **Frontend.** `npm run build` passed. `npm run types:check` reported two errors in untouched files: missing `destroy` on the generated profile route in `resources/js/components/delete-user.tsx:58`, and a number/string filter mismatch in `resources/js/pages/food/distribution.tsx:450`. The changed Results page had no reported TypeScript error.
+
+18. **Migration impact.** One additive migration adds nullable unsigned-small-integer `result_placements.tally_quantity`. It changes no award constraints and deletes/backfills no historical data. It must be applied in the target environment before using the new count fields. It was exercised only by the isolated tests, not against the development application's persistent database or production.
+
+19. **Production impact.** No deployment, SSH, production migration, or production-data modification was performed. Existing production medals were not automatically backfilled. Authorized acceptance retries or the existing recalculation action can reconcile accepted direct records after the code and migration are deployed.

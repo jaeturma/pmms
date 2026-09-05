@@ -228,7 +228,6 @@ class ResultController extends Controller
                         ->first();
                     $attachment ??= $result->attachments
                         ->where('attachment_type', ResultAttachment::DIRECT_RESULT_EVIDENCE)
-                        ->where('result_version', $result->version)
                         ->where('is_current', true)->sortByDesc('id')->first();
                     $resultPhoto = $result->attachments
                         ->where('attachment_type', ResultAttachment::RESULT_PHOTO)
@@ -246,7 +245,9 @@ class ResultController extends Controller
                         'meet' => $result->meet?->name ?? 'Unavailable meet',
                         'event' => $event === null ? 'Unavailable event' : $this->eventLabel($event),
                         'status' => $result->status->value,
-                        'status_label' => $result->status->label(),
+                        'status_label' => $result->result_source === 'direct' && $result->status === ResultStatus::Official ? 'Accepted' : $result->status->label(),
+                        'result_source' => $result->result_source,
+                        'can_reopen' => $result->status === ResultStatus::Official && $user->hasPermission(Permission::ResultsReopen, $result->meet),
                         'encoded_by' => $result->encodedBy?->name,
                         'encoded_at' => $result->encoded_at?->toDayDateTimeString(),
                         'submitted_by' => $result->submittedBy?->name,
@@ -274,7 +275,8 @@ class ResultController extends Controller
                         'can_form' => $canForm,
                         'can_upload_photo' => $canForm,
                         'can_review' => $isEventSecretariat,
-                        'can_cancel' => $isEventSecretariat && in_array($result->status, [ResultStatus::Submitted, ResultStatus::Returned, ResultStatus::Validated], true),
+                        'can_cancel' => $isEventSecretariat && (in_array($result->status, [ResultStatus::Submitted, ResultStatus::Returned, ResultStatus::Validated], true)
+                            || ($result->result_source === 'direct' && $result->status === ResultStatus::Official)),
                         'can_request_cancellation' => $result->status === ResultStatus::Submitted
                             && $result->cancellation_requested_at === null
                             && $user->meetSportAssignments()
@@ -293,8 +295,8 @@ class ResultController extends Controller
                         ],
                         'can_officialize' => ($isEventSecretariat || $user->hasPermission(Permission::ResultsOfficialize, $result->meet))
                             && $result->isFinalEventResult()
-                            && $result->status === ResultStatus::Validated
-                            && ($attachment !== null || ($result->result_source === 'manual' && $result->event_schedule_id === null)),
+                            && ($result->status === ResultStatus::Validated || ($result->result_source === 'direct' && $result->status === ResultStatus::Submitted))
+                            && ($result->result_source === 'direct' || $attachment !== null || ($result->result_source === 'manual' && $result->event_schedule_id === null)),
                         'form_generated' => $result->form_generated_version === $result->version,
                         'tm_confirmed' => $result->tm_confirmed_at !== null,
                         'can_tm_confirm' => $sportId !== null && $this->userManagedSportIds($user)->contains($sportId)
@@ -341,6 +343,7 @@ class ResultController extends Controller
                                     ?? $placement->entry?->delegation?->school?->name
                                     ?? 'School unavailable',
                                 'mark' => $placement->mark,
+                                'tally_quantity' => $placement->tally_quantity,
                                 'is_tie' => $placement->is_tie,
                             ])
                             ->values()
@@ -614,7 +617,7 @@ class ResultController extends Controller
 
         $this->audit->record('result.validated', $result, $this->context($result));
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Result accepted and published as unofficial. The unofficial tally has been updated.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Result validated. It remains internal until accepted.')]);
 
         return back();
     }

@@ -35,17 +35,24 @@ class MedalAwardService
 
         $this->logicalMedalPlacements($result->placements->whereIn('rank', [1, 2, 3]), $result->event->is_team_event)
             ->each(function (ResultPlacement $placement) use ($result, $config, $actor): void {
+                $medal = match ($placement->rank) {
+                    1 => 'gold', 2 => 'silver', default => 'bronze'
+                };
+                $quantity = $result->result_source === 'direct'
+                    ? ($placement->tally_quantity ?? ($config->isComplete() ? $config->tallyQuantityForRank($placement->rank) : 1))
+                    : $config->tallyQuantityForRank($placement->rank);
+                if ($quantity === 0 && $result->result_source === 'direct') {
+                    return;
+                }
                 MedalAward::query()->create([
                     'event_result_id' => $result->id,
                     'result_placement_id' => $placement->id,
                     'delegation_id' => $placement->delegation_id ?? $placement->teamEntry?->delegation_id ?? $placement->entry?->delegation_id,
                     'school_id' => $placement->delegation_id === null && $placement->team_entry_id === null ? $placement->entry?->athlete?->school_id : null,
                     'rank' => $placement->rank,
-                    'medal_type' => match ($placement->rank) {
-                        1 => 'gold', 2 => 'silver', default => 'bronze'
-                    },
-                    'physical_quantity' => $config->isComplete() ? $config->physicalQuantityForRank($placement->rank) : 1,
-                    'tally_quantity' => $config->isComplete() ? $config->tallyQuantityForRank($placement->rank) : 1,
+                    'medal_type' => $medal,
+                    'physical_quantity' => $config->{$medal.'_physical_quantity'} ?? 1,
+                    'tally_quantity' => $quantity,
                     'result_version' => (int) ($result->version ?? 1),
                     'snapshotted_by' => $actor->id,
                     'snapshotted_at' => now(),
