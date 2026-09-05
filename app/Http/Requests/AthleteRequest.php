@@ -47,7 +47,7 @@ class AthleteRequest extends FormRequest
         }
 
         $delegations = app(AthleteRegistrationScope::class)->delegations($this->user());
-        if ($delegations->count() === 1) {
+        if ($delegations->count() === 1 && ! $this->filled('delegation_id')) {
             $this->merge(['delegation_id' => $delegations->first()->id]);
         }
     }

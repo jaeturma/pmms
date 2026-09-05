@@ -73,7 +73,7 @@ class MedalTallyService
     public function standings(?int $meetId = null, ?int $sportId = null, ?string $ageDivision = null): array
     {
         $placements = $this->basePlacements($meetId, $sportId, $ageDivision)
-            ->with('result.event', 'entry.delegation', 'entry.athlete.school.district', 'entry.athlete.school.schoolDistrict', 'teamEntry.delegation.district', 'teamEntry.delegation.school.district')
+            ->with('result.event', 'entry.delegation', 'entry.athlete.school.district', 'entry.athlete.school.schoolDistrict', 'teamEntry.delegation.district', 'teamEntry.delegation.school.district', 'delegation.district', 'delegation.school.district')
             ->get();
         $tallyPlacements = $this->medalUnits($placements);
 
@@ -113,7 +113,9 @@ class MedalTallyService
         // several schools it pools, and the district/municipality rollup
         // below (unchanged) sums them back up automatically.
         $medalsBySchool = $tallyPlacements
-            ->filter(fn (ResultPlacement $placement): bool => $placement->entry?->athlete?->school_id !== null)
+            ->filter(fn (ResultPlacement $placement): bool => $placement->team_entry_id === null
+                && $placement->delegation_id === null
+                && $placement->entry?->athlete?->school_id !== null)
             ->groupBy(fn (ResultPlacement $placement): int => $placement->entry->athlete->school_id)
             ->map(fn (Collection $group): array => $this->medals($group));
 
@@ -165,12 +167,14 @@ class MedalTallyService
             });
 
         $tallyPlacements
-            ->filter(fn (ResultPlacement $placement): bool => $placement->team_entry_id !== null)
+            ->filter(fn (ResultPlacement $placement): bool => $placement->delegation_id !== null || $placement->team_entry_id !== null)
             ->groupBy(fn (ResultPlacement $placement): int|string => $placement->teamEntry?->delegation?->district_id
                 ?? $placement->teamEntry?->delegation?->school?->district_id
+                ?? $placement->delegation?->district_id
+                ?? $placement->delegation?->school?->district_id
                 ?? 'unassigned')
             ->each(function (Collection $group) use ($districts): void {
-                $delegation = $group->first()->teamEntry?->delegation;
+                $delegation = $group->first()->teamEntry?->delegation ?? $group->first()->delegation;
                 $district = $delegation?->district ?? $delegation?->school?->district;
                 $name = $district?->name ?? __('Not assigned');
                 $medals = $this->medals($group);
@@ -353,6 +357,9 @@ class MedalTallyService
                     ->whereHas('entry.athlete.school', fn ($school) => $school->where('district_id', $districtId))
                     ->orWhereHas('teamEntry.delegation', fn ($delegation) => $delegation
                         ->where('district_id', $districtId)
+                        ->orWhereHas('school', fn ($school) => $school->where('district_id', $districtId)))
+                    ->orWhereHas('delegation', fn ($delegation) => $delegation
+                        ->where('district_id', $districtId)
                         ->orWhereHas('school', fn ($school) => $school->where('district_id', $districtId)))),
             )
             // Paragames is a real, seeded Sport-name prefix
@@ -430,7 +437,7 @@ class MedalTallyService
         };
 
         $placements = $this->basePlacements($meetId, null, $ageDivision, $districtId, $paragames)
-            ->with(['result.event.sport', 'entry.athlete.school.district'])
+            ->with(['result.event.sport', 'entry.athlete.school.district', 'teamEntry.delegation.school', 'delegation.school'])
             ->get();
 
         return $placements
@@ -440,8 +447,9 @@ class MedalTallyService
                 $first = $group->first();
                 $event = $first->result->event;
                 $isTeam = $event->is_team_event;
-                $school = $first->entry?->athlete?->school ?? $first->teamEntry?->delegation?->school;
-                $delegation = $first->teamEntry?->delegation;
+                $delegation = $first->teamEntry?->delegation
+                    ?? ($first->entry_id === null ? $first->delegation : null);
+                $school = $first->entry?->athlete?->school ?? $delegation?->school;
 
                 return [
                     'medal' => match ($first->rank) {
@@ -450,10 +458,10 @@ class MedalTallyService
                         3 => 'bronze',
                         default => 'other',
                     },
-                    'participant_type' => $isTeam ? 'team' : 'athlete',
-                    'athlete_name' => $isTeam ? null : $first->entry->athlete->fullName(),
+                    'participant_type' => $isTeam || $first->entry === null ? 'team' : 'athlete',
+                    'athlete_name' => $isTeam || $first->entry === null ? null : $first->entry->athlete->fullName(),
                     'team_name' => $isTeam
-                        ? sprintf('%s %s Team', $delegation?->registrantName() ?? $school?->name ?? __('Delegation'), $event->sport->name)
+                        ? sprintf('%s %s Team', $delegation?->registrantName() ?? $school?->district?->name ?? $school?->name ?? __('Delegation'), $event->sport->name)
                         : null,
                     'roster' => $isTeam
                         ? $group->map(fn (ResultPlacement $p): ?string => $p->entry?->athlete?->fullName())->filter()->values()->all()
@@ -563,7 +571,7 @@ class MedalTallyService
                 'team',
                 $placement->event_result_id,
                 $placement->rank,
-                $placement->team_entry_id ?? $placement->entry->delegation_id,
+                $placement->team_entry_id ?? $placement->delegation_id ?? $placement->entry?->delegation_id,
             ]);
         })->values();
     }

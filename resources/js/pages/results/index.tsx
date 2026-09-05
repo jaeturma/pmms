@@ -47,6 +47,7 @@ import {
 type Placement = {
     entry_id: number | null;
     team_entry_id: number | null;
+    delegation_id: number | null;
     rank: number;
     athlete: string;
     school: string;

@@ -22,7 +22,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['event_result_id', 'entry_id', 'team_entry_id', 'rank', 'mark', 'is_tie'])]
+#[Fillable(['event_result_id', 'entry_id', 'team_entry_id', 'delegation_id', 'rank', 'mark', 'is_tie'])]
 class ResultPlacement extends Model
 {
     /** @use HasFactory<ResultPlacementFactory> */
@@ -60,6 +60,11 @@ class ResultPlacement extends Model
     public function teamEntry(): BelongsTo
     {
         return $this->belongsTo(TeamEntry::class);
+    }
+
+    public function delegation(): BelongsTo
+    {
+        return $this->belongsTo(Delegation::class);
     }
 
     public function medalAward(): HasOne

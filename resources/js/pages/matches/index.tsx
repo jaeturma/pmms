@@ -47,6 +47,7 @@ import { board as scoringBoard } from '@/routes/scoring';
 
 type Participant = {
     entry_id: number;
+    delegation_id: number;
     name: string;
     school: string | null;
 };
@@ -82,7 +83,13 @@ type Match = {
         position: number;
         athlete_id: number | null;
         athlete: string | null;
+        is_selected: boolean;
     }>;
+    manual_score_a: string | null;
+    manual_score_b: string | null;
+    winner_delegation_id: number | null;
+    notes: string | null;
+    has_result: boolean;
     transitions: Transition[];
     is_scheduled: boolean;
     can_delete: boolean;
@@ -146,6 +153,7 @@ function MatchFormDialog({
                 ? match.live_scoring_enabled
                 : false,
             awards_medals: match?.awards_medals ?? false,
+            notes: match?.notes ?? '',
         });
 
     transform((current) => ({
@@ -292,6 +300,11 @@ function MatchFormDialog({
                         />
                         <InputError message={errors.competition_area} />
                     </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="match-notes">Notes (optional)</Label>
+                        <Input id="match-notes" value={data.notes} onChange={(e) => setData('notes', e.target.value)} placeholder="Meet-day remarks or data to resolve later" />
+                        <InputError message={errors.notes} />
+                    </div>
                     <div className="flex flex-wrap gap-6">
                         {liveScoreAvailable && (
                             <label className="flex items-center gap-2 text-sm">
@@ -328,6 +341,49 @@ function MatchFormDialog({
     );
 }
 
+function ManualOutcomeDialog({ match, open, onOpenChange }: {
+    match: Match;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+}) {
+    const delegations = [
+        ...match.participants.map((participant) => ({ id: participant.delegation_id, label: participant.name.split(' (')[0] })),
+        ...match.participant_slots.filter((slot) => slot.is_selected)
+            .map((slot) => ({ id: slot.delegation_id, label: slot.delegation })),
+    ].filter((delegation, index, all) => all.findIndex((candidate) => candidate.id === delegation.id) === index);
+    const { data, setData, patch, processing, errors } = useForm({
+        score_a: match.manual_score_a ?? '',
+        score_b: match.manual_score_b ?? '',
+        winner_delegation_id: match.winner_delegation_id ? String(match.winner_delegation_id) : '',
+        notes: match.notes ?? '',
+    });
+
+    return <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-lg">
+            <DialogHeader><DialogTitle>Encode score and winner</DialogTitle></DialogHeader>
+            <form className="space-y-4" onSubmit={(event) => {
+                event.preventDefault();
+                patch(`/matches/${match.id}/manual-outcome`, { preserveScroll: true, onSuccess: () => onOpenChange(false) });
+            }}>
+                <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2"><Label>Side A score / points</Label><Input value={data.score_a} onChange={(event) => setData('score_a', event.target.value)} /></div>
+                    <div className="space-y-2"><Label>Side B score / points</Label><Input value={data.score_b} onChange={(event) => setData('score_b', event.target.value)} /></div>
+                </div>
+                <div className="space-y-2">
+                    <Label>Winner</Label>
+                    <Select value={data.winner_delegation_id} onValueChange={(value) => setData('winner_delegation_id', value)}>
+                        <SelectTrigger><SelectValue placeholder="Select winner" /></SelectTrigger>
+                        <SelectContent>{delegations.map((delegation) => <SelectItem key={delegation.id} value={String(delegation.id)}>{delegation.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <InputError message={errors.winner_delegation_id} />
+                </div>
+                <div className="space-y-2"><Label>Notes</Label><Input value={data.notes} onChange={(event) => setData('notes', event.target.value)} /></div>
+                <DialogFooter><Button type="submit" disabled={processing || delegations.length === 0}>Save outcome</Button></DialogFooter>
+            </form>
+        </DialogContent>
+    </Dialog>;
+}
+
 function ParticipantsDialog({
     match,
     entryOptions,
@@ -353,6 +409,7 @@ function ParticipantsDialog({
         slot_assignments: match.participant_slots.map((slot) => ({
             slot_id: slot.id,
             athlete_id: slot.athlete_id ? String(slot.athlete_id) : '',
+            is_selected: slot.is_selected,
         })),
     });
 
@@ -387,6 +444,7 @@ function ParticipantsDialog({
                           (assignment) => ({
                               slot_id: assignment.slot_id,
                               athlete_id: assignment.athlete_id || null,
+                              is_selected: assignment.is_selected,
                           }),
                       ),
                   }
@@ -443,13 +501,18 @@ function ParticipantsDialog({
                                 );
 
                                 return (
-                                    <div key={slot.id} className="grid items-center gap-2 sm:grid-cols-[minmax(10rem,1fr)_minmax(14rem,2fr)]">
+                                    <div key={slot.id} className="grid items-center gap-2 sm:grid-cols-[auto_minmax(10rem,1fr)_minmax(14rem,2fr)]">
+                                        <Checkbox checked={data.slot_assignments[index]?.is_selected} onCheckedChange={(checked) => {
+                                            const next = [...data.slot_assignments];
+                                            next[index] = { ...next[index], is_selected: checked === true };
+                                            setData('slot_assignments', next);
+                                        }} />
                                         <Label>{slot.delegation}{match.participant_slots.filter((item) => item.delegation_id === slot.delegation_id).length > 1 ? ` · Entry ${slot.position}` : ''}</Label>
                                         <Select
                                             value={data.slot_assignments[index]?.athlete_id || 'unassigned'}
                                             onValueChange={(value) => {
                                                 const next = [...data.slot_assignments];
-                                                next[index] = { slot_id: slot.id, athlete_id: value === 'unassigned' ? '' : value };
+                                                next[index] = { ...next[index], slot_id: slot.id, athlete_id: value === 'unassigned' ? '' : value };
                                                 setData('slot_assignments', next);
                                             }}
                                         >
@@ -539,6 +602,7 @@ export default function Matches({
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<Match | null>(null);
     const [participantsFor, setParticipantsFor] = useState<Match | null>(null);
+    const [outcomeFor, setOutcomeFor] = useState<Match | null>(null);
     const isTournamentScoped =
         usePage().props.auth.user?.is_tournament_scoped ?? false;
 
@@ -665,7 +729,9 @@ export default function Matches({
                                         </TableCell>
                                         <TableCell>
                                             {match.participants.length === 0 ? (
-                                                '—'
+                                                match.participant_slots.filter((slot) => slot.is_selected)
+                                                    .map((slot) => slot.athlete ? `${slot.delegation} (${slot.athlete})` : `${slot.delegation} (athlete pending)`)
+                                                    .join(', ') || '—'
                                             ) : (
                                                 <ul className="space-y-0.5 text-sm">
                                                     {match.participants.map(
@@ -751,6 +817,16 @@ export default function Matches({
                                                     >
                                                         Edit
                                                     </Button>}
+                                                    {canManage && match.is_scheduled && (
+                                                        <Button variant="outline" size="sm" onClick={() => setOutcomeFor(match)}>
+                                                            Score / Winner
+                                                        </Button>
+                                                    )}
+                                                    {canManage && match.status === 'completed' && !match.has_result && (
+                                                        <Button size="sm" onClick={() => router.post(`/matches/${match.id}/result`)}>
+                                                            Create Result
+                                                        </Button>
+                                                    )}
                                                     {canManage && match.transitions.map(
                                                         (transition) => (
                                                             <ConfirmDialog
@@ -863,6 +939,14 @@ export default function Matches({
                             setParticipantsFor(null);
                         }
                     }}
+                />
+            )}
+            {outcomeFor && (
+                <ManualOutcomeDialog
+                    key={outcomeFor.id}
+                    match={outcomeFor}
+                    open
+                    onOpenChange={(open) => !open && setOutcomeFor(null)}
                 />
             )}
         </>

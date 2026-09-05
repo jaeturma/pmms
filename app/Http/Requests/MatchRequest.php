@@ -2,10 +2,13 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\ManagementTeamMemberStatus;
+use App\Enums\MeetSportAssignmentRole;
 use App\Enums\ScoreboardType;
-use App\Models\Event;
-use App\Models\Meet;
 use App\Enums\UserRole;
+use App\Models\Event;
+use App\Models\EventMatch;
+use App\Models\Meet;
 use App\Services\CompetitionAccessService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -19,9 +22,14 @@ class MatchRequest extends FormRequest
         $access = app(CompetitionAccessService::class);
 
         return $user !== null && ($user->isAdmin()
-            || $user->role === UserRole::TournamentICT
             || $user->canManageProductionAccounts()
-            || $access->hasAssignmentRole($user, $access->competitionManagerRoles(), Meet::current()->id));
+            || ($user->role === UserRole::TournamentICT
+                && $access->hasAssignmentRole($user, [MeetSportAssignmentRole::TournamentICT->value], Meet::current()->id)
+                && ($event = Event::query()->find($this->integer('event_id'))) !== null
+                && $access->canAccessEvent($user, $event, Meet::current()->id))
+            || $access->hasAssignmentRole($user, $access->competitionManagerRoles(), Meet::current()->id)
+            || $user->managementTeamMemberships()->where('status', ManagementTeamMemberStatus::Active)
+                ->whereHas('managementTeam', fn ($team) => $team->where('meet_id', Meet::current()->id)->where('source_code', 'EVENT_SECRETARIAT'))->exists());
     }
 
     /**
@@ -49,13 +57,14 @@ class MatchRequest extends FormRequest
             'competition_area' => ['nullable', 'string', 'max:100'],
             'live_scoring_enabled' => ['sometimes', 'boolean'],
             'awards_medals' => ['sometimes', 'boolean'],
+            'notes' => ['nullable', 'string', 'max:2000'],
         ];
     }
 
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
-            $duplicate = \App\Models\EventMatch::query()
+            $duplicate = EventMatch::query()
                 ->where('meet_id', $this->integer('meet_id'))
                 ->where('event_id', $this->integer('event_id'))
                 ->where('round_label', trim((string) $this->input('round_label')))

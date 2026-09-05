@@ -5,14 +5,14 @@ namespace App\Services;
 use App\Enums\MatchStatus;
 use App\Enums\ResultStatus;
 use App\Models\Entry;
-use App\Models\EventMatch;
 use App\Models\Event;
+use App\Models\EventMatch;
+use App\Models\EventResult;
 use App\Models\EventSchedule;
 use App\Models\Meet;
-use App\Models\EventResult;
 use App\Models\ScoringSession;
-use App\Models\User;
 use App\Models\TeamEntry;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -102,6 +102,48 @@ class CompetitionResultService
             return $result;
         });
         $this->audit->record('result.created_from_live_score', $result, ['match_id' => $match->id, 'scoring_session_id' => $session->id]);
+
+        return $result;
+    }
+
+    public function createFromManualOutcome(EventMatch $match, User $user): EventResult
+    {
+        $this->assertCompleted($match);
+        $this->assertUnique($match);
+        if (EventResult::query()->where('meet_id', $match->meet_id)->where('event_id', $match->event_id)
+            ->where('result_scope', 'event')->exists()) {
+            throw ValidationException::withMessages(['match_id' => __('This Sports Event already has a final result.')]);
+        }
+        $delegationIds = $match->participantSlots()->where('is_selected', true)->pluck('delegation_id')
+            ->merge($match->teamEntries()->pluck('delegation_id'))
+            ->merge($match->entries()->pluck('delegation_id'))->unique()->values();
+        if ($match->winner_delegation_id === null || ! $delegationIds->contains($match->winner_delegation_id)) {
+            throw ValidationException::withMessages(['winner_delegation_id' => __('The completed match needs a valid winner.')]);
+        }
+
+        $result = DB::transaction(function () use ($match, $user, $delegationIds): EventResult {
+            $result = $this->newResult($match, $user, 'manual');
+            $result->forceFill(['result_scope' => 'event'])->save();
+            $nextLoserRank = 2;
+            foreach ($delegationIds as $delegationId) {
+                $isWinner = (int) $delegationId === (int) $match->winner_delegation_id;
+                $result->placements()->create([
+                    'delegation_id' => $delegationId,
+                    'rank' => $isWinner ? 1 : $nextLoserRank++,
+                    'mark' => collect([$match->manual_score_a, $match->manual_score_b])
+                        ->filter(fn ($score) => $score !== null && $score !== '')->implode(' - ') ?: null,
+                    'is_tie' => false,
+                ]);
+            }
+
+            return $result;
+        });
+        $this->audit->record('result.created_from_manual_match', $result, [
+            'match_id' => $match->id,
+            'delegations' => $delegationIds->all(),
+            'winner_delegation_id' => $match->winner_delegation_id,
+            'scores' => [$match->manual_score_a, $match->manual_score_b],
+        ]);
 
         return $result;
     }

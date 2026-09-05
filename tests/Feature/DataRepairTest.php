@@ -1,26 +1,33 @@
 <?php
 
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\Delegation;
 use App\Models\District;
+use App\Models\Entry;
+use App\Models\Event;
+use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
 use App\Models\School;
+use App\Models\Sport;
 use App\Models\User;
 use App\Services\RegistrationDataConsistencyService;
-use Inertia\Testing\AssertableInertia;
 use Illuminate\Support\Facades\Route;
+use Inertia\Testing\AssertableInertia;
 
 beforeEach(function () {
     $this->withoutVite();
 });
 
-test('system administrators and tournament ICT can view problematic registration data', function (User $user) {
+test('system administrators can view all problematic registration data', function () {
     $delegationSchool = School::factory()->create();
     $otherSchool = School::factory()->create();
     $delegation = Delegation::factory()->create(['school_id' => $delegationSchool->id, 'district_id' => null]);
     $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id, 'school_id' => $otherSchool->id]);
 
-    $this->actingAs($user)->get('/data-repair')->assertOk()
+    $this->actingAs(User::factory()->admin()->create())->get('/data-repair')->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('data-repair/index')
             ->has('issues', fn (AssertableInertia $issues) => $issues
@@ -29,10 +36,32 @@ test('system administrators and tournament ICT can view problematic registration
                 ->where('0.code', 'school_mismatch')
                 ->where('0.repair.code', 'use_delegation_school')
                 ->etc()));
-})->with([
-    'admin' => fn () => User::factory()->admin()->create(),
-    'ICT' => fn () => User::factory()->create(['role' => UserRole::TournamentICT]),
-]);
+});
+
+test('tournament ICT sees data issues only for assigned sports', function () {
+    $ownSport = Sport::factory()->create();
+    $otherSport = Sport::factory()->create();
+    $ownEvent = Event::factory()->create(['sport_id' => $ownSport->id]);
+    $otherEvent = Event::factory()->create(['sport_id' => $otherSport->id]);
+    $delegationSchool = School::factory()->create();
+    $delegation = Delegation::factory()->create(['school_id' => $delegationSchool->id, 'district_id' => null]);
+    $ownAthlete = Athlete::factory()->create(['delegation_id' => $delegation->id, 'school_id' => School::factory()->create()->id]);
+    $otherAthlete = Athlete::factory()->create(['delegation_id' => $delegation->id, 'school_id' => School::factory()->create()->id]);
+    Entry::factory()->create(['athlete_id' => $ownAthlete->id, 'delegation_id' => $delegation->id, 'event_id' => $ownEvent->id]);
+    Entry::factory()->create(['athlete_id' => $otherAthlete->id, 'delegation_id' => $delegation->id, 'event_id' => $otherEvent->id]);
+    $meetSport = MeetSport::factory()->create(['meet_id' => $delegation->meet_id, 'sport_id' => $ownSport->id]);
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+    MeetSportAssignment::factory()->create([
+        'user_id' => $ict->id,
+        'meet_sport_id' => $meetSport->id,
+        'role' => MeetSportAssignmentRole::TournamentICT,
+        'status' => MeetSportAssignmentStatus::Active,
+    ]);
+
+    $this->actingAs($ict)->get('/data-repair')->assertInertia(fn (AssertableInertia $page) => $page
+        ->where('issues', fn ($issues) => collect($issues)->contains(fn ($issue) => $issue['type'] === 'athlete' && $issue['id'] === $ownAthlete->id)
+            && ! collect($issues)->contains(fn ($issue) => $issue['type'] === 'athlete' && $issue['id'] === $otherAthlete->id)));
+});
 
 test('unambiguous athlete school inconsistencies can be repaired automatically', function () {
     $delegationSchool = School::factory()->create();

@@ -19,7 +19,7 @@ class MedalAwardService
             return;
         }
 
-        $result->loadMissing(['event.medalConfig', 'placements.entry.athlete', 'placements.teamEntry']);
+        $result->loadMissing(['event.medalConfig', 'placements.entry.athlete', 'placements.teamEntry', 'placements.delegation']);
         $config = $result->event->resolvedMedalConfig();
 
         if ($config->awards_medals && ! $config->isComplete()) {
@@ -38,10 +38,12 @@ class MedalAwardService
                 MedalAward::query()->create([
                     'event_result_id' => $result->id,
                     'result_placement_id' => $placement->id,
-                    'delegation_id' => $placement->teamEntry?->delegation_id ?? $placement->entry?->delegation_id,
-                    'school_id' => $placement->team_entry_id === null ? $placement->entry->athlete->school_id : null,
+                    'delegation_id' => $placement->delegation_id ?? $placement->teamEntry?->delegation_id ?? $placement->entry?->delegation_id,
+                    'school_id' => $placement->delegation_id === null && $placement->team_entry_id === null ? $placement->entry?->athlete?->school_id : null,
                     'rank' => $placement->rank,
-                    'medal_type' => match ($placement->rank) { 1 => 'gold', 2 => 'silver', default => 'bronze' },
+                    'medal_type' => match ($placement->rank) {
+                        1 => 'gold', 2 => 'silver', default => 'bronze'
+                    },
                     'physical_quantity' => $config->physicalQuantityForRank($placement->rank),
                     'tally_quantity' => $config->tallyQuantityForRank($placement->rank),
                     'result_version' => (int) ($result->version ?? 1),
@@ -55,7 +57,7 @@ class MedalAwardService
     private function logicalMedalPlacements(Collection $placements, bool $isTeamEvent): Collection
     {
         return $placements->unique(fn (ResultPlacement $placement): string => $isTeamEvent
-            ? 'team:'.$placement->rank.':'.($placement->team_entry_id ?? $placement->entry?->delegation_id)
+            ? 'team:'.$placement->rank.':'.($placement->delegation_id ?? $placement->team_entry_id ?? $placement->entry?->delegation_id)
             : "entry:{$placement->id}")->values();
     }
 }

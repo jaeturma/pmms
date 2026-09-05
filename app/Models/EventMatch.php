@@ -27,7 +27,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['meet_id', 'event_id', 'event_schedule_id', 'competition_area', 'round_label', 'sequence', 'live_scoring_enabled', 'awards_medals'])]
+#[Fillable(['meet_id', 'event_id', 'event_schedule_id', 'competition_area', 'round_label', 'sequence', 'live_scoring_enabled', 'awards_medals', 'manual_score_a', 'manual_score_b', 'winner_delegation_id', 'notes'])]
 class EventMatch extends Model
 {
     /** @use HasFactory<EventMatchFactory> */
@@ -50,9 +50,20 @@ class EventMatch extends Model
         ];
     }
 
-    public function scopeReal($query) { return $query->whereNull('demo_scenario_id'); }
-    public function scopeDemo($query) { return $query->whereNotNull('demo_scenario_id'); }
-    public function demoScenario(): BelongsTo { return $this->belongsTo(DemoScenario::class); }
+    public function scopeReal($query)
+    {
+        return $query->whereNull('demo_scenario_id');
+    }
+
+    public function scopeDemo($query)
+    {
+        return $query->whereNotNull('demo_scenario_id');
+    }
+
+    public function demoScenario(): BelongsTo
+    {
+        return $this->belongsTo(DemoScenario::class);
+    }
 
     /**
      * @return BelongsTo<Meet, $this>
@@ -100,6 +111,11 @@ class EventMatch extends Model
     public function participantSlots(): HasMany
     {
         return $this->hasMany(MatchParticipantSlot::class, 'match_id');
+    }
+
+    public function winnerDelegation(): BelongsTo
+    {
+        return $this->belongsTo(Delegation::class, 'winner_delegation_id');
     }
 
     /**

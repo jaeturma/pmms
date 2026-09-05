@@ -22,8 +22,8 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rules\File;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ResultWorkflowController extends Controller
 {
@@ -43,6 +43,7 @@ class ResultWorkflowController extends Controller
             'meet', 'event.sport', 'event.sportCategory',
             'placements.entry.athlete.school.district', 'match', 'schedule.venue',
             'placements.teamEntry.delegation.school', 'placements.teamEntry.delegation.district',
+            'placements.delegation.school', 'placements.delegation.district',
         ]);
 
         $result->forceFill([
@@ -187,7 +188,8 @@ class ResultWorkflowController extends Controller
         abort_unless(in_array($result->status, [ResultStatus::Encoded, ResultStatus::Returned, ResultStatus::Reopened], true), 422);
         abort_if(! $canDeferIssues && $result->match_id !== null && $result->tm_confirmed_at === null, 422, 'Tournament Manager confirmation is required before submission.');
 
-        if ((bool) config('pmms.results.signed_result_form_required') && $result->currentSignedForm() === null) {
+        $urgentManualResult = $result->result_source === 'manual' && $result->event_schedule_id === null;
+        if (! $urgentManualResult && (bool) config('pmms.results.signed_result_form_required') && $result->currentSignedForm() === null) {
             throw ValidationException::withMessages(['file' => 'A signed Result Form for the current result version is required.']);
         }
 
@@ -336,7 +338,8 @@ class ResultWorkflowController extends Controller
             abort_unless($locked->status === ResultStatus::Validated, 422, 'Only a validated result awaiting officialization may be marked official.');
             abort_unless($locked->isFinalEventResult(), 422, 'Only a final Sports Event Result may be marked official. Completed Match Results remain operational and unofficial.');
             abort_unless($locked->submitted_at !== null && $locked->submitted_by !== null, 422, 'The final result must be submitted before officialization.');
-            abort_if($locked->currentSignedForm() === null, 422, 'The signed Result Form is missing.');
+            abort_if($locked->currentSignedForm() === null
+                && ! ($locked->result_source === 'manual' && $locked->event_schedule_id === null), 422, 'The signed Result Form is missing.');
             abort_unless($locked->placements()->exists(), 422, 'The final result has no placements.');
 
             $duplicateRanks = $locked->placements()->select('rank')->groupBy('rank')->havingRaw('COUNT(*) > 1')->pluck('rank');

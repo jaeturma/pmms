@@ -117,6 +117,8 @@ class ResultController extends Controller
                 'placements.entry.delegation.school:id,name',
                 'placements.teamEntry.delegation.school:id,name',
                 'placements.teamEntry.delegation.district:id,name',
+                'placements.delegation.school:id,name',
+                'placements.delegation.district:id,name',
                 'placements.teamEntry.members:id,team_entry_id,athlete_id',
             ])
             ->orderByDesc('id');
@@ -283,7 +285,7 @@ class ResultController extends Controller
                         'can_officialize' => $user->hasPermission(Permission::ResultsOfficialize, $result->meet)
                             && $result->isFinalEventResult()
                             && $result->status === ResultStatus::Validated
-                            && $attachment !== null,
+                            && ($attachment !== null || ($result->result_source === 'manual' && $result->event_schedule_id === null)),
                         'form_generated' => $result->form_generated_version === $result->version,
                         'tm_confirmed' => $result->tm_confirmed_at !== null,
                         'can_tm_confirm' => $sportId !== null && $this->userManagedSportIds($user)->contains($sportId)
@@ -316,12 +318,15 @@ class ResultController extends Controller
                             ->map(fn (ResultPlacement $placement): array => [
                                 'entry_id' => $placement->entry_id,
                                 'team_entry_id' => $placement->team_entry_id,
+                                'delegation_id' => $placement->delegation_id,
                                 'rank' => $placement->rank,
                                 'athlete' => $placement->teamEntry?->delegation?->registrantName()
+                                    ?? $placement->delegation?->registrantName()
                                     ?? $placement->entry?->athlete?->fullName()
                                     ?? $placement->entry?->delegation?->school?->name
                                     ?? 'Archived participant',
                                 'school' => $placement->teamEntry?->delegation?->registrantName()
+                                    ?? $placement->delegation?->registrantName()
                                     ?? $placement->entry?->athlete?->school?->name
                                     ?? $placement->entry?->delegation?->school?->name
                                     ?? 'School unavailable',
@@ -952,6 +957,9 @@ class ResultController extends Controller
             }
             if ($placement->teamEntry !== null && $placement->teamEntry->members->isEmpty()) {
                 $issues[] = __('A team has no assigned athletes.');
+            }
+            if ($placement->delegation_id !== null && $placement->entry_id === null && $placement->team_entry_id === null) {
+                $issues[] = __('Athlete or team association is pending for a delegation-only placement.');
             }
         }
 

@@ -585,7 +585,7 @@ test('a coach cannot view or register athletes for another delegation', function
             'lrn' => '999999999999',
             'grade_level' => 9,
         ])
-        ->assertSessionHasErrors('school_id');
+        ->assertForbidden();
 
     $this->assertDatabaseMissing('athletes', ['lrn' => '999999999999']);
 });

@@ -41,8 +41,8 @@
         @foreach ($result->placements->sortBy('rank') as $placement)
             <tr>
                 <td>{{ $placement->rank }}</td>
-                <td>{{ $placement->teamEntry?->delegation?->registrantName() ?? $placement->entry?->athlete?->fullName() ?? 'Archived participant' }}</td>
-                <td>{{ $placement->teamEntry?->delegation?->registrantName() ?? (($placement->entry?->athlete?->school?->district?->name ? $placement->entry->athlete->school->district->name.' / ' : '').($placement->entry?->athlete?->school?->name ?? 'School unavailable')) }}</td>
+                <td>{{ $placement->delegation?->registrantName() ?? $placement->teamEntry?->delegation?->registrantName() ?? $placement->entry?->athlete?->fullName() ?? 'Archived participant' }}</td>
+                <td>{{ $placement->delegation?->registrantName() ?? $placement->teamEntry?->delegation?->registrantName() ?? (($placement->entry?->athlete?->school?->district?->name ? $placement->entry->athlete->school->district->name.' / ' : '').($placement->entry?->athlete?->school?->name ?? 'School unavailable')) }}</td>
                 <td>{{ $placement->mark ?: '—' }}</td>
                 <td>{{ $placement->is_tie ? 'Tie' : '' }}</td>
             </tr>
