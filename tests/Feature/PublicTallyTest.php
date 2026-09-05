@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\AgeDivision;
+use App\Enums\ResultStatus;
 use App\Models\Athlete;
 use App\Models\Delegation;
 use App\Models\District;
@@ -59,11 +60,11 @@ test('guests can view the public tally; unpublished meets 404', function () {
     $this->get("/meets/{$hidden->id}/tally")->assertNotFound();
 });
 
-test('accepted unofficial results do not contribute to the official medal tally', function () {
+test('accepted results immediately contribute to the operational medal tally', function () {
     $meet = Meet::factory()->active()->published()->create();
     $unofficial = EventResult::factory()->create([
         'meet_id' => $meet->id,
-        'status' => \App\Enums\ResultStatus::Validated,
+        'status' => ResultStatus::Validated,
         'validated_at' => now(),
     ]);
 
@@ -71,7 +72,7 @@ test('accepted unofficial results do not contribute to the official medal tally'
 
     $this->get("/meets/{$meet->id}/tally")
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('totals.gold', 0)
+            ->where('totals.gold', 1)
             ->where('totals.silver', 0)
             ->where('totals.bronze', 0));
 });

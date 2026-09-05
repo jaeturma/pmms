@@ -22,6 +22,7 @@ use App\Models\Sport;
 use App\Models\SportRosterMember;
 use App\Models\TeamEntry;
 use App\Models\User;
+use App\Services\MedalTallyService;
 use Inertia\Testing\AssertableInertia;
 
 function confirmedEntryFor(EventMatch $match): Entry
@@ -761,7 +762,7 @@ test('duplicate match round and sequence returns a clear validation error', func
 });
 
 test('urgent meet-day workflow records delegation-only result without fabricating entries or a schedule', function () {
-    $meet = Meet::factory()->active()->create();
+    $meet = Meet::factory()->active()->published()->create();
     $event = Event::factory()->team()->create();
     $meet->events()->attach($event);
     $delegations = Delegation::factory()->count(2)->approved()->create(['meet_id' => $meet->id]);
@@ -771,6 +772,7 @@ test('urgent meet-day workflow records delegation-only result without fabricatin
         'event_id' => $event->id,
         'round_label' => 'Urgent Final',
         'sequence' => 1,
+        'awards_medals' => true,
         'notes' => 'Created courtside after the printed schedule changed.',
     ])->assertSessionHasNoErrors();
 
@@ -806,6 +808,10 @@ test('urgent meet-day workflow records delegation-only result without fabricatin
     $this->actingAs($admin)->post("/results/{$result->id}/submit")
         ->assertSessionHasNoErrors();
     expect($result->fresh()->status->value)->toBe('submitted');
+    $this->actingAs($admin)->post("/results/{$result->id}/event-secretariat-validation")
+        ->assertSessionHasNoErrors();
+    expect(collect(app(MedalTallyService::class)->standings($meet->id)['districts'])->sum('gold'))->toBe(1);
+    $this->get("/meets/{$meet->id}/results")->assertOk();
     $this->assertDatabaseHas('audit_logs', ['action' => 'match.manual_outcome_saved']);
     $this->assertDatabaseHas('audit_logs', ['action' => 'result.created_from_manual_match']);
 });

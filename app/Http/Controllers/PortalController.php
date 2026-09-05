@@ -59,6 +59,7 @@ class PortalController extends Controller
 
         return Storage::disk($upload->disk)->response($upload->path, $upload->original_name);
     }
+
     /** Public, stable About URL for the active published meet. */
     public function currentAbout(): Response
     {
@@ -277,9 +278,9 @@ class PortalController extends Controller
                         ->sortBy([['rank', 'asc']])
                         ->map(fn (ResultPlacement $placement): array => [
                             'rank' => $placement->rank,
-                            'athlete' => $placement->entry->athlete->fullName(),
-                            'school' => $placement->entry->athlete->school?->name ?? __('Not provided'),
-                            'delegation' => $placement->entry->athlete->school?->district?->name ?? $placement->entry->delegation->registrantName(),
+                            'athlete' => $this->placementParticipantName($placement),
+                            'school' => $this->placementSchoolName($placement),
+                            'delegation' => $this->placementDelegationName($placement),
                             'mark' => $placement->mark,
                             'is_tie' => $placement->is_tie,
                         ])
@@ -504,8 +505,8 @@ class PortalController extends Controller
                         'top_placements' => $result === null ? [] : $result->placements
                             ->map(fn (ResultPlacement $placement): array => [
                                 'rank' => $placement->rank,
-                                'athlete' => $placement->entry->athlete->fullName(),
-                                'school' => $placement->entry->athlete->school?->name ?? __('Not provided'),
+                                'athlete' => $this->placementParticipantName($placement),
+                                'school' => $this->placementSchoolName($placement),
                                 'mark' => $placement->mark,
                             ])
                             ->values()
@@ -622,9 +623,9 @@ class PortalController extends Controller
                 ->sortBy('rank')
                 ->map(fn (ResultPlacement $placement): array => [
                     'rank' => $placement->rank,
-                    'athlete' => $placement->entry->athlete->fullName(),
-                    'school' => $placement->entry->athlete->school?->name ?? __('Not provided'),
-                    'delegation' => $placement->entry->athlete->school?->district?->name ?? $placement->entry->delegation->registrantName(),
+                    'athlete' => $this->placementParticipantName($placement),
+                    'school' => $this->placementSchoolName($placement),
+                    'delegation' => $this->placementDelegationName($placement),
                     'mark' => $placement->mark,
                     'is_tie' => $placement->is_tie,
                 ])
@@ -934,9 +935,9 @@ class PortalController extends Controller
                 ),
                 'sport_id' => $placement->result->event->sport->id,
                 'rank' => $placement->rank,
-                'athlete' => $placement->entry->athlete->fullName(),
-                'school' => $placement->entry->athlete->school?->name ?? __('Not provided'),
-                'delegation' => $placement->entry->athlete->school?->district?->name ?? $placement->entry->delegation->registrantName(),
+                'athlete' => $this->placementParticipantName($placement),
+                'school' => $this->placementSchoolName($placement),
+                'delegation' => $this->placementDelegationName($placement),
                 'mark' => $placement->mark,
                 'is_tie' => $placement->is_tie,
             ])
@@ -1537,8 +1538,8 @@ class PortalController extends Controller
         if ($placement !== null) {
             $winner = sprintf(
                 '1st: %s (%s)',
-                $placement->entry->athlete->fullName(),
-                $placement->entry->athlete->school?->name ?? __('Not provided'),
+                $this->placementParticipantName($placement),
+                $this->placementSchoolName($placement),
             );
             $mark = $placement->mark;
         }
@@ -1865,9 +1866,9 @@ class PortalController extends Controller
                 ->sortBy('rank')
                 ->map(fn (ResultPlacement $placement): array => [
                     'rank' => $placement->rank,
-                    'athlete' => $placement->entry->athlete->fullName(),
-                    'school' => $placement->entry->athlete->school?->name ?? __('Not provided'),
-                    'delegation' => $placement->entry->athlete->school?->district?->name ?? $placement->entry->delegation->registrantName(),
+                    'athlete' => $this->placementParticipantName($placement),
+                    'school' => $this->placementSchoolName($placement),
+                    'delegation' => $this->placementDelegationName($placement),
                     'mark' => $placement->mark,
                     'is_tie' => $placement->is_tie,
                 ])
@@ -1903,5 +1904,30 @@ class PortalController extends Controller
             ])
             ->values()
             ->all();
+    }
+
+    private function placementParticipantName(ResultPlacement $placement): string
+    {
+        return $placement->entry?->athlete?->fullName()
+            ?? $placement->teamEntry?->delegation?->registrantName()
+            ?? $placement->delegation?->registrantName()
+            ?? __('Participant pending');
+    }
+
+    private function placementSchoolName(ResultPlacement $placement): string
+    {
+        return $placement->entry?->athlete?->school?->name
+            ?? $placement->teamEntry?->delegation?->school?->name
+            ?? $placement->delegation?->school?->name
+            ?? __('Not provided');
+    }
+
+    private function placementDelegationName(ResultPlacement $placement): string
+    {
+        return $placement->entry?->athlete?->school?->district?->name
+            ?? $placement->teamEntry?->delegation?->registrantName()
+            ?? $placement->delegation?->registrantName()
+            ?? $placement->entry?->delegation?->registrantName()
+            ?? __('Delegation pending');
     }
 }
