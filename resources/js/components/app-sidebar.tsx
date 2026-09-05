@@ -433,6 +433,9 @@ export function AppSidebar() {
             .filter((item): item is NavItem => item !== undefined);
 
     const navItems: NavItem[] = byTitle(['Dashboard']);
+    if (auth.user?.can_operate_scoreboard) {
+        navItems.push({ title: 'Scoreboard', href: '/scoreboards', icon: Swords });
+    }
     if (auth.user?.can_access_meal_stub) {
         navItems.push({
             title: 'Meals',

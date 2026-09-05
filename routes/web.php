@@ -341,6 +341,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('swimming/rosters', [SwimmingRosterController::class, 'index'])->name('swimming.rosters.index');
 
     Route::get('matches', [MatchController::class, 'index'])->name('matches.index');
+    Route::get('scoreboards', [ScoringSessionController::class, 'index'])->name('scoreboards.index');
+    Route::post('matches/{match}/scoreboard/reset', [ScoringSessionController::class, 'reset'])->name('scoring.reset');
     Route::get('matches/{match}/scoring-session', [ScoringSessionController::class, 'show'])->name('scoring.show');
     Route::get('matches/{match}/scoreboard', [ScoringSessionController::class, 'board'])->name('scoring.board');
     // Match controllers perform precise assignment/ICT authorization. Keeping

@@ -127,6 +127,7 @@ class ScoringSession extends Model
             'match_id' => $this->match_id,
             'status' => $this->status->value,
             'status_label' => $this->status->label(),
+            'scoreboard_mode' => $this->sport_state['scoreboard_mode'] ?? null,
             'side_a_label' => $this->side_a_label,
             'side_b_label' => $this->side_b_label,
             'side_a_logo_url' => $this->districtLogoUrl($this->side_a_label),

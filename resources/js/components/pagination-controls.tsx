@@ -34,57 +34,111 @@ export function PaginationControls({
             { preserveState: true, preserveScroll: true },
         );
     };
-    const windowStart =
-        page.current_page % 3 === 0
-            ? page.current_page
-            : Math.floor((page.current_page - 1) / 3) * 3 + 1;
-    const visiblePages = Array.from(
-        { length: Math.min(3, page.last_page - windowStart + 1) },
-        (_, index) => windowStart + index,
+    const start = Math.max(
+        1,
+        Math.min(page.current_page - 1, page.last_page - 2),
     );
+    const numbers = [
+        ...new Set([
+            start,
+            start + 1,
+            start + 2,
+            page.last_page - 2,
+            page.last_page - 1,
+            page.last_page,
+        ]),
+    ]
+        .filter((n) => n > 0 && n <= page.last_page)
+        .sort((a, b) => a - b);
+    const visiblePages: (number | 'gap')[] = [];
+    numbers.forEach((number, i) => {
+        if (i > 0 && number > numbers[i - 1] + 1) {
+            visiblePages.push('gap');
+        }
+
+        visiblePages.push(number);
+    });
 
     return (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">
                 Page {page.current_page} of {page.last_page} ({page.total}{' '}
                 {label})
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-1">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label="First page"
+                    disabled={page.current_page === 1}
+                    onClick={() => go(1)}
+                >
+                    {'|<'}
+                </Button>
                 <Button
                     variant="outline"
                     size="sm"
                     disabled={page.current_page === 1}
+                    aria-label="Previous page"
                     onClick={() => go(page.current_page - 1)}
                 >
-                    Previous
+                    {'<'}
                 </Button>
-                {visiblePages.map((number) => (
-                    <Button
-                        key={number}
-                        variant={
-                            number === page.current_page ? 'default' : 'outline'
-                        }
-                        size="sm"
-                        asChild
-                    >
-                        <Link
-                            href={url}
-                            data={{ ...params, [pageName]: String(number) }}
-                            preserveState
-                            preserveScroll
-                            prefetch
+                {visiblePages.map((number) =>
+                    number === 'gap' ? (
+                        <span
+                            key="gap"
+                            className="px-2 py-1"
+                            aria-hidden="true"
                         >
-                            {number}
-                        </Link>
-                    </Button>
-                ))}
+                            ...
+                        </span>
+                    ) : (
+                        <Button
+                            key={number}
+                            variant={
+                                number === page.current_page
+                                    ? 'default'
+                                    : 'outline'
+                            }
+                            size="sm"
+                            asChild
+                        >
+                            <Link
+                                aria-current={
+                                    number === page.current_page
+                                        ? 'page'
+                                        : undefined
+                                }
+                                aria-label={`Page ${number}`}
+                                href={url}
+                                data={{ ...params, [pageName]: String(number) }}
+                                preserveState
+                                preserveScroll
+                                prefetch
+                            >
+                                {number}
+                            </Link>
+                        </Button>
+                    ),
+                )}
                 <Button
                     variant="outline"
                     size="sm"
                     disabled={page.current_page === page.last_page}
+                    aria-label="Next page"
                     onClick={() => go(page.current_page + 1)}
                 >
-                    Next
+                    {'>'}
+                </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label="Last page"
+                    disabled={page.current_page === page.last_page}
+                    onClick={() => go(page.last_page)}
+                >
+                    {'>|'}
                 </Button>
             </div>
         </div>

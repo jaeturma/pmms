@@ -64,7 +64,10 @@ export default function PortalScoreboard({
     }
 
     useEffect(() => {
-        if (!visible || session?.status === 'ended') {
+        if (
+            !visible ||
+            (session?.status === 'ended' && !match.scoreboard_mode)
+        ) {
             return;
         }
 
@@ -111,6 +114,26 @@ export default function PortalScoreboard({
         <>
             <Head title={`${match.event} — Live Scoreboard`} />
             <div className="flex flex-col gap-6">
+                {!isBasketball &&
+                    !isSoftball &&
+                    !isBoxing &&
+                    (session?.scoreboard_mode ?? match.scoreboard_mode) && (
+                        <div className="rounded-xl border border-amber-500/50 bg-amber-500/15 p-4 text-center text-xl font-bold">
+                            {
+                                (
+                                    {
+                                        test: 'Test',
+                                        finals: 'Finals Game',
+                                        championship: 'Championship Game',
+                                    } as Record<string, string>
+                                )[
+                                    session?.scoreboard_mode ??
+                                        match.scoreboard_mode ??
+                                        'test'
+                                ]
+                            }
+                        </div>
+                    )}
                 {isBasketball || isSoftball || isBoxing ? (
                     <PortalSportEventStrip
                         sportEmoji={

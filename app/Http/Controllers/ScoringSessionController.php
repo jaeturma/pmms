@@ -56,6 +56,48 @@ class ScoringSessionController extends Controller
         private readonly CompetitionResultService $competitionResults,
     ) {}
 
+    public function index(Request $request): Response
+    {
+        $user = $request->user();
+        abort_unless(\App\Services\ScheduleScoreboardService::canOperate($user), 403);
+        $access = app(CompetitionAccessService::class);
+        $matches = EventMatch::query()->real()->where('meet_id', \App\Models\Meet::current()->id)
+            ->whereNotNull('scoreboard_mode')
+            ->where('live_scoring_enabled', true)
+            ->when(! $user->isAdmin(), fn ($q) => $q->whereHas('event.sport.meetSports', fn ($scope) => $scope
+                ->where('meet_id', \App\Models\Meet::current()->id)->where('active', true)
+                ->whereHas('assignments', fn ($assignment) => $assignment->where('user_id', $user->id)->where('status', 'active')->where('role', 'tournament_ict'))))
+            ->whereHas('event.sport', fn ($sport) => $sport->whereIn('name', ['Basketball', 'Baseball', 'Boxing']))
+            ->when(! $user->isAdmin(), fn ($q) => $q->whereIn('event_id', $access->eventIds($user, \App\Models\Meet::current()->id)))
+            ->with(['event.sport', 'schedule.venue'])->orderByDesc('id')->get()
+            ->filter(fn ($match) => $this->canManage($user, $match))->values()
+            ->map(fn ($match) => [
+                'id' => $match->id, 'event' => $match->event->name, 'sport' => $match->event->sport->name,
+                'mode' => $match->scoreboard_mode === null ? $match->round_label : \App\Services\ScheduleScoreboardService::label($match->scoreboard_mode),
+                'schedule' => $match->schedule?->scheduled_date?->format('M j, Y').' '.substr((string) $match->schedule?->starts_at, 0, 5),
+                'venue' => $match->schedule?->venue?->name,
+                'viewer_url' => route('public.scoreboard', [$match->meet_id, $match->id]),
+            ]);
+        return Inertia::render('scoring/index', ['matches' => $matches]);
+    }
+
+    public function reset(Request $request, EventMatch $match): RedirectResponse
+    {
+        $this->authorizeManage($request, $match);
+        abort_unless($match->scoreboard_mode !== null && $match->live_scoring_enabled, 422);
+        return DB::transaction(function () use ($request, $match): RedirectResponse {
+            $match = EventMatch::query()->lockForUpdate()->findOrFail($match->id);
+            foreach ($match->scoringSessions()->where('status', '!=', ScoringSessionStatus::Ended->value)->get() as $session) {
+                $session->forceFill(['status' => ScoringSessionStatus::Ended, 'ended_by' => $request->user()->id,
+                    'ended_at' => now(), 'sport_state' => $this->materializeCountdownClocks($session->sport_state ?? [])])->save();
+            }
+            $this->audit->record('scoreboard.reset', $match, ['mode' => $match->scoreboard_mode]);
+            $request->merge(['side_a_label' => $match->scoringSessions()->latest('id')->value('side_a_label') ?? 'Side A',
+                'side_b_label' => $match->scoringSessions()->latest('id')->value('side_b_label') ?? 'Side B']);
+            return $this->store($request, $match);
+        });
+    }
+
     /**
      * Current (most recent) scoring session for a match, for the
      * interactive display and for polling — works whether or not Reverb
@@ -114,6 +156,8 @@ class ScoringSessionController extends Controller
                 'scheduled_date' => $match->schedule?->scheduled_date?->format('M j, Y'),
                 'status' => $match->status->value,
                 'is_scheduled' => $match->status === MatchStatus::Scheduled,
+                'scoreboard_mode' => $match->scoreboard_mode,
+                'viewer_url' => route('public.scoreboard', [$match->meet_id, $match->id]),
             ],
             'suggestedLabels' => $sideLabels->count() === 2 ? [
                 $sideLabels[0],
@@ -135,6 +179,11 @@ class ScoringSessionController extends Controller
      */
     public function store(Request $request, EventMatch $match): RedirectResponse
     {
+        return DB::transaction(fn () => $this->startSession($request, EventMatch::query()->lockForUpdate()->findOrFail($match->id)));
+    }
+
+    private function startSession(Request $request, EventMatch $match): RedirectResponse
+    {
         $this->authorizeManage($request, $match);
 
         if (! $match->live_scoring_enabled) {
@@ -143,7 +192,7 @@ class ScoringSessionController extends Controller
             ]);
         }
 
-        if ($match->status !== MatchStatus::Scheduled) {
+        if ($match->status !== MatchStatus::Scheduled && $match->scoreboard_mode === null) {
             throw ValidationException::withMessages([
                 'match_id' => __('Live scoring can only start for a scheduled match.'),
             ]);
@@ -159,6 +208,7 @@ class ScoringSessionController extends Controller
             'side_a_label' => ['required', 'string', 'max:255'],
             'side_b_label' => ['required', 'string', 'max:255'],
             'board_type' => ['nullable', 'string', Rule::in([ScoreboardType::Generic->value])],
+            'scoreboard_mode' => ['sometimes', 'required', Rule::in(['test', 'finals', 'championship'])],
         ]);
 
         /** @var User $user */
@@ -182,6 +232,9 @@ class ScoringSessionController extends Controller
             $data['side_b_label'] = $scheduledLabels[1];
         }
 
+        if ($match->scoreboard_mode !== null && isset($data['scoreboard_mode'])) {
+            $match->forceFill(['scoreboard_mode' => $data['scoreboard_mode'], 'round_label' => \App\Services\ScheduleScoreboardService::label($data['scoreboard_mode'])])->save();
+        }
         $session = ScoringSession::create([
             'match_id' => $match->id,
             'side_a_label' => $data['side_a_label'],
@@ -276,6 +329,9 @@ class ScoringSessionController extends Controller
             default => null,
         };
 
+        if ($match->scoreboard_mode !== null) {
+            $initialSportState = [...($initialSportState ?? []), 'scoreboard_mode' => $match->scoreboard_mode];
+        }
         if ($initialSportState !== null) {
             $session->forceFill(['sport_state' => $initialSportState])->save();
         }
@@ -449,8 +505,10 @@ class ScoringSessionController extends Controller
             'recorded_by' => $user->id,
         ]);
 
-        $session->match->forceFill(['status' => MatchStatus::Completed])->save();
-        $this->competitionResults->createFromLiveScore($session->fresh(), $user);
+        if ($session->match->scoreboard_mode === null) {
+            $session->match->forceFill(['status' => MatchStatus::Completed])->save();
+            $this->competitionResults->createFromLiveScore($session->fresh(), $user);
+        }
 
         $this->audit->record('scoring.ended', $session, $this->context($session));
 
@@ -2488,6 +2546,12 @@ class ScoringSessionController extends Controller
 
         if ($user->hasRole(UserRole::Admin)) {
             return true;
+        }
+
+        if ($match->scoreboard_mode !== null) {
+            return $user->meetSportAssignments()->where('status', 'active')->where('role', 'tournament_ict')
+                ->whereHas('meetSport', fn ($q) => $q->where('meet_id', $match->meet_id)->where('sport_id', $match->event->sport_id)->where('active', true))
+                ->exists() && app(CompetitionAccessService::class)->canAccessEvent($user, $match->event, $match->meet_id);
         }
 
         // Deliberately not `loadMissing('event:id,sport_id')`: restricting

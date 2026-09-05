@@ -128,6 +128,7 @@ export type PortalAthleteParticipant = {
 };
 
 export type PortalLiveSession = {
+    scoreboard_mode?: string | null;
     id: number;
     match_id: number;
     status: string;
@@ -406,6 +407,7 @@ export type PortalSportPersonnel = {
 };
 
 export type PortalMatchSummary = {
+    scoreboard_mode?: string | null;
     id: number;
     event: string;
     sport: string;

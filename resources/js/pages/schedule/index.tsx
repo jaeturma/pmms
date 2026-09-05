@@ -20,7 +20,6 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { formatTime } from '@/lib/format-time';
 import {
     Select,
     SelectContent,
@@ -36,6 +35,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { formatTime } from '@/lib/format-time';
 import { schedule as scheduleSheet } from '@/routes/reports';
 import { destroy, index, store, update } from '@/routes/schedule';
 import { board as scoringBoard } from '@/routes/scoring';
@@ -56,6 +56,8 @@ type ScheduleSlot = {
     ends_at: string;
     note: string | null;
     match_id: number | null;
+    live_scoreboard: boolean;
+    scoreboard_mode: string;
     is_live: boolean;
     live_score_available: boolean;
     can_manage: boolean;
@@ -65,6 +67,7 @@ type Option = { id: number; label: string };
 
 type EventOption = Option & {
     sport_id: number;
+    supports_scoreboard: boolean;
     sport_category_id: number | null;
     venue_id: number | null;
 };
@@ -127,6 +130,8 @@ function SlotFormDialog({
         starts_at: slot?.starts_at ?? '',
         ends_at: slot?.ends_at ?? '',
         note: slot?.note ?? '',
+        live_scoreboard: slot?.live_scoreboard ?? false,
+        scoreboard_mode: slot?.scoreboard_mode ?? 'test',
     });
 
     const eventVenueOptions = venueOptions.filter(
@@ -184,6 +189,11 @@ function SlotFormDialog({
                                     (option) => String(option.id) === value,
                                 );
                                 setData('event_id', value);
+
+                                if (!event?.supports_scoreboard) {
+setData('live_scoreboard', false);
+}
+
                                 setData(
                                     'sport_category_id',
                                     event?.sport_category_id
@@ -217,9 +227,7 @@ function SlotFormDialog({
                     </div>
                     {needsArea && (
                         <div className="space-y-2">
-                            <Label htmlFor="slot-area">
-                                Competition area
-                            </Label>
+                            <Label htmlFor="slot-area">Competition area</Label>
                             <Select
                                 value={data.competition_area_id}
                                 onValueChange={(value) =>
@@ -228,9 +236,7 @@ function SlotFormDialog({
                                 disabled={areaOptions.length === 0}
                             >
                                 <SelectTrigger id="slot-area">
-                                    <SelectValue
-                                        placeholder="Select a competition area"
-                                    />
+                                    <SelectValue placeholder="Select a competition area" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {areaOptions.map((option) => (
@@ -294,6 +300,61 @@ function SlotFormDialog({
                         />
                         <InputError message={errors.note} />
                     </div>
+                    {eventOptions.find(
+                        (event) => String(event.id) === data.event_id,
+                    )?.supports_scoreboard && (
+                        <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+                            <label className="flex items-center gap-2 text-sm font-medium">
+                                <input
+                                    type="checkbox"
+                                    checked={data.live_scoreboard}
+                                    onChange={(e) =>
+                                        setData(
+                                            'live_scoreboard',
+                                            e.target.checked,
+                                        )
+                                    }
+                                />
+                                Live Scoreboard
+                            </label>
+                            <p className="text-sm text-muted-foreground">
+                                Link a scoreboard for ICT to test, run, and
+                                reset.
+                            </p>
+                            {data.live_scoreboard && (
+                                <>
+                                    <Label htmlFor="scoreboard-mode">
+                                        Viewer game label
+                                    </Label>
+                                    <select
+                                        id="scoreboard-mode"
+                                        className="h-10 w-full rounded-md border bg-background px-3"
+                                        value={data.scoreboard_mode}
+                                        onChange={(e) =>
+                                            setData(
+                                                'scoreboard_mode',
+                                                e.target.value,
+                                            )
+                                        }
+                                    >
+                                        <option value="test">Test</option>
+                                        <option value="finals">
+                                            Finals Game
+                                        </option>
+                                        <option value="championship">
+                                            Championship Game
+                                        </option>
+                                    </select>
+                                </>
+                            )}
+                            <InputError
+                                message={
+                                    errors.live_scoreboard ||
+                                    errors.scoreboard_mode
+                                }
+                            />
+                        </div>
+                    )}
                     <DialogFooter>
                         <Button type="submit" disabled={processing}>
                             {slot ? 'Save changes' : 'Create slot'}
@@ -328,10 +389,7 @@ export default function Schedule({
         setFormOpen(true);
     };
 
-    const applyFilters = (overrides: {
-        venue_id?: string;
-        date?: string;
-    }) => {
+    const applyFilters = (overrides: { venue_id?: string; date?: string }) => {
         const params: Record<string, string> = {};
 
         const venueId = overrides.venue_id ?? String(filters.venue_id ?? '');
@@ -478,7 +536,8 @@ export default function Schedule({
                                             {slot.date_label}
                                         </TableCell>
                                         <TableCell className="whitespace-nowrap">
-                                            {formatTime(slot.starts_at)}–{formatTime(slot.ends_at)}
+                                            {formatTime(slot.starts_at)}–
+                                            {formatTime(slot.ends_at)}
                                         </TableCell>
                                         <TableCell>{slot.event}</TableCell>
                                         <TableCell>
@@ -497,7 +556,7 @@ export default function Schedule({
                                         </TableCell>
                                         <TableCell>
                                             {slot.match_id &&
-                                                slot.live_score_available ? (
+                                            slot.live_score_available ? (
                                                 <div className="flex items-center gap-2">
                                                     {slot.is_live && (
                                                         <Badge

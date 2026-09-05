@@ -106,6 +106,8 @@ class ScheduleRequest extends FormRequest
             'starts_at' => ['required', 'date_format:H:i'],
             'ends_at' => ['required', 'date_format:H:i', 'after:starts_at'],
             'note' => ['nullable', 'string', 'max:255'],
+            'live_scoreboard' => ['sometimes', 'boolean'],
+            'scoreboard_mode' => ['sometimes', 'required', Rule::in(['test', 'finals', 'championship'])],
         ];
     }
 
@@ -118,6 +120,9 @@ class ScheduleRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
+            if ($this->boolean('live_scoreboard') && ! \App\Services\ScheduleScoreboardService::supports(Event::find($this->integer('event_id'))?->sport?->name)) {
+                $validator->errors()->add('live_scoreboard', 'Live Scoreboard is available for Basketball, Baseball, and Boxing.');
+            }
             $categoryId = $this->integer('sport_category_id');
             $eventId = $this->integer('event_id');
             $areaId = $this->integer('competition_area_id');

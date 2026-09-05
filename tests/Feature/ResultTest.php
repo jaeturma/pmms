@@ -23,6 +23,29 @@ use App\Models\School;
 use App\Models\ScoringSession;
 use App\Models\Sport;
 use App\Models\TeamEntry;
+
+test('results filter by status and sport and show current registered coaches and audit trail', function () {
+    $meet = Meet::current();
+    $event = Event::factory()->create();
+    $meet->events()->attach($event);
+    $entry = placeableEntry($meet, $event);
+    $coach = \App\Models\User::factory()->coach()->create();
+    $entry->athlete->coaches()->sync([$coach->id]);
+    $result = EventResult::factory()->create(['meet_id' => $meet->id, 'event_id' => $event->id, 'status' => ResultStatus::Official]);
+    ResultPlacement::factory()->create(['event_result_id' => $result->id, 'entry_id' => $entry->id]);
+    app(\App\Services\AuditLogger::class)->record('result.accepted', $result);
+    EventResult::factory()->create(['meet_id' => $meet->id, 'event_id' => $event->id, 'status' => ResultStatus::Returned]);
+    $this->actingAs(\App\Models\User::factory()->admin()->create())->get('/results?status=accepted&sport_id='.$event->sport_id)
+        ->assertOk()->assertInertia(fn (\Inertia\Testing\AssertableInertia $page) => $page
+            ->has('results.data', 1)->where('results.data.0.status_label', 'Accepted')
+            ->where('results.data.0.placements.0.coaches.0', $coach->name)
+            ->where('results.data.0.audit_trail.0.action', 'result.accepted'));
+    $this->get('/results?status=returned&sport_id='.$event->sport_id)
+        ->assertInertia(fn (\Inertia\Testing\AssertableInertia $page) => $page->has('results.data', 1)->where('results.data.0.status_label', 'Returned'));
+    $otherSport = Sport::factory()->create();
+    $this->get('/results?status=accepted&sport_id='.$otherSport->id)
+        ->assertInertia(fn (\Inertia\Testing\AssertableInertia $page) => $page->has('results.data', 0));
+});
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 

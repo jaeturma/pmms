@@ -45,6 +45,7 @@ import { correct, destroy, index, store, update } from '@/routes/results';
 
 type Placement = {
     id: number;
+    coaches: string[];
     attribution: Attribution;
     can_attribute: boolean;
     entry_id: number | null;
@@ -73,6 +74,13 @@ type Result = {
     event: string;
     status: string;
     status_label: string;
+    audit_trail: {
+        id: number;
+        action: string;
+        actor: string;
+        at: string | null;
+        reason: string | null;
+    }[];
     encoded_by: string | null;
     encoded_at: string | null;
     submitted_by: string | null;
@@ -124,7 +132,12 @@ type Result = {
 
 type Option = { id: number; label: string };
 
-type EventOption = Option & { meet_id: number; is_team_event: boolean; default_result_type: 'medal' | 'versus' };
+type EventOption = Option & {
+    sport_id: number;
+    meet_id: number;
+    is_team_event: boolean;
+    default_result_type: 'medal' | 'versus';
+};
 type ScheduleOption = Option & { meet_id: number; event_id: number };
 
 type EntryOption = Option & { meet_id: number; event_id: number };
@@ -145,7 +158,13 @@ type PlacementRow = {
 
 type Props = {
     results: Paginated<Result>;
-    filters: { meet_id: number | null; event_id: number | null };
+    filters: {
+        meet_id: number | null;
+        event_id: number | null;
+        sport_id: number | null;
+        status: string | null;
+    };
+    sportOptions: Option[];
     meetOptions: Option[];
     eventOptionsByMeet: EventOption[];
     scheduleOptions: ScheduleOption[];
@@ -184,7 +203,9 @@ function PlacementAttribution({
         <div className="rounded border p-3">
             <p className="text-sm font-medium">
                 {
-                    (result.result_type === 'versus' ? ['Winner', 'Loser'] : ['Gold / 1st', 'Silver / 2nd', 'Bronze / 3rd'])[
+                    (result.result_type === 'versus'
+                        ? ['Winner', 'Loser']
+                        : ['Gold / 1st', 'Silver / 2nd', 'Bronze / 3rd'])[
                         placement.rank - 1
                     ]
                 }{' '}
@@ -270,7 +291,11 @@ function DirectResultForm({
 }) {
     const { data, setData, post, processing, errors, reset, transform } =
         useForm({
-            result_type: result?.result_type ?? (result?.placements.some((p) => (p.tally_quantity ?? 0) > 0) ? 'medal' : 'versus'),
+            result_type:
+                result?.result_type ??
+                (result?.placements.some((p) => (p.tally_quantity ?? 0) > 0)
+                    ? 'medal'
+                    : 'versus'),
             measurement_type: result?.measurement_type ?? '',
             event_id: result ? String(result.event_id) : '',
             gold_delegation_id: String(
@@ -325,24 +350,36 @@ function DirectResultForm({
         [preview],
     );
 
-    transform((current) => !withMedals ? {
-        event_id: current.event_id, result_type: 'versus', measurement_type: current.measurement_type,
-        winner_delegation_id: current.gold_delegation_id, loser_delegation_id: current.silver_delegation_id,
-        winner_value: current.gold_mark, loser_value: current.silver_mark,
-        winner_attribution: current.gold_attribution, loser_attribution: current.silver_attribution, evidence: current.evidence,
-    } : ({
-        ...current,
-        gold_count:
-            withMedals && current.gold_delegation_id ? current.gold_count : '0',
-        silver_count:
-            withMedals && current.silver_delegation_id
-                ? current.silver_count
-                : '0',
-        bronze_count:
-            withMedals && current.bronze_delegation_id
-                ? current.bronze_count
-                : '0',
-    }));
+    transform((current) =>
+        !withMedals
+            ? {
+                  event_id: current.event_id,
+                  result_type: 'versus',
+                  measurement_type: current.measurement_type,
+                  winner_delegation_id: current.gold_delegation_id,
+                  loser_delegation_id: current.silver_delegation_id,
+                  winner_value: current.gold_mark,
+                  loser_value: current.silver_mark,
+                  winner_attribution: current.gold_attribution,
+                  loser_attribution: current.silver_attribution,
+                  evidence: current.evidence,
+              }
+            : {
+                  ...current,
+                  gold_count:
+                      withMedals && current.gold_delegation_id
+                          ? current.gold_count
+                          : '0',
+                  silver_count:
+                      withMedals && current.silver_delegation_id
+                          ? current.silver_count
+                          : '0',
+                  bronze_count:
+                      withMedals && current.bronze_delegation_id
+                          ? current.bronze_count
+                          : '0',
+              },
+    );
 
     const selectResultType = (mode: string) => {
         const enabled = mode === 'medal';
@@ -384,7 +421,19 @@ function DirectResultForm({
                 >
                     Back to Results
                 </Button>
-                <label>Result Type<select aria-label="Result Type" className="ml-2 rounded border p-2" value={data.result_type} onChange={(e) => selectResultType(e.target.value)} disabled={processing}><option value="medal">Medal Result</option><option value="versus">Versus / Non-Medal</option></select></label>
+                <label>
+                    Result Type
+                    <select
+                        aria-label="Result Type"
+                        className="ml-2 rounded border p-2"
+                        value={data.result_type}
+                        onChange={(e) => selectResultType(e.target.value)}
+                        disabled={processing}
+                    >
+                        <option value="medal">Medal Result</option>
+                        <option value="versus">Versus / Non-Medal</option>
+                    </select>
+                </label>
             </div>
             <form onSubmit={submit} className="space-y-6">
                 <section className="space-y-3 rounded-xl border bg-card p-4 sm:p-5">
@@ -400,8 +449,13 @@ function DirectResultForm({
                             setData((current) => ({
                                 ...current,
                                 event_id: value,
-                                result_type: events.find((event) => event.id === Number(value))?.default_result_type ?? 'versus',
-                                gold_count: '1', silver_count: '1', bronze_count: '1',
+                                result_type:
+                                    events.find(
+                                        (event) => event.id === Number(value),
+                                    )?.default_result_type ?? 'versus',
+                                gold_count: '1',
+                                silver_count: '1',
+                                bronze_count: '1',
                                 gold_attribution: emptyAttribution(),
                                 silver_attribution: emptyAttribution(),
                                 bronze_attribution: emptyAttribution(),
@@ -427,7 +481,28 @@ function DirectResultForm({
                         </SelectContent>
                     </Select>
                     <InputError message={errors.event_id} />
-                    {!withMedals && <label className="block">Measurement Type<select aria-label="Measurement Type" required className="ml-2 rounded border p-2" value={data.measurement_type} onChange={(e) => setData('measurement_type', e.target.value)}><option value="">Select measurement type</option><option value="score">Score</option><option value="points">Points</option><option value="time">Time</option><option value="distance">Distance</option></select></label>}
+                    {!withMedals && (
+                        <label className="block">
+                            Measurement Type
+                            <select
+                                aria-label="Measurement Type"
+                                required
+                                className="ml-2 rounded border p-2"
+                                value={data.measurement_type}
+                                onChange={(e) =>
+                                    setData('measurement_type', e.target.value)
+                                }
+                            >
+                                <option value="">
+                                    Select measurement type
+                                </option>
+                                <option value="score">Score</option>
+                                <option value="points">Points</option>
+                                <option value="time">Time</option>
+                                <option value="distance">Distance</option>
+                            </select>
+                        </label>
+                    )}
                     {Object.entries(errors)
                         .filter(([key]) => key !== 'event_id')
                         .map(([key, error]) => (
@@ -444,7 +519,9 @@ function DirectResultForm({
                                 Participants and Results
                             </h2>
                             <p className="text-sm text-muted-foreground">
-                                {withMedals ? 'Gold is required. Silver and Bronze are optional.' : 'Select a distinct Winner and Loser. Attribution is optional.'}
+                                {withMedals
+                                    ? 'Gold is required. Silver and Bronze are optional.'
+                                    : 'Select a distinct Winner and Loser. Attribution is optional.'}
                             </p>
                         </div>
                         <div className="divide-y">
@@ -469,180 +546,169 @@ function DirectResultForm({
                                         optional: true,
                                     },
                                 ] as const
-                            ).filter(({ key }) => withMedals || key !== 'bronze').map(({ key, label, optional }) => {
-                                const delegationField =
-                                    `${key}_delegation_id` as const;
-                                const markField = `${key}_mark` as const;
-                                const countField = `${key}_count` as const;
+                            )
+                                .filter(
+                                    ({ key }) => withMedals || key !== 'bronze',
+                                )
+                                .map(({ key, label, optional }) => {
+                                    const delegationField =
+                                        `${key}_delegation_id` as const;
+                                    const markField = `${key}_mark` as const;
+                                    const countField = `${key}_count` as const;
 
-                                return (
-                                    <div
-                                        key={key}
-                                        className="space-y-3 p-4 sm:p-5"
-                                    >
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <h3 className="text-sm font-semibold">
-                                                {withMedals ? label : key === 'gold' ? 'Winner' : 'Loser'}
-                                            </h3>
-                                            {optional && withMedals && (
-                                                <span className="text-xs text-muted-foreground">
-                                                    Optional
-                                                </span>
-                                            )}
-                                            {withMedals && (
-                                                <Badge variant="outline">
-                                                    <Award className="mr-1 size-3 text-orange-600" />
-                                                    {label}
-                                                </Badge>
-                                            )}
-                                        </div>
+                                    return (
                                         <div
-                                            className={`grid gap-4 ${withMedals ? 'md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_7rem]' : 'md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]'}`}
+                                            key={key}
+                                            className="space-y-3 p-4 sm:p-5"
                                         >
-                                            <div className="min-w-0 space-y-2">
-                                                <Label
-                                                    htmlFor={`${key}-delegation`}
-                                                >
-                                                    Delegation / Team
-                                                </Label>
-                                                <Select
-                                                    value={
-                                                        data[delegationField] ||
-                                                        'none'
-                                                    }
-                                                    onValueChange={(value) =>
-                                                        setData((current) => ({
-                                                            ...current,
-                                                            [delegationField]:
-                                                                value === 'none'
-                                                                    ? ''
-                                                                    : value,
-                                                            [`${key}_attribution`]:
-                                                                emptyAttribution(),
-                                                        }))
-                                                    }
-                                                    disabled={processing}
-                                                >
-                                                    <SelectTrigger
-                                                        id={`${key}-delegation`}
-                                                        className="h-auto min-h-10 w-full [&>span]:text-left [&>span]:whitespace-normal"
-                                                    >
-                                                        <SelectValue placeholder="Select a delegation" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="none">
-                                                            {optional && withMedals
-                                                                ? 'No participant'
-                                                                : 'Select a delegation'}
-                                                        </SelectItem>
-                                                        {delegations.map(
-                                                            (option) => (
-                                                                <SelectItem
-                                                                    key={
-                                                                        option.id
-                                                                    }
-                                                                    value={String(
-                                                                        option.id,
-                                                                    )}
-                                                                >
-                                                                    {
-                                                                        option.label
-                                                                    }
-                                                                </SelectItem>
-                                                            ),
-                                                        )}
-                                                    </SelectContent>
-                                                </Select>
-                                                <InputError
-                                                    message={
-                                                        errors[delegationField]
-                                                    }
-                                                />
-                                                <AttributionFields
-                                                    key={`${data.event_id}-${data[delegationField]}`}
-                                                    eventId={Number(
-                                                        data.event_id,
-                                                    )}
-                                                    delegationId={Number(
-                                                        data[delegationField],
-                                                    )}
-                                                    team={
-                                                        events.find(
-                                                            (e) =>
-                                                                e.id ===
-                                                                Number(
-                                                                    data.event_id,
-                                                                ),
-                                                        )?.is_team_event ??
-                                                        false
-                                                    }
-                                                    value={
-                                                        data[
-                                                            `${key}_attribution`
-                                                        ]
-                                                    }
-                                                    onChange={(value) =>
-                                                        setData(
-                                                            `${key}_attribution`,
-                                                            value,
-                                                        )
-                                                    }
-                                                />
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <h3 className="text-sm font-semibold">
+                                                    {withMedals
+                                                        ? label
+                                                        : key === 'gold'
+                                                          ? 'Winner'
+                                                          : 'Loser'}
+                                                </h3>
+                                                {optional && withMedals && (
+                                                    <span className="text-xs text-muted-foreground">
+                                                        Optional
+                                                    </span>
+                                                )}
+                                                {withMedals && (
+                                                    <Badge variant="outline">
+                                                        <Award className="mr-1 size-3 text-orange-600" />
+                                                        {label}
+                                                    </Badge>
+                                                )}
                                             </div>
-                                            <div className="min-w-0 space-y-2">
-                                                <Label htmlFor={`${key}-mark`}>
-                                                    {withMedals ? 'Score / Points / Time' : 'Result Value'}
-                                                </Label>
-                                                <Input
-                                                    id={`${key}-mark`}
-                                                    className="h-10"
-                                                    maxLength={60}
-                                                    required={!withMedals}
-                                                    inputMode={!withMedals ? 'decimal' : 'text'}
-                                                    value={data[markField]}
-                                                    placeholder="e.g. 98 points or 12.45 s"
-                                                    disabled={processing}
-                                                    onChange={(event) =>
-                                                        setData(
-                                                            markField,
-                                                            event.target.value,
-                                                        )
-                                                    }
-                                                />
-                                                <InputError
-                                                    message={errors[markField]}
-                                                />
-                                            </div>
-                                            {withMedals && (
-                                                <div className="space-y-2">
+                                            <div
+                                                className={`grid gap-4 ${withMedals ? 'md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_7rem]' : 'md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]'}`}
+                                            >
+                                                <div className="min-w-0 space-y-2">
                                                     <Label
-                                                        htmlFor={`${key}-count`}
+                                                        htmlFor={`${key}-delegation`}
                                                     >
-                                                        Medal count
+                                                        Delegation / Team
+                                                    </Label>
+                                                    <Select
+                                                        value={
+                                                            data[
+                                                                delegationField
+                                                            ] || 'none'
+                                                        }
+                                                        onValueChange={(
+                                                            value,
+                                                        ) =>
+                                                            setData(
+                                                                (current) => ({
+                                                                    ...current,
+                                                                    [delegationField]:
+                                                                        value ===
+                                                                        'none'
+                                                                            ? ''
+                                                                            : value,
+                                                                    [`${key}_attribution`]:
+                                                                        emptyAttribution(),
+                                                                }),
+                                                            )
+                                                        }
+                                                        disabled={processing}
+                                                    >
+                                                        <SelectTrigger
+                                                            id={`${key}-delegation`}
+                                                            className="h-auto min-h-10 w-full [&>span]:text-left [&>span]:whitespace-normal"
+                                                        >
+                                                            <SelectValue placeholder="Select a delegation" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="none">
+                                                                {optional &&
+                                                                withMedals
+                                                                    ? 'No participant'
+                                                                    : 'Select a delegation'}
+                                                            </SelectItem>
+                                                            {delegations.map(
+                                                                (option) => (
+                                                                    <SelectItem
+                                                                        key={
+                                                                            option.id
+                                                                        }
+                                                                        value={String(
+                                                                            option.id,
+                                                                        )}
+                                                                    >
+                                                                        {
+                                                                            option.label
+                                                                        }
+                                                                    </SelectItem>
+                                                                ),
+                                                            )}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <InputError
+                                                        message={
+                                                            errors[
+                                                                delegationField
+                                                            ]
+                                                        }
+                                                    />
+                                                    <AttributionFields
+                                                        key={`${data.event_id}-${data[delegationField]}`}
+                                                        eventId={Number(
+                                                            data.event_id,
+                                                        )}
+                                                        delegationId={Number(
+                                                            data[
+                                                                delegationField
+                                                            ],
+                                                        )}
+                                                        team={
+                                                            events.find(
+                                                                (e) =>
+                                                                    e.id ===
+                                                                    Number(
+                                                                        data.event_id,
+                                                                    ),
+                                                            )?.is_team_event ??
+                                                            false
+                                                        }
+                                                        value={
+                                                            data[
+                                                                `${key}_attribution`
+                                                            ]
+                                                        }
+                                                        onChange={(value) =>
+                                                            setData(
+                                                                `${key}_attribution`,
+                                                                value,
+                                                            )
+                                                        }
+                                                    />
+                                                </div>
+                                                <div className="min-w-0 space-y-2">
+                                                    <Label
+                                                        htmlFor={`${key}-mark`}
+                                                    >
+                                                        {withMedals
+                                                            ? 'Score / Points / Time'
+                                                            : 'Result Value'}
                                                     </Label>
                                                     <Input
-                                                        id={`${key}-count`}
-                                                        aria-label={`${label} medal count`}
+                                                        id={`${key}-mark`}
                                                         className="h-10"
-                                                        type="number"
-                                                        min={0}
-                                                        max={65535}
-                                                        step={1}
-                                                        required={
-                                                            !!data[
-                                                                delegationField
-                                                            ]
+                                                        maxLength={60}
+                                                        required={!withMedals}
+                                                        inputMode={
+                                                            !withMedals
+                                                                ? 'decimal'
+                                                                : 'text'
                                                         }
-                                                        disabled={
-                                                            processing ||
-                                                            !data[
-                                                                delegationField
-                                                            ]
-                                                        }
-                                                        value={data[countField]}
+                                                        value={data[markField]}
+                                                        placeholder="e.g. 98 points or 12.45 s"
+                                                        disabled={processing}
                                                         onChange={(event) =>
                                                             setData(
-                                                                countField,
+                                                                markField,
                                                                 event.target
                                                                     .value,
                                                             )
@@ -650,15 +716,60 @@ function DirectResultForm({
                                                     />
                                                     <InputError
                                                         message={
-                                                            errors[countField]
+                                                            errors[markField]
                                                         }
                                                     />
                                                 </div>
-                                            )}
+                                                {withMedals && (
+                                                    <div className="space-y-2">
+                                                        <Label
+                                                            htmlFor={`${key}-count`}
+                                                        >
+                                                            Medal count
+                                                        </Label>
+                                                        <Input
+                                                            id={`${key}-count`}
+                                                            aria-label={`${label} medal count`}
+                                                            className="h-10"
+                                                            type="number"
+                                                            min={0}
+                                                            max={65535}
+                                                            step={1}
+                                                            required={
+                                                                !!data[
+                                                                    delegationField
+                                                                ]
+                                                            }
+                                                            disabled={
+                                                                processing ||
+                                                                !data[
+                                                                    delegationField
+                                                                ]
+                                                            }
+                                                            value={
+                                                                data[countField]
+                                                            }
+                                                            onChange={(event) =>
+                                                                setData(
+                                                                    countField,
+                                                                    event.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                        />
+                                                        <InputError
+                                                            message={
+                                                                errors[
+                                                                    countField
+                                                                ]
+                                                            }
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                );
-                            })}
+                                    );
+                                })}
                         </div>
                     </section>
                     <aside className="min-w-0 space-y-4 rounded-xl border bg-card p-4 sm:p-5">
@@ -1279,6 +1390,7 @@ function CorrectDialog({
 export default function Results({
     results,
     filters,
+    sportOptions,
     eventOptionsByMeet,
     scheduleOptions,
     activeMeets,
@@ -1289,6 +1401,10 @@ export default function Results({
     canDirectResult,
     delegationOptions,
 }: Props) {
+    const [detail, setDetail] = useState<{
+        result: Result;
+        tab: 'trail' | 'issues' | 'evidence';
+    } | null>(null);
     const [formOpen, setFormOpen] = useState(false);
     const pageUrl = usePage().url;
     const [directOpen, setDirectOpen] = useState(
@@ -1324,6 +1440,8 @@ export default function Results({
     const applyFilters = (overrides: {
         meet_id?: string;
         event_id?: string;
+        sport_id?: string;
+        status?: string;
     }) => {
         const params: Record<string, string> = {};
 
@@ -1338,6 +1456,14 @@ export default function Results({
             params.event_id = eventId;
         }
 
+        for (const key of ['sport_id', 'status'] as const) {
+            const value = overrides[key] ?? String(filters[key] ?? '');
+
+            if (value && value !== 'all') {
+params[key] = value;
+}
+        }
+
         router.get(index().url, params, {
             preserveState: true,
             preserveScroll: true,
@@ -1345,13 +1471,17 @@ export default function Results({
     };
 
     const filterParams = {
+        ...(filters.sport_id ? { sport_id: String(filters.sport_id) } : {}),
+        ...(filters.status ? { status: filters.status } : {}),
         ...(filters.meet_id ? { meet_id: String(filters.meet_id) } : {}),
         ...(filters.event_id ? { event_id: String(filters.event_id) } : {}),
     };
 
     const eventFilterOptions = filters.meet_id
         ? eventOptionsByMeet.filter(
-              (option) => option.meet_id === filters.meet_id,
+              (option) =>
+                  option.meet_id === filters.meet_id &&
+                  (!filters.sport_id || option.sport_id === filters.sport_id),
           )
         : eventOptionsByMeet.filter(
               (option, i, all) =>
@@ -1398,6 +1528,117 @@ export default function Results({
     return (
         <>
             <Head title="Results" />
+            <Dialog
+                open={detail !== null}
+                onOpenChange={(open) => {
+                    if (!open) {
+setDetail(null);
+}
+                }}
+            >
+                <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+                    <DialogHeader>
+                        <DialogTitle>
+                            {detail?.tab === 'trail'
+                                ? 'Audit trail'
+                                : detail?.tab === 'issues'
+                                  ? 'Issues and concerns'
+                                  : 'Result Evidence'}
+                        </DialogTitle>
+                    </DialogHeader>
+                    <p className="text-sm text-muted-foreground">
+                        {detail?.result.event} / {detail?.result.reference}
+                    </p>
+                    {detail?.tab === 'trail' && (
+                        <div className="space-y-3">
+                            {detail.result.audit_trail.length === 0 ? (
+                                <p>No audit entries recorded.</p>
+                            ) : (
+                                detail.result.audit_trail.map((entry) => (
+                                    <div
+                                        key={entry.id}
+                                        className="rounded-lg border p-3"
+                                    >
+                                        <p className="font-medium">
+                                            {entry.action
+                                                .replaceAll('.', ' ')
+                                                .replaceAll('_', ' ')}
+                                        </p>
+                                        <p className="text-sm">
+                                            {entry.actor} /{' '}
+                                            {entry.at
+                                                ? new Date(
+                                                      entry.at,
+                                                  ).toLocaleString()
+                                                : 'Date unavailable'}
+                                        </p>
+                                        {entry.reason && <p>{entry.reason}</p>}
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    )}
+                    {detail?.tab === 'issues' && (
+                        <div className="space-y-3 text-sm">
+                            <ul className="list-disc pl-5">
+                                {detail.result.data_issues.map((issue) => (
+                                    <li key={issue}>{issue}</li>
+                                ))}
+                            </ul>
+                            <p className="whitespace-pre-wrap">
+                                {detail.result.operational_remarks}
+                            </p>
+                            {detail.result.return_reason && (
+                                <p>
+                                    Return reason: {detail.result.return_reason}
+                                </p>
+                            )}
+                            {detail.result.cancellation_request && (
+                                <p>
+                                    Cancellation requested by{' '}
+                                    {
+                                        detail.result.cancellation_request
+                                            .requested_by
+                                    }
+                                    :{' '}
+                                    {detail.result.cancellation_request.reason}
+                                </p>
+                            )}
+                        </div>
+                    )}
+                    {detail?.tab === 'evidence' && (
+                        <div className="space-y-4">
+                            {!detail.result.signed_form &&
+                                !detail.result.result_photo && (
+                                    <p>No evidence attached yet.</p>
+                                )}
+                            {detail.result.signed_form && (
+                                <>
+                                    <iframe
+                                        title="Result evidence preview"
+                                        className="h-[55vh] w-full rounded border"
+                                        src={`/results/${detail.result.id}/attachments/${detail.result.signed_form.id}?preview=1`}
+                                    />
+                                    <a
+                                        className="text-sm underline"
+                                        href={`/results/${detail.result.id}/attachments/${detail.result.signed_form.id}`}
+                                    >
+                                        Download{' '}
+                                        {detail.result.signed_form.name}
+                                    </a>
+                                </>
+                            )}
+                            {detail.result.result_photo && (
+                                <img
+                                    className="max-h-[65vh] w-full rounded object-contain"
+                                    src={detail.result.result_photo.url}
+                                    alt={`Result evidence for ${detail.result.event}`}
+                                />
+                            )}
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
                     title="Results"
@@ -1422,6 +1663,64 @@ export default function Results({
                     }
                 />
 
+                <div className="flex flex-wrap gap-3 rounded-xl border bg-muted/20 p-4">
+                    <Select
+                        value={filters.status ?? 'all'}
+                        onValueChange={(status) => applyFilters({ status })}
+                    >
+                        <SelectTrigger
+                            className="w-48"
+                            aria-label="Filter by status"
+                        >
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All statuses</SelectItem>
+                            <SelectItem value="for_validation">
+                                For Validation
+                            </SelectItem>
+                            <SelectItem value="returned">Returned</SelectItem>
+                            <SelectItem value="accepted">Accepted</SelectItem>
+                            <SelectItem value="cancelled">Cancelled</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select
+                        value={String(filters.sport_id ?? 'all')}
+                        onValueChange={(sport_id) =>
+                            applyFilters({ sport_id, event_id: 'all' })
+                        }
+                    >
+                        <SelectTrigger
+                            className="w-56"
+                            aria-label="Filter by sport"
+                        >
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All sports</SelectItem>
+                            {sportOptions.map((sport) => (
+                                <SelectItem
+                                    key={sport.id}
+                                    value={String(sport.id)}
+                                >
+                                    {sport.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Button
+                        variant="ghost"
+                        onClick={() =>
+                            applyFilters({
+                                status: 'all',
+                                sport_id: 'all',
+                                event_id: 'all',
+                            })
+                        }
+                    >
+                        Clear filters
+                    </Button>
+                </div>
                 {!isTournamentScoped && (
                     <div className="flex flex-wrap gap-2">
                         <Select
@@ -1473,41 +1772,14 @@ export default function Results({
                                         <p className="font-medium">
                                             {result.event}
                                         </p>
-                                        <p className="text-sm text-muted-foreground">
-                                            {result.meet} · Encoded by{' '}
-                                            {result.encoded_by ?? '—'}{' '}
-                                            {result.encoded_at ??
-                                                'Date unavailable'}
-                                            {result.validated_by && (
-                                                <>
-                                                    {' '}
-                                                    · Validated by{' '}
-                                                    {result.validated_by}{' '}
-                                                    {result.validated_at}
-                                                </>
-                                            )}
+                                        <p className="text-xs text-muted-foreground">
+                                            Sports Event / {result.reference}
                                         </p>
                                         <p className="text-sm text-muted-foreground">
                                             {result.competition_context}
-                                            {result.submitted_by && (
-                                                <>
-                                                    {' '}
-                                                    · Submitted by{' '}
-                                                    {result.submitted_by}{' '}
-                                                    {result.submitted_at}
-                                                </>
-                                            )}
-                                            {result.official_by && (
-                                                <>
-                                                    {' '}
-                                                    · Officialized by{' '}
-                                                    {result.official_by}{' '}
-                                                    {result.official_at}
-                                                </>
-                                            )}
                                         </p>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <Badge
                                             variant={
                                                 result.status === 'validated'
@@ -1536,59 +1808,47 @@ export default function Results({
                                                 Awaiting TM confirmation
                                             </Badge>
                                         ) : null}
-                                        {result.data_issues.length > 0 && (
-                                            <div className="w-full rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-                                                <div className="font-medium text-amber-700 dark:text-amber-300">
-                                                    Submitted with issues —
-                                                    resolve later
-                                                </div>
-                                                <ul className="mt-1 list-disc pl-5 text-muted-foreground">
-                                                    {result.data_issues.map(
-                                                        (issue) => (
-                                                            <li key={issue}>
-                                                                {issue}
-                                                            </li>
-                                                        ),
-                                                    )}
-                                                </ul>
-                                            </div>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                setDetail({
+                                                    result,
+                                                    tab: 'trail',
+                                                })
+                                            }
+                                        >
+                                            Trail
+                                        </Button>
+                                        {(result.data_issues.length > 0 ||
+                                            result.operational_remarks ||
+                                            result.return_reason ||
+                                            result.cancellation_request) && (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() =>
+                                                    setDetail({
+                                                        result,
+                                                        tab: 'issues',
+                                                    })
+                                                }
+                                            >
+                                                Issues
+                                            </Button>
                                         )}
-                                        {result.operational_remarks && (
-                                            <div className="w-full rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-                                                <div className="font-medium text-amber-700 dark:text-amber-300">
-                                                    Operational remarks
-                                                </div>
-                                                <div className="mt-1 whitespace-pre-line text-muted-foreground">
-                                                    {result.operational_remarks}
-                                                </div>
-                                            </div>
-                                        )}
-                                        {result.cancellation_request && (
-                                            <div className="w-full rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
-                                                <div className="font-medium text-destructive">
-                                                    Cancellation requested
-                                                </div>
-                                                <div className="mt-1">
-                                                    {
-                                                        result
-                                                            .cancellation_request
-                                                            .reason
-                                                    }
-                                                </div>
-                                                <div className="mt-1 text-xs text-muted-foreground">
-                                                    Requested by{' '}
-                                                    {result.cancellation_request
-                                                        .requested_by ??
-                                                        'ICT'}{' '}
-                                                    ·{' '}
-                                                    {
-                                                        result
-                                                            .cancellation_request
-                                                            .requested_at
-                                                    }
-                                                </div>
-                                            </div>
-                                        )}
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                setDetail({
+                                                    result,
+                                                    tab: 'evidence',
+                                                })
+                                            }
+                                        >
+                                            Result Evidence
+                                        </Button>
                                         {result.can_tm_confirm &&
                                             !result.tm_confirmed && (
                                                 <Button
@@ -1681,22 +1941,6 @@ export default function Results({
                                                     </Button>
                                                 </>
                                             )}
-                                        {result.signed_form && (
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                asChild
-                                            >
-                                                <a
-                                                    href={`/results/${result.id}/attachments/${result.signed_form.id}`}
-                                                >
-                                                    {result.signed_form.type ===
-                                                    'direct_result_evidence'
-                                                        ? 'Result evidence'
-                                                        : 'Signed form'}
-                                                </a>
-                                            </Button>
-                                        )}
                                         {result.can_review &&
                                             result.status === 'submitted' && (
                                                 <>
@@ -1927,7 +2171,10 @@ export default function Results({
                                 </div>
                                 <div className="overflow-x-auto">
                                     {result.result_source === 'direct' && (
-                                        <div className="space-y-3 p-4">
+                                        <details className="space-y-3 border-b p-4">
+                                            <summary className="cursor-pointer text-sm font-medium">
+                                                Athlete and coach links
+                                            </summary>
                                             {result.placements.map(
                                                 (placement) => (
                                                     <PlacementAttribution
@@ -1937,7 +2184,7 @@ export default function Results({
                                                     />
                                                 ),
                                             )}
-                                        </div>
+                                        </details>
                                     )}
                                     {result.result_source === 'direct' &&
                                         result.placements.every(
@@ -1949,34 +2196,6 @@ export default function Results({
                                                 Team Standing
                                             </h3>
                                         )}
-                                    {result.result_photo && (
-                                        <div
-                                            className={
-                                                result.awards_medals
-                                                    ? 'border-b bg-amber-50/40 p-4 dark:bg-amber-950/10'
-                                                    : 'border-b p-4'
-                                            }
-                                        >
-                                            <p className="mb-2 text-sm font-medium">
-                                                Written game result photo
-                                                {result.awards_medals &&
-                                                    ' · Medal event'}
-                                            </p>
-                                            <a
-                                                href={result.result_photo.url}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                            >
-                                                <img
-                                                    src={
-                                                        result.result_photo.url
-                                                    }
-                                                    alt={`Written result for ${result.event}`}
-                                                    className="max-h-96 w-auto rounded-lg border object-contain"
-                                                />
-                                            </a>
-                                        </div>
-                                    )}
                                     {result.can_upload_photo && (
                                         <div className="border-b p-3">
                                             <label className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-accent">
@@ -2010,7 +2229,10 @@ export default function Results({
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead className="w-16">
-                                                    {result.result_type === 'versus' ? 'Outcome' : 'Rank'}
+                                                    {result.result_type ===
+                                                    'versus'
+                                                        ? 'Outcome'
+                                                        : 'Rank'}
                                                 </TableHead>
                                                 <TableHead>
                                                     {result.result_source ===
@@ -2020,12 +2242,20 @@ export default function Results({
                                                 </TableHead>
                                                 <TableHead>School</TableHead>
                                                 <TableHead>
-                                                    {result.measurement_type ?? 'Score / Points / Time'}
+                                                    Athletes' Coach
+                                                </TableHead>
+                                                <TableHead>
+                                                    {result.measurement_type ??
+                                                        'Score / Points / Time'}
                                                 </TableHead>
                                                 {result.result_source ===
-                                                    'direct' && result.result_type !== 'versus' && (
-                                                    <TableHead>Medal</TableHead>
-                                                )}
+                                                    'direct' &&
+                                                    result.result_type !==
+                                                        'versus' && (
+                                                        <TableHead>
+                                                            Medal
+                                                        </TableHead>
+                                                    )}
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -2035,7 +2265,13 @@ export default function Results({
                                                         key={`${placement.rank}-${placement.entry_id ?? placement.team_entry_id ?? placement.delegation_id}`}
                                                     >
                                                         <TableCell className="font-medium">
-                                                            {result.result_type === 'versus' ? (placement.rank === 1 ? 'Winner' : 'Loser') : placement.rank}
+                                                            {result.result_type ===
+                                                            'versus'
+                                                                ? placement.rank ===
+                                                                  1
+                                                                    ? 'Winner'
+                                                                    : 'Loser'
+                                                                : placement.rank}
                                                             {placement.is_tie &&
                                                                 ' (tie)'}
                                                         </TableCell>
@@ -2046,18 +2282,28 @@ export default function Results({
                                                             {placement.school}
                                                         </TableCell>
                                                         <TableCell>
+                                                            {placement.coaches
+                                                                .length
+                                                                ? placement.coaches.join(
+                                                                      ', ',
+                                                                  )
+                                                                : 'Not linked'}
+                                                        </TableCell>
+                                                        <TableCell>
                                                             {placement.mark ??
                                                                 '—'}
                                                         </TableCell>
                                                         {result.result_source ===
-                                                            'direct' && result.result_type !== 'versus' && (
-                                                            <TableCell>
-                                                                {(placement.tally_quantity ??
-                                                                    0) > 0
-                                                                    ? `${['Gold', 'Silver', 'Bronze'][placement.rank - 1]} x ${placement.tally_quantity}`
-                                                                    : 'No medal'}
-                                                            </TableCell>
-                                                        )}
+                                                            'direct' &&
+                                                            result.result_type !==
+                                                                'versus' && (
+                                                                <TableCell>
+                                                                    {(placement.tally_quantity ??
+                                                                        0) > 0
+                                                                        ? `${['Gold', 'Silver', 'Bronze'][placement.rank - 1]} x ${placement.tally_quantity}`
+                                                                        : 'No medal'}
+                                                                </TableCell>
+                                                            )}
                                                     </TableRow>
                                                 ),
                                             )}

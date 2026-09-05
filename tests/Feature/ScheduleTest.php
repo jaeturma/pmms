@@ -250,7 +250,7 @@ test('the end time must be after the start time', function () {
         ->assertSessionHasErrors('ends_at');
 });
 
-test('overlapping slots at a venue without separate playing areas are rejected', function () {
+test('overlapping slots at a venue without separate playing areas are allowed', function () {
     $venue = Venue::factory()->create();
     EventSchedule::factory()->create([
         'meet_id' => Meet::current()->id,
@@ -266,12 +266,12 @@ test('overlapping slots at a venue without separate playing areas are rejected',
 
     $this->actingAs(User::factory()->admin()->create())
         ->post('/schedule', $input)
-        ->assertSessionHasErrors('starts_at');
+        ->assertSessionDoesntHaveErrors();
 
-    expect(EventSchedule::query()->count())->toBe(1);
+    expect(EventSchedule::query()->count())->toBe(2);
 });
 
-test('overlapping slots within the same competition area are rejected', function () {
+test('overlapping slots within the same competition area are allowed', function () {
     $venue = Venue::factory()->create();
     $area = CompetitionArea::create(['venue_id' => $venue->id, 'name' => 'Court 1', 'area_type' => 'court']);
     EventSchedule::factory()->create([
@@ -282,9 +282,9 @@ test('overlapping slots within the same competition area are rejected', function
     $input = [...validSlotInput(venue: $venue), 'competition_area_id' => $area->id, 'starts_at' => '09:00', 'ends_at' => '11:00'];
 
     $this->actingAs(User::factory()->admin()->create())->post('/schedule', $input)
-        ->assertSessionHasErrors('starts_at');
+        ->assertSessionDoesntHaveErrors();
 
-    expect(EventSchedule::query()->where('competition_area_id', $area->id)->count())->toBe(1);
+    expect(EventSchedule::query()->where('competition_area_id', $area->id)->count())->toBe(2);
 });
 
 test('different competition areas allow simultaneous slots', function () {

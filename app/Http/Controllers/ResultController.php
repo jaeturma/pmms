@@ -99,6 +99,12 @@ class ResultController extends Controller
 
         $meetId = Meet::current()->id;
         $eventId = $request->integer('event_id');
+        $sportId = $request->integer('sport_id');
+        $status = $request->string('status')->toString();
+        $statusGroups = [
+            'for_validation' => ['encoded', 'submitted', 'validated', 'reopened'],
+            'returned' => ['returned'], 'accepted' => ['official'], 'cancelled' => ['cancelled'],
+        ];
 
         $query = EventResult::query()->real()
             ->with([
@@ -119,6 +125,10 @@ class ResultController extends Controller
                     ->withTrashed()
                     ->select(['id', 'first_name', 'last_name', 'school_id']),
                 'placements.entry.athlete.school:id,name',
+                'placements.entry.athlete.coaches:id,name,role',
+                'placements.athlete.coaches:id,name,role',
+                'placements.reportingAthletes.coaches:id,name,role',
+                'placements.teamEntry.members.athlete.coaches:id,name,role',
                 'placements.entry.delegation.school:id,name',
                 'placements.teamEntry.delegation.school:id,name',
                 'placements.teamEntry.delegation.district:id,name',
@@ -144,6 +154,7 @@ class ResultController extends Controller
                 $visible->where('status', ResultStatus::Official->value)
                     ->orWhere(function ($secretariatResults) use ($user) {
                         $secretariatResults->whereIn('status', [
+                            ResultStatus::Cancelled->value,
                             ResultStatus::Encoded->value,
                             ResultStatus::Submitted->value,
                             ResultStatus::Validated->value,
@@ -157,6 +168,8 @@ class ResultController extends Controller
                     })
                     ->orWhere(function ($assignedResults) use ($user) {
                         $assignedResults->whereIn('status', [
+                            ResultStatus::Validated->value,
+                            ResultStatus::Cancelled->value,
                             ResultStatus::Encoded->value,
                             ResultStatus::Submitted->value,
                             ResultStatus::Returned->value,
@@ -212,6 +225,13 @@ class ResultController extends Controller
             $query->where('event_id', $eventId);
         }
 
+        if ($sportId > 0) {
+            $query->whereHas('event', fn ($events) => $events->where('sport_id', $sportId));
+        }
+        if (isset($statusGroups[$status])) {
+            $query->whereIn('status', $statusGroups[$status]);
+        }
+
         return Inertia::render('results/index', [
             'results' => $query->paginate($this->registryPageSize)->withQueryString()
                 ->through(function (EventResult $result) use ($user, $canManage): array {
@@ -260,7 +280,18 @@ class ResultController extends Controller
                         'meet' => $result->meet?->name ?? 'Unavailable meet',
                         'event' => $event === null ? 'Unavailable event' : $this->eventLabel($event),
                         'status' => $result->status->value,
-                        'status_label' => $result->result_source === 'direct' && $result->status === ResultStatus::Official ? 'Accepted' : $result->status->label(),
+                        'status_label' => match ($result->status) {
+                            ResultStatus::Official => 'Accepted',
+                            ResultStatus::Returned => 'Returned',
+                            ResultStatus::Cancelled => 'Cancelled',
+                            default => 'For Validation',
+                        },
+                        'audit_trail' => \App\Models\AuditLog::query()
+                            ->where('auditable_type', $result->getMorphClass())->where('auditable_id', $result->id)
+                            ->with('user:id,name')->orderByDesc('id')->get()
+                            ->map(fn ($log) => ['id' => $log->id, 'action' => $log->action,
+                                'actor' => $log->user?->name ?? 'System', 'at' => $log->created_at?->toIso8601String(),
+                                'reason' => $log->context['reason'] ?? null]),
                         'result_source' => $result->result_source,
                         'result_type' => $result->result_type,
                         'measurement_type' => $result->measurement_type,
@@ -349,6 +380,11 @@ class ResultController extends Controller
                             ->map(fn (ResultPlacement $placement): array => [
                                 'id' => $placement->id,
                                 'attribution' => app(ResultAttributionService::class)->report($placement),
+                                'coaches' => collect([$placement->athlete, $placement->entry?->athlete])
+                                    ->merge($placement->reportingAthletes)
+                                    ->merge($placement->teamEntry?->members->pluck('athlete') ?? [])
+                                    ->filter()->flatMap(fn ($athlete) => $athlete->coaches->pluck('name'))
+                                    ->unique()->values(),
                                 'can_attribute' => $result->result_source === 'direct' && $placement->delegation !== null && app(ResultAttributionService::class)->canManage($user, $event, $placement->delegation),
                                 'entry_id' => $placement->entry_id,
                                 'team_entry_id' => $placement->team_entry_id,
@@ -376,7 +412,12 @@ class ResultController extends Controller
             'filters' => [
                 'meet_id' => $meetId > 0 ? $meetId : null,
                 'event_id' => $eventId > 0 ? $eventId : null,
+                'sport_id' => $sportId ?: null,
+                'status' => isset($statusGroups[$status]) ? $status : null,
             ],
+            'sportOptions' => \App\Models\Sport::query()
+                ->whereHas('events', fn ($events) => $events->when($isTournamentScoped, fn ($q) => $q->whereKey($assignedEventIds)))
+                ->orderBy('name')->get(['id', 'name'])->map(fn ($sport) => ['id' => $sport->id, 'label' => $sport->name]),
             'meetOptions' => Meet::query()->orderBy('name')->get(['id', 'name'])
                 ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]),
             'eventOptionsByMeet' => Event::query()->real()
@@ -386,6 +427,7 @@ class ResultController extends Controller
                 ->get(['id', 'sport_id', 'name', 'gender', 'age_division', 'is_team_event', 'is_medal_event'])
                 ->flatMap(fn (Event $event) => $event->meets->map(fn (Meet $meet): array => [
                     'id' => $event->id,
+                    'sport_id' => $event->sport_id,
                     'meet_id' => $meet->id,
                     'is_team_event' => $event->is_team_event,
                     'default_result_type' => $event->resolvedMedalConfig()->awards_medals ? 'medal' : 'versus',

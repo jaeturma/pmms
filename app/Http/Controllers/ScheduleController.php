@@ -229,8 +229,10 @@ class ScheduleController extends Controller
                         'ends_at' => substr($schedule->ends_at, 0, 5),
                         'note' => $schedule->note,
                         'match_id' => $match?->id,
+                        'live_scoreboard' => (bool) $match?->live_scoring_enabled && $match?->scoreboard_mode !== null,
+                        'scoreboard_mode' => $match?->scoreboard_mode ?? 'test',
                         'is_live' => $match !== null && $match->scoringSessions->isNotEmpty(),
-                        'live_score_available' => ScoreboardType::supportsLiveSport($schedule->event->sport->name),
+                        'live_score_available' => (bool) $match?->live_scoring_enabled && ScoreboardType::supportsLiveSport($schedule->event->sport->name),
                         'can_manage' => $canManageAll
                             || ($canManageAssignedCompetition && $visibleEventIds->contains($schedule->event_id)),
                     ];
@@ -247,6 +249,7 @@ class ScheduleController extends Controller
                 ->map(fn (Event $event): array => [
                     'id' => $event->id,
                     'sport_id' => $event->sport_id,
+                    'supports_scoreboard' => \App\Services\ScheduleScoreboardService::supports($event->sport->name),
                     'sport_category_id' => $event->sport_category_id,
                     'venue_id' => $venueOptions->firstWhere('event_id', $event->id)['id'] ?? null,
                     'label' => sprintf(
@@ -299,7 +302,11 @@ class ScheduleController extends Controller
 
         $this->assertSlotIsValid($data, $user);
 
-        $schedule = EventSchedule::create($data);
+        $schedule = \Illuminate\Support\Facades\DB::transaction(function () use ($data, $request) {
+            $schedule = EventSchedule::create(collect($data)->except(['live_scoreboard', 'scoreboard_mode'])->all());
+            app(\App\Services\ScheduleScoreboardService::class)->sync($schedule, $request->boolean('live_scoreboard'), $request->input('scoreboard_mode', 'test'));
+            return $schedule;
+        });
 
         $this->audit->record('schedule.created', $schedule, $this->context($schedule));
 
@@ -327,7 +334,12 @@ class ScheduleController extends Controller
 
         $this->assertSlotIsValid($data, $user, $schedule);
 
-        $schedule->update($data);
+        \Illuminate\Support\Facades\DB::transaction(function () use ($schedule, $data, $request) {
+            $schedule->update(collect($data)->except(['live_scoreboard', 'scoreboard_mode'])->all());
+            if ($request->has('live_scoreboard')) {
+                app(\App\Services\ScheduleScoreboardService::class)->sync($schedule, $request->boolean('live_scoreboard'), $request->input('scoreboard_mode', 'test'));
+            }
+        });
 
         $this->audit->record('schedule.updated', $schedule, $this->context($schedule));
 
@@ -404,31 +416,6 @@ class ScheduleController extends Controller
             ]);
         }
 
-        // A venue can run simultaneous competitions on different playing
-        // areas, but one physical area cannot host overlapping activities.
-        $conflict = EventSchedule::query()
-            ->where('meet_id', $meet->id)
-            ->whereDate('scheduled_date', $data['scheduled_date'])
-            ->where('starts_at', '<', $data['ends_at'])
-            ->where('ends_at', '>', $data['starts_at'])
-            ->when($ignore !== null, fn ($slots) => $slots->whereKeyNot($ignore->id))
-            ->when(
-                ! empty($data['competition_area_id']),
-                fn ($slots) => $slots->where('competition_area_id', $data['competition_area_id']),
-                fn ($slots) => $slots->where('venue_id', $data['venue_id'])->whereNull('competition_area_id'),
-            )
-            ->with(['event:id,name', 'venue:id,name', 'competitionArea:id,name'])
-            ->first();
-
-        if ($conflict !== null) {
-            throw ValidationException::withMessages([
-                'starts_at' => __('This playing area is already booked for :event from :start to :end.', [
-                    'event' => $conflict->event->name,
-                    'start' => substr($conflict->starts_at, 0, 5),
-                    'end' => substr($conflict->ends_at, 0, 5),
-                ]),
-            ]);
-        }
     }
 
     private function meetIsSchedulable(Meet $meet): bool

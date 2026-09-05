@@ -811,18 +811,23 @@ class AthleteController extends Controller
         $athlete->save();
 
         if ($canReassignCoach && $athlete->relationLoaded('pendingCoaches')) {
+            $previousCoachIds = $athlete->coaches()->pluck('users.id')->all();
             $athlete->coaches()->sync($athlete->getRelation('pendingCoaches')->modelKeys());
+            $this->audit->record('athlete.coaches_relinked', $athlete, [
+                'previous_coach_ids' => $previousCoachIds,
+                'coach_ids' => $athlete->getRelation('pendingCoaches')->modelKeys(),
+            ]);
         }
 
         if ($canManageAssignments) {
             DB::transaction(function () use ($request, $athlete): void {
-                $eventIds = collect($request->input('event_ids', []))->map(fn ($id) => (int) $id)->unique();
+                $eventIds = collect($request->input('event_ids', $athlete->entries()->pluck('event_id')->all()))->map(fn ($id) => (int) $id)->unique();
                 $athlete->entries()->whereNotIn('event_id', $eventIds)->whereDoesntHave('placements')->delete();
                 foreach ($eventIds as $eventId) {
                     Entry::query()->firstOrCreate(['athlete_id' => $athlete->id, 'event_id' => $eventId], ['delegation_id' => $athlete->delegation_id]);
                 }
                 $athlete->entries()->update(['delegation_id' => $athlete->delegation_id]);
-                $sportIds = collect($request->input('meet_sport_ids', []))->map(fn ($id) => (int) $id)->unique();
+                $sportIds = collect($request->input('meet_sport_ids', $athlete->sportRosterMemberships()->pluck('meet_sport_id')->all()))->map(fn ($id) => (int) $id)->unique();
                 $athlete->sportRosterMemberships()->whereNotIn('meet_sport_id', $sportIds)->delete();
                 foreach ($sportIds as $meetSportId) {
                     $athlete->sportRosterMemberships()->firstOrCreate(['meet_sport_id' => $meetSportId], [

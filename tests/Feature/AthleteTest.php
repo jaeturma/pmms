@@ -292,7 +292,7 @@ test('active ICT team members can register athletes', function () {
     expect(AuditLog::query()->where('action', 'athlete.created')->exists())->toBeTrue();
 });
 
-test('active ICT team members can open and update the full athlete editor', function () {
+test('active ICT team members can relink coaches through registration after result acceptance', function () {
     $delegation = Delegation::factory()->create();
     $event = Event::factory()->create();
     $delegation->meet->events()->attach($event);
@@ -331,6 +331,10 @@ test('active ICT team members can open and update the full athlete editor', func
         ->where('canReassignCoach', true)
         ->has('coachOptions', 2));
 
+    $entry = Entry::factory()->confirmed()->create(['athlete_id' => $athlete->id, 'delegation_id' => $delegation->id, 'event_id' => $event->id]);
+    $result = \App\Models\EventResult::factory()->create(['meet_id' => $delegation->meet_id, 'event_id' => $event->id, 'status' => 'official']);
+    \App\Models\ResultPlacement::factory()->create(['event_result_id' => $result->id, 'entry_id' => $entry->id]);
+
     $this->actingAs($ict)->put("/athletes/{$athlete->id}", [
         ...validAthletePayload($delegation), 'first_name' => 'Updated',
         'lrn' => $athlete->lrn, 'meet_sport_ids' => [$meetSport->id],
@@ -338,7 +342,9 @@ test('active ICT team members can open and update the full athlete editor', func
     ])->assertRedirect()->assertSessionDoesntHaveErrors();
 
     expect($athlete->refresh()->first_name)->toBe('UPDATED')
-        ->and($athlete->registered_by)->toBe($replacementCoach->id);
+        ->and($athlete->registered_by)->toBe($replacementCoach->id)
+        ->and($athlete->coaches()->pluck('users.id')->all())->toBe([$replacementCoach->id])
+        ->and($result->fresh()->status->value)->toBe('official');
 });
 
 test('administrators can replace an athletes delegation sports and events', function () {

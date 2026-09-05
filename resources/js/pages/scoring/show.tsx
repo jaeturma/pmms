@@ -75,6 +75,8 @@ type Props = {
         scheduled_date: string | null;
         status: string;
         is_scheduled: boolean;
+        scoreboard_mode: string | null;
+        viewer_url: string;
     };
     suggestedLabels: [string | null, string | null];
     suggestedBoardType:
@@ -114,6 +116,7 @@ export default function ScoringBoard({
     const [sideALabel, setSideALabel] = useState(suggestedLabels[0] ?? '');
     const [sideBLabel, setSideBLabel] = useState(suggestedLabels[1] ?? '');
     const [forceGeneric, setForceGeneric] = useState(false);
+    const [gameType, setGameType] = useState(match.scoreboard_mode ?? 'test');
     const containerRef = useRef<HTMLDivElement>(null);
 
     // Adjust local state during render when a fresh Inertia prop arrives
@@ -186,6 +189,7 @@ export default function ScoringBoard({
         router.post(
             startRoute(match.id).url,
             {
+                scoreboard_mode: gameType,
                 side_a_label: sideALabel,
                 side_b_label: sideBLabel,
                 ...(forceGeneric ? { board_type: 'generic' } : {}),
@@ -211,9 +215,9 @@ export default function ScoringBoard({
             return;
         }
 
-        const reason = window.prompt(
-            'Why are you reversing this point or foul?',
-        )?.trim();
+        const reason = window
+            .prompt('Why are you reversing this point or foul?')
+            ?.trim();
 
         if (!reason) {
             return;
@@ -306,8 +310,53 @@ export default function ScoringBoard({
                     )}
                 </div>
 
+                {match.scoreboard_mode && (
+                    <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-muted/20 p-4">
+                        <Label htmlFor="game-type">Viewer game label</Label>
+                        <select
+                            id="game-type"
+                            value={gameType}
+                            onChange={(e) => setGameType(e.target.value)}
+                            className="h-10 rounded-md border bg-background px-3"
+                        >
+                            <option value="test">Test</option>
+                            <option value="finals">Finals Game</option>
+                            <option value="championship">
+                                Championship Game
+                            </option>
+                        </select>
+                        {isManager && session && (
+                            <Button
+                                variant="outline"
+                                onClick={() =>
+                                    router.post(
+                                        `/matches/${match.id}/scoreboard/reset`,
+                                        { scoreboard_mode: gameType },
+                                        { preserveScroll: true },
+                                    )
+                                }
+                            >
+                                Reset / new run
+                            </Button>
+                        )}
+                        <Button variant="outline" asChild>
+                            <a
+                                href={match.viewer_url}
+                                target="_blank"
+                                rel="noreferrer"
+                            >
+                                Viewer display
+                            </a>
+                        </Button>
+                        <p className="w-full text-sm text-muted-foreground">
+                            Reset starts from zero and keeps the previous run in
+                            history. Results are submitted separately.
+                        </p>
+                    </div>
+                )}
                 {session === null ? (
-                    isManager && match.is_scheduled ? (
+                    isManager &&
+                    (match.is_scheduled || match.scoreboard_mode !== null) ? (
                         <Card>
                             <CardHeader>
                                 <CardTitle className="text-base">
@@ -328,7 +377,9 @@ export default function ScoringBoard({
                                                 setSideALabel(e.target.value)
                                             }
                                             required
-                                            readOnly={suggestedLabels[0] !== null}
+                                            readOnly={
+                                                suggestedLabels[0] !== null
+                                            }
                                         />
                                     </div>
                                     <div className="grid gap-2">
@@ -340,7 +391,9 @@ export default function ScoringBoard({
                                                 setSideBLabel(e.target.value)
                                             }
                                             required
-                                            readOnly={suggestedLabels[1] !== null}
+                                            readOnly={
+                                                suggestedLabels[1] !== null
+                                            }
                                         />
                                     </div>
                                     {suggestedBoardType !== 'generic' && (
@@ -404,7 +457,6 @@ export default function ScoringBoard({
                             participants={participants}
                             hidePlayByPlay={isManager && isActive}
                         />
-
 
                         {isManager && isActive && basketballState && (
                             <BasketballGameControl

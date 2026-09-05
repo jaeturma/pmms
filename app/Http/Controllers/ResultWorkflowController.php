@@ -320,7 +320,7 @@ class ResultWorkflowController extends Controller
         ]);
 
         return Storage::disk($attachment->file->disk)
-            ->download($attachment->file->path, $attachment->file->original_name);
+            ->response($attachment->file->path, $attachment->file->original_name, [], $request->boolean('preview') ? 'inline' : 'attachment');
     }
 
     public function submit(Request $request, EventResult $result): RedirectResponse

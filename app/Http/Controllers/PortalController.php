@@ -521,6 +521,7 @@ class PortalController extends Controller
                 'sport' => $match->event->sport->name,
                 'category' => sprintf('%s %s', $match->event->gender->label(), $match->event->age_division->label()),
                 'round_label' => $match->round_label,
+                'scoreboard_mode' => $match->scoreboard_mode,
                 'status' => $match->status->value,
                 'status_label' => $match->status->label(),
                 'venue' => $match->schedule?->venue?->name,
@@ -1394,6 +1395,7 @@ class PortalController extends Controller
             [
                 'match_id' => $match->id,
                 'round_label' => $match->round_label,
+                'scoreboard_mode' => $match->scoreboard_mode,
                 'category' => sprintf('%s %s', $match->event->gender->label(), $match->event->age_division->label()),
                 'venue' => $match->schedule?->venue?->name,
                 // Same format as `sportPortalGameRow()` — the sport hub
@@ -1417,6 +1419,7 @@ class PortalController extends Controller
         return [
             'id' => $match->id,
             'round_label' => $match->round_label,
+                'scoreboard_mode' => $match->scoreboard_mode,
             'status' => $match->status->value,
             'status_label' => $match->status->label(),
             'category' => sprintf('%s %s', $match->event->gender->label(), $match->event->age_division->label()),

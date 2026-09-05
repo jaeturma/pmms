@@ -1,6 +1,7 @@
 import { ClipboardList } from 'lucide-react';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { initialsFor } from '@/apps/portal/components/municipality-crest';
+import { ScoreboardGameLabel } from '@/apps/portal/components/scoreboard-game-label';
 import {
     readCount,
     readHitsAndErrors,
@@ -153,6 +154,7 @@ export function PortalSoftballScoreboard({
 
     return (
         <div className={cn('flex flex-col gap-3.5', className)}>
+            <ScoreboardGameLabel mode={session.scoreboard_mode} />
             <div className="portal-animate-in overflow-hidden rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] text-[var(--portal-surface-foreground)] shadow-[0_6px_24px_rgba(15,23,42,0.08)]">
                 <div className="flex items-center justify-between gap-2 bg-[var(--portal-live)] px-4 py-2 text-[var(--portal-live-foreground)]">
                     <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase">

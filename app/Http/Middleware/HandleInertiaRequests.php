@@ -70,6 +70,7 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user === null ? null : [
                     ...$user->toArray(),
                     'role_label' => $user->role->label(),
+                    'can_operate_scoreboard' => \App\Services\ScheduleScoreboardService::canOperate($user),
                     'tournament_assignment_roles' => app(CompetitionAccessService::class)
                         ->assignments($user, Meet::current()->id)
                         ->map(fn ($assignment): string => $assignment->role->value)

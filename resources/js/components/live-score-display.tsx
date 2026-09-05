@@ -209,6 +209,7 @@ export type RosterPlayer = {
 };
 
 export type LiveSession = {
+    scoreboard_mode?: string | null;
     id: number;
     match_id: number;
     status: 'in_progress' | 'paused' | 'ended';
