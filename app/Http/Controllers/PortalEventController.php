@@ -32,6 +32,7 @@ class PortalEventController extends Controller
         // times cannot be added together or ranked with a generic formula.
         $medalResults = $results->filter(fn (array $result) => collect($result['placements'])->contains(fn (array $placement) => $placement['medal'] !== null));
         $standings = $results->reject(fn (array $result) => $medalResults->contains('id', $result['id']))
+            ->reject(fn (array $result) => ($result['result_type'] ?? null) === 'versus')
             ->flatMap(fn (array $result) => collect($result['placements'])->map(fn (array $placement) => [
                 ...$placement, 'result_id' => $result['id'], 'status_label' => $result['status_label'],
             ]))->sortBy('rank')->values();
@@ -43,13 +44,15 @@ class PortalEventController extends Controller
                 'sport_url' => $slug === null ? '/sports-directory' : route('public.sport-portal', $slug->value)],
             'meet' => $meet === null ? null : ['id' => $meet->id, 'name' => $meet->name],
             'standings' => $standings, 'results' => $medalResults->values(),
+            'versusResults' => $results->where('result_type', 'versus')->values(),
+            'teamStandings' => $meet === null ? ['columns' => [], 'rows' => [], 'note' => ''] : app(\App\Services\EventTeamStandingsService::class)->standings($meet->id, $event),
         ]);
     }
 
     public function document(EventResult $result, ResultAttachment $attachment, PublicEventResults $publicResults): StreamedResponse
     {
         abort_unless($result->status === ResultStatus::Official, 404);
-        abort_unless($publicResults->withMedals(EventResult::query())->whereKey($result->id)
+        abort_unless($publicResults->publishedResults(EventResult::query())->whereKey($result->id)
             ->whereHas('meet', fn ($query) => $query->published())
             ->whereHas('event.meets', fn ($query) => $query->whereKey($result->meet_id))->exists(), 404);
         abort_unless($attachment->event_result_id === $result->id && $attachment->is_current

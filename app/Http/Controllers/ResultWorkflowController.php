@@ -19,6 +19,7 @@ use App\Services\AuditLogger;
 use App\Services\CompetitionAccessService;
 use App\Services\FileUploadService;
 use App\Services\MedalAwardService;
+use App\Services\ResultAttributionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -41,12 +42,35 @@ class ResultWorkflowController extends Controller
 
     public function storeDirect(Request $request, ?EventResult $result = null): RedirectResponse
     {
+        $isVersus = $request->input('result_type', $result?->result_type) === 'versus';
+        if ($isVersus) {
+            $versus = $request->validate([
+                'winner_delegation_id' => ['required', 'integer', Rule::exists('delegations', 'id')],
+                'loser_delegation_id' => ['required', 'integer', 'different:winner_delegation_id', Rule::exists('delegations', 'id')],
+                'winner_value' => ['required', 'regex:/^\d{1,13}(?:\.\d{1,6})?$/'],
+                'loser_value' => ['required', 'regex:/^\d{1,13}(?:\.\d{1,6})?$/'],
+                'measurement_type' => ['required', Rule::in(['score', 'points', 'time', 'distance'])],
+                'winner_attribution' => ['sometimes', 'array'],
+                'loser_attribution' => ['sometimes', 'array'],
+            ]);
+            $request->merge([
+                'result_type' => 'versus',
+                'gold_delegation_id' => $versus['winner_delegation_id'], 'silver_delegation_id' => $versus['loser_delegation_id'], 'bronze_delegation_id' => null,
+                'gold_mark' => (string) $versus['winner_value'], 'silver_mark' => (string) $versus['loser_value'],
+                'gold_count' => 0, 'silver_count' => 0, 'bronze_count' => 0,
+                ...array_key_exists('winner_attribution', $versus) ? ['gold_attribution' => $versus['winner_attribution']] : [],
+                ...array_key_exists('loser_attribution', $versus) ? ['silver_attribution' => $versus['loser_attribution']] : [],
+            ]);
+        }
         $data = $request->validate([
+            'result_type' => ['nullable', Rule::in(['medal', 'versus'])],
+            'measurement_type' => ['nullable', Rule::in(['score', 'points', 'time', 'distance'])],
             'event_id' => ['required', 'integer', Rule::exists('events', 'id')],
             'gold_delegation_id' => ['required', 'integer', Rule::exists('delegations', 'id')],
             'silver_delegation_id' => ['nullable', 'integer', Rule::exists('delegations', 'id')],
             'bronze_delegation_id' => ['nullable', 'integer', Rule::exists('delegations', 'id')],
             ...collect(['gold', 'silver', 'bronze'])->flatMap(fn ($medal) => [
+                $medal.'_attribution' => ['sometimes', 'array'],
                 $medal.'_mark' => ['nullable', 'string', 'max:60'],
                 $medal.'_count' => ['sometimes', 'required', 'integer', 'min:0', 'max:65535'],
             ])->all(),
@@ -68,9 +92,19 @@ class ResultWorkflowController extends Controller
 
         $delegationIds = collect([$data['gold_delegation_id'], $data['silver_delegation_id'] ?? null, $data['bronze_delegation_id'] ?? null])->filter()->map(fn ($id) => (int) $id);
         abort_unless(Delegation::query()->where('meet_id', $meet->id)->whereIn('status', [DelegationStatus::Submitted->value, DelegationStatus::Approved->value])->whereKey($delegationIds)->count() === $delegationIds->unique()->count(), 422, 'Every medal Delegation must be active in the current Meet.');
-        abort_if(EventResult::query()->real()->where('meet_id', $meet->id)->where('event_id', $event->id)
+        abort_if(! $isVersus && EventResult::query()->real()->where('meet_id', $meet->id)->where('event_id', $event->id)
+            ->where(fn ($query) => $query->whereNull('result_type')->orWhere('result_type', '!=', 'versus'))
             ->when($result !== null, fn ($query) => $query->whereKeyNot($result->id))
             ->whereNotIn('status', [ResultStatus::Cancelled->value])->exists(), 422, 'An active Result already exists for this Sports Event. Return, cancel, or correct it instead.');
+
+        $attributions = [];
+        foreach ($delegationIds as $index => $delegationId) {
+            $medal = ['gold', 'silver', 'bronze'][$index];
+            if (array_key_exists($medal.'_attribution', $data)) {
+                $payload = validator($data[$medal.'_attribution'], ResultAttributionController::rules())->validate();
+                $attributions[$index] = app(ResultAttributionService::class)->validate($event, Delegation::findOrFail($delegationId), $payload);
+            }
+        }
 
         $upload = null;
         $checksum = null;
@@ -84,12 +118,19 @@ class ResultWorkflowController extends Controller
             $checksum = hash_final($hash);
         }
 
-        $result = DB::transaction(function () use ($meet, $event, $user, $delegationIds, $upload, $checksum, $data, $result): EventResult {
+        $result = DB::transaction(function () use ($meet, $event, $user, $delegationIds, $upload, $checksum, $data, $result, $attributions, $isVersus): EventResult {
             $previous = null;
             if ($result !== null) {
                 $result = EventResult::query()->lockForUpdate()->findOrFail($result->id);
                 abort_unless(in_array($result->status, [ResultStatus::Encoded, ResultStatus::Submitted, ResultStatus::Returned, ResultStatus::Reopened], true), 422, 'Reopen an accepted Result before editing it.');
                 $previous = $result->placements()->get()->toArray();
+                // Preserve optional links when an older client edits only scores/counts.
+                foreach ($result->placements()->get() as $oldPlacement) {
+                    $index = $oldPlacement->rank - 1;
+                    if (! isset($attributions[$index]) && ($delegationIds[$index] ?? null) === $oldPlacement->delegation_id) {
+                        $attributions[$index] = app(ResultAttributionService::class)->report($oldPlacement);
+                    }
+                }
                 $result->medalAwards()->delete();
                 $result->placements()->delete();
             }
@@ -98,6 +139,8 @@ class ResultWorkflowController extends Controller
                 'result_scope' => 'event', 'operational_remarks' => 'Direct Event Result submitted from delegation medal placements.',
             ]);
             $result->forceFill([
+                'result_type' => $data['result_type'] ?? $result->result_type,
+                'measurement_type' => $isVersus ? $data['measurement_type'] : null,
                 'status' => ResultStatus::Submitted, 'encoded_by' => $user->id, 'encoded_at' => now(),
                 'submitted_by' => $user->id, 'submitted_at' => now(),
                 'version' => $result->exists ? $result->version + 1 : 1,
@@ -105,10 +148,14 @@ class ResultWorkflowController extends Controller
             ])->save();
             foreach ($delegationIds as $index => $delegationId) {
                 $medal = ['gold', 'silver', 'bronze'][$index];
-                $result->placements()->create([
+                $placement = $result->placements()->create([
                     'delegation_id' => $delegationId, 'rank' => $index + 1, 'is_tie' => false,
                     'mark' => $data[$medal.'_mark'] ?? null, 'tally_quantity' => $data[$medal.'_count'] ?? 0,
+                    'result_value' => $isVersus ? $data[$medal.'_mark'] : null,
                 ]);
+                if (isset($attributions[$index])) {
+                    app(ResultAttributionService::class)->save($placement, $attributions[$index]);
+                }
             }
             if ($upload !== null) {
                 $result->attachments()->where('attachment_type', ResultAttachment::DIRECT_RESULT_EVIDENCE)->update(['is_current' => false]);
@@ -585,7 +632,8 @@ class ResultWorkflowController extends Controller
 
             if ($locked->result_source === 'direct') {
                 $this->assertDirectResultIntegrity($locked);
-                abort_if(EventResult::query()->where('meet_id', $locked->meet_id)->where('event_id', $locked->event_id)
+                abort_if($locked->result_type !== 'versus' && EventResult::query()->where('meet_id', $locked->meet_id)->where('event_id', $locked->event_id)
+                    ->where(fn ($query) => $query->whereNull('result_type')->orWhere('result_type', '!=', 'versus'))
                     ->where('status', ResultStatus::Official->value)->whereKeyNot($locked->id)->exists(), 422,
                     'Another accepted Result already owns this Sports Event medal allocation. Reopen or correct it first.');
             }
@@ -605,7 +653,9 @@ class ResultWorkflowController extends Controller
             $this->audit->record('result.made_official', $locked, $this->context($locked));
         });
 
-        return back()->with('success', 'Result accepted and posted to the official public medal tally.');
+        return back()->with('success', $result->result_type === 'versus'
+            ? 'Versus result accepted and published. Event standings updated.'
+            : 'Result accepted and posted to the official public medal tally.');
     }
 
     private function assertDirectResultIntegrity(EventResult $result): void
@@ -615,6 +665,13 @@ class ResultWorkflowController extends Controller
         abort_unless($result->attachments->where('is_current', true)->contains('attachment_type', ResultAttachment::DIRECT_RESULT_EVIDENCE), 422,
             'Direct Result evidence is required.');
         $placements = $result->placements->whereIn('rank', [1, 2, 3]);
+        if ($result->result_type === 'versus') {
+            abort_unless($result->placements->count() === 2 && $placements->pluck('rank')->sort()->values()->all() === [1, 2]
+                && $placements->pluck('delegation_id')->unique()->count() === 2
+                && $placements->every(fn ($placement) => $placement->result_value !== null && $placement->tally_quantity === 0)
+                && in_array($result->measurement_type, ['score', 'points', 'time', 'distance'], true), 422,
+                'Versus results require distinct Winner and Loser, numeric values and a measurement type.');
+        }
         abort_unless($placements->isNotEmpty()
             && $placements->pluck('rank')->unique()->count() === $placements->count()
             && $placements->pluck('delegation_id')->filter()->count() === $placements->count(), 422,
@@ -783,6 +840,8 @@ class ResultWorkflowController extends Controller
             'sport' => $result->event->sport->name,
             'version' => $result->version,
             'status' => $result->status->value,
+            'result_type' => $result->result_type,
+            'measurement_type' => $result->measurement_type,
         ];
     }
 }

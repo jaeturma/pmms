@@ -13,6 +13,9 @@ class MedalAwardService
 {
     public function synchronize(EventResult $result, User $actor): void
     {
+        if ($result->result_type === 'versus') {
+            return;
+        }
         if ($result->demo_scenario_id !== null) {
             $result->medalAwards()->delete();
 

@@ -69,6 +69,8 @@ export type PortalResultDocument = {
 };
 
 export type PortalLatestResult = {
+    result_type?: 'medal' | 'versus';
+    measurement_type?: string;
     documents?: PortalResultDocument[];
     event: string;
     status?: string;

@@ -240,7 +240,7 @@ class PortalController extends Controller
 
         $sportId = $request->integer('sport_id');
 
-        $results = app(PublicEventResults::class)->withMedals(EventResult::query())
+        $results = app(PublicEventResults::class)->publishedResults(EventResult::query())
             ->where('meet_id', $meet->id)
             ->where('status', ResultStatus::Official->value)
             ->when($sportId > 0, fn ($query) => $query->whereHas(

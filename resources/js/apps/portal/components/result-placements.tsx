@@ -48,10 +48,10 @@ export function PortalResultPlacements({
                     >
                         <span>
                             <span className="mr-2 font-semibold tabular-nums">
-                                {placement.rank}.
+                                {result.result_type === 'versus' ? (placement.rank === 1 ? 'Winner' : 'Loser') : `${placement.rank}.`}
                             </span>
                             {placement.athlete}
-                            {placement.medal !== undefined && (
+                            {result.result_type !== 'versus' && placement.medal !== undefined && (
                                 <span className="ml-2 rounded border px-2 py-0.5 text-xs capitalize">
                                     {placement.medal ?? 'No medal'}
                                 </span>
@@ -66,7 +66,7 @@ export function PortalResultPlacements({
                             {placement.school} · {placement.delegation}
                             {placement.mark && (
                                 <span className="ml-2 font-medium text-[var(--portal-fg)]">
-                                    Score / Points / Time: {placement.mark}
+                                    {result.measurement_type ?? 'Score / Points / Time'}: {placement.mark}
                                 </span>
                             )}
                         </span>

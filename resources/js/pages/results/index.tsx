@@ -8,6 +8,11 @@ import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
 import { PaginationControls } from '@/components/pagination-controls';
 import type { Paginated } from '@/components/pagination-controls';
+import type { Attribution } from '@/components/result-attribution';
+import {
+    AttributionFields,
+    emptyAttribution,
+} from '@/components/result-attribution';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -39,6 +44,9 @@ import { resultSheet } from '@/routes/reports';
 import { correct, destroy, index, store, update } from '@/routes/results';
 
 type Placement = {
+    id: number;
+    attribution: Attribution;
+    can_attribute: boolean;
     entry_id: number | null;
     team_entry_id: number | null;
     delegation_id: number | null;
@@ -51,6 +59,9 @@ type Placement = {
 };
 
 type Result = {
+    result_type: 'medal' | 'versus' | null;
+    measurement_type: string | null;
+    is_team_event: boolean;
     result_source: string;
     can_reopen: boolean;
     id: number;
@@ -113,7 +124,7 @@ type Result = {
 
 type Option = { id: number; label: string };
 
-type EventOption = Option & { meet_id: number };
+type EventOption = Option & { meet_id: number; is_team_event: boolean; default_result_type: 'medal' | 'versus' };
 type ScheduleOption = Option & { meet_id: number; event_id: number };
 
 type EntryOption = Option & { meet_id: number; event_id: number };
@@ -157,6 +168,95 @@ type Props = {
     delegationOptions: Option[];
 };
 
+function PlacementAttribution({
+    result,
+    placement,
+}: {
+    result: Result;
+    placement: Placement;
+}) {
+    const [editing, setEditing] = useState(false);
+    const { data, setData, patch, processing, errors } = useForm<Attribution>(
+        placement.attribution,
+    );
+
+    return (
+        <div className="rounded border p-3">
+            <p className="text-sm font-medium">
+                {
+                    (result.result_type === 'versus' ? ['Winner', 'Loser'] : ['Gold / 1st', 'Silver / 2nd', 'Bronze / 3rd'])[
+                        placement.rank - 1
+                    ]
+                }{' '}
+                · {placement.school}
+            </p>
+            <p className="text-sm">
+                {result.is_team_event
+                    ? `${placement.attribution.athlete_ids.length} athletes linked · ${placement.attribution.coaches.length} coaches linked`
+                    : placement.attribution.athlete_id
+                      ? 'Athlete linked: Complete'
+                      : 'Athlete linked: Missing'}
+            </p>
+            {((result.is_team_event &&
+                (!placement.attribution.athlete_ids.length ||
+                    !placement.attribution.coaches.length)) ||
+                (!result.is_team_event &&
+                    !placement.attribution.athlete_id)) && (
+                <Badge variant="outline">Reporting data incomplete</Badge>
+            )}
+            {placement.attribution.players?.length ? (
+                <p className="text-sm">
+                    Players: {placement.attribution.players.join(', ')}
+                </p>
+            ) : null}
+            {placement.attribution.coaches.map((c) => (
+                <p className="text-sm" key={c.user_id}>
+                    {c.role}: {c.name}
+                </p>
+            ))}
+            {placement.can_attribute && (
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setEditing(!editing)}
+                >
+                    Manage reporting attribution
+                </Button>
+            )}
+            {editing && (
+                <div className="space-y-2">
+                    <AttributionFields
+                        eventId={result.event_id}
+                        delegationId={placement.delegation_id!}
+                        team={result.is_team_event}
+                        value={data}
+                        onChange={(value) => setData(value)}
+                    />
+                    {Object.values(errors).map((error, i) => (
+                        <p role="alert" key={i}>
+                            {error}
+                        </p>
+                    ))}
+                    <Button
+                        disabled={processing}
+                        onClick={() =>
+                            patch(
+                                `/results/${result.id}/placements/${placement.id}/attribution`,
+                                {
+                                    preserveScroll: true,
+                                    onSuccess: () => setEditing(false),
+                                },
+                            )
+                        }
+                    >
+                        Save attribution
+                    </Button>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function DirectResultForm({
     onOpenChange,
     events,
@@ -170,6 +270,8 @@ function DirectResultForm({
 }) {
     const { data, setData, post, processing, errors, reset, transform } =
         useForm({
+            result_type: result?.result_type ?? (result?.placements.some((p) => (p.tally_quantity ?? 0) > 0) ? 'medal' : 'versus'),
+            measurement_type: result?.measurement_type ?? '',
             event_id: result ? String(result.event_id) : '',
             gold_delegation_id: String(
                 result?.placements.find((p) => p.rank === 1)?.delegation_id ??
@@ -184,6 +286,15 @@ function DirectResultForm({
                     '',
             ),
             evidence: null as File | null,
+            gold_attribution:
+                result?.placements.find((p) => p.rank === 1)?.attribution ??
+                emptyAttribution(),
+            silver_attribution:
+                result?.placements.find((p) => p.rank === 2)?.attribution ??
+                emptyAttribution(),
+            bronze_attribution:
+                result?.placements.find((p) => p.rank === 3)?.attribution ??
+                emptyAttribution(),
             gold_mark: result?.placements.find((p) => p.rank === 1)?.mark ?? '',
             silver_mark:
                 result?.placements.find((p) => p.rank === 2)?.mark ?? '',
@@ -202,11 +313,7 @@ function DirectResultForm({
                     0,
             ),
         });
-    const [withMedals, setWithMedals] = useState(() =>
-        [data.gold_count, data.silver_count, data.bronze_count].some(
-            (count) => Number(count) > 0,
-        ),
-    );
+    const withMedals = data.result_type === 'medal';
     const [preview, setPreview] = useState<string | null>(null);
 
     useEffect(
@@ -218,7 +325,12 @@ function DirectResultForm({
         [preview],
     );
 
-    transform((current) => ({
+    transform((current) => !withMedals ? {
+        event_id: current.event_id, result_type: 'versus', measurement_type: current.measurement_type,
+        winner_delegation_id: current.gold_delegation_id, loser_delegation_id: current.silver_delegation_id,
+        winner_value: current.gold_mark, loser_value: current.silver_mark,
+        winner_attribution: current.gold_attribution, loser_attribution: current.silver_attribution, evidence: current.evidence,
+    } : ({
         ...current,
         gold_count:
             withMedals && current.gold_delegation_id ? current.gold_count : '0',
@@ -232,11 +344,11 @@ function DirectResultForm({
                 : '0',
     }));
 
-    const toggleMedals = () => {
-        const enabled = !withMedals;
-        setWithMedals(enabled);
+    const selectResultType = (mode: string) => {
+        const enabled = mode === 'medal';
         setData((current) => ({
             ...current,
+            result_type: enabled ? 'medal' : 'versus',
             gold_count: enabled ? '1' : '0',
             silver_count: enabled ? '1' : '0',
             bronze_count: enabled ? '1' : '0',
@@ -272,21 +384,7 @@ function DirectResultForm({
                 >
                     Back to Results
                 </Button>
-                <Button
-                    type="button"
-                    aria-pressed={withMedals}
-                    aria-controls="result-participants"
-                    disabled={processing}
-                    className={
-                        withMedals
-                            ? 'border border-orange-700 bg-orange-700 text-white hover:bg-orange-800 focus-visible:ring-orange-500'
-                            : 'border border-orange-300 bg-orange-100 text-orange-900 hover:bg-orange-200 focus-visible:ring-orange-500 dark:border-orange-700 dark:bg-orange-950 dark:text-orange-100 dark:hover:bg-orange-900'
-                    }
-                    onClick={toggleMedals}
-                >
-                    <Award className="size-4" /> With Medals:{' '}
-                    {withMedals ? 'On' : 'Off'}
-                </Button>
+                <label>Result Type<select aria-label="Result Type" className="ml-2 rounded border p-2" value={data.result_type} onChange={(e) => selectResultType(e.target.value)} disabled={processing}><option value="medal">Medal Result</option><option value="versus">Versus / Non-Medal</option></select></label>
             </div>
             <form onSubmit={submit} className="space-y-6">
                 <section className="space-y-3 rounded-xl border bg-card p-4 sm:p-5">
@@ -298,7 +396,17 @@ function DirectResultForm({
                     </Label>
                     <Select
                         value={data.event_id}
-                        onValueChange={(value) => setData('event_id', value)}
+                        onValueChange={(value) =>
+                            setData((current) => ({
+                                ...current,
+                                event_id: value,
+                                result_type: events.find((event) => event.id === Number(value))?.default_result_type ?? 'versus',
+                                gold_count: '1', silver_count: '1', bronze_count: '1',
+                                gold_attribution: emptyAttribution(),
+                                silver_attribution: emptyAttribution(),
+                                bronze_attribution: emptyAttribution(),
+                            }))
+                        }
                         disabled={processing || !!result}
                     >
                         <SelectTrigger
@@ -319,6 +427,12 @@ function DirectResultForm({
                         </SelectContent>
                     </Select>
                     <InputError message={errors.event_id} />
+                    {!withMedals && <label className="block">Measurement Type<select aria-label="Measurement Type" required className="ml-2 rounded border p-2" value={data.measurement_type} onChange={(e) => setData('measurement_type', e.target.value)}><option value="">Select measurement type</option><option value="score">Score</option><option value="points">Points</option><option value="time">Time</option><option value="distance">Distance</option></select></label>}
+                    {Object.entries(errors)
+                        .filter(([key]) => key !== 'event_id')
+                        .map(([key, error]) => (
+                            <InputError key={key} message={error} />
+                        ))}
                 </section>
                 <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
                     <section
@@ -330,8 +444,7 @@ function DirectResultForm({
                                 Participants and Results
                             </h2>
                             <p className="text-sm text-muted-foreground">
-                                One participant is enough. Second and third
-                                places are optional.
+                                {withMedals ? 'Gold is required. Silver and Bronze are optional.' : 'Select a distinct Winner and Loser. Attribution is optional.'}
                             </p>
                         </div>
                         <div className="divide-y">
@@ -356,7 +469,7 @@ function DirectResultForm({
                                         optional: true,
                                     },
                                 ] as const
-                            ).map(({ key, place, label, optional }) => {
+                            ).filter(({ key }) => withMedals || key !== 'bronze').map(({ key, label, optional }) => {
                                 const delegationField =
                                     `${key}_delegation_id` as const;
                                 const markField = `${key}_mark` as const;
@@ -369,9 +482,9 @@ function DirectResultForm({
                                     >
                                         <div className="flex flex-wrap items-center gap-2">
                                             <h3 className="text-sm font-semibold">
-                                                {place}
+                                                {withMedals ? label : key === 'gold' ? 'Winner' : 'Loser'}
                                             </h3>
-                                            {optional && (
+                                            {optional && withMedals && (
                                                 <span className="text-xs text-muted-foreground">
                                                     Optional
                                                 </span>
@@ -398,12 +511,15 @@ function DirectResultForm({
                                                         'none'
                                                     }
                                                     onValueChange={(value) =>
-                                                        setData(
-                                                            delegationField,
-                                                            value === 'none'
-                                                                ? ''
-                                                                : value,
-                                                        )
+                                                        setData((current) => ({
+                                                            ...current,
+                                                            [delegationField]:
+                                                                value === 'none'
+                                                                    ? ''
+                                                                    : value,
+                                                            [`${key}_attribution`]:
+                                                                emptyAttribution(),
+                                                        }))
                                                     }
                                                     disabled={processing}
                                                 >
@@ -415,7 +531,7 @@ function DirectResultForm({
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="none">
-                                                            {optional
+                                                            {optional && withMedals
                                                                 ? 'No participant'
                                                                 : 'Select a delegation'}
                                                         </SelectItem>
@@ -442,15 +558,47 @@ function DirectResultForm({
                                                         errors[delegationField]
                                                     }
                                                 />
+                                                <AttributionFields
+                                                    key={`${data.event_id}-${data[delegationField]}`}
+                                                    eventId={Number(
+                                                        data.event_id,
+                                                    )}
+                                                    delegationId={Number(
+                                                        data[delegationField],
+                                                    )}
+                                                    team={
+                                                        events.find(
+                                                            (e) =>
+                                                                e.id ===
+                                                                Number(
+                                                                    data.event_id,
+                                                                ),
+                                                        )?.is_team_event ??
+                                                        false
+                                                    }
+                                                    value={
+                                                        data[
+                                                            `${key}_attribution`
+                                                        ]
+                                                    }
+                                                    onChange={(value) =>
+                                                        setData(
+                                                            `${key}_attribution`,
+                                                            value,
+                                                        )
+                                                    }
+                                                />
                                             </div>
                                             <div className="min-w-0 space-y-2">
                                                 <Label htmlFor={`${key}-mark`}>
-                                                    Score / Points / Time
+                                                    {withMedals ? 'Score / Points / Time' : 'Result Value'}
                                                 </Label>
                                                 <Input
                                                     id={`${key}-mark`}
                                                     className="h-10"
                                                     maxLength={60}
+                                                    required={!withMedals}
+                                                    inputMode={!withMedals ? 'decimal' : 'text'}
                                                     value={data[markField]}
                                                     placeholder="e.g. 98 points or 12.45 s"
                                                     disabled={processing}
@@ -1778,6 +1926,19 @@ export default function Results({
                                     </div>
                                 </div>
                                 <div className="overflow-x-auto">
+                                    {result.result_source === 'direct' && (
+                                        <div className="space-y-3 p-4">
+                                            {result.placements.map(
+                                                (placement) => (
+                                                    <PlacementAttribution
+                                                        key={placement.id}
+                                                        result={result}
+                                                        placement={placement}
+                                                    />
+                                                ),
+                                            )}
+                                        </div>
+                                    )}
                                     {result.result_source === 'direct' &&
                                         result.placements.every(
                                             (placement) =>
@@ -1849,7 +2010,7 @@ export default function Results({
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead className="w-16">
-                                                    Rank
+                                                    {result.result_type === 'versus' ? 'Outcome' : 'Rank'}
                                                 </TableHead>
                                                 <TableHead>
                                                     {result.result_source ===
@@ -1859,10 +2020,10 @@ export default function Results({
                                                 </TableHead>
                                                 <TableHead>School</TableHead>
                                                 <TableHead>
-                                                    Score / Points / Time
+                                                    {result.measurement_type ?? 'Score / Points / Time'}
                                                 </TableHead>
                                                 {result.result_source ===
-                                                    'direct' && (
+                                                    'direct' && result.result_type !== 'versus' && (
                                                     <TableHead>Medal</TableHead>
                                                 )}
                                             </TableRow>
@@ -1874,7 +2035,7 @@ export default function Results({
                                                         key={`${placement.rank}-${placement.entry_id ?? placement.team_entry_id ?? placement.delegation_id}`}
                                                     >
                                                         <TableCell className="font-medium">
-                                                            {placement.rank}
+                                                            {result.result_type === 'versus' ? (placement.rank === 1 ? 'Winner' : 'Loser') : placement.rank}
                                                             {placement.is_tie &&
                                                                 ' (tie)'}
                                                         </TableCell>
@@ -1889,7 +2050,7 @@ export default function Results({
                                                                 '—'}
                                                         </TableCell>
                                                         {result.result_source ===
-                                                            'direct' && (
+                                                            'direct' && result.result_type !== 'versus' && (
                                                             <TableCell>
                                                                 {(placement.tally_quantity ??
                                                                     0) > 0

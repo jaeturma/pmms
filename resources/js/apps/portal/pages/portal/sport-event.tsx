@@ -20,6 +20,8 @@ type Props = {
         PortalResultPlacement & { result_id: number; status_label: string }
     >;
     results: Array<PortalLatestResult & { id: number }>;
+    versusResults: Array<PortalLatestResult & { id: number }>;
+    teamStandings: { columns: Record<string, string>; rows: Array<{ rank: number; delegation_id: number; team: string; played: number; wins: number; losses: number }>; note: string };
 };
 
 export default function PortalSportEvent({
@@ -27,6 +29,8 @@ export default function PortalSportEvent({
     meet,
     standings,
     results,
+    versusResults,
+    teamStandings,
 }: Props) {
     return (
         <>
@@ -44,6 +48,8 @@ export default function PortalSportEvent({
                     meta={<span>{meet?.name ?? 'No active meet'}</span>}
                 />
                 <section className="space-y-3">
+                    {teamStandings.rows.length > 0 && <div className="space-y-3"><PortalSectionHeader title="Event Team Standings" /><p className="text-sm">{teamStandings.note}</p><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr><th className="p-3">Rank</th><th className="p-3">Team / Delegation</th>{Object.entries(teamStandings.columns).map(([key, label]) => <th className="p-3" key={key}>{label}</th>)}</tr></thead><tbody>{teamStandings.rows.map((row) => <tr key={row.delegation_id}><td className="p-3">{row.rank}</td><td className="p-3">{row.team}</td>{Object.keys(teamStandings.columns).map((key) => <td className="p-3" key={key}>{row[key as 'played' | 'wins' | 'losses']}</td>)}</tr>)}</tbody></table></div></div>}
+                    {versusResults.length > 0 && <div className="space-y-4"><PortalSectionHeader title="Accepted Versus Results" />{versusResults.map((result) => <article key={result.id} className="rounded border p-4"><PortalResultPlacements result={result} /></article>)}</div>}
                     <PortalSectionHeader title="Team Standing" />
                     <p className="text-sm text-[var(--portal-muted-foreground)]">
                         Recorded places and scores from accepted non-medal

@@ -11,8 +11,8 @@ use App\Models\Entry;
 use App\Models\Event;
 use App\Models\EventResult;
 use App\Models\EventSchedule;
-use App\Models\Meet;
 use App\Models\MedalAward;
+use App\Models\Meet;
 use App\Models\Personnel;
 use App\Models\ResultPlacement;
 use App\Models\School;
@@ -20,6 +20,7 @@ use App\Models\Sport;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\MedalTallyService;
+use App\Services\ResultAttributionService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -246,12 +247,23 @@ class ReportController extends Controller
             'event' => $data['result']['event'],
         ]);
 
-        $rows = [['Rank', 'Athlete', 'School', 'Mark', 'Tie']];
+        $versus = $result->result_type === 'versus';
+        $rows = [$versus ? ['Outcome', 'Athlete / Team', 'Delegation', 'Value', 'Measurement Type', 'Players', 'Coaches', 'Status']
+            : ['Rank', 'Athlete', 'School', 'Mark', 'Tie', 'Medal Count', 'Players', 'Coaches']];
 
         foreach ($data['placements'] as $placement) {
+            if ($versus) {
+                $rows[] = [$placement['rank'] === 1 ? 'Winner' : 'Loser', $placement['athlete'], $placement['school'], $placement['result_value'], $result->measurement_type,
+                    implode('; ', $placement['attribution']['players']),
+                    collect($placement['attribution']['coaches'])->map(fn ($coach) => $coach['role'].': '.$coach['name'])->implode('; '), $result->status->value];
+                continue;
+            }
             $rows[] = [
                 $placement['rank'], $placement['athlete'], $placement['school'],
                 $placement['mark'], $placement['is_tie'] ? 'Yes' : '',
+                $placement['tally_quantity'] ?? 1,
+                implode('; ', $placement['attribution']['players']),
+                collect($placement['attribution']['coaches'])->map(fn ($coach) => $coach['role'].': '.$coach['name'])->implode('; '),
             ];
         }
 
@@ -373,6 +385,7 @@ class ReportController extends Controller
             'placements.entry.athlete.school:id,name',
             'placements.teamEntry.delegation.school:id,name',
             'placements.teamEntry.delegation.district:id,name',
+            'placements.athlete', 'placements.reportingAthletes', 'placements.reportingCoaches',
         ]);
 
         return [
@@ -380,6 +393,10 @@ class ReportController extends Controller
                 'id' => $result->id,
                 'meet' => $result->meet->name,
                 'school_year' => $result->meet->school_year,
+                'result_type' => $result->result_type,
+                'measurement_type' => $result->measurement_type,
+                'status' => $result->status->value,
+                'submitted_at' => $result->submitted_at?->toDayDateTimeString(),
                 'event' => sprintf(
                     '%s — %s (%s, %s)',
                     $result->event->sport->name,
@@ -390,15 +407,22 @@ class ReportController extends Controller
                 'encoded_by' => $result->encodedBy?->name,
                 'validated_by' => $result->validatedBy?->name,
                 'validated_at' => $result->validated_at?->toDayDateTimeString(),
+                'documents' => $result->attachments()->with('file')->where('is_current', true)->get()
+                    ->filter(fn ($attachment) => $attachment->file !== null)
+                    ->map(fn ($attachment) => ['name' => $attachment->file->original_name,
+                        'url' => route('results.attachments.download', [$result, $attachment])])->values()->all(),
             ],
             'placements' => $result->placements
                 ->sortBy([['rank', 'asc']])
                 ->map(fn (ResultPlacement $placement): array => [
                     'rank' => $placement->rank,
-                    'athlete' => $placement->teamEntry?->delegation?->registrantName()
+                    'tally_quantity' => $placement->tally_quantity,
+                    'result_value' => $placement->result_value,
+                    'attribution' => app(ResultAttributionService::class)->report($placement),
+                    'athlete' => $placement->athlete?->fullName() ?? $placement->delegation?->registrantName() ?? $placement->teamEntry?->delegation?->registrantName()
                         ?? $placement->entry?->athlete?->fullName()
                         ?? __('Archived participant'),
-                    'school' => $placement->teamEntry?->delegation?->registrantName()
+                    'school' => $placement->delegation?->registrantName() ?? $placement->teamEntry?->delegation?->registrantName()
                         ?? $placement->entry?->athlete?->school?->name
                         ?? __('School unavailable'),
                     'mark' => $placement->mark,

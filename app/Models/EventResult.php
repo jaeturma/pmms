@@ -26,7 +26,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['meet_id', 'event_id', 'match_id', 'event_schedule_id', 'scoring_session_id', 'result_source', 'result_scope', 'operational_remarks'])]
+#[Fillable(['meet_id', 'event_id', 'match_id', 'event_schedule_id', 'scoring_session_id', 'result_source', 'result_scope', 'result_type', 'measurement_type', 'operational_remarks'])]
 class EventResult extends Model
 {
     /** @use HasFactory<EventResultFactory> */

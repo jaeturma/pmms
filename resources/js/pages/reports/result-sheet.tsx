@@ -13,6 +13,11 @@ import { download } from '@/routes/reports/result-sheet';
 import { index as resultsIndex } from '@/routes/results';
 
 type Placement = {
+    tally_quantity: number | null;
+    attribution: {
+        players: string[];
+        coaches: { name: string; role: string }[];
+    };
     rank: number;
     athlete: string;
     school: string;
@@ -29,6 +34,11 @@ type Props = {
         encoded_by: string | null;
         validated_by: string | null;
         validated_at: string | null;
+        documents: { name: string; url: string }[];
+        result_type: string | null;
+        measurement_type: string | null;
+        status: string;
+        submitted_at: string | null;
     };
     placements: Placement[];
     generatedAt: string;
@@ -52,18 +62,28 @@ export default function ResultSheet({
                 />
 
                 <p className="text-sm text-muted-foreground">
+                    {result.result_type === 'versus' && <span>Versus result · {result.measurement_type} · {result.status === 'official' ? 'Accepted' : result.status} · {result.submitted_at} · </span>}
                     Encoded by {result.encoded_by ?? '—'} · Validated by{' '}
                     {result.validated_by ?? '—'} on {result.validated_at} ·
                     Generated {generatedAt}
                 </p>
 
                 <div className="overflow-x-auto rounded-xl border">
+                    {result.documents.map((document) => (
+                        <a
+                            key={document.url}
+                            href={document.url}
+                            className="block p-2 underline"
+                        >
+                            Result document: {document.name}
+                        </a>
+                    ))}
                     <Table>
                         <TableHeader>
                             <TableRow>
                                 <TableHead className="w-16">Rank</TableHead>
-                                <TableHead>Athlete</TableHead>
-                                <TableHead>School</TableHead>
+                                <TableHead>Athlete / Team</TableHead>
+                                <TableHead>Delegation / School</TableHead>
                                 <TableHead>Score / mark</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -71,10 +91,34 @@ export default function ResultSheet({
                             {placements.map((placement, i) => (
                                 <TableRow key={i}>
                                     <TableCell className="font-medium">
-                                        {placement.rank}
+                                        {result.result_type === 'versus' ? (placement.rank === 1 ? 'Winner' : 'Loser') : placement.rank}
+                                        {result.result_type !== 'versus' && (placement.tally_quantity ?? 0) > 0 &&
+                                            ` (${['Gold', 'Silver', 'Bronze'][placement.rank - 1] ?? ''})`}
                                         {placement.is_tie && ' (tie)'}
                                     </TableCell>
-                                    <TableCell>{placement.athlete}</TableCell>
+                                    <TableCell>
+                                        {placement.athlete}
+                                        {placement.attribution.players.length >
+                                            0 && (
+                                            <p>
+                                                Players:{' '}
+                                                {placement.attribution.players.join(
+                                                    ', ',
+                                                )}
+                                            </p>
+                                        )}
+                                        {placement.attribution.coaches.map(
+                                            (c, i) => (
+                                                <p key={i}>
+                                                    {c.role}: {c.name}
+                                                </p>
+                                            ),
+                                        )}
+                                        {result.result_type !== 'versus' && <p>
+                                            Medal tally count:{' '}
+                                            {placement.tally_quantity ?? 1}
+                                        </p>}
+                                    </TableCell>
                                     <TableCell>{placement.school}</TableCell>
                                     <TableCell>
                                         {placement.mark ?? '—'}

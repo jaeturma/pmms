@@ -29,6 +29,7 @@ use App\Services\AuditLogger;
 use App\Services\CompetitionAccessService;
 use App\Services\CompetitionResultService;
 use App\Services\FileUploadService;
+use App\Services\ResultAttributionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -124,6 +125,7 @@ class ResultController extends Controller
                 'placements.delegation.school:id,name',
                 'placements.delegation.district:id,name',
                 'placements.teamEntry.members:id,team_entry_id,athlete_id',
+                'placements.athlete', 'placements.reportingAthletes', 'placements.reportingCoaches',
             ])
             ->orderByDesc('id');
 
@@ -132,6 +134,7 @@ class ResultController extends Controller
                 ->where(fn ($results) => $results
                     ->whereHas('placements.entry', fn ($entries) => $entries
                         ->whereIn('delegation_id', $coachDelegationIds))
+                    ->orWhereHas('placements.delegation', fn ($delegations) => $delegations->whereIn('id', $coachDelegationIds))
                     ->orWhereHas('placements.teamEntry', fn ($teams) => $teams
                         ->whereIn('delegation_id', $coachDelegationIds)));
         }
@@ -181,6 +184,18 @@ class ResultController extends Controller
 
                 if ($canOfficialize) {
                     $visible->orWhereIn('status', [ResultStatus::Validated->value, ResultStatus::Official->value]);
+                }
+                if ($user->role === UserRole::Coach) {
+                    foreach ($user->approvedCoachDelegationIds() as $delegationId) {
+                        $delegation = Delegation::find($delegationId);
+                        if ($delegation !== null && $delegation->meet_id === Meet::current()->id) {
+                            $visible->orWhere(fn ($ownResults) => $ownResults
+                                ->where('meet_id', $delegation->meet_id)
+                                ->whereIn('event_id', $user->approvedCoachEventIdsForDelegation($delegation))
+                                ->whereHas('placements', fn ($placements) => $placements->where('delegation_id', $delegation->id))
+                                ->whereIn('status', [ResultStatus::Submitted, ResultStatus::Validated, ResultStatus::Returned, ResultStatus::Encoded, ResultStatus::Reopened]));
+                        }
+                    }
                 }
             });
         }
@@ -247,6 +262,9 @@ class ResultController extends Controller
                         'status' => $result->status->value,
                         'status_label' => $result->result_source === 'direct' && $result->status === ResultStatus::Official ? 'Accepted' : $result->status->label(),
                         'result_source' => $result->result_source,
+                        'result_type' => $result->result_type,
+                        'measurement_type' => $result->measurement_type,
+                        'is_team_event' => (bool) $event?->is_team_event,
                         'can_reopen' => $result->status === ResultStatus::Official && $user->hasPermission(Permission::ResultsReopen, $result->meet),
                         'encoded_by' => $result->encodedBy?->name,
                         'encoded_at' => $result->encoded_at?->toDayDateTimeString(),
@@ -329,11 +347,15 @@ class ResultController extends Controller
                         'placements' => $result->placements
                             ->sortBy([['rank', 'asc']])
                             ->map(fn (ResultPlacement $placement): array => [
+                                'id' => $placement->id,
+                                'attribution' => app(ResultAttributionService::class)->report($placement),
+                                'can_attribute' => $result->result_source === 'direct' && $placement->delegation !== null && app(ResultAttributionService::class)->canManage($user, $event, $placement->delegation),
                                 'entry_id' => $placement->entry_id,
                                 'team_entry_id' => $placement->team_entry_id,
                                 'delegation_id' => $placement->delegation_id,
                                 'rank' => $placement->rank,
-                                'athlete' => $placement->teamEntry?->delegation?->registrantName()
+                                'result_value' => $placement->result_value,
+                                'athlete' => $placement->athlete?->fullName() ?? $placement->teamEntry?->delegation?->registrantName()
                                     ?? $placement->delegation?->registrantName()
                                     ?? $placement->entry?->athlete?->fullName()
                                     ?? $placement->entry?->delegation?->school?->name
@@ -360,11 +382,13 @@ class ResultController extends Controller
             'eventOptionsByMeet' => Event::query()->real()
                 ->whereHas('meets')
                 ->when($isTournamentScoped, fn ($events) => $events->whereKey($assignedEventIds))
-                ->with(['sport:id,name', 'meets:id'])
-                ->get(['id', 'sport_id', 'name', 'gender', 'age_division'])
+                ->with(['sport:id,name', 'meets:id', 'medalConfig'])
+                ->get(['id', 'sport_id', 'name', 'gender', 'age_division', 'is_team_event', 'is_medal_event'])
                 ->flatMap(fn (Event $event) => $event->meets->map(fn (Meet $meet): array => [
                     'id' => $event->id,
                     'meet_id' => $meet->id,
+                    'is_team_event' => $event->is_team_event,
+                    'default_result_type' => $event->resolvedMedalConfig()->awards_medals ? 'medal' : 'versus',
                     'label' => $this->eventLabel($event),
                 ]))
                 ->values(),

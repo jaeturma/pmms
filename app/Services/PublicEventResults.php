@@ -20,14 +20,21 @@ class PublicEventResults
         return $this->visible($query)->whereHas('medalAwards', fn (Builder $awards) => $awards->where('tally_quantity', '>', 0));
     }
 
+    public function publishedResults(Builder $query): Builder
+    {
+        return $this->visible($query)->where(fn ($q) => $q->where('result_type', 'versus')
+            ->orWhereHas('medalAwards', fn ($awards) => $awards->where('tally_quantity', '>', 0)));
+    }
+
     public function row(EventResult $result): array
     {
         $result->loadMissing(['event.sport', 'placements.entry.athlete.school', 'placements.entry.delegation.school',
             'placements.entry.delegation.district', 'placements.teamEntry.delegation.school',
             'placements.teamEntry.delegation.district', 'placements.delegation.school', 'placements.delegation.district',
-            'placements.medalAward', 'attachments.file']);
+            'placements.medalAward', 'placements.athlete', 'attachments.file']);
 
         return [
+            ...($result->result_type === 'versus' ? ['result_type' => 'versus', 'measurement_type' => $result->measurement_type] : []),
             'id' => $result->id,
             'event' => sprintf('%s — %s (%s, %s)', $result->event->sport->name, $result->event->name,
                 $result->event->gender->label(), $result->event->age_division->label()),
@@ -41,7 +48,7 @@ class PublicEventResults
                 return [
                     'id' => $placement->id, 'rank' => $placement->rank,
                     'delegation_id' => $delegation?->id,
-                    'athlete' => $placement->entry?->athlete?->fullName() ?? $delegation?->registrantName() ?? 'Participant pending',
+                    'athlete' => $placement->athlete?->fullName() ?? $placement->entry?->athlete?->fullName() ?? $delegation?->registrantName() ?? 'Participant pending',
                     'school' => $placement->entry?->athlete?->school?->name ?? $delegation?->school?->name ?? '',
                     'delegation' => $delegation?->registrantName() ?? 'Delegation pending',
                     'mark' => $placement->mark, 'is_tie' => $placement->is_tie,

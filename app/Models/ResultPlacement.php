@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
@@ -22,7 +23,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['event_result_id', 'entry_id', 'team_entry_id', 'delegation_id', 'rank', 'mark', 'tally_quantity', 'is_tie'])]
+#[Fillable(['athlete_id', 'event_result_id', 'entry_id', 'team_entry_id', 'delegation_id', 'rank', 'mark', 'result_value', 'tally_quantity', 'is_tie'])]
 class ResultPlacement extends Model
 {
     /** @use HasFactory<ResultPlacementFactory> */
@@ -37,6 +38,7 @@ class ResultPlacement extends Model
     {
         return [
             'rank' => 'integer',
+            'result_value' => 'decimal:6',
             'tally_quantity' => 'integer',
             'is_tie' => 'boolean',
         ];
@@ -66,6 +68,21 @@ class ResultPlacement extends Model
     public function delegation(): BelongsTo
     {
         return $this->belongsTo(Delegation::class);
+    }
+
+    public function athlete(): BelongsTo
+    {
+        return $this->belongsTo(Athlete::class)->withTrashed();
+    }
+
+    public function reportingAthletes(): BelongsToMany
+    {
+        return $this->belongsToMany(Athlete::class, 'result_placement_athlete')->withTrashed();
+    }
+
+    public function reportingCoaches(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'result_placement_coach')->withPivot('role')->withTrashed();
     }
 
     public function medalAward(): HasOne

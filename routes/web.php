@@ -355,6 +355,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('matches/{match}/result', [MatchController::class, 'createResult'])->name('matches.result.store');
     Route::get('results', [ResultController::class, 'index'])->name('results.index');
     Route::get('results/submit', [ResultController::class, 'index'])->name('results.create');
+    Route::get('results/attribution-options', [\App\Http\Controllers\ResultAttributionController::class, 'options'])->name('results.attribution.options');
+    Route::patch('results/{result}/placements/{placement}/attribution', [\App\Http\Controllers\ResultAttributionController::class, 'update'])->name('results.attribution.update');
     Route::post('results/direct', [ResultWorkflowController::class, 'storeDirect'])->name('results.direct.store');
     Route::post('results/{result}/direct', [ResultWorkflowController::class, 'storeDirect'])->name('results.direct.update');
     Route::get('results/{result}/form', [ResultWorkflowController::class, 'form'])->name('results.form');
