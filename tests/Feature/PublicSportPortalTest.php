@@ -326,7 +326,7 @@ test('game rows carry no internal or restricted athlete fields', function () {
     $this->get('/basketball')
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('todayGames.0', fn (AssertableInertia $row) => $row
-                ->hasAll(['id', 'round_label', 'status', 'status_label', 'category', 'venue', 'scheduled_date', 'starts_at', 'side_a', 'side_b', 'score_a', 'score_b', 'mark'])
+                ->hasAll(['id', 'round_label', 'scoreboard_mode', 'status', 'status_label', 'category', 'venue', 'scheduled_date', 'starts_at', 'side_a', 'side_b', 'score_a', 'score_b', 'mark'])
                 ->missing('birthdate')
                 ->missing('lrn')
                 ->missing('grade_level')));
