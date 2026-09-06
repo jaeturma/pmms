@@ -58,12 +58,20 @@ type Placement = {
     team_entry_id: number | null;
     delegation_id: number | null;
     rank: number;
+    medal_type: 'gold' | 'silver' | 'bronze' | null;
     athlete: string;
     school: string;
     mark: string | null;
     tally_quantity: number | null;
     is_tie: boolean;
 };
+
+type MedalType = 'gold' | 'silver' | 'bronze';
+
+const MEDAL_TYPES: MedalType[] = ['gold', 'silver', 'bronze'];
+
+const medalLabel = (medal: MedalType) =>
+    medal.charAt(0).toUpperCase() + medal.slice(1);
 
 type Result = {
     result_type: 'medal' | 'versus' | null;
@@ -170,6 +178,14 @@ type PlacementRow = {
     is_tie: boolean;
 };
 
+type MedalRow = {
+    medal_type: MedalType;
+    delegation_id: string;
+    mark: string;
+    count: string;
+    attribution: Attribution;
+};
+
 type Props = {
     results: Paginated<Result>;
     filters: {
@@ -216,13 +232,15 @@ function PlacementAttribution({
     return (
         <div className="rounded border p-3">
             <p className="text-sm font-medium">
-                {
-                    (result.result_type === 'versus'
-                        ? ['Winner', 'Loser']
-                        : ['Gold / 1st', 'Silver / 2nd', 'Bronze / 3rd'])[
-                        placement.rank - 1
-                    ]
-                }{' '}
+                {result.result_type === 'versus'
+                    ? placement.rank === 1
+                        ? 'Winner'
+                        : 'Loser'
+                    : placement.medal_type
+                      ? medalLabel(placement.medal_type)
+                      : (['Gold / 1st', 'Silver / 2nd', 'Bronze / 3rd'][
+                            placement.rank - 1
+                        ] ?? `Place ${placement.rank}`)}{' '}
                 · {placement.school}
             </p>
             <p className="text-sm">
@@ -308,6 +326,22 @@ function DirectResultForm({
     events: EventOption[];
     delegations: Option[];
 }) {
+    const editingMedalRows: MedalRow[] =
+        result && result.result_type !== 'versus'
+            ? [...result.placements]
+                  .sort((a, b) => a.rank - b.rank)
+                  .map((placement) => ({
+                      medal_type:
+                          placement.medal_type ??
+                          MEDAL_TYPES[placement.rank - 1] ??
+                          'gold',
+                      delegation_id: String(placement.delegation_id ?? ''),
+                      mark: placement.mark ?? '',
+                      count: String(placement.tally_quantity ?? 1),
+                      attribution: placement.attribution,
+                  }))
+            : [];
+
     const { data, setData, post, processing, errors, reset, transform } =
         useForm({
             result_type:
@@ -317,47 +351,43 @@ function DirectResultForm({
                     : 'versus'),
             measurement_type: result?.measurement_type ?? '',
             event_id: result ? String(result.event_id) : '',
-            gold_delegation_id: String(
+            evidence: null as File | null,
+            // Versus Winner / Loser (kept separate from the medal rows).
+            winner_delegation_id: String(
                 result?.placements.find((p) => p.rank === 1)?.delegation_id ??
                     '',
             ),
-            silver_delegation_id: String(
+            loser_delegation_id: String(
                 result?.placements.find((p) => p.rank === 2)?.delegation_id ??
                     '',
             ),
-            bronze_delegation_id: String(
-                result?.placements.find((p) => p.rank === 3)?.delegation_id ??
-                    '',
-            ),
-            evidence: null as File | null,
-            gold_attribution:
+            winner_mark:
+                result?.placements.find((p) => p.rank === 1)?.mark ?? '',
+            loser_mark:
+                result?.placements.find((p) => p.rank === 2)?.mark ?? '',
+            winner_attribution:
                 result?.placements.find((p) => p.rank === 1)?.attribution ??
                 emptyAttribution(),
-            silver_attribution:
+            loser_attribution:
                 result?.placements.find((p) => p.rank === 2)?.attribution ??
                 emptyAttribution(),
-            bronze_attribution:
-                result?.placements.find((p) => p.rank === 3)?.attribution ??
-                emptyAttribution(),
-            gold_mark: result?.placements.find((p) => p.rank === 1)?.mark ?? '',
-            silver_mark:
-                result?.placements.find((p) => p.rank === 2)?.mark ?? '',
-            bronze_mark:
-                result?.placements.find((p) => p.rank === 3)?.mark ?? '',
-            gold_count: String(
-                result?.placements.find((p) => p.rank === 1)?.tally_quantity ??
-                    0,
-            ),
-            silver_count: String(
-                result?.placements.find((p) => p.rank === 2)?.tally_quantity ??
-                    0,
-            ),
-            bronze_count: String(
-                result?.placements.find((p) => p.rank === 3)?.tally_quantity ??
-                    0,
-            ),
+            // Dynamic medal rows — any Gold/Silver/Bronze combination.
+            medal_rows:
+                editingMedalRows.length > 0
+                    ? editingMedalRows
+                    : (MEDAL_TYPES.map((medal) => ({
+                          medal_type: medal,
+                          delegation_id: '',
+                          mark: '',
+                          count: '1',
+                          attribution: emptyAttribution(),
+                      })) as MedalRow[]),
         });
     const withMedals = data.result_type === 'medal';
+    const selectedEvent = events.find(
+        (event) => event.id === Number(data.event_id),
+    );
+    const isTeamEvent = selectedEvent?.is_team_event ?? false;
     const [preview, setPreview] = useState<string | null>(null);
 
     useEffect(
@@ -375,41 +405,66 @@ function DirectResultForm({
                   event_id: current.event_id,
                   result_type: 'versus',
                   measurement_type: current.measurement_type,
-                  winner_delegation_id: current.gold_delegation_id,
-                  loser_delegation_id: current.silver_delegation_id,
-                  winner_value: current.gold_mark,
-                  loser_value: current.silver_mark,
-                  winner_attribution: current.gold_attribution,
-                  loser_attribution: current.silver_attribution,
+                  winner_delegation_id: current.winner_delegation_id,
+                  loser_delegation_id: current.loser_delegation_id,
+                  winner_value: current.winner_mark,
+                  loser_value: current.loser_mark,
+                  winner_attribution: current.winner_attribution,
+                  loser_attribution: current.loser_attribution,
                   evidence: current.evidence,
               }
             : {
-                  ...current,
-                  gold_count:
-                      withMedals && current.gold_delegation_id
-                          ? current.gold_count
-                          : '0',
-                  silver_count:
-                      withMedals && current.silver_delegation_id
-                          ? current.silver_count
-                          : '0',
-                  bronze_count:
-                      withMedals && current.bronze_delegation_id
-                          ? current.bronze_count
-                          : '0',
+                  event_id: current.event_id,
+                  result_type: 'medal',
+                  evidence: current.evidence,
+                  medal_placements: current.medal_rows.map((row) => ({
+                      medal_type: row.medal_type,
+                      delegation_id: row.delegation_id,
+                      mark: row.mark,
+                      count: row.count === '' ? '0' : row.count,
+                      attribution: row.attribution,
+                  })),
               },
     );
 
-    const selectResultType = (mode: string) => {
-        const enabled = mode === 'medal';
-        setData((current) => ({
-            ...current,
-            result_type: enabled ? 'medal' : 'versus',
-            gold_count: enabled ? '1' : '0',
-            silver_count: enabled ? '1' : '0',
-            bronze_count: enabled ? '1' : '0',
-        }));
-    };
+    const setRow = (index: number, patch: Partial<MedalRow>) =>
+        setData(
+            'medal_rows',
+            data.medal_rows.map((row, i) =>
+                i === index ? { ...row, ...patch } : row,
+            ),
+        );
+
+    const addRow = () =>
+        setData('medal_rows', [
+            ...data.medal_rows,
+            {
+                medal_type: 'bronze',
+                delegation_id: '',
+                mark: '',
+                count: '1',
+                attribution: emptyAttribution(),
+            },
+        ]);
+
+    const removeRow = (index: number) =>
+        setData(
+            'medal_rows',
+            data.medal_rows.filter((_, i) => i !== index),
+        );
+
+    const selectResultType = (mode: string) =>
+        setData('result_type', mode === 'medal' ? 'medal' : 'versus');
+
+    const rowError = (index: number, field: string) =>
+        (errors as Record<string, string>)[
+            `medal_placements.${index}.${field}`
+        ];
+
+    const incompleteMedalRows =
+        withMedals &&
+        (data.medal_rows.length === 0 ||
+            data.medal_rows.some((row) => row.delegation_id === ''));
 
     const submit = (event: FormEvent) => {
         event.preventDefault();
@@ -472,12 +527,12 @@ function DirectResultForm({
                                     events.find(
                                         (event) => event.id === Number(value),
                                     )?.default_result_type ?? 'versus',
-                                gold_count: '1',
-                                silver_count: '1',
-                                bronze_count: '1',
-                                gold_attribution: emptyAttribution(),
-                                silver_attribution: emptyAttribution(),
-                                bronze_attribution: emptyAttribution(),
+                                winner_attribution: emptyAttribution(),
+                                loser_attribution: emptyAttribution(),
+                                medal_rows: current.medal_rows.map((row) => ({
+                                    ...row,
+                                    attribution: emptyAttribution(),
+                                })),
                             }))
                         }
                         disabled={processing}
@@ -523,9 +578,13 @@ function DirectResultForm({
                         </label>
                     )}
                     {Object.entries(errors)
-                        .filter(([key]) => key !== 'event_id')
+                        .filter(
+                            ([key]) =>
+                                key !== 'event_id' &&
+                                !key.startsWith('medal_placements'),
+                        )
                         .map(([key, error]) => (
-                            <InputError key={key} message={error} />
+                            <InputError key={key} message={error as string} />
                         ))}
                 </section>
                 <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
@@ -535,77 +594,40 @@ function DirectResultForm({
                     >
                         <div className="space-y-1 border-b p-4 sm:p-5">
                             <h2 className="font-semibold">
-                                Participants and Results
+                                {withMedals
+                                    ? 'Medal Results'
+                                    : 'Participants and Results'}
                             </h2>
                             <p className="text-sm text-muted-foreground">
                                 {withMedals
-                                    ? 'Gold is required. Silver and Bronze are optional.'
+                                    ? 'One row per medal awarded. Any Gold/Silver/Bronze combination is allowed — repeat a medal type or a delegation as the event requires. The tally count is separate from the score.'
                                     : 'Select a distinct Winner and Loser. Attribution is optional.'}
                             </p>
                         </div>
-                        <div className="divide-y">
-                            {(
-                                [
-                                    {
-                                        key: 'gold',
-                                        place: '1st place',
-                                        label: 'Gold',
-                                        optional: false,
-                                    },
-                                    {
-                                        key: 'silver',
-                                        place: '2nd place',
-                                        label: 'Silver',
-                                        optional: true,
-                                    },
-                                    {
-                                        key: 'bronze',
-                                        place: '3rd place',
-                                        label: 'Bronze',
-                                        optional: true,
-                                    },
-                                ] as const
-                            )
-                                .filter(
-                                    ({ key }) => withMedals || key !== 'bronze',
-                                )
-                                .map(({ key, label, optional }) => {
+
+                        {!withMedals ? (
+                            <div className="divide-y">
+                                {(['winner', 'loser'] as const).map((side) => {
                                     const delegationField =
-                                        `${key}_delegation_id` as const;
-                                    const markField = `${key}_mark` as const;
-                                    const countField = `${key}_count` as const;
+                                        `${side}_delegation_id` as const;
+                                    const markField = `${side}_mark` as const;
+                                    const attributionField =
+                                        `${side}_attribution` as const;
 
                                     return (
                                         <div
-                                            key={key}
+                                            key={side}
                                             className="space-y-3 p-4 sm:p-5"
                                         >
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <h3 className="text-sm font-semibold">
-                                                    {withMedals
-                                                        ? label
-                                                        : key === 'gold'
-                                                          ? 'Winner'
-                                                          : 'Loser'}
-                                                </h3>
-                                                {optional && withMedals && (
-                                                    <span className="text-xs text-muted-foreground">
-                                                        Optional
-                                                    </span>
-                                                )}
-                                                {withMedals && (
-                                                    <Badge variant="outline">
-                                                        <Award className="mr-1 size-3 text-orange-600" />
-                                                        {label}
-                                                    </Badge>
-                                                )}
-                                            </div>
-                                            <div
-                                                className={`grid gap-4 ${withMedals ? 'md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_7rem]' : 'md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]'}`}
-                                            >
+                                            <h3 className="text-sm font-semibold">
+                                                {side === 'winner'
+                                                    ? 'Winner'
+                                                    : 'Loser'}
+                                            </h3>
+                                            <div className="grid gap-4 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
                                                 <div className="min-w-0 space-y-2">
                                                     <Label
-                                                        htmlFor={`${key}-delegation`}
+                                                        htmlFor={`${side}-delegation`}
                                                     >
                                                         Delegation / Team
                                                     </Label>
@@ -626,7 +648,7 @@ function DirectResultForm({
                                                                         'none'
                                                                             ? ''
                                                                             : value,
-                                                                    [`${key}_attribution`]:
+                                                                    [attributionField]:
                                                                         emptyAttribution(),
                                                                 }),
                                                             )
@@ -634,17 +656,15 @@ function DirectResultForm({
                                                         disabled={processing}
                                                     >
                                                         <SelectTrigger
-                                                            id={`${key}-delegation`}
+                                                            id={`${side}-delegation`}
                                                             className="h-auto min-h-10 w-full [&>span]:text-left [&>span]:whitespace-normal"
                                                         >
                                                             <SelectValue placeholder="Select a delegation" />
                                                         </SelectTrigger>
                                                         <SelectContent>
                                                             <SelectItem value="none">
-                                                                {optional &&
-                                                                withMedals
-                                                                    ? 'No participant'
-                                                                    : 'Select a delegation'}
+                                                                Select a
+                                                                delegation
                                                             </SelectItem>
                                                             {delegations.map(
                                                                 (option) => (
@@ -664,13 +684,6 @@ function DirectResultForm({
                                                             )}
                                                         </SelectContent>
                                                     </Select>
-                                                    <InputError
-                                                        message={
-                                                            errors[
-                                                                delegationField
-                                                            ]
-                                                        }
-                                                    />
                                                     <AttributionFields
                                                         key={`${data.event_id}-${data[delegationField]}`}
                                                         eventId={Number(
@@ -681,24 +694,15 @@ function DirectResultForm({
                                                                 delegationField
                                                             ],
                                                         )}
-                                                        team={
-                                                            events.find(
-                                                                (e) =>
-                                                                    e.id ===
-                                                                    Number(
-                                                                        data.event_id,
-                                                                    ),
-                                                            )?.is_team_event ??
-                                                            false
-                                                        }
+                                                        team={isTeamEvent}
                                                         value={
                                                             data[
-                                                                `${key}_attribution`
+                                                                attributionField
                                                             ]
                                                         }
                                                         onChange={(value) =>
                                                             setData(
-                                                                `${key}_attribution`,
+                                                                attributionField,
                                                                 value,
                                                             )
                                                         }
@@ -706,22 +710,16 @@ function DirectResultForm({
                                                 </div>
                                                 <div className="min-w-0 space-y-2">
                                                     <Label
-                                                        htmlFor={`${key}-mark`}
+                                                        htmlFor={`${side}-mark`}
                                                     >
-                                                        {withMedals
-                                                            ? 'Score / Points / Time'
-                                                            : 'Result Value'}
+                                                        Result Value
                                                     </Label>
                                                     <Input
-                                                        id={`${key}-mark`}
+                                                        id={`${side}-mark`}
                                                         className="h-10"
                                                         maxLength={60}
-                                                        required={!withMedals}
-                                                        inputMode={
-                                                            !withMedals
-                                                                ? 'decimal'
-                                                                : 'text'
-                                                        }
+                                                        required
+                                                        inputMode="decimal"
                                                         value={data[markField]}
                                                         placeholder="e.g. 98 points or 12.45 s"
                                                         disabled={processing}
@@ -733,63 +731,247 @@ function DirectResultForm({
                                                             )
                                                         }
                                                     />
-                                                    <InputError
-                                                        message={
-                                                            errors[markField]
-                                                        }
-                                                    />
                                                 </div>
-                                                {withMedals && (
-                                                    <div className="space-y-2">
-                                                        <Label
-                                                            htmlFor={`${key}-count`}
-                                                        >
-                                                            Medal count
-                                                        </Label>
-                                                        <Input
-                                                            id={`${key}-count`}
-                                                            aria-label={`${label} medal count`}
-                                                            className="h-10"
-                                                            type="number"
-                                                            min={0}
-                                                            max={65535}
-                                                            step={1}
-                                                            required={
-                                                                !!data[
-                                                                    delegationField
-                                                                ]
-                                                            }
-                                                            disabled={
-                                                                processing ||
-                                                                !data[
-                                                                    delegationField
-                                                                ]
-                                                            }
-                                                            value={
-                                                                data[countField]
-                                                            }
-                                                            onChange={(event) =>
-                                                                setData(
-                                                                    countField,
-                                                                    event.target
-                                                                        .value,
-                                                                )
-                                                            }
-                                                        />
-                                                        <InputError
-                                                            message={
-                                                                errors[
-                                                                    countField
-                                                                ]
-                                                            }
-                                                        />
-                                                    </div>
-                                                )}
                                             </div>
                                         </div>
                                     );
                                 })}
-                        </div>
+                            </div>
+                        ) : (
+                            <div className="divide-y">
+                                {data.medal_rows.map((row, index) => (
+                                    <div
+                                        key={index}
+                                        className="space-y-3 p-4 sm:p-5"
+                                    >
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <h3 className="text-sm font-semibold">
+                                                Row {index + 1}
+                                            </h3>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => removeRow(index)}
+                                                disabled={
+                                                    processing ||
+                                                    data.medal_rows.length === 1
+                                                }
+                                            >
+                                                <Trash2 className="size-4" />
+                                                Remove
+                                            </Button>
+                                        </div>
+                                        <div className="grid gap-4 md:grid-cols-[8rem_minmax(0,1.3fr)_minmax(0,1fr)_7rem]">
+                                            <div className="space-y-2">
+                                                <Label
+                                                    htmlFor={`medal-${index}-type`}
+                                                >
+                                                    Medal Type
+                                                </Label>
+                                                <select
+                                                    id={`medal-${index}-type`}
+                                                    aria-label={`Row ${index + 1} medal type`}
+                                                    className="h-10 w-full rounded border bg-background px-2"
+                                                    value={row.medal_type}
+                                                    disabled={processing}
+                                                    onChange={(event) =>
+                                                        setRow(index, {
+                                                            medal_type: event
+                                                                .target
+                                                                .value as MedalType,
+                                                        })
+                                                    }
+                                                >
+                                                    {MEDAL_TYPES.map(
+                                                        (medal) => (
+                                                            <option
+                                                                key={medal}
+                                                                value={medal}
+                                                            >
+                                                                {medalLabel(
+                                                                    medal,
+                                                                )}
+                                                            </option>
+                                                        ),
+                                                    )}
+                                                </select>
+                                                <InputError
+                                                    message={rowError(
+                                                        index,
+                                                        'medal_type',
+                                                    )}
+                                                />
+                                            </div>
+                                            <div className="min-w-0 space-y-2">
+                                                <Label
+                                                    htmlFor={`medal-${index}-delegation`}
+                                                >
+                                                    Delegation / Team
+                                                </Label>
+                                                <Select
+                                                    value={
+                                                        row.delegation_id ||
+                                                        'none'
+                                                    }
+                                                    onValueChange={(value) =>
+                                                        setRow(index, {
+                                                            delegation_id:
+                                                                value === 'none'
+                                                                    ? ''
+                                                                    : value,
+                                                            attribution:
+                                                                emptyAttribution(),
+                                                        })
+                                                    }
+                                                    disabled={processing}
+                                                >
+                                                    <SelectTrigger
+                                                        id={`medal-${index}-delegation`}
+                                                        aria-label={`Row ${index + 1} delegation`}
+                                                        className="h-auto min-h-10 w-full [&>span]:text-left [&>span]:whitespace-normal"
+                                                    >
+                                                        <SelectValue placeholder="Select a delegation" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="none">
+                                                            Select a delegation
+                                                        </SelectItem>
+                                                        {delegations.map(
+                                                            (option) => (
+                                                                <SelectItem
+                                                                    key={
+                                                                        option.id
+                                                                    }
+                                                                    value={String(
+                                                                        option.id,
+                                                                    )}
+                                                                >
+                                                                    {
+                                                                        option.label
+                                                                    }
+                                                                </SelectItem>
+                                                            ),
+                                                        )}
+                                                    </SelectContent>
+                                                </Select>
+                                                <InputError
+                                                    message={rowError(
+                                                        index,
+                                                        'delegation_id',
+                                                    )}
+                                                />
+                                                {row.delegation_id === '' && (
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Select a delegation for
+                                                        this row or remove it.
+                                                    </p>
+                                                )}
+                                                {!isTeamEvent &&
+                                                    row.delegation_id !==
+                                                        '' && (
+                                                        <AttributionFields
+                                                            key={`${data.event_id}-${index}-${row.delegation_id}`}
+                                                            eventId={Number(
+                                                                data.event_id,
+                                                            )}
+                                                            delegationId={Number(
+                                                                row.delegation_id,
+                                                            )}
+                                                            team={false}
+                                                            value={
+                                                                row.attribution
+                                                            }
+                                                            onChange={(value) =>
+                                                                setRow(index, {
+                                                                    attribution:
+                                                                        value,
+                                                                })
+                                                            }
+                                                        />
+                                                    )}
+                                            </div>
+                                            <div className="min-w-0 space-y-2">
+                                                <Label
+                                                    htmlFor={`medal-${index}-mark`}
+                                                >
+                                                    Score / Points / Time
+                                                </Label>
+                                                <Input
+                                                    id={`medal-${index}-mark`}
+                                                    aria-label={`Row ${index + 1} score`}
+                                                    className="h-10"
+                                                    maxLength={60}
+                                                    value={row.mark}
+                                                    placeholder="e.g. 98 points or 12.45 s"
+                                                    disabled={processing}
+                                                    onChange={(event) =>
+                                                        setRow(index, {
+                                                            mark: event.target
+                                                                .value,
+                                                        })
+                                                    }
+                                                />
+                                                <InputError
+                                                    message={rowError(
+                                                        index,
+                                                        'mark',
+                                                    )}
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label
+                                                    htmlFor={`medal-${index}-count`}
+                                                >
+                                                    Tally Count
+                                                </Label>
+                                                <Input
+                                                    id={`medal-${index}-count`}
+                                                    aria-label={`Row ${index + 1} tally count`}
+                                                    className="h-10"
+                                                    type="number"
+                                                    min={0}
+                                                    max={65535}
+                                                    step={1}
+                                                    value={row.count}
+                                                    disabled={processing}
+                                                    onChange={(event) =>
+                                                        setRow(index, {
+                                                            count: event.target
+                                                                .value,
+                                                        })
+                                                    }
+                                                />
+                                                <InputError
+                                                    message={rowError(
+                                                        index,
+                                                        'count',
+                                                    )}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                                <div className="space-y-2 p-4 sm:p-5">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={addRow}
+                                        disabled={processing}
+                                    >
+                                        <Plus className="size-4" />
+                                        Add Medal
+                                    </Button>
+                                    <InputError
+                                        message={
+                                            (errors as Record<string, string>)
+                                                .medal_placements
+                                        }
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </section>
                     <aside className="min-w-0 space-y-4 rounded-xl border bg-card p-4 sm:p-5">
                         <div className="space-y-1">
@@ -853,7 +1035,7 @@ function DirectResultForm({
                     <Button
                         type="submit"
                         size="lg"
-                        disabled={processing}
+                        disabled={processing || incompleteMedalRows}
                         loading={processing}
                         className="w-full sm:w-auto"
                     >

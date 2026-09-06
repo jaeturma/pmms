@@ -23,7 +23,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['athlete_id', 'event_result_id', 'entry_id', 'team_entry_id', 'delegation_id', 'rank', 'mark', 'result_value', 'tally_quantity', 'is_tie'])]
+#[Fillable(['athlete_id', 'event_result_id', 'entry_id', 'team_entry_id', 'delegation_id', 'rank', 'medal_type', 'mark', 'result_value', 'tally_quantity', 'is_tie'])]
 class ResultPlacement extends Model
 {
     /** @use HasFactory<ResultPlacementFactory> */

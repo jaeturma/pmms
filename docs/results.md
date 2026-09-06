@@ -80,6 +80,38 @@ it** (`cancel()` — likewise). `ResultController::index` exposes `is_non_medal`
 Medal results are unaffected — they keep the explicit encode → submit →
 validate → accept workflow.
 
+## Direct Event Result medal rows
+
+A Direct Event Result (`result_source = 'direct'`, submitted by a Tournament ICT
+via `ResultWorkflowController::storeDirect()`) carries a **variable list of medal
+rows** — not a fixed Gold/Silver/Bronze podium. The form (`DirectResultForm` in
+`resources/js/pages/results/index.tsx`) starts with three rows (Gold, Silver,
+Bronze, tally count `1`); the ICT can add rows ("Add Medal") or remove them
+before submission. Any combination is valid: `Gold/Silver/Bronze`,
+`Gold/Silver/Bronze/Bronze`, `Gold/Gold/Silver`, `Gold/Gold/Gold`, repeated
+delegations, repeated medal types.
+
+- Each row is stored as its own `result_placements` row with an explicit
+  `medal_type` (`gold`/`silver`/`bronze`), its `delegation_id`, optional athlete
+  attribution (individual events only — team events show no per-row athlete
+  dropdown), a `mark` (score/points/time), and `tally_quantity` (the medal count,
+  independent of the score and never multiplied by a roster).
+- `rank` mirrors the medal position (`gold` → 1, `silver` → 2, `bronze` → 3) so
+  the rank-keyed tally code keeps working; multiple rows may share a rank.
+- Payload: `medal_placements[]` (`{medal_type, delegation_id, mark, count,
+  attribution}`). The legacy fixed `gold_/silver_/bronze_*` shape is still
+  accepted and folded into `medal_placements` before validation.
+
+On acceptance (`makeOfficial()`), `MedalAwardService::synchronizeDirectRows()`
+creates **one `MedalAward` per row**, keyed by `result_placement_id` — never
+collapsed because the event, delegation, or medal type repeats, so two identical
+`Gold → Compostela → 1` rows contribute `Compostela Gold +2`. Zero-count rows
+create no award. The service always deletes the result's awards first, so a
+**repeated Accept is idempotent** and a **reopen + resubmit reconciles** the
+tally (rebuilds the award set from the current rows) rather than appending.
+`MedalTallyService::medalUnits()` and `municipalityMedalWinners()` likewise skip
+the "collapse duplicate (result, rank, delegation)" rule for direct results.
+
 ## Visibility
 
 Validated results are meet outcomes — readable by **all roles**. Encoded results

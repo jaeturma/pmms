@@ -444,7 +444,9 @@ class MedalTallyService
             ->get();
 
         return $placements
-            ->groupBy(fn (ResultPlacement $placement): string => "{$placement->event_result_id}-{$placement->rank}")
+            ->groupBy(fn (ResultPlacement $placement): string => ($placement->result->result_source ?? null) === 'direct'
+                ? "{$placement->event_result_id}-p{$placement->id}"
+                : "{$placement->event_result_id}-{$placement->rank}")
             ->map(function (Collection $group): array {
                 /** @var ResultPlacement $first */
                 $first = $group->first();
@@ -455,7 +457,7 @@ class MedalTallyService
                 $school = $first->entry?->athlete?->school ?? $delegation?->school;
 
                 return [
-                    'medal' => match ($first->rank) {
+                    'medal' => $first->medal_type ?? match ($first->rank) {
                         1 => 'gold',
                         2 => 'silver',
                         3 => 'bronze',
@@ -566,6 +568,13 @@ class MedalTallyService
     private function medalUnits(Collection $placements): Collection
     {
         return $placements->unique(function (ResultPlacement $placement): string {
+            // Direct Event Results already store one canonical award per
+            // submitted medal row; each row is its own unit even when the
+            // medal type and delegation repeat, so it is never collapsed.
+            if (($placement->result->result_source ?? null) === 'direct') {
+                return 'direct:'.$placement->id;
+            }
+
             if (! $placement->result->event->is_team_event) {
                 return 'individual:'.$placement->id;
             }

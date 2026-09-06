@@ -249,7 +249,7 @@ class ReportController extends Controller
 
         $versus = $result->result_type === 'versus';
         $rows = [$versus ? ['Outcome', 'Athlete / Team', 'Delegation', 'Value', 'Measurement Type', 'Players', 'Coaches', 'Status']
-            : ['Rank', 'Athlete', 'School', 'Mark', 'Tie', 'Medal Count', 'Players', 'Coaches']];
+            : ['Rank', 'Medal', 'Athlete', 'School', 'Mark', 'Tie', 'Medal Count', 'Players', 'Coaches']];
 
         foreach ($data['placements'] as $placement) {
             if ($versus) {
@@ -259,7 +259,9 @@ class ReportController extends Controller
                 continue;
             }
             $rows[] = [
-                $placement['rank'], $placement['athlete'], $placement['school'],
+                $placement['rank'],
+                ucfirst($placement['medal_type'] ?? ['gold', 'silver', 'bronze'][$placement['rank'] - 1] ?? ''),
+                $placement['athlete'], $placement['school'],
                 $placement['mark'], $placement['is_tie'] ? 'Yes' : '',
                 $placement['tally_quantity'] ?? 1,
                 implode('; ', $placement['attribution']['players']),
@@ -416,6 +418,7 @@ class ReportController extends Controller
                 ->sortBy([['rank', 'asc']])
                 ->map(fn (ResultPlacement $placement): array => [
                     'rank' => $placement->rank,
+                    'medal_type' => $placement->medal_type,
                     'tally_quantity' => $placement->tally_quantity,
                     'result_value' => $placement->result_value,
                     'attribution' => app(ResultAttributionService::class)->report($placement),

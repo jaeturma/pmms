@@ -426,6 +426,7 @@ class ResultController extends Controller
                                 'team_entry_id' => $placement->team_entry_id,
                                 'delegation_id' => $placement->delegation_id,
                                 'rank' => $placement->rank,
+                                'medal_type' => $placement->medal_type,
                                 'result_value' => $placement->result_value,
                                 'athlete' => $placement->athlete?->fullName() ?? $placement->teamEntry?->delegation?->registrantName()
                                     ?? $placement->delegation?->registrantName()

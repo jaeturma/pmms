@@ -412,3 +412,125 @@ test('ICT requests a correction on an official result, admin approves, ICT moves
     $totals = collect(app(MedalTallyService::class)->standings($meet->id)['districts']);
     expect($totals->sum('total'))->toBe(6);
 });
+
+/**
+ * Build a dynamic medal-rows payload. `$rows` are `[medalType, delegationIndex,
+ * count]` (mark optional 4th) tuples resolved against `$delegations`.
+ */
+function medalRowsPayload(array $context, array $delegations, array $rows, array $overrides = []): array
+{
+    return array_replace([
+        'event_id' => $context['event']->id,
+        'result_type' => 'medal',
+        'medal_placements' => collect($rows)->map(fn (array $row): array => [
+            'medal_type' => $row[0],
+            'delegation_id' => $delegations[$row[1]]->id,
+            'count' => $row[2],
+            'mark' => $row[3] ?? null,
+        ])->all(),
+        'evidence' => UploadedFile::fake()->image('medal-rows.png'),
+    ], $overrides);
+}
+
+function districtTally(int $meetId): array
+{
+    $districts = collect(app(MedalTallyService::class)->standings($meetId)['districts']);
+
+    return [
+        'gold' => (int) $districts->sum('gold'),
+        'silver' => (int) $districts->sum('silver'),
+        'bronze' => (int) $districts->sum('bronze'),
+        'total' => (int) $districts->sum('total'),
+    ];
+}
+
+test('Direct Result accepts any medal combination and tallies every submitted row exactly, idempotently', function (array $rows, array $expected) {
+    Storage::fake('local');
+    config()->set('uploads.disk', 'local');
+    $context = directResultContext();
+    $delegations = Delegation::factory()->count(5)->approved()->create(['meet_id' => $context['meet']->id]);
+    $awardedRows = collect($rows)->filter(fn (array $row): bool => $row[2] > 0)->count();
+
+    $this->actingAs($context['ict'])
+        ->post('/results/direct', medalRowsPayload($context, $delegations->all(), $rows))
+        ->assertRedirect()->assertSessionDoesntHaveErrors();
+
+    $result = EventResult::query()->sole();
+    expect($result->placements()->count())->toBe(count($rows))
+        ->and($result->placements()->pluck('medal_type')->all())->toBe(collect($rows)->pluck(0)->all());
+
+    $this->actingAs($context['secretariat'])->post(route('results.official', $result))->assertSessionDoesntHaveErrors();
+    expect($result->fresh()->status)->toBe(ResultStatus::Official)
+        // One award row per submitted medal row — never collapsed by shared
+        // event / delegation / medal type.
+        ->and($result->medalAwards()->count())->toBe($awardedRows);
+
+    expect(districtTally($context['meet']->id))->toMatchArray($expected);
+
+    // Repeated Accept must not duplicate the tally or the award rows.
+    $this->actingAs($context['secretariat'])->post(route('results.official', $result))->assertSessionDoesntHaveErrors();
+    expect($result->fresh()->medalAwards()->count())->toBe($awardedRows)
+        ->and(districtTally($context['meet']->id))->toMatchArray($expected);
+})->with([
+    'Gold/Silver/Bronze (default 3 rows)' => [
+        [['gold', 0, 1], ['silver', 1, 1], ['bronze', 2, 1]],
+        ['gold' => 1, 'silver' => 1, 'bronze' => 1, 'total' => 3],
+    ],
+    'Gold/Silver/Bronze/Bronze (added 4th Bronze)' => [
+        [['gold', 0, 1], ['silver', 1, 1], ['bronze', 2, 1], ['bronze', 3, 1]],
+        ['gold' => 1, 'silver' => 1, 'bronze' => 2, 'total' => 4],
+    ],
+    'Gold/Silver/Silver/Bronze/Bronze' => [
+        [['gold', 0, 1], ['silver', 1, 1], ['silver', 2, 1], ['bronze', 3, 1], ['bronze', 4, 1]],
+        ['gold' => 1, 'silver' => 2, 'bronze' => 2, 'total' => 5],
+    ],
+    'Gold/Gold/Silver' => [
+        [['gold', 0, 1], ['gold', 1, 1], ['silver', 2, 1]],
+        ['gold' => 2, 'silver' => 1, 'bronze' => 0, 'total' => 3],
+    ],
+    'Gold/Gold/Gold (three delegations)' => [
+        [['gold', 0, 1], ['gold', 1, 1], ['gold', 2, 1]],
+        ['gold' => 3, 'silver' => 0, 'bronze' => 0, 'total' => 3],
+    ],
+    'same delegation repeated for the same medal type' => [
+        [['gold', 0, 1], ['gold', 0, 1], ['gold', 0, 1]],
+        ['gold' => 3, 'silver' => 0, 'bronze' => 0, 'total' => 3],
+    ],
+    'tally counts greater than one' => [
+        [['gold', 0, 2], ['silver', 1, 3], ['bronze', 2, 1]],
+        ['gold' => 2, 'silver' => 3, 'bronze' => 1, 'total' => 6],
+    ],
+    'zero-count row contributes nothing' => [
+        [['gold', 0, 1], ['silver', 1, 0], ['bronze', 2, 1]],
+        ['gold' => 1, 'silver' => 0, 'bronze' => 1, 'total' => 2],
+    ],
+]);
+
+test('correcting an accepted Direct Result reconciles the medal tally instead of appending awards', function () {
+    Storage::fake('local');
+    config()->set('uploads.disk', 'local');
+    $context = directResultContext();
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $delegations = Delegation::factory()->count(4)->approved()->create(['meet_id' => $context['meet']->id])->all();
+
+    $this->actingAs($context['ict'])
+        ->post('/results/direct', medalRowsPayload($context, $delegations, [['gold', 0, 1], ['silver', 1, 1], ['bronze', 2, 1]]))
+        ->assertSessionDoesntHaveErrors();
+    $result = EventResult::query()->sole();
+    $this->actingAs($context['secretariat'])->post(route('results.official', $result))->assertSessionDoesntHaveErrors();
+    expect($result->medalAwards()->count())->toBe(3)
+        ->and(districtTally($context['meet']->id))->toMatchArray(['gold' => 1, 'silver' => 1, 'bronze' => 1, 'total' => 3]);
+
+    // Reopen, resubmit a wholly different combination, re-accept.
+    $this->actingAs($admin)->post(route('results.reopen', $result), ['reason' => 'Protest upheld'])->assertSessionDoesntHaveErrors();
+    expect($result->fresh()->medalAwards()->count())->toBe(0);
+
+    $this->actingAs($context['ict'])->post(
+        route('results.direct.update', $result),
+        medalRowsPayload($context, $delegations, [['gold', 0, 1], ['gold', 3, 1], ['silver', 1, 1], ['bronze', 2, 2]], ['evidence' => null]),
+    )->assertSessionDoesntHaveErrors();
+    $this->actingAs($context['secretariat'])->post(route('results.official', $result))->assertSessionDoesntHaveErrors();
+
+    expect($result->fresh()->medalAwards()->count())->toBe(4)
+        ->and(districtTally($context['meet']->id))->toMatchArray(['gold' => 2, 'silver' => 1, 'bronze' => 2, 'total' => 5]);
+});

@@ -1,5 +1,5 @@
 import { Head, router } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PortalHero } from '@/apps/portal/components/hero';
 import { PortalMedalTotalsRow } from '@/apps/portal/components/medal-totals';
 import { PortalSectionHeader } from '@/apps/portal/components/section-header';
@@ -7,6 +7,7 @@ import { PortalSelect } from '@/apps/portal/components/select';
 import { PortalStandingsTable } from '@/apps/portal/components/standings-table';
 import { PortalTabs } from '@/apps/portal/components/tabs';
 import { PortalTopMedalistTable } from '@/apps/portal/components/top-medalist-table';
+import { usePortalPageVisible } from '@/apps/portal/lib/use-page-visible';
 import type {
     PortalMedalTotals,
     PortalMeetSummary,
@@ -18,6 +19,11 @@ import type {
 import { tally as publicTally } from '@/routes/public';
 
 type ViewTab = 'overall' | 'elementary' | 'secondary' | 'top-medalist';
+
+// The medal tally moves slowly — a 20s background refresh keeps it live
+// without hammering the endpoint. Paused entirely while the tab is
+// hidden (see `usePortalPageVisible`).
+const TALLY_POLL_INTERVAL_MS = 20000;
 
 const VIEW_TABS: { value: ViewTab; label: string; mobileLabel?: string }[] = [
     { value: 'overall', label: 'Overall' },
@@ -62,6 +68,36 @@ export default function PortalTally({
             ? filters.age_division
             : 'overall',
     );
+
+    // Lightweight in-place refresh: a partial Inertia reload of just the
+    // tally props (no navigation, scroll and local tab state preserved),
+    // on a single interval that is torn down on unmount and never runs
+    // while the tab is hidden — so it cannot stack duplicate intervals
+    // or leak. The tables animate the diff themselves.
+    const pageVisible = usePortalPageVisible();
+    useEffect(() => {
+        if (!pageVisible) {
+            return;
+        }
+
+        const interval = setInterval(() => {
+            router.reload({
+                only: [
+                    'districts',
+                    'schools',
+                    'totals',
+                    'topByPoints',
+                    'recentMedals',
+                    'topMedalists',
+                    'generatedAt',
+                ],
+                // Silent background refresh — no top progress bar flash.
+                showProgress: false,
+            });
+        }, TALLY_POLL_INTERVAL_MS);
+
+        return () => clearInterval(interval);
+    }, [pageVisible]);
 
     const updateFilters = (
         next: Partial<{ sport_id: string; age_division: string }>,
@@ -122,7 +158,7 @@ export default function PortalTally({
                                 />
                             }
                         />
-                        <PortalTopMedalistTable rows={topMedalists} />
+                        <PortalTopMedalistTable rows={topMedalists} animate />
                     </>
                 ) : (
                     <>
@@ -147,7 +183,11 @@ export default function PortalTally({
                         <PortalStandingsTable
                             nameLabel="District"
                             emphasized
+                            animate
                             rows={districts.map((row) => ({
+                                key: row.slug
+                                    ? `d-${row.slug}`
+                                    : `d-${row.district_id ?? row.district}`,
                                 label: row.district,
                                 logoUrl: row.logo_url,
                                 teamLogoUrl: row.team_logo_url,
@@ -159,7 +199,7 @@ export default function PortalTally({
                             }))}
                         />
 
-                        <PortalMedalTotalsRow totals={totals} />
+                        <PortalMedalTotalsRow totals={totals} animate />
 
                         <PortalSectionHeader
                             title={`School Standings (${medalTallyOfficial ? 'Official Result' : 'Unofficial'})`}
@@ -167,7 +207,9 @@ export default function PortalTally({
                         <PortalStandingsTable
                             nameLabel="School"
                             showCrest={false}
+                            animate
                             rows={schools.map((row) => ({
+                                key: `s-${row.district}-${row.municipality}-${row.school}`,
                                 label: row.school,
                                 gold: row.gold,
                                 silver: row.silver,

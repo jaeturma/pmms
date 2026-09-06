@@ -50,7 +50,7 @@ test('result sheet CSV downloads are audited', function () {
 
     $response->assertOk();
 
-    expect($response->streamedContent())->toContain('Rank,Athlete,School')
+    expect($response->streamedContent())->toContain('Rank,Medal,Athlete,School')
         ->and(AuditLog::query()->where('action', 'report.result_sheet_exported')->exists())->toBeTrue();
 });
 

@@ -1,8 +1,11 @@
 import { Medal } from 'lucide-react';
+import { PortalAnimatedNumber } from '@/apps/portal/components/animated-number';
 import type { PortalMedalTotals } from '@/apps/portal/types';
 
 type PortalMedalTotalsRowProps = {
     totals: PortalMedalTotals;
+    /** Opt-in (live `/tally` page): pulse a total when it increases. */
+    animate?: boolean;
 };
 
 const TILES = [
@@ -20,7 +23,10 @@ const TILES = [
     { key: 'total', bg: 'var(--portal-ink-soft)', fg: 'var(--portal-ink)' },
 ] as const;
 
-export function PortalMedalTotalsRow({ totals }: PortalMedalTotalsRowProps) {
+export function PortalMedalTotalsRow({
+    totals,
+    animate = false,
+}: PortalMedalTotalsRowProps) {
     return (
         <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {TILES.map(({ key, bg, fg }) => (
@@ -35,7 +41,11 @@ export function PortalMedalTotalsRow({ totals }: PortalMedalTotalsRowProps) {
                         <Medal aria-hidden="true" className="size-6" />
                     </span>
                     <p className="text-2xl font-bold tabular-nums">
-                        {totals[key]}
+                        {animate ? (
+                            <PortalAnimatedNumber value={totals[key]} />
+                        ) : (
+                            totals[key]
+                        )}
                     </p>
                     <p className="text-xs text-[var(--portal-muted-foreground)] capitalize">
                         {key}
