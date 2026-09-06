@@ -40,7 +40,7 @@ class ResultAttributionController extends Controller
                 ->map(fn ($a) => ['id' => $a->id, 'label' => $a->fullName()]),
             'teams' => $event->is_team_event ? TeamEntry::where('event_id', $event->id)->where('delegation_id', $delegation->id)->with('members')->get()
                 ->map(fn ($t) => ['id' => $t->id, 'label' => 'Team Entry #'.$t->id.' ('.$t->status->value.')', 'athlete_ids' => $t->members->pluck('athlete_id')]) : [],
-            'coaches' => $event->is_team_event ? $service->coaches($event, $delegation)->map(fn ($c) => ['id' => $c->id, 'label' => $c->name]) : [],
+            'coaches' => $service->coaches($event, $delegation)->map(fn ($c) => ['id' => $c->id, 'label' => $c->name]),
         ]);
     }
 

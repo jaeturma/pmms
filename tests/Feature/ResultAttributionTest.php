@@ -1,6 +1,10 @@
 <?php
 
 use App\Enums\EntryStatus;
+use App\Enums\ManagementTeamMemberStatus;
+use App\Enums\ManagementTeamType;
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\ResultStatus;
 use App\Enums\UserRole;
 use App\Models\Athlete;
@@ -8,8 +12,11 @@ use App\Models\AuditLog;
 use App\Models\CoachAssignmentRequest;
 use App\Models\Entry;
 use App\Models\EventResult;
+use App\Models\ManagementTeam;
+use App\Models\ManagementTeamMember;
 use App\Models\Meet;
 use App\Models\MeetSport;
+use App\Models\MeetSportAssignment;
 use App\Models\Sport;
 use App\Models\SportRosterMember;
 use App\Models\TeamEntry;
@@ -180,3 +187,81 @@ test('scoped coach can enrich submitted result while admin can correct and legac
     $this->actingAs(User::factory()->create(['role' => UserRole::Admin]))->patch(route('results.attribution.update', [$result, $placement]), ['athlete_id' => null])->assertSessionDoesntHaveErrors();
     expect($placement->fresh()->athlete_id)->toBeNull()->and($result->fresh()->status)->toBe(ResultStatus::Submitted);
 });
+
+test('result link managers can add team athletes and coaches to submitted results', function (string $manager) {
+    $c = directResultContext();
+    $this->actingAs($c['ict'])->post('/results/direct', directPayload($c))->assertSessionDoesntHaveErrors();
+    $result = EventResult::sole();
+    $placement = $result->placements()->where('rank', 1)->sole();
+    $athletes = collect(range(1, 3))->map(fn () => reportingAthlete($c)->id)->all();
+    $coach = reportingCoach($c);
+    if ($manager === 'central_ict') {
+        $user = User::factory()->create();
+        $team = ManagementTeam::factory()->create([
+            'meet_id' => $c['meet']->id, 'team_type' => ManagementTeamType::ICT,
+            'source_code' => 'CENTRAL_ICT',
+        ]);
+        ManagementTeamMember::factory()->create([
+            'management_team_id' => $team->id, 'user_id' => $user->id,
+            'status' => ManagementTeamMemberStatus::Active,
+        ]);
+    } elseif ($manager === 'secretary') {
+        $user = User::factory()->create(['role' => UserRole::TournamentSecretary]);
+        MeetSportAssignment::create([
+            'meet_sport_id' => MeetSport::where('meet_id', $c['meet']->id)->where('sport_id', $c['event']->sport_id)->sole()->id,
+            'user_id' => $user->id, 'role' => MeetSportAssignmentRole::TournamentSecretary,
+            'status' => MeetSportAssignmentStatus::Active,
+        ]);
+    } else {
+        $user = $manager === 'admin' ? User::factory()->create(['role' => UserRole::Admin]) : $c[$manager];
+    }
+    $this->actingAs($user)->get('/results')->assertInertia(fn ($p) => $p
+        ->has('results.data', 1)->where('results.data.0.placements.0.can_attribute', true)
+        ->where('results.data.0.is_team_event', true));
+    $this->getJson('/results/attribution-options?event_id='.$c['event']->id.'&delegation_id='.$placement->delegation_id)
+        ->assertOk()->assertJsonCount(3, 'athletes')->assertJsonPath('coaches.0.id', $coach->id);
+    $url = route('results.attribution.update', [$result, $placement]);
+    $this->patch($url, ['athlete_ids' => [$athletes[0]], 'coaches' => [['user_id' => $coach->id, 'role' => 'primary']]])->assertSessionDoesntHaveErrors();
+    $this->patch($url, ['athlete_ids' => $athletes])->assertSessionDoesntHaveErrors();
+    expect($placement->reportingAthletes()->count())->toBe(3)
+        ->and($placement->reportingCoaches()->count())->toBe(1)
+        ->and($placement->fresh()->rank)->toBe(1)
+        ->and($result->fresh()->status)->toBe(ResultStatus::Submitted);
+})->with(['ict', 'secretariat', 'admin', 'central_ict', 'secretary']);
+
+test('individual submitted result permits athlete and coach links but rejects a team roster', function () {
+    $c = directResultContext();
+    $c['event']->update(['is_team_event' => false]);
+    $athlete = reportingAthlete($c);
+    $coach = reportingCoach($c);
+    $this->actingAs($c['ict'])->post('/results/direct', directPayload($c))->assertSessionDoesntHaveErrors();
+    $result = EventResult::sole();
+    $placement = $result->placements()->where('rank', 1)->sole();
+    $url = route('results.attribution.update', [$result, $placement]);
+    $this->getJson('/results/attribution-options?event_id='.$c['event']->id.'&delegation_id='.$placement->delegation_id)
+        ->assertOk()->assertJsonPath('coaches.0.id', $coach->id);
+    $this->patch($url, ['athlete_id' => $athlete->id, 'coaches' => [['user_id' => $coach->id, 'role' => 'primary']]])->assertSessionDoesntHaveErrors();
+    expect($placement->fresh()->athlete_id)->toBe($athlete->id)->and($placement->reportingCoaches()->count())->toBe(1);
+    $this->patch($url, ['athlete_ids' => [$athlete->id]])->assertSessionHasErrors('attribution');
+});
+
+test('central ICT attribution access requires active membership in the result meet', function (string $scope) {
+    $c = directResultContext();
+    $this->actingAs($c['ict'])->post('/results/direct', directPayload($c))->assertSessionDoesntHaveErrors();
+    $result = EventResult::sole();
+    $placement = $result->placements()->where('rank', 1)->sole();
+    $user = User::factory()->create();
+    $team = ManagementTeam::factory()->create([
+        'meet_id' => $scope === 'other_meet' ? Meet::factory()->create()->id : $c['meet']->id,
+        'team_type' => ManagementTeamType::ICT, 'source_code' => 'CENTRAL_ICT',
+    ]);
+    $membership = ManagementTeamMember::factory()->create([
+        'management_team_id' => $team->id, 'user_id' => $user->id,
+        'status' => ManagementTeamMemberStatus::Active,
+    ]);
+    if ($scope === 'removed') {
+        $membership->delete();
+    }
+    $this->actingAs($user)->getJson('/results/attribution-options?event_id='.$c['event']->id.'&delegation_id='.$placement->delegation_id)->assertForbidden();
+    $this->patch(route('results.attribution.update', [$result, $placement]), ['athlete_ids' => []])->assertForbidden();
+})->with(['other_meet', 'removed']);

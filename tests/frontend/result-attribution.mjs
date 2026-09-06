@@ -46,7 +46,11 @@ try {
     assert.match(team, /View \/ Manage Roster/);
     assert.match(team, /Team Coaches \(optional\)/);
     assert.match(team, /Roster may remain incomplete/);
-    console.log('Passed 7 attribution UI assertions.');
+    assert.match(individual, /Coaches \(optional\)/);
+    assert.match(team, /Add athletes to this team/);
+    assert.match(team, /Select multiple athletes/);
+    assert.match(team, /<details[^>]* open=""/);
+    console.log('Passed 11 attribution UI assertions.');
 } finally {
     await unlink(generated).catch(() => {});
 }

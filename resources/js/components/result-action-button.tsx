@@ -23,9 +23,11 @@ export function ResultActionButton({
     return (
         <Button
             {...props}
-            disabled={disabled || busy}
+            // Keep the initial click enabled through bubbling and native form submission.
+            // The capture guard below blocks subsequent clicks while feedback is active.
+            disabled={disabled || loading}
             aria-busy={busy}
-            aria-disabled={disabled || busy}
+            aria-disabled={disabled || loading}
             className={cn(
                 busy &&
                     "after:size-4 after:shrink-0 after:animate-spin after:rounded-full after:border-2 after:border-current after:border-r-transparent after:content-['']",
@@ -42,8 +44,8 @@ export function ResultActionButton({
                 onClickCapture?.(event);
 
                 if (event.defaultPrevented) {
-return;
-}
+                    return;
+                }
 
                 cleanup.current();
                 active.current = true;
@@ -60,8 +62,8 @@ return;
                 const stopFinish = router.on('finish', finish);
                 const timer = window.setTimeout(() => {
                     if (!requesting) {
-finish();
-}
+                        finish();
+                    }
                 }, 450);
                 cleanup.current = () => {
                     window.clearTimeout(timer);

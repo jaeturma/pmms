@@ -77,7 +77,7 @@ export function AttributionFields({
     }
 
     return (
-        <details className="space-y-3 rounded border p-3" open={!team}>
+        <details className="space-y-3 rounded border p-3" open>
             <summary className="cursor-pointer text-sm font-medium">
                 {team
                     ? `View / Manage Roster (${value.athlete_ids.length} athletes linked)`
@@ -127,26 +127,41 @@ export function AttributionFields({
                 onChange={(e) => setSearch(e.target.value)}
             />
             {team ? (
-                <div className="max-h-48 overflow-auto">
-                    {athletes.map((a) => (
-                        <label key={a.id} className="flex gap-2 p-1">
-                            <input
-                                type="checkbox"
-                                checked={value.athlete_ids.includes(a.id)}
-                                onChange={(e) =>
-                                    onChange({
-                                        ...value,
-                                        athlete_ids: e.target.checked
-                                            ? [...value.athlete_ids, a.id]
-                                            : value.athlete_ids.filter(
-                                                  (id) => id !== a.id,
-                                              ),
-                                    })
-                                }
-                            />
-                            {a.label}
-                        </label>
-                    ))}
+                <div className="space-y-2">
+                    <p className="text-sm font-medium">
+                        Add athletes to this team
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                        Select multiple athletes from this delegation.{' '}
+                        {value.athlete_ids.length} selected.
+                    </p>
+                    <div className="max-h-48 overflow-auto">
+                        {athletes.map((a) => (
+                            <label key={a.id} className="flex gap-2 p-1">
+                                <input
+                                    type="checkbox"
+                                    checked={value.athlete_ids.includes(a.id)}
+                                    onChange={(e) =>
+                                        onChange({
+                                            ...value,
+                                            athlete_ids: e.target.checked
+                                                ? [...value.athlete_ids, a.id]
+                                                : value.athlete_ids.filter(
+                                                      (id) => id !== a.id,
+                                                  ),
+                                        })
+                                    }
+                                />
+                                {a.label}
+                            </label>
+                        ))}
+                        {athletes.length === 0 && (
+                            <p className="text-sm text-muted-foreground">
+                                No matching athletes in this delegation?s sport
+                                roster.
+                            </p>
+                        )}
+                    </div>
                 </div>
             ) : (
                 <select
@@ -174,8 +189,8 @@ export function AttributionFields({
                         ))}
                 </select>
             )}
-            {team && (
-                <div>
+            <div>
+                {team && (
                     <button
                         type="button"
                         className="text-sm underline"
@@ -189,60 +204,57 @@ export function AttributionFields({
                     >
                         Clear roster links
                     </button>
-                    <p className="text-sm font-medium">
-                        Team Coaches (optional)
-                    </p>
-                    <button
-                        type="button"
-                        className="text-sm underline"
-                        onClick={() => onChange({ ...value, coaches: [] })}
+                )}
+                <p className="text-sm font-medium">
+                    {team ? 'Team Coaches (optional)' : 'Coaches (optional)'}
+                </p>
+                <button
+                    type="button"
+                    className="text-sm underline"
+                    onClick={() => onChange({ ...value, coaches: [] })}
+                >
+                    Clear coach links
+                </button>
+                {options.coaches.map((c) => (
+                    <label
+                        className="flex items-center justify-between gap-2 p-1"
+                        key={c.id}
                     >
-                        Clear coach links
-                    </button>
-                    {options.coaches.map((c) => (
-                        <label
-                            className="flex items-center justify-between gap-2 p-1"
-                            key={c.id}
+                        {c.label}
+                        <select
+                            aria-label={`${c.label} coach role`}
+                            value={
+                                value.coaches.find((v) => v.user_id === c.id)
+                                    ?.role ?? ''
+                            }
+                            onChange={(e) =>
+                                onChange({
+                                    ...value,
+                                    coaches: [
+                                        ...value.coaches.filter(
+                                            (v) => v.user_id !== c.id,
+                                        ),
+                                        ...(e.target.value
+                                            ? [
+                                                  {
+                                                      user_id: c.id,
+                                                      role: e.target.value,
+                                                  },
+                                              ]
+                                            : []),
+                                    ],
+                                })
+                            }
                         >
-                            {c.label}
-                            <select
-                                aria-label={`${c.label} coach role`}
-                                value={
-                                    value.coaches.find(
-                                        (v) => v.user_id === c.id,
-                                    )?.role ?? ''
-                                }
-                                onChange={(e) =>
-                                    onChange({
-                                        ...value,
-                                        coaches: [
-                                            ...value.coaches.filter(
-                                                (v) => v.user_id !== c.id,
-                                            ),
-                                            ...(e.target.value
-                                                ? [
-                                                      {
-                                                          user_id: c.id,
-                                                          role: e.target.value,
-                                                      },
-                                                  ]
-                                                : []),
-                                        ],
-                                    })
-                                }
-                            >
-                                <option value="">Not linked</option>
-                                <option value="primary">
-                                    Head / Primary Coach
-                                </option>
-                                <option value="assistant">
-                                    Assistant Coach
-                                </option>
-                            </select>
-                        </label>
-                    ))}
-                </div>
-            )}
+                            <option value="">Not linked</option>
+                            <option value="primary">
+                                Head / Primary Coach
+                            </option>
+                            <option value="assistant">Assistant Coach</option>
+                        </select>
+                    </label>
+                ))}
+            </div>
         </details>
     );
 }

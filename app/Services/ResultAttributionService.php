@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\ManagementTeamMemberStatus;
+use App\Enums\ManagementTeamType;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
 use App\Models\Athlete;
@@ -21,7 +22,9 @@ class ResultAttributionService
             return true;
         }
         if ($user->managementTeamMemberships()->where('status', ManagementTeamMemberStatus::Active)
-            ->whereHas('managementTeam', fn ($q) => $q->where('meet_id', $delegation->meet_id)->where('source_code', 'EVENT_SECRETARIAT'))->exists()) {
+            ->whereHas('managementTeam', fn ($q) => $q->where('meet_id', $delegation->meet_id)
+                ->where(fn ($team) => $team->whereIn('source_code', ['EVENT_SECRETARIAT', 'CENTRAL_ICT', 'ICT'])
+                    ->orWhere('team_type', ManagementTeamType::ICT->value)))->exists()) {
             return true;
         }
 
@@ -66,7 +69,7 @@ class ResultAttributionService
                     $members = $team->members()->pluck('athlete_id')->unique()->values()->all();
                 }
             }
-        } elseif ($members || $coaches || $teamId) {
+        } elseif ($members || $teamId) {
             throw ValidationException::withMessages(['attribution' => 'Individual results use an optional athlete.']);
         }
         $ids = $athlete ? [$athlete] : $members;

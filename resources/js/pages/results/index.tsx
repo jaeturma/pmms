@@ -247,7 +247,9 @@ function PlacementAttribution({
                     variant="outline"
                     onClick={() => setEditing(!editing)}
                 >
-                    Manage reporting attribution
+                    {editing
+                        ? 'Cancel editing'
+                        : 'Manage athlete and coach links'}
                 </Button>
             )}
             {editing && (
@@ -277,7 +279,7 @@ function PlacementAttribution({
                             )
                         }
                     >
-                        Save attribution
+                        Save athlete and coach links
                     </Button>
                 </div>
             )}
@@ -1426,8 +1428,6 @@ export default function Results({
     const [directEditing, setDirectEditing] = useState<Result | null>(null);
     const [editing, setEditing] = useState<Result | null>(null);
     const [correcting, setCorrecting] = useState<Result | null>(null);
-    const isTournamentScoped =
-        usePage().props.auth.user?.is_tournament_scoped ?? false;
 
     const openEdit = (result: Result) => {
         setEditing(result);
@@ -1438,14 +1438,6 @@ export default function Results({
         router.post(
             `/results/${result.id}/attachments`,
             { file },
-            { forceFormData: true, preserveScroll: true },
-        );
-    };
-
-    const uploadResultPhoto = (result: Result, photo: File) => {
-        router.post(
-            `/results/${result.id}/photo`,
-            { photo },
             { forceFormData: true, preserveScroll: true },
         );
     };
@@ -1686,13 +1678,13 @@ export default function Results({
                     }
                 />
 
-                <div className="flex flex-wrap gap-3 rounded-xl border bg-muted/20 p-4">
+                <div className="flex items-center gap-3 overflow-x-auto rounded-xl border bg-muted/20 p-4">
                     <Select
                         value={filters.status ?? 'all'}
                         onValueChange={(status) => applyFilters({ status })}
                     >
                         <SelectTrigger
-                            className="w-48"
+                            className="w-44 shrink-0"
                             aria-label="Filter by status"
                         >
                             <SelectValue />
@@ -1714,13 +1706,13 @@ export default function Results({
                         }
                     >
                         <SelectTrigger
-                            className="w-56"
+                            className="w-48 shrink-0"
                             aria-label="Filter by sport"
                         >
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">All sports</SelectItem>
+                            <SelectItem value="all">All Sports</SelectItem>
                             {sportOptions.map((sport) => (
                                 <SelectItem
                                     key={sport.id}
@@ -1731,8 +1723,33 @@ export default function Results({
                             ))}
                         </SelectContent>
                     </Select>
+                    <Select
+                        value={String(filters.event_id ?? 'all')}
+                        onValueChange={(value) =>
+                            applyFilters({ event_id: value })
+                        }
+                    >
+                        <SelectTrigger
+                            className="w-64 shrink-0"
+                            aria-label="Filter by event"
+                        >
+                            <SelectValue placeholder="All Events" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Events</SelectItem>
+                            {eventFilterOptions.map((option) => (
+                                <SelectItem
+                                    key={`${option.meet_id}-${option.id}`}
+                                    value={String(option.id)}
+                                >
+                                    {option.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                     <Button
-                        variant="ghost"
+                        variant="outline"
+                        className="shrink-0 border-sky-200 bg-sky-100 text-sky-900 hover:bg-sky-200 hover:text-sky-950 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-100 dark:hover:bg-sky-900"
                         onClick={() =>
                             applyFilters({
                                 status: 'all',
@@ -1741,37 +1758,9 @@ export default function Results({
                             })
                         }
                     >
-                        Clear filters
+                        Clear Filters
                     </Button>
                 </div>
-                {!isTournamentScoped && (
-                    <div className="flex flex-wrap gap-2">
-                        <Select
-                            value={String(filters.event_id ?? 'all')}
-                            onValueChange={(value) =>
-                                applyFilters({ event_id: value })
-                            }
-                        >
-                            <SelectTrigger
-                                className="w-72"
-                                aria-label="Filter by event"
-                            >
-                                <SelectValue placeholder="All events" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All events</SelectItem>
-                                {eventFilterOptions.map((option) => (
-                                    <SelectItem
-                                        key={`${option.meet_id}-${option.id}`}
-                                        value={String(option.id)}
-                                    >
-                                        {option.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                )}
 
                 {results.data.length === 0 ? (
                     <EmptyState
@@ -2197,7 +2186,13 @@ export default function Results({
                                 </div>
                                 <div className="overflow-x-auto">
                                     {result.result_source === 'direct' && (
-                                        <details className="space-y-3 border-b p-4">
+                                        <details
+                                            className="space-y-3 border-b p-4"
+                                            open={result.placements.some(
+                                                (placement) =>
+                                                    placement.can_attribute,
+                                            )}
+                                        >
                                             <summary className="cursor-pointer text-sm font-medium">
                                                 Athlete and coach links
                                             </summary>
@@ -2222,38 +2217,9 @@ export default function Results({
                                                 Team Standing
                                             </h3>
                                         )}
-                                    {result.can_upload_photo && (
-                                        <div className="border-b p-3">
-                                            <label className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-accent">
-                                                <FileUp className="size-4" />
-                                                {result.result_photo
-                                                    ? 'Replace result photo'
-                                                    : 'Attach written result photo'}
-                                                <input
-                                                    className="sr-only"
-                                                    type="file"
-                                                    accept="image/jpeg,image/png,image/webp"
-                                                    onChange={(event) => {
-                                                        const photo =
-                                                            event.target
-                                                                .files?.[0];
-
-                                                        if (photo) {
-                                                            uploadResultPhoto(
-                                                                result,
-                                                                photo,
-                                                            );
-                                                        }
-
-                                                        event.target.value = '';
-                                                    }}
-                                                />
-                                            </label>
-                                        </div>
-                                    )}
                                     <Table>
                                         <TableHeader>
-                                            <TableRow>
+                                            <TableRow className="bg-[#ffddd0] hover:bg-[#ffd3c2] dark:bg-orange-950/40 dark:hover:bg-orange-950/50">
                                                 <TableHead className="w-16">
                                                     {result.result_type ===
                                                     'versus'
@@ -2289,6 +2255,13 @@ export default function Results({
                                                 (placement) => (
                                                     <TableRow
                                                         key={`${placement.rank}-${placement.entry_id ?? placement.team_entry_id ?? placement.delegation_id}`}
+                                                        className={
+                                                            placement.rank >=
+                                                                1 &&
+                                                            placement.rank <= 3
+                                                                ? 'bg-[#fff7f3] hover:bg-[#fff0e8] dark:bg-orange-950/15 dark:hover:bg-orange-950/25'
+                                                                : undefined
+                                                        }
                                                     >
                                                         <TableCell className="font-medium">
                                                             {result.result_type ===

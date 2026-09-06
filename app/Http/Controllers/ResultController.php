@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\DelegationStatus;
 use App\Enums\EntryStatus;
 use App\Enums\ManagementTeamMemberStatus;
+use App\Enums\ManagementTeamType;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\MeetStatus;
@@ -13,6 +14,7 @@ use App\Enums\ResultStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\ScopesToAssignedSport;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
+use App\Models\AuditLog;
 use App\Models\Delegation;
 use App\Models\Entry;
 use App\Models\Event;
@@ -23,6 +25,7 @@ use App\Models\FileUpload;
 use App\Models\Meet;
 use App\Models\ResultAttachment;
 use App\Models\ResultPlacement;
+use App\Models\Sport;
 use App\Models\TeamEntry;
 use App\Models\User;
 use App\Services\AuditLogger;
@@ -161,7 +164,9 @@ class ResultController extends Controller
                             ResultStatus::Returned->value,
                             ResultStatus::Reopened->value,
                         ])->whereHas('meet.managementTeams', fn ($team) => $team
-                            ->where('source_code', 'EVENT_SECRETARIAT')
+                            ->where(fn ($managementTeam) => $managementTeam
+                                ->whereIn('source_code', ['EVENT_SECRETARIAT', 'CENTRAL_ICT', 'ICT'])
+                                ->orWhere('team_type', ManagementTeamType::ICT->value))
                             ->whereHas('members', fn ($member) => $member
                                 ->where('user_id', $user->id)
                                 ->where('status', ManagementTeamMemberStatus::Active)));
@@ -286,7 +291,7 @@ class ResultController extends Controller
                             ResultStatus::Cancelled => 'Cancelled',
                             default => 'For Validation',
                         },
-                        'audit_trail' => \App\Models\AuditLog::query()
+                        'audit_trail' => AuditLog::query()
                             ->where('auditable_type', $result->getMorphClass())->where('auditable_id', $result->id)
                             ->with('user:id,name')->orderByDesc('id')->get()
                             ->map(fn ($log) => ['id' => $log->id, 'action' => $log->action,
@@ -401,6 +406,7 @@ class ResultController extends Controller
                                     ->merge($placement->reportingAthletes)
                                     ->merge($placement->teamEntry?->members->pluck('athlete') ?? [])
                                     ->filter()->flatMap(fn ($athlete) => $athlete->coaches->pluck('name'))
+                                    ->merge($placement->reportingCoaches->pluck('name'))
                                     ->unique()->values(),
                                 'can_attribute' => $result->result_source === 'direct' && $placement->delegation !== null && app(ResultAttributionService::class)->canManage($user, $event, $placement->delegation),
                                 'entry_id' => $placement->entry_id,
@@ -432,7 +438,7 @@ class ResultController extends Controller
                 'sport_id' => $sportId ?: null,
                 'status' => isset($statusGroups[$status]) ? $status : null,
             ],
-            'sportOptions' => \App\Models\Sport::query()
+            'sportOptions' => Sport::query()
                 ->whereHas('events', fn ($events) => $events->when($isTournamentScoped, fn ($q) => $q->whereKey($assignedEventIds)))
                 ->orderBy('name')->get(['id', 'name'])->map(fn ($sport) => ['id' => $sport->id, 'label' => $sport->name]),
             'meetOptions' => Meet::query()->orderBy('name')->get(['id', 'name'])
