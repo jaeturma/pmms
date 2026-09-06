@@ -2,22 +2,28 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\DelegationStatus;
+use App\Enums\EntryStatus;
 use App\Enums\MatchStatus;
 use App\Enums\Permission;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
+use App\Enums\ResultStatus;
 use App\Enums\ScoreboardType;
 use App\Enums\ScoreEventType;
 use App\Enums\ScoringSessionStatus;
 use App\Enums\UserRole;
 use App\Events\ScoreUpdated;
 use App\Http\Controllers\Concerns\ScopesToAssignedSport;
+use App\Models\Delegation;
 use App\Models\Entry;
 use App\Models\EventMatch;
 use App\Models\MatchRosterPlayer;
 use App\Models\MeetSportAssignment;
 use App\Models\ScoreEvent;
 use App\Models\ScoringSession;
+use App\Models\TeamEntry;
+use App\Models\TeamEntryMember;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\CompetitionAccessService;
@@ -81,17 +87,56 @@ class ScoringSessionController extends Controller
         return Inertia::render('scoring/index', ['matches' => $matches]);
     }
 
+    /**
+     * Restart a match's live scoreboard from zero — available for any
+     * match once it has had at least one scoring session, not just the
+     * dedicated test/finals/championship boards. Any still-active session
+     * is force-ended first, then a brand-new session starts fresh: zero
+     * score, zero fouls/cards/rounds, its own play-by-play. Every prior
+     * ended session's own row is kept as history, never deleted. The
+     * match's roster (`MatchRosterPlayer`) and Team Entries are
+     * match-scoped, not session-scoped, so a restart deliberately leaves
+     * them untouched — "start all over" means a fresh game for the same
+     * two already-set-up teams, not re-registering them.
+     *
+     * The one real exception: ending a session for a non-scoreboard_mode
+     * match auto-completes it and auto-drafts a match-level Result from
+     * the final score (`CompetitionResultService::createFromLiveScore()`).
+     * That draft would otherwise sit stale (still showing the pre-restart
+     * score) and — because `createFromLiveScore()` reuses an existing
+     * `match->result` rather than creating a second one — silently
+     * swallow the restarted game's real outcome when it, too, ends. Since
+     * restart is meant to be a genuine do-over, an unsubmitted (`Encoded`)
+     * draft is safely deleted here the same way `ResultController::
+     * destroy()` deletes one; anything a human has already reviewed
+     * (Submitted or further) is left alone and reported so the operator
+     * uses the Result correction workflow instead of an implicit restart.
+     */
     public function reset(Request $request, EventMatch $match): RedirectResponse
     {
         $this->authorizeManage($request, $match);
-        abort_unless($match->scoreboard_mode !== null && $match->live_scoring_enabled, 422);
+        abort_unless($match->live_scoring_enabled, 422);
+        abort_unless($match->scoringSessions()->exists(), 422, __('This match has no scoring session yet to restart.'));
         return DB::transaction(function () use ($request, $match): RedirectResponse {
             $match = EventMatch::query()->lockForUpdate()->findOrFail($match->id);
             foreach ($match->scoringSessions()->where('status', '!=', ScoringSessionStatus::Ended->value)->get() as $session) {
                 $session->forceFill(['status' => ScoringSessionStatus::Ended, 'ended_by' => $request->user()->id,
                     'ended_at' => now(), 'sport_state' => $this->materializeCountdownClocks($session->sport_state ?? [])])->save();
             }
-            $this->audit->record('scoreboard.reset', $match, ['mode' => $match->scoreboard_mode]);
+
+            $draftResult = $match->result;
+            if ($draftResult !== null) {
+                abort_unless($draftResult->status === ResultStatus::Encoded, 422,
+                    __('This match already has a submitted result. Reopen or cancel it from Results before restarting the scoreboard.'));
+                $draftResult->placements()->delete();
+                $draftResult->attachments()->delete();
+                $draftResult->delete();
+            }
+            if ($match->status === MatchStatus::Completed) {
+                $match->forceFill(['status' => MatchStatus::Scheduled])->save();
+            }
+
+            $this->audit->record('scoreboard.reset', $match, ['mode' => $match->scoreboard_mode, 'draft_result_discarded' => $draftResult !== null]);
             $request->merge(['side_a_label' => $match->scoringSessions()->latest('id')->value('side_a_label') ?? 'Side A',
                 'side_b_label' => $match->scoringSessions()->latest('id')->value('side_b_label') ?? 'Side B']);
             return $this->store($request, $match);
@@ -157,12 +202,19 @@ class ScoringSessionController extends Controller
                 'status' => $match->status->value,
                 'is_scheduled' => $match->status === MatchStatus::Scheduled,
                 'scoreboard_mode' => $match->scoreboard_mode,
+                'is_team_event' => $match->event->is_team_event,
                 'viewer_url' => route('public.scoreboard', [$match->meet_id, $match->id]),
             ],
             'suggestedLabels' => $sideLabels->count() === 2 ? [
                 $sideLabels[0],
                 $sideLabels[1],
             ] : [null, null],
+            // Only meaningful before any team is attached — once two Team
+            // Entries exist, `suggestedLabels` above already carries them
+            // and the operator no longer needs a picker.
+            'delegationOptions' => $match->event->is_team_event && $teamEntries->isEmpty()
+                ? $this->competingDelegationOptions($match)
+                : [],
             'suggestedBoardType' => ScoreboardType::forSport($match->event->sport->name)->value,
             'session' => $session === null ? null : $session->toLivePayload(),
             'channel' => "match.{$match->id}.scoring",
@@ -171,6 +223,29 @@ class ScoringSessionController extends Controller
                 ? [null, null]
                 : $this->matchParticipants($entries),
         ]);
+    }
+
+    /**
+     * Delegations the ICT may pick as this match's competing team — active
+     * in the meet and already carrying a registered Team Entry for this
+     * event, so a selection always has real, extractable athletes behind
+     * it (this never offers, or creates, an empty team).
+     *
+     * @return array<int, array{id: int, label: string}>
+     */
+    private function competingDelegationOptions(EventMatch $match): array
+    {
+        return TeamEntry::query()
+            ->where('event_id', $match->event_id)
+            ->whereHas('delegation', fn ($delegation) => $delegation
+                ->where('meet_id', $match->meet_id)
+                ->whereIn('status', [DelegationStatus::Submitted->value, DelegationStatus::Approved->value]))
+            ->with('delegation')
+            ->get()
+            ->map(fn (TeamEntry $team): array => ['id' => $team->delegation_id, 'label' => $team->delegation->registrantName()])
+            ->sortBy('label')
+            ->values()
+            ->all();
     }
 
     /**
@@ -209,20 +284,32 @@ class ScoringSessionController extends Controller
             'side_b_label' => ['required', 'string', 'max:255'],
             'board_type' => ['nullable', 'string', Rule::in([ScoreboardType::Generic->value])],
             'scoreboard_mode' => ['sometimes', 'required', Rule::in(['test', 'finals', 'championship'])],
+            'delegation_a_id' => ['nullable', 'integer', 'required_with:delegation_b_id', Rule::exists('delegations', 'id')],
+            'delegation_b_id' => ['nullable', 'integer', 'required_with:delegation_a_id', 'different:delegation_a_id', Rule::exists('delegations', 'id')],
         ]);
 
         /** @var User $user */
         $user = $request->user();
 
+        $match->loadMissing('event');
+
+        if (($data['delegation_a_id'] ?? null) !== null) {
+            $this->attachCompetingTeams($match, (int) $data['delegation_a_id'], (int) $data['delegation_b_id']);
+        }
+
         // For a scheduled head-to-head match, the assigned participants
         // are authoritative. An ICT operator must not accidentally start
         // the board under hand-typed or swapped team names.
         $match->loadMissing([
-            'event',
             'entries.athlete.school:id,name',
             'teamEntries.delegation.school:id,name',
             'teamEntries.delegation.district:id,name',
         ]);
+
+        $extractedCount = $match->event->is_team_event && $match->teamEntries->count() === 2
+            ? $this->extractRosterFromTeamEntries($match)
+            : 0;
+
         $scheduledLabels = $match->event->is_team_event
             ? $match->teamEntries->map(fn ($team): string => $team->delegation->registrantName())->values()
             : $match->entries->map(fn (Entry $entry): string => $entry->athlete->school?->name ?? __('School not provided'))->values();
@@ -329,6 +416,11 @@ class ScoringSessionController extends Controller
             default => null,
         };
 
+        $settingsOverride = $this->initialSettingsOverride($request, $session->boardType());
+        if ($settingsOverride !== [] && $initialSportState !== null) {
+            $initialSportState = [...$initialSportState, ...$settingsOverride];
+        }
+
         if ($match->scoreboard_mode !== null) {
             $initialSportState = [...($initialSportState ?? []), 'scoreboard_mode' => $match->scoreboard_mode];
         }
@@ -336,11 +428,75 @@ class ScoringSessionController extends Controller
             $session->forceFill(['sport_state' => $initialSportState])->save();
         }
 
-        $this->audit->record('scoring.started', $session, [...$this->context($session), 'board_type' => $session->boardType()->value]);
+        $this->audit->record('scoring.started', $session, [...$this->context($session), 'board_type' => $session->boardType()->value, 'athletes_extracted' => $extractedCount]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Live scoring started.')]);
 
         return back();
+    }
+
+    /**
+     * Attach two Delegations' existing Team Entries as this match's
+     * competing teams — the "select competing team" step offered at
+     * session start when the match reached live scoring without
+     * participants already set from the Matches page. Never creates a
+     * Team Entry: each Delegation must already carry one for this event,
+     * since an empty team would defeat the point of extracting real
+     * athletes automatically below.
+     */
+    private function attachCompetingTeams(EventMatch $match, int $delegationAId, int $delegationBId): void
+    {
+        abort_unless($match->event->is_team_event, 422, __('Selecting a competing team only applies to team events.'));
+        abort_if($match->teamEntries()->exists(), 422, __('This match already has team participants attached. Change them from the Matches page.'));
+
+        $delegations = Delegation::query()->where('meet_id', $match->meet_id)
+            ->whereIn('status', [DelegationStatus::Submitted->value, DelegationStatus::Approved->value])
+            ->whereKey([$delegationAId, $delegationBId])->get()->keyBy('id');
+        abort_unless($delegations->count() === 2, 422, __('Both competing Delegations must be active in the current Meet.'));
+
+        $teamIds = collect([$delegationAId, $delegationBId])->map(function (int $delegationId) use ($match, $delegations): int {
+            $team = TeamEntry::query()->where('event_id', $match->event_id)->where('delegation_id', $delegationId)->first();
+            abort_if($team === null, 422, __(':name has no registered Team Entry for this Sports Event yet.', ['name' => $delegations[$delegationId]->registrantName()]));
+
+            return $team->id;
+        });
+
+        $match->teamEntries()->sync($teamIds);
+        $match->entries()->detach();
+    }
+
+    /**
+     * Auto-populate the match's roster from each competing team's already-
+     * confirmed registration — the "athletes extracted automatically" half
+     * of competing-team selection, so the ICT never re-types a roster the
+     * delegation's Coach already built. Runs for any team event with two
+     * Team Entries attached, whether just selected via
+     * `attachCompetingTeams()` above or already set earlier from the
+     * Matches page. Idempotent (skips any entry already on this match's
+     * roster, e.g. a restarted session via `reset()`) and respects
+     * `MatchRosterController::store()`'s own 15-per-side cap.
+     */
+    private function extractRosterFromTeamEntries(EventMatch $match): int
+    {
+        $rosteredEntryIds = MatchRosterPlayer::query()->where('match_id', $match->id)->pluck('entry_id');
+        $extracted = 0;
+
+        foreach ($match->teamEntries->values() as $index => $team) {
+            $side = $index === 0 ? 'a' : 'b';
+            $entryIds = TeamEntryMember::query()->where('team_entry_id', $team->id)
+                ->whereHas('entry', fn ($entry) => $entry->where('status', EntryStatus::Confirmed->value))
+                ->whereNotIn('entry_id', $rosteredEntryIds)
+                ->orderBy('member_order')
+                ->pluck('entry_id')
+                ->take(15);
+
+            foreach ($entryIds as $entryId) {
+                MatchRosterPlayer::create(['match_id' => $match->id, 'entry_id' => $entryId, 'side' => $side]);
+                $extracted++;
+            }
+        }
+
+        return $extracted;
     }
 
     /**
@@ -1836,56 +1992,11 @@ class ScoringSessionController extends Controller
         $this->authorizeManageSession($request, $session);
         $this->assertActive($session);
 
-        $data = match ($session->boardType()) {
-            ScoreboardType::Basketball => $request->validate([
-                'minutes_per_period' => ['required', 'integer', 'min:1', 'max:20'],
-                'shot_clock_duration' => ['required', 'integer', 'min:5', 'max:60'],
-                'team_color_a' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
-                'team_color_b' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
-                'quarters' => ['required', 'integer', Rule::in([2, 4])],
-            ]),
-            ScoreboardType::Boxing, ScoreboardType::CombatRounds => $request->validate([
-                'round_duration_seconds' => ['required', 'integer', 'min:30', 'max:600'],
-                'rest_duration_seconds' => ['required', 'integer', 'min:15', 'max:300'],
-                'total_rounds' => ['required', 'integer', 'min:1', 'max:12'],
-            ]),
-            ScoreboardType::SoftballBaseball => $request->validate([
-                'team_color_a' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
-                'team_color_b' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
-                'innings_scheduled' => ['required', 'integer', 'min:3', 'max:15'],
-            ]),
-            ScoreboardType::VolleyballSepakTakraw => $request->validate([
-                'set_target_points' => ['required', 'integer', 'min:5', 'max:50'],
-                'deciding_set_target_points' => ['required', 'integer', 'min:5', 'max:50'],
-                'sets_to_win' => ['required', 'integer', 'min:1', 'max:5'],
-            ]),
-            ScoreboardType::FootballFutsal => $request->validate([
-                'minutes_per_half' => ['required', 'integer', 'min:5', 'max:60'],
-            ]),
-            ScoreboardType::RacketGames => $request->validate([
-                'game_target_points' => ['required', 'integer', 'min:5', 'max:50'],
-                'hard_cap_points' => ['required', 'integer', 'min:0', 'max:60'],
-                'games_to_win' => ['required', 'integer', 'min:1', 'max:5'],
-            ]),
-            ScoreboardType::Wrestling => $request->validate([
-                'period_duration_seconds' => ['required', 'integer', 'min:30', 'max:600'],
-                'rest_duration_seconds' => ['required', 'integer', 'min:10', 'max:300'],
-                'total_periods' => ['required', 'integer', 'min:1', 'max:5'],
-            ]),
-            ScoreboardType::Tennis => $request->validate([
-                'sets_to_win' => ['required', 'integer', Rule::in([2, 3])],
-            ]),
-            ScoreboardType::GoalBall => $request->validate([
-                'minutes_per_half' => ['required', 'integer', 'min:3', 'max:20'],
-            ]),
-            ScoreboardType::Billiard => $request->validate([
-                'racks_to_win' => ['required', 'integer', 'min:1', 'max:15'],
-            ]),
-            ScoreboardType::Bocce => $request->validate([
-                'target_score' => ['required', 'integer', 'min:1', 'max:50'],
-            ]),
-            default => abort(422, __('This action is not available for this board type.')),
-        };
+        $rules = $this->sportSettingsRules($session->boardType());
+        if ($rules === []) {
+            abort(422, __('This action is not available for this board type.'));
+        }
+        $data = $request->validate($rules);
 
         $state = [...($session->sport_state ?? []), ...$data];
 
@@ -1896,6 +2007,102 @@ class ScoringSessionController extends Controller
         broadcast(new ScoreUpdated($session))->toOthers();
 
         return back();
+    }
+
+    /**
+     * The per-board-type settings validation rules, shared by `settings()`
+     * (post-start, `$prefix` empty) and `initialSettingsOverride()`
+     * (pre-start, `$prefix = 'settings'` validates a nested `settings.*`
+     * payload) so the two can never drift out of sync. Returns `[]` for a
+     * board type with no configurable settings (e.g. Generic).
+     *
+     * @return array<string, array<int, mixed>>
+     */
+    private function sportSettingsRules(ScoreboardType $boardType, string $prefix = ''): array
+    {
+        $rules = match ($boardType) {
+            ScoreboardType::Basketball => [
+                'minutes_per_period' => ['required', 'integer', 'min:1', 'max:20'],
+                'shot_clock_duration' => ['required', 'integer', 'min:5', 'max:60'],
+                'team_color_a' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+                'team_color_b' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+                'quarters' => ['required', 'integer', Rule::in([2, 4])],
+            ],
+            ScoreboardType::Boxing, ScoreboardType::CombatRounds => [
+                'round_duration_seconds' => ['required', 'integer', 'min:30', 'max:600'],
+                'rest_duration_seconds' => ['required', 'integer', 'min:15', 'max:300'],
+                'total_rounds' => ['required', 'integer', 'min:1', 'max:12'],
+            ],
+            ScoreboardType::SoftballBaseball => [
+                'team_color_a' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+                'team_color_b' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+                'innings_scheduled' => ['required', 'integer', 'min:3', 'max:15'],
+            ],
+            ScoreboardType::VolleyballSepakTakraw => [
+                'set_target_points' => ['required', 'integer', 'min:5', 'max:50'],
+                'deciding_set_target_points' => ['required', 'integer', 'min:5', 'max:50'],
+                'sets_to_win' => ['required', 'integer', 'min:1', 'max:5'],
+            ],
+            ScoreboardType::FootballFutsal => [
+                'minutes_per_half' => ['required', 'integer', 'min:5', 'max:60'],
+            ],
+            ScoreboardType::RacketGames => [
+                'game_target_points' => ['required', 'integer', 'min:5', 'max:50'],
+                'hard_cap_points' => ['required', 'integer', 'min:0', 'max:60'],
+                'games_to_win' => ['required', 'integer', 'min:1', 'max:5'],
+            ],
+            ScoreboardType::Wrestling => [
+                'period_duration_seconds' => ['required', 'integer', 'min:30', 'max:600'],
+                'rest_duration_seconds' => ['required', 'integer', 'min:10', 'max:300'],
+                'total_periods' => ['required', 'integer', 'min:1', 'max:5'],
+            ],
+            ScoreboardType::Tennis => [
+                'sets_to_win' => ['required', 'integer', Rule::in([2, 3])],
+            ],
+            ScoreboardType::GoalBall => [
+                'minutes_per_half' => ['required', 'integer', 'min:3', 'max:20'],
+            ],
+            ScoreboardType::Billiard => [
+                'racks_to_win' => ['required', 'integer', 'min:1', 'max:15'],
+            ],
+            ScoreboardType::Bocce => [
+                'target_score' => ['required', 'integer', 'min:1', 'max:50'],
+            ],
+            default => [],
+        };
+
+        if ($rules === [] || $prefix === '') {
+            return $rules;
+        }
+
+        return collect($rules)->mapWithKeys(fn (array $rule, string $key): array => ["{$prefix}.{$key}" => $rule])->all();
+    }
+
+    /**
+     * The ICT's optional pre-start settings for the match's board type —
+     * "Game Settings" chosen before the session exists, instead of always
+     * starting from the hardcoded defaults and adjusting via `settings()`
+     * afterward. Reuses `sportSettingsRules()` so a pre-start choice is
+     * validated exactly as strictly as a post-start change. Returns `[]`
+     * (defaults apply) when the request carries no `settings` payload at
+     * all, or the board type has none to offer.
+     *
+     * @return array<string, mixed>
+     */
+    private function initialSettingsOverride(Request $request, ScoreboardType $boardType): array
+    {
+        if (! $request->has('settings')) {
+            return [];
+        }
+
+        $rules = $this->sportSettingsRules($boardType, 'settings');
+        if ($rules === []) {
+            return [];
+        }
+
+        $validated = $request->validate($rules);
+
+        return $validated['settings'] ?? [];
     }
 
     /**

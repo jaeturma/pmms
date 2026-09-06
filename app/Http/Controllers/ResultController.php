@@ -342,6 +342,23 @@ class ResultController extends Controller
                             'requested_by' => $result->cancellationRequestedBy?->name,
                             'requested_at' => $result->cancellation_requested_at->toDayDateTimeString(),
                         ],
+                        'can_request_correction' => $result->result_source === 'direct'
+                            && $result->status === ResultStatus::Official
+                            && $result->correction_requested_at === null
+                            && $user->meetSportAssignments()
+                                ->where('status', MeetSportAssignmentStatus::Active)
+                                ->where('role', MeetSportAssignmentRole::TournamentICT->value)
+                                ->whereHas('meetSport', fn ($scope) => $scope
+                                    ->where('meet_id', $result->meet_id)
+                                    ->where('sport_id', $sportId))
+                                ->exists()
+                            && $event !== null
+                            && app(CompetitionAccessService::class)->canAccessEvent($user, $event, $result->meet_id),
+                        'correction_request' => $result->correction_requested_at === null ? null : [
+                            'reason' => $result->correction_request_reason,
+                            'requested_by' => $result->correctionRequestedBy?->name,
+                            'requested_at' => $result->correction_requested_at->toDayDateTimeString(),
+                        ],
                         'can_officialize' => ($isEventSecretariat || $user->hasPermission(Permission::ResultsOfficialize, $result->meet))
                             && $result->isFinalEventResult()
                             && ($result->status === ResultStatus::Validated || ($result->result_source === 'direct' && $result->status === ResultStatus::Submitted))

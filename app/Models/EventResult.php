@@ -50,6 +50,7 @@ class EventResult extends Model
             'submitted_at' => 'datetime',
             'returned_at' => 'datetime',
             'cancellation_requested_at' => 'datetime',
+            'correction_requested_at' => 'datetime',
             'official_at' => 'datetime',
         ];
     }
@@ -142,6 +143,11 @@ class EventResult extends Model
     public function cancellationRequestedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'cancellation_requested_by')->withTrashed();
+    }
+
+    public function correctionRequestedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'correction_requested_by')->withTrashed();
     }
 
     public function officialBy(): BelongsTo

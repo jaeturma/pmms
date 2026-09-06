@@ -3,6 +3,7 @@
 use App\Enums\MatchStatus;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
+use App\Enums\ResultStatus;
 use App\Enums\ScoringSessionStatus;
 use App\Models\Athlete;
 use App\Models\AuditLog;
@@ -12,6 +13,7 @@ use App\Models\Event;
 use App\Models\EventMatch;
 use App\Models\EventResult;
 use App\Models\FileUpload;
+use App\Models\MatchRosterPlayer;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
 use App\Models\ResultPlacement;
@@ -3793,4 +3795,183 @@ test('a bocce match session can be forced to the generic board at start', functi
     $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
 
     expect($session->toLivePayload())->toMatchArray(['board_type' => 'generic', 'sport_state' => null]);
+});
+
+/**
+ * A registered delegation with a Team Entry for the given event, plus
+ * `$memberCount` confirmed athletes on its roster — the real registration
+ * data `attachCompetingTeams()`/`extractRosterFromTeamEntries()` read from.
+ */
+function teamWithConfirmedRoster(Event $event, int $memberCount): \App\Models\TeamEntry
+{
+    $delegation = \App\Models\Delegation::factory()->approved()->create(['meet_id' => $event->meets()->first()?->id ?? \App\Models\Meet::factory()->create()->id]);
+    $team = \App\Models\TeamEntry::query()->create(['delegation_id' => $delegation->id, 'event_id' => $event->id, 'status' => 'confirmed']);
+
+    for ($i = 0; $i < $memberCount; $i++) {
+        $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);
+        $entry = Entry::factory()->confirmed()->create(['athlete_id' => $athlete->id, 'delegation_id' => $delegation->id, 'event_id' => $event->id]);
+        \App\Models\TeamEntryMember::query()->create(['team_entry_id' => $team->id, 'athlete_id' => $athlete->id, 'entry_id' => $entry->id, 'member_order' => $i + 1]);
+    }
+
+    return $team;
+}
+
+test('an ICT selects two registered delegations at session start and their confirmed rosters are extracted automatically', function () {
+    $sport = Sport::factory()->create(['name' => 'Basketball']);
+    $event = Event::factory()->team()->create(['sport_id' => $sport->id]);
+    $match = EventMatch::factory()->create(['event_id' => $event->id, 'status' => MatchStatus::Scheduled]);
+    $teamA = teamWithConfirmedRoster($event, 5);
+    $teamB = teamWithConfirmedRoster($event, 4);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->get("/matches/{$match->id}/scoreboard")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('match.is_team_event', true)
+            ->has('delegationOptions', 2));
+
+    $this->actingAs($admin)->post("/matches/{$match->id}/scoring-sessions", [
+        'side_a_label' => $teamA->delegation->registrantName(),
+        'side_b_label' => $teamB->delegation->registrantName(),
+        'delegation_a_id' => $teamA->delegation_id,
+        'delegation_b_id' => $teamB->delegation_id,
+    ])->assertSessionHasNoErrors();
+
+    expect($match->teamEntries()->pluck('team_entries.id')->sort()->values()->all())
+        ->toBe(collect([$teamA->id, $teamB->id])->sort()->values()->all())
+        ->and(MatchRosterPlayer::query()->where('match_id', $match->id)->where('side', 'a')->count())->toBe(5)
+        ->and(MatchRosterPlayer::query()->where('match_id', $match->id)->where('side', 'b')->count())->toBe(4)
+        ->and(AuditLog::query()->where('action', 'scoring.started')->latest('id')->first()->context)
+        ->toMatchArray(['athletes_extracted' => 9]);
+});
+
+test('competing team selection rejects the same delegation twice and a delegation without a registered team entry', function () {
+    $sport = Sport::factory()->create(['name' => 'Basketball']);
+    $event = Event::factory()->team()->create(['sport_id' => $sport->id]);
+    $match = EventMatch::factory()->create(['event_id' => $event->id, 'status' => MatchStatus::Scheduled]);
+    $teamA = teamWithConfirmedRoster($event, 3);
+    $unregisteredDelegation = Delegation::factory()->approved()->create(['meet_id' => $teamA->delegation->meet_id]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->post("/matches/{$match->id}/scoring-sessions", [
+        'side_a_label' => 'A', 'side_b_label' => 'B',
+        'delegation_a_id' => $teamA->delegation_id, 'delegation_b_id' => $teamA->delegation_id,
+    ])->assertSessionHasErrors('delegation_b_id');
+
+    $this->actingAs($admin)->post("/matches/{$match->id}/scoring-sessions", [
+        'side_a_label' => 'A', 'side_b_label' => 'B',
+        'delegation_a_id' => $teamA->delegation_id, 'delegation_b_id' => $unregisteredDelegation->id,
+    ])->assertStatus(422);
+
+    expect(EventMatch::query()->findOrFail($match->id)->teamEntries()->count())->toBe(0);
+});
+
+test('resetting a session with already-attached teams re-extracts without duplicating the roster', function () {
+    $sport = Sport::factory()->create(['name' => 'Basketball']);
+    $event = Event::factory()->team()->create(['sport_id' => $sport->id]);
+    $match = EventMatch::factory()->create(['event_id' => $event->id, 'status' => MatchStatus::Scheduled]);
+    $teamA = teamWithConfirmedRoster($event, 3);
+    $teamB = teamWithConfirmedRoster($event, 3);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->post("/matches/{$match->id}/scoring-sessions", [
+        'side_a_label' => $teamA->delegation->registrantName(), 'side_b_label' => $teamB->delegation->registrantName(),
+        'delegation_a_id' => $teamA->delegation_id, 'delegation_b_id' => $teamB->delegation_id,
+    ])->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)->post("/matches/{$match->id}/scoreboard/reset")->assertSessionHasNoErrors();
+
+    expect(MatchRosterPlayer::query()->where('match_id', $match->id)->count())->toBe(6);
+});
+
+test('an ICT may configure basketball game settings before the session starts, or omit them for the defaults', function () {
+    $admin = User::factory()->admin()->create();
+    $sport = Sport::factory()->create(['name' => 'Basketball']);
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+
+    $customized = EventMatch::factory()->create(['event_id' => $event->id, 'status' => MatchStatus::Scheduled]);
+    $this->actingAs($admin)->post("/matches/{$customized->id}/scoring-sessions", [
+        'side_a_label' => 'Home', 'side_b_label' => 'Away',
+        'settings' => [
+            'minutes_per_period' => 8, 'shot_clock_duration' => 20,
+            'team_color_a' => '#111111', 'team_color_b' => '#222222', 'quarters' => 2,
+        ],
+    ])->assertSessionHasNoErrors();
+    $customizedState = ScoringSession::query()->where('match_id', $customized->id)->firstOrFail()->sport_state;
+    expect($customizedState)->toMatchArray([
+        'minutes_per_period' => 8, 'shot_clock_duration' => 20,
+        'team_color_a' => '#111111', 'team_color_b' => '#222222', 'quarters' => 2,
+    ]);
+
+    $default = EventMatch::factory()->create(['event_id' => $event->id, 'status' => MatchStatus::Scheduled]);
+    $this->actingAs($admin)->post("/matches/{$default->id}/scoring-sessions", [
+        'side_a_label' => 'Home', 'side_b_label' => 'Away',
+    ])->assertSessionHasNoErrors();
+    $defaultState = ScoringSession::query()->where('match_id', $default->id)->firstOrFail()->sport_state;
+    expect($defaultState)->toMatchArray(['minutes_per_period' => 10, 'shot_clock_duration' => 24, 'quarters' => 4]);
+});
+
+test('pre-start settings are validated exactly as strictly as post-start settings', function () {
+    $admin = User::factory()->admin()->create();
+    $match = basketballMatch();
+
+    $this->actingAs($admin)->post("/matches/{$match->id}/scoring-sessions", [
+        'side_a_label' => 'Home', 'side_b_label' => 'Away',
+        'settings' => ['minutes_per_period' => 8, 'shot_clock_duration' => 20, 'team_color_a' => '#111111', 'team_color_b' => '#222222', 'quarters' => 3],
+    ])->assertSessionHasErrors('settings.quarters');
+
+    expect(ScoringSession::query()->where('match_id', $match->id)->exists())->toBeFalse();
+});
+
+test('an ended ordinary match scoreboard can be restarted, discarding its unsubmitted draft result and starting fresh', function () {
+    $admin = User::factory()->admin()->create();
+    $match = basketballMatch();
+    $match->entries()->attach([confirmedEntryForScoringSession($match)->id, confirmedEntryForScoringSession($match)->id]);
+
+    $this->actingAs($admin)->post("/matches/{$match->id}/scoring-sessions", [
+        'side_a_label' => 'Home', 'side_b_label' => 'Away',
+    ])->assertSessionHasNoErrors();
+    $firstSession = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+    $this->actingAs($admin)->patch("/scoring-sessions/{$firstSession->id}/score", ['type' => 'point', 'side' => 'a', 'delta' => 42])
+        ->assertSessionHasNoErrors();
+    $this->actingAs($admin)->patch("/scoring-sessions/{$firstSession->id}/end")->assertSessionHasNoErrors();
+
+    expect($match->fresh()->status)->toBe(MatchStatus::Completed);
+    $draft = EventResult::query()->where('match_id', $match->id)->sole();
+    expect($draft->status)->toBe(ResultStatus::Encoded);
+
+    $this->actingAs($admin)->post("/matches/{$match->id}/scoreboard/reset")->assertSessionHasNoErrors();
+
+    expect($match->fresh()->status)->toBe(MatchStatus::Scheduled)
+        ->and(EventResult::query()->where('match_id', $match->id)->exists())->toBeFalse()
+        ->and(ScoringSession::query()->where('match_id', $match->id)->count())->toBe(2);
+
+    $newSession = ScoringSession::query()->where('match_id', $match->id)->latest('id')->firstOrFail();
+    expect($newSession->id)->not->toBe($firstSession->id)
+        ->and($newSession->score_a)->toBe(0)->and($newSession->score_b)->toBe(0)
+        ->and($newSession->status)->toBe(ScoringSessionStatus::InProgress);
+
+    $this->actingAs($admin)->patch("/scoring-sessions/{$newSession->id}/score", ['type' => 'point', 'side' => 'b', 'delta' => 7])
+        ->assertSessionHasNoErrors();
+    $this->actingAs($admin)->patch("/scoring-sessions/{$newSession->id}/end")->assertSessionHasNoErrors();
+
+    $secondDraft = EventResult::query()->where('match_id', $match->id)->sole();
+    expect($secondDraft->id)->not->toBe($draft->id)
+        ->and($secondDraft->placements()->where('mark', '0-7')->exists())->toBeTrue();
+});
+
+test('a match whose draft live-score result was already submitted cannot be silently restarted', function () {
+    $admin = User::factory()->admin()->create();
+    $match = basketballMatch();
+
+    $this->actingAs($admin)->post("/matches/{$match->id}/scoring-sessions", [
+        'side_a_label' => 'Home', 'side_b_label' => 'Away',
+    ])->assertSessionHasNoErrors();
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/end")->assertSessionHasNoErrors();
+    EventResult::query()->where('match_id', $match->id)->sole()->forceFill(['status' => ResultStatus::Submitted])->save();
+
+    $this->actingAs($admin)->post("/matches/{$match->id}/scoreboard/reset")->assertStatus(422);
+
+    expect(EventResult::query()->where('match_id', $match->id)->exists())->toBeTrue()
+        ->and($match->fresh()->status)->toBe(MatchStatus::Completed);
 });

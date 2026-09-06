@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { ResultActionButton } from '@/components/result-action-button';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -21,6 +22,7 @@ type Props = {
     cancelLabel?: string;
     destructive?: boolean;
     processing?: boolean;
+    actionFeedback?: boolean;
     onConfirm: () => void;
 };
 
@@ -34,8 +36,11 @@ export function ConfirmDialog({
     cancelLabel = 'Cancel',
     destructive = false,
     processing = false,
+    actionFeedback = false,
     onConfirm,
 }: Props) {
+    const ActionButton = actionFeedback ? ResultActionButton : Button;
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
@@ -48,17 +53,17 @@ export function ConfirmDialog({
                 </DialogHeader>
                 <DialogFooter className="gap-2">
                     <DialogClose asChild>
-                        <Button variant="secondary" disabled={processing}>
+                        <ActionButton variant="secondary" disabled={processing}>
                             {cancelLabel}
-                        </Button>
+                        </ActionButton>
                     </DialogClose>
-                    <Button
+                    <ActionButton
                         variant={destructive ? 'destructive' : 'default'}
                         onClick={onConfirm}
                         disabled={processing}
                     >
                         {confirmLabel}
-                    </Button>
+                    </ActionButton>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

@@ -8,13 +8,13 @@ import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
 import { PaginationControls } from '@/components/pagination-controls';
 import type { Paginated } from '@/components/pagination-controls';
+import { ResultActionButton as Button } from '@/components/result-action-button';
 import type { Attribution } from '@/components/result-attribution';
 import {
     AttributionFields,
     emptyAttribution,
 } from '@/components/result-attribution';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
@@ -104,6 +104,12 @@ type Result = {
     can_cancel: boolean;
     can_request_cancellation: boolean;
     cancellation_request: {
+        reason: string;
+        requested_by: string | null;
+        requested_at: string;
+    } | null;
+    can_request_correction: boolean;
+    correction_request: {
         reason: string;
         requested_by: string | null;
         requested_at: string;
@@ -260,6 +266,7 @@ function PlacementAttribution({
                     ))}
                     <Button
                         disabled={processing}
+                        loading={processing}
                         onClick={() =>
                             patch(
                                 `/results/${result.id}/placements/${placement.id}/attribution`,
@@ -461,7 +468,7 @@ function DirectResultForm({
                                 bronze_attribution: emptyAttribution(),
                             }))
                         }
-                        disabled={processing || !!result}
+                        disabled={processing}
                     >
                         <SelectTrigger
                             id="result-event"
@@ -835,6 +842,7 @@ function DirectResultForm({
                         type="submit"
                         size="lg"
                         disabled={processing}
+                        loading={processing}
                         className="w-full sm:w-auto"
                     >
                         <Send className="size-4" />
@@ -1313,7 +1321,11 @@ function EncodeForm({
                     </div>
 
                     <div className="flex justify-end">
-                        <Button type="submit" disabled={processing}>
+                        <Button
+                            type="submit"
+                            disabled={processing}
+                            loading={processing}
+                        >
                             {result ? 'Save changes' : 'Encode result'}
                         </Button>
                     </div>
@@ -1377,6 +1389,7 @@ function CorrectDialog({
                             type="submit"
                             variant="destructive"
                             disabled={processing}
+                            loading={processing}
                         >
                             Reopen result
                         </Button>
@@ -1460,8 +1473,8 @@ export default function Results({
             const value = overrides[key] ?? String(filters[key] ?? '');
 
             if (value && value !== 'all') {
-params[key] = value;
-}
+                params[key] = value;
+            }
         }
 
         router.get(index().url, params, {
@@ -1532,8 +1545,8 @@ params[key] = value;
                 open={detail !== null}
                 onOpenChange={(open) => {
                     if (!open) {
-setDetail(null);
-}
+                        setDetail(null);
+                    }
                 }}
             >
                 <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
@@ -1602,6 +1615,16 @@ setDetail(null);
                                     }
                                     :{' '}
                                     {detail.result.cancellation_request.reason}
+                                </p>
+                            )}
+                            {detail.result.correction_request && (
+                                <p>
+                                    Correction requested by{' '}
+                                    {
+                                        detail.result.correction_request
+                                            .requested_by
+                                    }
+                                    : {detail.result.correction_request.reason}
                                 </p>
                             )}
                         </div>
@@ -1823,7 +1846,8 @@ setDetail(null);
                                         {(result.data_issues.length > 0 ||
                                             result.operational_remarks ||
                                             result.return_reason ||
-                                            result.cancellation_request) && (
+                                            result.cancellation_request ||
+                                            result.correction_request) && (
                                             <Button
                                                 variant="outline"
                                                 size="sm"
@@ -1914,31 +1938,6 @@ setDetail(null);
                                                             }}
                                                         />
                                                     </label>
-                                                    <Button
-                                                        size="sm"
-                                                        disabled={
-                                                            !result.signed_form ||
-                                                            ![
-                                                                'encoded',
-                                                                'returned',
-                                                                'reopened',
-                                                            ].includes(
-                                                                result.status,
-                                                            )
-                                                        }
-                                                        onClick={() =>
-                                                            router.post(
-                                                                `/results/${result.id}/submit`,
-                                                                {},
-                                                                {
-                                                                    preserveScroll: true,
-                                                                },
-                                                            )
-                                                        }
-                                                    >
-                                                        <Send />
-                                                        Submit
-                                                    </Button>
                                                 </>
                                             )}
                                         {result.can_review &&
@@ -2034,6 +2033,7 @@ setDetail(null);
                                         )}
                                         {result.can_officialize && (
                                             <ConfirmDialog
+                                                actionFeedback
                                                 trigger={
                                                     <Button size="sm">
                                                         Accept
@@ -2100,6 +2100,31 @@ setDetail(null);
                                                     Reopen for correction
                                                 </Button>
                                             )}
+                                        {result.can_request_correction && (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => {
+                                                    const reason = window
+                                                        .prompt(
+                                                            'Describe what needs to be corrected (e.g. wrong Sports Event, wrong medal placement)',
+                                                        )
+                                                        ?.trim();
+
+                                                    if (reason) {
+                                                        router.post(
+                                                            `/results/${result.id}/request-correction`,
+                                                            { reason },
+                                                            {
+                                                                preserveScroll: true,
+                                                            },
+                                                        );
+                                                    }
+                                                }}
+                                            >
+                                                Request correction
+                                            </Button>
+                                        )}
                                         {canEncode &&
                                             result.result_source !== 'direct' &&
                                             result.status === 'encoded' && (
@@ -2144,6 +2169,7 @@ setDetail(null);
                                         {result.can_manage &&
                                             result.status === 'encoded' && (
                                                 <ConfirmDialog
+                                                    actionFeedback
                                                     trigger={
                                                         <Button
                                                             variant="destructive"

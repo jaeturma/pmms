@@ -347,3 +347,69 @@ test('a single participant result defaults to no medals and can be accepted', fu
     $this->get($documentUrl)->assertNotFound();
     $this->get($eventUrl)->assertInertia(fn ($page) => $page->has('standings', 0)->has('results', 0));
 });
+
+test('ICT requests a correction on an official result, admin approves, ICT moves it to another event and resubmits, admin re-accepts and medals recount', function () {
+    Storage::fake('local');
+    config()->set('uploads.disk', 'local');
+    $context = directResultContext();
+    ['meet' => $meet, 'ict' => $ict, 'secretariat' => $secretariat, 'delegations' => $delegations] = $context;
+
+    $otherEvent = Event::factory()->team()->create(['sport_id' => $context['event']->sport_id]);
+    $meet->events()->attach($otherEvent);
+    EventMedalConfig::query()->create([
+        'event_id' => $otherEvent->id, 'awards_medals' => true, 'award_type' => 'TEAM',
+        'physical_quantity_mode' => 'FIXED', 'gold_physical_quantity' => 12,
+        'silver_physical_quantity' => 12, 'bronze_physical_quantity' => 12,
+        'gold_tally_quantity' => 2, 'silver_tally_quantity' => 1, 'bronze_tally_quantity' => 1,
+    ]);
+
+    $this->actingAs($ict)->post('/results/direct', directPayload($context))->assertSessionDoesntHaveErrors();
+    $result = EventResult::query()->sole();
+    $this->actingAs($secretariat)->post(route('results.official', $result))->assertSessionDoesntHaveErrors();
+    expect($result->fresh()->status)->toBe(ResultStatus::Official)->and($result->medalAwards()->count())->toBe(3);
+    expect(collect(app(MedalTallyService::class)->standings($meet->id)['districts'])->sum('total'))->toBe(3);
+
+    // A non-assigned ICT and a repeat request are both rejected.
+    $this->actingAs(User::factory()->create(['role' => UserRole::TournamentICT]))
+        ->post("/results/{$result->id}/request-correction", ['reason' => 'Not my sport'])->assertForbidden();
+
+    $this->actingAs($ict)->post("/results/{$result->id}/request-correction", [
+        'reason' => 'Wrong Sports Event — this belongs to the other team event.',
+    ])->assertSessionDoesntHaveErrors();
+    expect($result->fresh()->status)->toBe(ResultStatus::Official)
+        ->and($result->fresh()->correction_requested_at)->not->toBeNull()
+        ->and($result->medalAwards()->count())->toBe(3);
+
+    $this->actingAs($ict)->post("/results/{$result->id}/request-correction", ['reason' => 'again'])
+        ->assertStatus(422);
+
+    $this->actingAs($ict)->get('/results')->assertInertia(fn ($page) => $page
+        ->where('results.data.0.can_request_correction', false)
+        ->where('results.data.0.correction_request.reason', 'Wrong Sports Event — this belongs to the other team event.'));
+
+    $admin = User::factory()->create(['role' => UserRole::Admin]);
+    $this->actingAs($admin)->post(route('results.reopen', $result), ['reason' => 'Approving ICT correction request'])
+        ->assertSessionDoesntHaveErrors();
+    expect($result->fresh()->status)->toBe(ResultStatus::Reopened)
+        ->and($result->fresh()->correction_requested_at)->toBeNull()
+        ->and($result->medalAwards()->count())->toBe(0)
+        ->and(collect(app(MedalTallyService::class)->standings($meet->id)['districts'])->sum('total'))->toBe(0);
+
+    // Corrects both the Sports Event and the Gold delegation/count in one
+    // resubmission — the real-world shape of a correction, not just a
+    // relabeling.
+    $this->actingAs($ict)->post(route('results.direct.update', $result), directPayload($context, [
+        'event_id' => $otherEvent->id, 'evidence' => null,
+        'gold_delegation_id' => $delegations[1]->id, 'bronze_count' => 4,
+    ]))->assertSessionDoesntHaveErrors();
+    expect($result->fresh()->event_id)->toBe($otherEvent->id)
+        ->and($result->fresh()->status)->toBe(ResultStatus::Submitted);
+
+    $this->actingAs($secretariat)->post(route('results.official', $result))->assertSessionDoesntHaveErrors();
+    expect($result->fresh()->status)->toBe(ResultStatus::Official)
+        ->and($result->medalAwards()->sum('tally_quantity'))->toBe(6)
+        ->and($result->medalAwards()->where('medal_type', 'gold')->sole()->delegation_id)->toBe($delegations[1]->id)
+        ->and($result->medalAwards()->where('medal_type', 'bronze')->sole()->delegation_id)->toBe($delegations[0]->id);
+    $totals = collect(app(MedalTallyService::class)->standings($meet->id)['districts']);
+    expect($totals->sum('total'))->toBe(6);
+});

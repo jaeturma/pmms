@@ -86,7 +86,10 @@ class ResultWorkflowController extends Controller
         abort_unless($event->meets()->whereKey($meet->id)->exists(), 422, 'The selected Sports Event is not part of the current Meet.');
 
         if ($result !== null) {
-            abort_unless($result->result_source === 'direct' && $result->meet_id === $meet->id && $result->event_id === $event->id, 422);
+            // The Sports Event may change here — a correction may need to
+            // move a misfiled Result to the right event, not just fix its
+            // scores. Still confined to the same direct Result and Meet.
+            abort_unless($result->result_source === 'direct' && $result->meet_id === $meet->id, 422);
             abort_unless(in_array($result->status, [ResultStatus::Encoded, ResultStatus::Submitted, ResultStatus::Returned, ResultStatus::Reopened], true), 422, 'Reopen an accepted Result before editing it.');
         }
 
@@ -139,12 +142,14 @@ class ResultWorkflowController extends Controller
                 'result_scope' => 'event', 'operational_remarks' => 'Direct Event Result submitted from delegation medal placements.',
             ]);
             $result->forceFill([
+                'event_id' => $event->id,
                 'result_type' => $data['result_type'] ?? $result->result_type,
                 'measurement_type' => $isVersus ? $data['measurement_type'] : null,
                 'status' => ResultStatus::Submitted, 'encoded_by' => $user->id, 'encoded_at' => now(),
                 'submitted_by' => $user->id, 'submitted_at' => now(),
                 'version' => $result->exists ? $result->version + 1 : 1,
                 'validated_by' => null, 'validated_at' => null, 'official_by' => null, 'official_at' => null,
+                'correction_requested_by' => null, 'correction_requested_at' => null, 'correction_request_reason' => null,
             ])->save();
             foreach ($delegationIds as $index => $delegationId) {
                 $medal = ['gold', 'silver', 'bronze'][$index];
@@ -439,6 +444,35 @@ class ResultWorkflowController extends Controller
         return back()->with('success', 'Cancellation requested. The submitted result remains locked while the Event Secretariat reviews the problem.');
     }
 
+    /**
+     * The ICT's half of the correction workflow for an already-official
+     * Result: flag it for the Event Secretariat/Admin to reopen. Approval
+     * is `reopen()` itself (below) — it clears these same fields once
+     * granted, so a stale pending badge never lingers past approval.
+     */
+    public function requestCorrection(Request $request, EventResult $result): RedirectResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+        abort_unless($this->isAssignedTournamentIct($user, $result), 403);
+        abort_unless($result->status === ResultStatus::Official, 422, 'Only an official result may have a correction requested.');
+        abort_if($result->correction_requested_at !== null, 422, 'A correction has already been requested for this result.');
+        $validated = $request->validate(['reason' => ['required', 'string', 'max:1000']]);
+
+        $result->forceFill([
+            'correction_requested_by' => $user->id,
+            'correction_requested_at' => now(),
+            'correction_request_reason' => $validated['reason'],
+        ])->save();
+
+        $this->audit->record('result.correction_requested', $result, [
+            ...$this->context($result),
+            'reason' => $validated['reason'],
+        ]);
+
+        return back()->with('success', 'Correction requested. The result stays official and counted until the Event Secretariat reopens it.');
+    }
+
     public function cancel(Request $request, EventResult $result): RedirectResponse
     {
         $this->authorizeEventSecretariat($request->user(), $result);
@@ -690,14 +724,18 @@ class ResultWorkflowController extends Controller
         DB::transaction(function () use ($result, $validated): void {
             $result = EventResult::query()->lockForUpdate()->findOrFail($result->id);
             abort_unless($result->status === ResultStatus::Official, 422);
+            $hadPendingCorrectionRequest = $result->correction_requested_at !== null;
             $result->medalAwards()->delete();
             $result->forceFill([
                 'status' => ResultStatus::Reopened,
                 'version' => $result->version + 1,
                 'tm_confirmed_by' => null, 'tm_confirmed_at' => null,
                 'official_by' => null, 'official_at' => null,
+                'correction_requested_by' => null, 'correction_requested_at' => null, 'correction_request_reason' => null,
             ])->save();
-            $this->audit->record('result.reopened', $result, [...$this->context($result), 'reason' => $validated['reason']]);
+            $this->audit->record('result.reopened', $result, [
+                ...$this->context($result), 'reason' => $validated['reason'], 'approved_correction_request' => $hadPendingCorrectionRequest,
+            ]);
         });
 
         return back()->with('success', 'Official result reopened for correction.');
