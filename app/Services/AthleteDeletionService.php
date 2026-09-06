@@ -21,10 +21,12 @@ class AthleteDeletionService
             $entryIds = $athlete->entries()->pluck('id');
             $teamEntryIds = $athlete->teamMemberships()->pluck('team_entry_id');
 
-            $hasCompetitionHistory = DB::table('result_placements')
-                ->whereIn('entry_id', $entryIds)
-                ->orWhereIn('team_entry_id', $teamEntryIds)
-                ->exists()
+            $hasCompetitionHistory = DB::table('result_placements')->where('athlete_id', $athlete->id)->exists()
+                || DB::table('result_placement_athlete')->where('athlete_id', $athlete->id)->exists()
+                || DB::table('result_placements')
+                    ->whereIn('entry_id', $entryIds)
+                    ->orWhereIn('team_entry_id', $teamEntryIds)
+                    ->exists()
                 || DB::table('match_entries')->whereIn('entry_id', $entryIds)->exists()
                 || DB::table('match_roster_players')->whereIn('entry_id', $entryIds)->exists();
 

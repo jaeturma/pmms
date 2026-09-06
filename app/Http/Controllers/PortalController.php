@@ -240,7 +240,10 @@ class PortalController extends Controller
 
         $sportId = $request->integer('sport_id');
 
-        $results = app(PublicEventResults::class)->publishedResults(EventResult::query())
+        // Medal results only. Versus / standing / non-medal outcomes are
+        // auto-accepted and shown per Sports Event (Sports → Event), never
+        // listed on this public results page.
+        $results = app(PublicEventResults::class)->withMedals(EventResult::query())
             ->where('meet_id', $meet->id)
             ->where('status', ResultStatus::Official->value)
             ->when($sportId > 0, fn ($query) => $query->whereHas(
@@ -1049,6 +1052,17 @@ class PortalController extends Controller
             ? null
             : MeetSport::query()->where('meet_id', $meet->id)->where('sport_id', $sport->id)->first();
 
+        // Sports Events whose medal has already been awarded (an accepted
+        // result carrying at least one medal) in the active meet — the
+        // sport portal marks those event cards maroon.
+        $medalAwardedEventIds = $meet === null
+            ? collect()
+            : EventResult::query()->real()
+                ->where('meet_id', $meet->id)
+                ->where('status', ResultStatus::Official->value)
+                ->whereHas('medalAwards', fn ($awards) => $awards->where('tally_quantity', '>', 0))
+                ->pluck('event_id');
+
         return [
             'slug' => $slug->value,
             'name' => $slug->sportName(),
@@ -1060,6 +1074,7 @@ class PortalController extends Controller
             'events' => $sport->events()->orderBy('name')->get()->map(fn ($event) => [
                 'id' => $event->id, 'label' => $event->name.' ('.$event->gender->label().', '.$event->age_division->label().')',
                 'url' => route('public.sport-event', ['event' => $event, 'meet_id' => $meet?->id]),
+                'medal_awarded' => $medalAwardedEventIds->contains($event->id),
             ])->all(),
             'tournament_management' => $meetSport === null ? [] : $this->sportProfileTournamentManagement($meetSport),
             'technical_officials' => $this->sportProfileTechnicalOfficials($sport, $meetSport),

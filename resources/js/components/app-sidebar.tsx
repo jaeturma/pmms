@@ -65,11 +65,11 @@ import { index as entriesIndex } from '@/routes/entries';
 import { index as equipmentIndex } from '@/routes/equipment';
 import { index as eventsIndex } from '@/routes/events';
 import { index as foodIndex } from '@/routes/food';
-import { show as mealStubShow } from '@/routes/meal-stub';
 import { index as incidentsIndex } from '@/routes/incidents';
 import { index as managementIndex } from '@/routes/management';
 import { index as managementTeamsIndex } from '@/routes/management-teams';
 import { index as matchesIndex } from '@/routes/matches';
+import { show as mealStubShow } from '@/routes/meal-stub';
 import { index as medicalIndex } from '@/routes/medical';
 import { index as meetSportAssignmentsIndex } from '@/routes/meet-sport-assignments';
 import { index as meetsIndex } from '@/routes/meets';
@@ -433,9 +433,15 @@ export function AppSidebar() {
             .filter((item): item is NavItem => item !== undefined);
 
     const navItems: NavItem[] = byTitle(['Dashboard']);
+
     if (auth.user?.can_operate_scoreboard) {
-        navItems.push({ title: 'Scoreboard', href: '/scoreboards', icon: Swords });
+        navItems.push({
+            title: 'Scoreboard',
+            href: '/scoreboards',
+            icon: Swords,
+        });
     }
+
     if (auth.user?.can_access_meal_stub) {
         navItems.push({
             title: 'Meals',
@@ -443,6 +449,7 @@ export function AppSidebar() {
             icon: Utensils,
         });
     }
+
     const trailingNavItems: NavItem[] = [
         { title: 'Support', href: support(), icon: LifeBuoy },
     ];
@@ -499,8 +506,8 @@ export function AppSidebar() {
             {
                 title: 'Monitoring',
                 icon: BarChart3,
-                items: managerNavItems.filter(
-                    (item) => ['Management', 'Readiness'].includes(item.title),
+                items: managerNavItems.filter((item) =>
+                    ['Management', 'Readiness'].includes(item.title),
                 ),
             },
         );
@@ -520,7 +527,10 @@ export function AppSidebar() {
                         href: '/coach/assignment-requests',
                         icon: UserCog,
                     },
-                    ...byTitle(['Athletes', 'Eligibility', 'Data Repair'], mainNavItems),
+                    ...byTitle(
+                        ['Athletes', 'Eligibility', 'Data Repair'],
+                        mainNavItems,
+                    ),
                 ],
             },
             {
@@ -614,7 +624,12 @@ export function AppSidebar() {
                 role === 'technical_official' || role === 'tournament_manager'
                     ? labeledItems.filter((item) => item.title !== 'Dashboard')
                     : byTitle(
-                          ['Schedule of Events', 'Matches', 'Results', 'Medal tally'],
+                          [
+                              'Schedule of Events',
+                              'Matches',
+                              'Results',
+                              'Medal tally',
+                          ],
                           mainNavItems,
                       ),
         });
@@ -658,7 +673,11 @@ export function AppSidebar() {
             {
                 title: 'Competition',
                 icon: Trophy,
-                items: byTitle(['Schedule of Events', 'Results', 'Medal tally']),
+                items: byTitle([
+                    'Schedule of Events',
+                    'Results',
+                    'Medal tally',
+                ]),
             },
         );
     } else {
@@ -709,10 +728,26 @@ export function AppSidebar() {
                 icon: Utensils,
                 items: [
                     { title: 'Dashboard', href: foodIndex(), icon: LayoutGrid },
-                    { title: 'Meal Setup', href: '/food#meal-setup', icon: CalendarDays },
-                    { title: 'Meal Stubs', href: '/food/distribution#meal-stubs', icon: ClipboardList },
-                    { title: 'Distribution', href: '/food/distribution', icon: Utensils },
-                    { title: 'Reports', href: '/food/distribution#reports', icon: BarChart3 },
+                    {
+                        title: 'Meal Setup',
+                        href: '/food#meal-setup',
+                        icon: CalendarDays,
+                    },
+                    {
+                        title: 'Meal Stubs',
+                        href: '/food/distribution#meal-stubs',
+                        icon: ClipboardList,
+                    },
+                    {
+                        title: 'Distribution',
+                        href: '/food/distribution',
+                        icon: Utensils,
+                    },
+                    {
+                        title: 'Reports',
+                        href: '/food/distribution#reports',
+                        icon: BarChart3,
+                    },
                 ],
             });
         }
@@ -743,6 +778,20 @@ export function AppSidebar() {
             title: 'Monitoring',
             icon: BarChart3,
             items: byTitle(['Management', 'Readiness'], managerNavItems),
+        });
+    }
+
+    if (auth.user?.can_manage_data_integrity) {
+        navSections.push({
+            title: 'Administration',
+            icon: Settings,
+            items: [
+                {
+                    title: 'Data Integrity',
+                    href: '/administration/data-integrity',
+                    icon: Settings,
+                },
+            ],
         });
     }
 

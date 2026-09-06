@@ -223,7 +223,7 @@ class MatchRosterController extends Controller
             return null;
         }
 
-        return $side === 'a' ? $entries[0]->athlete->school_id : $entries[1]->athlete->school_id;
+        return $side === 'a' ? $entries[0]->athlete?->school_id : $entries[1]->athlete?->school_id;
     }
 
     private function sideDelegationId(EventMatch $match, string $side): ?int
@@ -248,10 +248,10 @@ class MatchRosterController extends Controller
         $rosteredEntryIds = MatchRosterPlayer::query()->where('match_id', $match->id)->pluck('entry_id');
         $payload = fn ($team): array => $team->members
             ->whereNotIn('entry_id', $rosteredEntryIds)
-            ->filter(fn ($member): bool => $member->entry?->status === EntryStatus::Confirmed)
+            ->filter(fn ($member): bool => $member->entry?->status === EntryStatus::Confirmed && $member->entry?->athlete !== null)
             ->map(fn ($member): array => [
                 'id' => $member->entry_id,
-                'label' => $member->entry->athlete->fullName(),
+                'label' => $member->entry?->athlete?->fullName() ?? __('Missing athlete'),
             ])->values()->all();
 
         return ['a' => $payload($teams[0]), 'b' => $payload($teams[1])];
@@ -278,9 +278,13 @@ class MatchRosterController extends Controller
             ->where('match_id', $match->id)
             ->pluck('entry_id');
 
-        $schoolIdFor = fn (int $index): int => $entries[$index]->athlete->school_id;
+        $schoolIdFor = fn (int $index): ?int => $entries[$index]->athlete?->school_id;
 
-        $poolFor = function (int $schoolId) use ($match, $rosteredEntryIds): array {
+        $poolFor = function (?int $schoolId) use ($match, $rosteredEntryIds): array {
+            if ($schoolId === null) {
+                return [];
+            }
+
             return Entry::query()
                 ->where('event_id', $match->event_id)
                 ->where('status', EntryStatus::Confirmed->value)

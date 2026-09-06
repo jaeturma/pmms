@@ -4,9 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Enums\EligibilityStatus;
 use App\Enums\EntryStatus;
-use App\Enums\MeetStatus;
-use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MedicalClearanceStatus;
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Models\Athlete;
@@ -119,7 +119,7 @@ class EntryController extends Controller
             'entries' => $query->paginate($this->registryPageSize)->withQueryString()
                 ->through(fn (Entry $entry): array => [
                     'id' => $entry->id,
-                    'athlete' => $entry->athlete->fullName(),
+                    'athlete' => ($entry->athlete?->fullName() ?? __('Missing athlete')),
                     'event' => sprintf(
                         '%s — %s (%s, %s)',
                         $entry->event->sport->name,
@@ -127,14 +127,14 @@ class EntryController extends Controller
                         $entry->event->gender->label(),
                         $entry->event->age_division->label(),
                     ),
-                    'school' => $entry->athlete->school?->name ?? __('Not provided'),
-                    'delegation' => $entry->delegation->registrantName(),
-                    'meet' => $entry->delegation->meet->name,
+                    'school' => $entry->athlete?->school?->name ?? __('Not provided'),
+                    'delegation' => ($entry->delegation?->registrantName() ?? __('Missing delegation')),
+                    'meet' => ($entry->delegation?->meet?->name ?? __('Missing meet')),
                     'status' => $entry->status->value,
                     'status_label' => $entry->status->label(),
-                    'eligibility_approved' => $entry->athlete->eligibilityReview?->status === EligibilityStatus::Approved,
+                    'eligibility_approved' => $entry->athlete?->eligibilityReview?->status === EligibilityStatus::Approved,
                     'can_confirm' => $entry->status === EntryStatus::Submitted
-                        && ($entry->athlete->eligibilityReview?->status === EligibilityStatus::Approved
+                        && ($entry->athlete?->eligibilityReview?->status === EligibilityStatus::Approved
                             || $this->isAssignedIct($user, $entry->delegation->meet_id))
                         && $user->can('confirm', $entry),
                     'can_withdraw' => $entry->status !== EntryStatus::Withdrawn
@@ -175,7 +175,7 @@ class EntryController extends Controller
             'athleteOptions' => $athleteScope->get()
                 ->map(fn (Athlete $athlete): array => [
                     'id' => $athlete->id,
-                    'meet_id' => $athlete->delegation->meet->id,
+                    'meet_id' => $athlete->delegation?->meet?->id,
                     'delegation_id' => $athlete->delegation_id,
                     'label' => $athlete->fullName().' — '.($athlete->school?->name ?? __('School not provided')),
                     'event_ids' => $athlete->entries
@@ -228,7 +228,7 @@ class EntryController extends Controller
                         'meet_id' => $team->delegation->meet_id,
                         'delegation_id' => $team->delegation_id,
                         'event' => $team->event->sport->name.' — '.$team->event->name,
-                        'delegation' => $team->delegation->registrantName(),
+                        'delegation' => ($team->delegation?->registrantName() ?? __('Missing delegation')),
                         'member_count' => $count,
                         'minimum' => $minimum,
                         'maximum' => $maximum,
@@ -240,7 +240,7 @@ class EntryController extends Controller
                         'status' => $team->status->label(),
                         'members' => $team->members->map(fn ($member): array => [
                             'id' => $member->athlete_id,
-                            'name' => $member->athlete->fullName(),
+                            'name' => ($member->athlete?->fullName() ?? __('Missing athlete')),
                         ])->values(),
                     ];
                 })->values(),
@@ -368,7 +368,7 @@ class EntryController extends Controller
 
         $entry->loadMissing(['event.sport', 'athlete.delegation.meet', 'athlete.eligibilityReview', 'athlete.medicalClearance']);
         if (! $this->isAssignedIct(request()->user(), $entry->delegation->meet_id)
-            && $entry->athlete->eligibilityReview?->status !== EligibilityStatus::Approved) {
+            && $entry->athlete?->eligibilityReview?->status !== EligibilityStatus::Approved) {
             throw ValidationException::withMessages([
                 'entry' => __('This entry cannot be confirmed until DSAC approves the athlete’s eligibility.'),
             ]);
@@ -394,7 +394,7 @@ class EntryController extends Controller
         $entry->forceFill(['status' => EntryStatus::Confirmed])->save();
 
         $this->audit->record('entry.confirmed', $entry, [
-            'athlete' => $entry->athlete->fullName(),
+            'athlete' => ($entry->athlete?->fullName() ?? __('Missing athlete')),
             'event' => $entry->event->name,
         ]);
 
@@ -431,7 +431,7 @@ class EntryController extends Controller
         $entry->forceFill(['status' => EntryStatus::Withdrawn])->save();
 
         $this->audit->record('entry.withdrawn', $entry, [
-            'athlete' => $entry->athlete->fullName(),
+            'athlete' => ($entry->athlete?->fullName() ?? __('Missing athlete')),
             'event' => $entry->event->name,
         ]);
 
@@ -466,7 +466,7 @@ class EntryController extends Controller
         }
 
         $context = [
-            'athlete' => $entry->athlete->fullName(),
+            'athlete' => ($entry->athlete?->fullName() ?? __('Missing athlete')),
             'event' => $entry->event->name,
         ];
 

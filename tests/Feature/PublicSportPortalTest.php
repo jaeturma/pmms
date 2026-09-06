@@ -93,6 +93,32 @@ test('with no active meet, the portal shows an empty state instead of erroring',
             ->where('liveNow', null));
 });
 
+test('the sport portal flags an event whose medal has already been awarded', function () {
+    $meet = Meet::factory()->active()->published()->featured()->create();
+    $sport = basketballSport();
+    $awarded = Event::factory()->create(['sport_id' => $sport->id]);
+    $pending = Event::factory()->create(['sport_id' => $sport->id]);
+    $meet->events()->attach([$awarded->id, $pending->id]);
+
+    $result = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $awarded->id]);
+    $placement = ResultPlacement::factory()->create(['event_result_id' => $result->id, 'rank' => 1]);
+    $result->medalAwards()->create([
+        'result_placement_id' => $placement->id,
+        'delegation_id' => $placement->entry->delegation_id,
+        'rank' => 1, 'medal_type' => 'gold',
+        'physical_quantity' => 1, 'tally_quantity' => 1,
+        'result_version' => $result->version ?? 1,
+        'snapshotted_by' => $result->encoded_by, 'snapshotted_at' => now(),
+    ]);
+
+    $this->get('/basketball')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('sport.events', 2)
+            ->where('sport.events', fn ($events) => collect($events)->firstWhere('id', $awarded->id)['medal_awarded'] === true
+                && collect($events)->firstWhere('id', $pending->id)['medal_awarded'] === false));
+});
+
 test('a live match for this sport appears as liveNow with a real session payload', function () {
     $meet = Meet::factory()->active()->published()->featured()->create();
     $sport = basketballSport();

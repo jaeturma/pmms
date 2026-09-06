@@ -11,6 +11,7 @@ export type User = {
     can_access_meal_stub?: boolean;
     can_review_coaches?: boolean;
     can_manage_accounts?: boolean;
+    can_manage_data_integrity?: boolean;
     can_manage_announcements?: boolean;
     can_access_content_management?: boolean;
     can_manage_editorial_content?: boolean;

@@ -13,6 +13,7 @@ use App\Http\Controllers\BilletingVenueController;
 use App\Http\Controllers\CoachAssignmentRequestController;
 use App\Http\Controllers\ContentManagementController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DataIntegrityController;
 use App\Http\Controllers\DataRepairController;
 use App\Http\Controllers\DelegationController;
 use App\Http\Controllers\DemoDataController;
@@ -61,6 +62,7 @@ use App\Http\Controllers\ProtestController;
 use App\Http\Controllers\ReadinessChecklistController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RequiredPasswordChangeController;
+use App\Http\Controllers\ResultAttributionController;
 use App\Http\Controllers\ResultController;
 use App\Http\Controllers\ResultWorkflowController;
 use App\Http\Controllers\ScheduleController;
@@ -221,6 +223,16 @@ Route::middleware(['throttle:60,1', PreventStalePublicResults::class])->group(fu
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('administration/data-integrity', [DataIntegrityController::class, 'index'])->name('data-integrity.index');
+    Route::get('administration/data-integrity/rosters/{roster}', [DataIntegrityController::class, 'show'])->name('data-integrity.roster');
+    Route::get('administration/data-integrity/rosters/{roster}/candidates', [DataIntegrityController::class, 'candidates'])->name('data-integrity.candidates');
+    Route::patch('administration/data-integrity/rosters/{roster}', [DataIntegrityController::class, 'link'])->name('data-integrity.link');
+    Route::post('administration/data-integrity/rosters/{roster}/athlete', [DataIntegrityController::class, 'create'])->name('data-integrity.create');
+    Route::get('administration/data-integrity', [DataIntegrityController::class, 'index'])->name('data-integrity.index');
+    Route::get('administration/data-integrity/rosters/{roster}', [DataIntegrityController::class, 'show'])->name('data-integrity.roster');
+    Route::get('administration/data-integrity/rosters/{roster}/candidates', [DataIntegrityController::class, 'candidates'])->name('data-integrity.candidates');
+    Route::patch('administration/data-integrity/rosters/{roster}', [DataIntegrityController::class, 'link'])->name('data-integrity.link');
+    Route::post('administration/data-integrity/rosters/{roster}/athlete', [DataIntegrityController::class, 'create'])->name('data-integrity.create');
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::post('dashboard/eligibility/mark-complete', [DashboardController::class, 'markCompleteAthletesEligible'])
         ->name('dashboard.eligibility.mark-complete');
@@ -357,8 +369,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('matches/{match}/result', [MatchController::class, 'createResult'])->name('matches.result.store');
     Route::get('results', [ResultController::class, 'index'])->name('results.index');
     Route::get('results/submit', [ResultController::class, 'index'])->name('results.create');
-    Route::get('results/attribution-options', [\App\Http\Controllers\ResultAttributionController::class, 'options'])->name('results.attribution.options');
-    Route::patch('results/{result}/placements/{placement}/attribution', [\App\Http\Controllers\ResultAttributionController::class, 'update'])->name('results.attribution.update');
+    Route::get('results/attribution-options', [ResultAttributionController::class, 'options'])->name('results.attribution.options');
+    Route::patch('results/{result}/placements/{placement}/attribution', [ResultAttributionController::class, 'update'])->name('results.attribution.update');
     Route::post('results/direct', [ResultWorkflowController::class, 'storeDirect'])->name('results.direct.store');
     Route::post('results/{result}/direct', [ResultWorkflowController::class, 'storeDirect'])->name('results.direct.update');
     Route::get('results/{result}/form', [ResultWorkflowController::class, 'form'])->name('results.form');

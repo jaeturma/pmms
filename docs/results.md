@@ -61,11 +61,42 @@ Admin/Organizer. Both were reviewed and deliberately deferred, not built:
 - Duplicate ranks are rejected unless every placement sharing the rank carries
   the `is_tie` flag.
 
+## Non-medal auto-acceptance
+
+A **non-medal outcome** — a `versus` result, a result for an event that awards no
+medals, or a direct "standing" result whose placements carry no medal quantities
+— is **auto-accepted the moment it is submitted**. `ResultWorkflowController`
+(`isNonMedalFinalResult()` / `autoAcceptNonMedalResult()`) collapses the Event
+Secretariat's validate + accept steps into one automatic `Official` transition
+(`result.made_official` audit with `automatic: true`) from `submit()`,
+`acceptWithDeferredIssues()`, and `storeDirect()`.
+
+It stays fully reversible: the Event Secretariat can still **return it for
+correction** (`returnResult()` — accepted from `Official` for a non-medal final
+result, clearing `official_by`/`official_at` and any medal awards) or **cancel
+it** (`cancel()` — likewise). `ResultController::index` exposes `is_non_medal`,
+`can_return`, and the widened `can_cancel` for the frontend.
+
+Medal results are unaffected — they keep the explicit encode → submit →
+validate → accept workflow.
+
 ## Visibility
 
 Validated results are meet outcomes — readable by **all roles**. Encoded results
 are working data — visible to managers only (the index filters them out for
 everyone else, per product scope).
+
+**Non-medal / standing / versus results are kept off the public results page**
+(`/meets/{meet}/results` — `PortalController::results()` uses
+`PublicEventResults::withMedals()`). They appear only per Sports Event, reached
+by browsing **Sports → a sport → an event** (`portal/sport-event`, which renders
+`standings` and `versusResults` alongside medal `results`).
+
+On the public sport portal (`/{sport}` — `portal/sport-portal`), an event whose
+medal has already been awarded (an `Official` result with a medal award in the
+active meet) is flagged: `PortalController::sportProfile()` adds
+`events[].medal_awarded`, and `PortalSportEvents` renders that card with a
+maroon background and light text.
 
 ## UI
 

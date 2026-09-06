@@ -302,7 +302,7 @@ test('reopen correction and cancellation replace and reverse accepted direct awa
         ->and(collect(app(MedalTallyService::class)->standings($context['meet']->id)['districts'])->sum('total'))->toBe(0);
 });
 
-test('a single participant result defaults to no medals and can be accepted', function () {
+test('a single participant result defaults to no medals and is auto-accepted', function () {
     $this->withoutVite();
     Storage::fake('local');
     config()->set('uploads.disk', 'local');
@@ -316,33 +316,32 @@ test('a single participant result defaults to no medals and can be accepted', fu
     ])->assertRedirect('/results')->assertSessionDoesntHaveErrors();
     $result = EventResult::query()->sole();
     expect($result->placements()->count())->toBe(1)
-        ->and($result->placements()->sole()->tally_quantity)->toBe(0);
+        ->and($result->placements()->sole()->tally_quantity)->toBe(0)
+        ->and($result->fresh()->status)->toBe(ResultStatus::Official)
+        ->and($result->fresh()->official_by)->not->toBeNull()
+        ->and($result->medalAwards()->count())->toBe(0);
     $document = $result->attachments()->sole();
     $eventUrl = route('public.sport-event', ['event' => $result->event_id, 'meet_id' => $result->meet_id]);
     $documentUrl = route('public.result-document', [$result, $document]);
     auth()->logout();
-    $this->get($eventUrl)->assertOk()->assertInertia(fn ($page) => $page->has('standings', 0)->has('results', 0));
-    $this->get($documentUrl)->assertNotFound();
-    $this->actingAs($context['secretariat'])->post(route('results.official', $result))->assertSessionDoesntHaveErrors();
-    expect($result->fresh()->status)->toBe(ResultStatus::Official)
-        ->and($result->medalAwards()->count())->toBe(0);
-    $this->get('/results')->assertInertia(fn ($page) => $page
-        ->where('results.data.0.placements.0.mark', '12.45 seconds')
-        ->where('results.data.0.placements.0.tally_quantity', 0));
-    auth()->logout();
+    // Auto-accepted: the standing is immediately public on its Sports Event
+    // page, but never on the public medal-results page.
     $this->get($eventUrl)->assertInertia(fn ($page) => $page
         ->component('portal/sport-event')->has('standings', 1)
         ->where('standings.0.mark', '12.45 seconds')->where('standings.0.medal', null)
         ->has('results', 0));
+    // A non-medal standing carries no public evidence document.
+    $this->get($documentUrl)->assertNotFound();
     $this->get("/meets/{$result->meet_id}/results")->assertInertia(fn ($page) => $page->has('results', 0)->has('sportOptions', 0));
-    $this->get($documentUrl)->assertNotFound();
-    $document->update(['is_current' => false]);
-    $this->get($documentUrl)->assertNotFound();
-    $document->update(['is_current' => true]);
+    // Re-accepting is idempotent.
+    $this->actingAs($context['secretariat'])->post(route('results.official', $result))->assertSessionDoesntHaveErrors();
+    expect($result->fresh()->status)->toBe(ResultStatus::Official);
+    auth()->logout();
     $context['meet']->forceFill(['is_published' => false])->save();
     $this->get($documentUrl)->assertNotFound();
     $this->get($eventUrl)->assertNotFound();
     $context['meet']->forceFill(['is_published' => true])->save();
+    // Returning it for correction pulls it back out of the public portal.
     $result->forceFill(['status' => ResultStatus::Reopened])->save();
     $this->get($documentUrl)->assertNotFound();
     $this->get($eventUrl)->assertInertia(fn ($page) => $page->has('standings', 0)->has('results', 0));

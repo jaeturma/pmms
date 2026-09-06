@@ -481,7 +481,12 @@ export type PortalSport = {
     description: string | null;
     photo_url: string | null;
     categories: PortalSportCategorySummary[];
-    events: Array<{ id: number; label: string; url: string }>;
+    events: Array<{
+        id: number;
+        label: string;
+        url: string;
+        medal_awarded: boolean;
+    }>;
     tournament_management: PortalSportPersonnelAssignment[];
     technical_officials: PortalTechnicalOfficial[];
 };

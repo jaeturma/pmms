@@ -142,7 +142,7 @@ class MatchController extends Controller
                         $match->schedule->scheduled_date->format('M j'),
                         substr($match->schedule->starts_at, 0, 5),
                         substr($match->schedule->ends_at, 0, 5),
-                        $match->schedule->venue->name.($match->schedule->competitionArea
+                        ($match->schedule->venue?->name ?? __('Missing venue')).($match->schedule->competitionArea
                             ? ' / '.$match->schedule->competitionArea->name
                             : ''),
                     ),
@@ -151,9 +151,9 @@ class MatchController extends Controller
                             'entry_id' => $entry->id,
                             'delegation_id' => $entry->delegation_id,
                             'name' => $match->event->is_team_event
-                                ? $entry->delegation->registrantName()
-                                : $entry->delegation->registrantName().' ('.$entry->athlete->fullName().')',
-                            'school' => $match->event->is_team_event ? null : ($entry->athlete->school?->name ?? __('Not provided')),
+                                ? ($entry->delegation?->registrantName() ?? __('Missing delegation'))
+                                : ($entry->delegation?->registrantName() ?? __('Missing delegation')).' ('.($entry->athlete?->fullName() ?? __('Missing athlete')).')',
+                            'school' => $match->event->is_team_event ? null : ($entry->athlete?->school?->name ?? __('Not provided')),
                         ])
                         ->sortBy('name')
                         ->values()
@@ -165,7 +165,7 @@ class MatchController extends Controller
                         ->map(fn (MatchParticipantSlot $slot): array => [
                             'id' => $slot->id,
                             'delegation_id' => $slot->delegation_id,
-                            'delegation' => $slot->delegation->registrantName(),
+                            'delegation' => ($slot->delegation?->registrantName() ?? __('Missing delegation')),
                             'position' => $slot->position,
                             'athlete_id' => $slot->entry?->athlete_id,
                             'athlete' => $slot->entry?->athlete?->fullName(),
@@ -219,11 +219,11 @@ class MatchController extends Controller
                         $slot->scheduled_date->format('M j'),
                         substr($slot->starts_at, 0, 5),
                         substr($slot->ends_at, 0, 5),
-                        $slot->venue->name.($slot->competitionArea ? ' / '.$slot->competitionArea->name : ''),
+                        ($slot->venue?->name ?? __('Missing venue')).($slot->competitionArea ? ' / '.$slot->competitionArea->name : ''),
                     ),
                 ])
                 ->values(),
-            'entryOptions' => Entry::query()
+            'entryOptions' => Entry::query()->whereHas('athlete')->whereHas('delegation')->whereHas('event')
                 ->whereIn('status', $user->isAdmin() || $isIct
                     ? [EntryStatus::Submitted->value, EntryStatus::Confirmed->value]
                     : [EntryStatus::Confirmed->value])
@@ -248,15 +248,15 @@ class MatchController extends Controller
                     'delegation_id' => $entry->delegation_id,
                     'is_team_event' => $entry->event->is_team_event,
                     'label' => $entry->event->is_team_event
-                        ? $entry->delegation->registrantName()
-                        : $entry->delegation->registrantName().' ('.$entry->athlete->fullName().')',
+                        ? ($entry->delegation?->registrantName() ?? __('Missing delegation'))
+                        : ($entry->delegation?->registrantName() ?? __('Missing delegation')).' ('.($entry->athlete?->fullName() ?? __('Missing athlete')).')',
                 ])
                 ->unique(fn (array $option): string => $option['is_team_event']
                         ? 'team-'.$option['event_id'].'-'.$option['delegation_id']
                         : 'entry-'.$option['id'])
                 ->sortBy('label')
                 ->values(),
-            'teamEntryOptions' => TeamEntry::query()
+            'teamEntryOptions' => TeamEntry::query()->whereHas('delegation')
                 ->whereHas('event', fn ($events) => $events->where('is_team_event', true)
                     ->whereHas('meets', fn ($meets) => $meets->whereKey(Meet::current()->id)))
                 ->with(['delegation.school:id,name', 'delegation.district:id,name'])
@@ -266,7 +266,7 @@ class MatchController extends Controller
                     'event_id' => $team->event_id,
                     'delegation_id' => $team->delegation_id,
                     'is_team_event' => true,
-                    'label' => $team->delegation->registrantName(),
+                    'label' => ($team->delegation?->registrantName() ?? __('Missing delegation')),
                 ])
                 ->sortBy('label')
                 ->values(),
@@ -282,7 +282,7 @@ class MatchController extends Controller
                 ])
                 ->sortBy('label')
                 ->values(),
-            'athleteOptions' => SportRosterMember::query()
+            'athleteOptions' => SportRosterMember::query()->usable()
                 ->whereHas('meetSport', fn ($meetSports) => $meetSports->where('meet_id', Meet::current()->id))
                 ->when($isTournamentScoped, fn ($members) => $members->whereHas(
                     'meetSport.sport.events', fn ($events) => $events->whereIn('events.id', $visibleEventIds),
@@ -290,11 +290,12 @@ class MatchController extends Controller
                 ->when($user->role === UserRole::Coach, fn ($members) => $members->whereIn('delegation_id', $coachDelegationIds))
                 ->with(['athlete.school', 'meetSport:id,sport_id'])
                 ->get()
+                ->filter(fn (SportRosterMember $member): bool => $member->athlete !== null && $member->meetSport !== null)
                 ->map(fn (SportRosterMember $member): array => [
                     'id' => $member->athlete_id,
                     'sport_id' => $member->meetSport->sport_id,
                     'delegation_id' => $member->delegation_id,
-                    'label' => $member->athlete->fullName().' — '.($member->athlete->school?->name ?? __('School not provided')),
+                    'label' => ($member->athlete?->fullName() ?? __('Missing athlete')).' — '.($member->athlete?->school?->name ?? __('School not provided')),
                 ])->unique(fn (array $option): string => $option['id'].'-'.$option['sport_id'])->values(),
             'canManage' => $canManageAll || $canManageAssignedCompetition,
         ]);
@@ -453,7 +454,7 @@ class MatchController extends Controller
                 || $entry->delegation->meet_id !== $match->meet_id) {
                 throw ValidationException::withMessages([
                     'entry_ids' => __(':name is not entered in this match\'s event.', [
-                        'name' => $entry->athlete->fullName(),
+                        'name' => ($entry->athlete?->fullName() ?? __('Missing athlete')),
                     ]),
                 ]);
             }
@@ -462,7 +463,7 @@ class MatchController extends Controller
                 && $entry->status !== EntryStatus::Confirmed) {
                 throw ValidationException::withMessages([
                     'entry_ids' => __('Only confirmed entries can join a match (:name is :status).', [
-                        'name' => $entry->athlete->fullName(),
+                        'name' => ($entry->athlete?->fullName() ?? __('Missing athlete')),
                         'status' => $entry->status->label(),
                     ]),
                 ]);

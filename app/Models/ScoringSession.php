@@ -209,7 +209,7 @@ class ScoringSession extends Model
     {
         $this->loadMissing('match.event', 'match.entries.athlete');
 
-        if ($this->match->event->is_team_event) {
+        if ($this->match?->event === null || $this->match->event->is_team_event) {
             return [null, null];
         }
 
@@ -220,8 +220,8 @@ class ScoringSession extends Model
         }
 
         $describe = fn (Entry $entry): array => [
-            'name' => $entry->athlete->fullName(),
-            'sports_photo_url' => $entry->athlete->sportsPhotoUrl(),
+            'name' => $entry->athlete?->fullName() ?? __('Missing athlete'),
+            'sports_photo_url' => $entry->athlete?->sportsPhotoUrl(),
         ];
 
         return [$describe($entries[0]), $describe($entries[1])];

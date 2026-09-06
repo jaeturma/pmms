@@ -33,6 +33,7 @@ use App\Services\CompetitionAccessService;
 use App\Services\CompetitionResultService;
 use App\Services\FileUploadService;
 use App\Services\ResultAttributionService;
+use App\Services\ResultReportingCompleteness;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -276,6 +277,15 @@ class ResultController extends Controller
                         ->sortByDesc('id')
                         ->first();
 
+                    $awardsMedals = ($event?->resolvedMedalConfig()->awards_medals ?? false)
+                        && ($result->result_source !== 'direct' || $result->placements->contains(fn ($placement) => ($placement->tally_quantity ?? 1) > 0));
+                    // A versus / standing / non-medal-event result: auto-accepted
+                    // on submission, kept off the public results page, and still
+                    // returnable or cancellable by the Event Secretariat.
+                    $isNonMedal = ! $awardsMedals;
+                    $isAutoAcceptedNonMedal = $isNonMedal && $result->isFinalEventResult()
+                        && $result->status === ResultStatus::Official;
+
                     return [
                         'id' => $result->id,
                         'meet_id' => $result->meet_id,
@@ -330,7 +340,9 @@ class ResultController extends Controller
                         'can_upload_photo' => $canForm,
                         'can_review' => $isEventSecretariat,
                         'can_cancel' => $isEventSecretariat && (in_array($result->status, [ResultStatus::Submitted, ResultStatus::Returned, ResultStatus::Validated], true)
-                            || ($result->result_source === 'direct' && $result->status === ResultStatus::Official)),
+                            || (($result->result_source === 'direct' || $isNonMedal && $result->isFinalEventResult()) && $result->status === ResultStatus::Official)),
+                        'can_return' => $isEventSecretariat && (in_array($result->status, [ResultStatus::Submitted, ResultStatus::Validated], true)
+                            || $isAutoAcceptedNonMedal),
                         'can_request_cancellation' => $result->status === ResultStatus::Submitted
                             && $result->cancellation_requested_at === null
                             && $user->meetSportAssignments()
@@ -389,8 +401,8 @@ class ResultController extends Controller
                         // validate/correct/delete their own sport's — a global
                         // boolean can't express that, so it's computed per row.
                         'can_manage' => $canManage,
-                        'awards_medals' => ($event?->resolvedMedalConfig()->awards_medals ?? false)
-                            && ($result->result_source !== 'direct' || $result->placements->contains(fn ($placement) => ($placement->tally_quantity ?? 1) > 0)),
+                        'awards_medals' => $awardsMedals,
+                        'is_non_medal' => $isNonMedal,
                         'medal_tally' => [
                             'gold' => $result->medalAwards->where('medal_type', 'gold')->sum('tally_quantity'),
                             'silver' => $result->medalAwards->where('medal_type', 'silver')->sum('tally_quantity'),
@@ -402,6 +414,7 @@ class ResultController extends Controller
                             ->map(fn (ResultPlacement $placement): array => [
                                 'id' => $placement->id,
                                 'attribution' => app(ResultAttributionService::class)->report($placement),
+                                'reporting_completeness' => app(ResultReportingCompleteness::class)->forPlacement($placement, $result),
                                 'coaches' => collect([$placement->athlete, $placement->entry?->athlete])
                                     ->merge($placement->reportingAthletes)
                                     ->merge($placement->teamEntry?->members->pluck('athlete') ?? [])
@@ -488,7 +501,7 @@ class ResultController extends Controller
                     ->values()
                 : [],
             'entryOptions' => $canEncode
-                ? Entry::query()
+                ? Entry::query()->whereHas('delegation')
                     ->whereIn('status', $user->isAdmin() || $user->role === UserRole::TournamentICT
                         ? [EntryStatus::Submitted->value, EntryStatus::Confirmed->value]
                         : [EntryStatus::Confirmed->value])
@@ -526,7 +539,7 @@ class ResultController extends Controller
                     ->values()
                 : [],
             'teamEntryOptions' => $canEncode
-                ? TeamEntry::query()
+                ? TeamEntry::query()->whereHas('delegation')->whereHas('event')
                     ->whereIn('status', [EntryStatus::Submitted->value, EntryStatus::Confirmed->value])
                     ->when(! $canManage, fn ($query) => $query->whereIn('event_id', $assignedEventIds))
                     ->with(['delegation:id,meet_id,school_id,district_id', 'delegation.school:id,name', 'delegation.district:id,name'])

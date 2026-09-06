@@ -121,6 +121,27 @@ test('central Event Secretariat can submit an encoded Event Result', function ()
         ->and($result->fresh()->submitted_by)->toBe($secretariat->id);
 });
 
+test('a non-medal event result is auto-accepted on submission yet stays returnable', function () {
+    config()->set('pmms.results.signed_result_form_required', false);
+    $result = EventResult::factory()->create();
+    $result->event->forceFill(['is_medal_event' => false])->save();
+    ResultPlacement::factory()->create(['event_result_id' => $result->id]);
+    $secretariat = eventSecretariatFor($result);
+
+    $this->actingAs($secretariat)->post("/results/{$result->id}/submit")->assertSessionDoesntHaveErrors();
+
+    expect($result->fresh()->status)->toBe(ResultStatus::Official)
+        ->and($result->fresh()->official_by)->toBe($secretariat->id)
+        ->and(AuditLog::query()->where('action', 'result.made_official')
+            ->where('auditable_id', $result->id)->exists())->toBeTrue();
+
+    $this->actingAs($secretariat)->post(route('results.return', $result), ['reason' => 'Re-check the ranking.'])
+        ->assertSessionDoesntHaveErrors();
+
+    expect($result->fresh()->status)->toBe(ResultStatus::Returned)
+        ->and($result->fresh()->official_by)->toBeNull();
+});
+
 test('system administrator can submit an encoded result without a tournament ICT assignment', function () {
     config()->set('pmms.results.signed_result_form_required', false);
     $result = resultWithPlacement();

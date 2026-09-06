@@ -5,9 +5,9 @@ namespace App\Http\Controllers;
 use App\Enums\DelegationStatus;
 use App\Enums\EntryStatus;
 use App\Enums\MatchStatus;
-use App\Enums\Permission;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
+use App\Enums\Permission;
 use App\Enums\ResultStatus;
 use App\Enums\ScoreboardType;
 use App\Enums\ScoreEventType;
@@ -19,6 +19,7 @@ use App\Models\Delegation;
 use App\Models\Entry;
 use App\Models\EventMatch;
 use App\Models\MatchRosterPlayer;
+use App\Models\Meet;
 use App\Models\MeetSportAssignment;
 use App\Models\ScoreEvent;
 use App\Models\ScoringSession;
@@ -28,6 +29,7 @@ use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\CompetitionAccessService;
 use App\Services\CompetitionResultService;
+use App\Services\ScheduleScoreboardService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -65,25 +67,26 @@ class ScoringSessionController extends Controller
     public function index(Request $request): Response
     {
         $user = $request->user();
-        abort_unless(\App\Services\ScheduleScoreboardService::canOperate($user), 403);
+        abort_unless(ScheduleScoreboardService::canOperate($user), 403);
         $access = app(CompetitionAccessService::class);
-        $matches = EventMatch::query()->real()->where('meet_id', \App\Models\Meet::current()->id)
+        $matches = EventMatch::query()->real()->where('meet_id', Meet::current()->id)
             ->whereNotNull('scoreboard_mode')
             ->where('live_scoring_enabled', true)
             ->when(! $user->isAdmin(), fn ($q) => $q->whereHas('event.sport.meetSports', fn ($scope) => $scope
-                ->where('meet_id', \App\Models\Meet::current()->id)->where('active', true)
+                ->where('meet_id', Meet::current()->id)->where('active', true)
                 ->whereHas('assignments', fn ($assignment) => $assignment->where('user_id', $user->id)->where('status', 'active')->where('role', 'tournament_ict'))))
             ->whereHas('event.sport', fn ($sport) => $sport->whereIn('name', ['Basketball', 'Baseball', 'Boxing']))
-            ->when(! $user->isAdmin(), fn ($q) => $q->whereIn('event_id', $access->eventIds($user, \App\Models\Meet::current()->id)))
+            ->when(! $user->isAdmin(), fn ($q) => $q->whereIn('event_id', $access->eventIds($user, Meet::current()->id)))
             ->with(['event.sport', 'schedule.venue'])->orderByDesc('id')->get()
             ->filter(fn ($match) => $this->canManage($user, $match))->values()
             ->map(fn ($match) => [
                 'id' => $match->id, 'event' => $match->event->name, 'sport' => $match->event->sport->name,
-                'mode' => $match->scoreboard_mode === null ? $match->round_label : \App\Services\ScheduleScoreboardService::label($match->scoreboard_mode),
+                'mode' => $match->scoreboard_mode === null ? $match->round_label : ScheduleScoreboardService::label($match->scoreboard_mode),
                 'schedule' => $match->schedule?->scheduled_date?->format('M j, Y').' '.substr((string) $match->schedule?->starts_at, 0, 5),
                 'venue' => $match->schedule?->venue?->name,
                 'viewer_url' => route('public.scoreboard', [$match->meet_id, $match->id]),
             ]);
+
         return Inertia::render('scoring/index', ['matches' => $matches]);
     }
 
@@ -117,6 +120,7 @@ class ScoringSessionController extends Controller
         $this->authorizeManage($request, $match);
         abort_unless($match->live_scoring_enabled, 422);
         abort_unless($match->scoringSessions()->exists(), 422, __('This match has no scoring session yet to restart.'));
+
         return DB::transaction(function () use ($request, $match): RedirectResponse {
             $match = EventMatch::query()->lockForUpdate()->findOrFail($match->id);
             foreach ($match->scoringSessions()->where('status', '!=', ScoringSessionStatus::Ended->value)->get() as $session) {
@@ -139,6 +143,7 @@ class ScoringSessionController extends Controller
             $this->audit->record('scoreboard.reset', $match, ['mode' => $match->scoreboard_mode, 'draft_result_discarded' => $draftResult !== null]);
             $request->merge(['side_a_label' => $match->scoringSessions()->latest('id')->value('side_a_label') ?? 'Side A',
                 'side_b_label' => $match->scoringSessions()->latest('id')->value('side_b_label') ?? 'Side B']);
+
             return $this->store($request, $match);
         });
     }
@@ -186,8 +191,8 @@ class ScoringSessionController extends Controller
         $entries = $match->entries;
         $teamEntries = $match->teamEntries;
         $sideLabels = $match->event->is_team_event
-            ? $teamEntries->map(fn ($team): string => $team->delegation->registrantName())->values()
-            : $entries->map(fn (Entry $entry): string => $entry->athlete->school?->name ?? __('School not provided'))->values();
+            ? $teamEntries->map(fn ($team): string => ($team->delegation?->registrantName() ?? __('Missing delegation')))->values()
+            : $entries->map(fn (Entry $entry): string => $entry->athlete?->school?->name ?? __('School not provided'))->values();
 
         return Inertia::render('scoring/show', [
             'match' => [
@@ -242,7 +247,7 @@ class ScoringSessionController extends Controller
                 ->whereIn('status', [DelegationStatus::Submitted->value, DelegationStatus::Approved->value]))
             ->with('delegation')
             ->get()
-            ->map(fn (TeamEntry $team): array => ['id' => $team->delegation_id, 'label' => $team->delegation->registrantName()])
+            ->map(fn (TeamEntry $team): array => ['id' => $team->delegation_id, 'label' => ($team->delegation?->registrantName() ?? __('Missing delegation'))])
             ->sortBy('label')
             ->values()
             ->all();
@@ -311,8 +316,8 @@ class ScoringSessionController extends Controller
             : 0;
 
         $scheduledLabels = $match->event->is_team_event
-            ? $match->teamEntries->map(fn ($team): string => $team->delegation->registrantName())->values()
-            : $match->entries->map(fn (Entry $entry): string => $entry->athlete->school?->name ?? __('School not provided'))->values();
+            ? $match->teamEntries->map(fn ($team): string => ($team->delegation?->registrantName() ?? __('Missing delegation')))->values()
+            : $match->entries->map(fn (Entry $entry): string => $entry->athlete?->school?->name ?? __('School not provided'))->values();
 
         if ($scheduledLabels->count() === 2) {
             $data['side_a_label'] = $scheduledLabels[0];
@@ -320,7 +325,7 @@ class ScoringSessionController extends Controller
         }
 
         if ($match->scoreboard_mode !== null && isset($data['scoreboard_mode'])) {
-            $match->forceFill(['scoreboard_mode' => $data['scoreboard_mode'], 'round_label' => \App\Services\ScheduleScoreboardService::label($data['scoreboard_mode'])])->save();
+            $match->forceFill(['scoreboard_mode' => $data['scoreboard_mode'], 'round_label' => ScheduleScoreboardService::label($data['scoreboard_mode'])])->save();
         }
         $session = ScoringSession::create([
             'match_id' => $match->id,
@@ -549,7 +554,7 @@ class ScoringSessionController extends Controller
                 'result' => $newValue,
                 ...($rosterPlayer !== null ? [
                     'roster_player_id' => $rosterPlayer->id,
-                    'player_name' => $rosterPlayer->entry->athlete->fullName(),
+                    'player_name' => ($rosterPlayer->entry?->athlete?->fullName() ?? __('Missing athlete')),
                 ] : []),
             ],
             'recorded_by' => $user->id,
@@ -728,7 +733,7 @@ class ScoringSessionController extends Controller
                 ...$data,
                 'fouls_a' => $state['fouls_a'],
                 'fouls_b' => $state['fouls_b'],
-                ...($rosterPlayer !== null ? ['player_name' => $rosterPlayer->entry->athlete->fullName()] : []),
+                ...($rosterPlayer !== null ? ['player_name' => ($rosterPlayer->entry?->athlete?->fullName() ?? __('Missing athlete'))] : []),
             ],
             'recorded_by' => $user->id,
         ]);
@@ -2392,7 +2397,7 @@ class ScoringSessionController extends Controller
                 'side' => $data['side'],
                 'roster_player_id' => $rosterPlayer->id,
                 'on_court' => $data['on_court'],
-                'player_name' => $rosterPlayer->entry->athlete->fullName(),
+                'player_name' => ($rosterPlayer->entry?->athlete?->fullName() ?? __('Missing athlete')),
             ],
             'recorded_by' => $user->id,
         ]);
@@ -2842,7 +2847,7 @@ class ScoringSessionController extends Controller
             return [null, null];
         }
 
-        $photoUrl = fn (Entry $entry): ?string => $entry->athlete->photo_upload_id === null
+        $photoUrl = fn (Entry $entry): ?string => $entry->athlete?->photo_upload_id === null
             ? null
             : route('athletes.photo', $entry->athlete);
 

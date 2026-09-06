@@ -10,6 +10,9 @@ use App\Models\Meet;
 use App\Models\ScoringSession;
 use App\Models\Setting;
 use App\Services\CompetitionAccessService;
+use App\Services\DataIntegrityAccess;
+use App\Services\MealEntitlementService;
+use App\Services\ScheduleScoreboardService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -70,7 +73,7 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user === null ? null : [
                     ...$user->toArray(),
                     'role_label' => $user->role->label(),
-                    'can_operate_scoreboard' => \App\Services\ScheduleScoreboardService::canOperate($user),
+                    'can_operate_scoreboard' => ScheduleScoreboardService::canOperate($user),
                     'tournament_assignment_roles' => app(CompetitionAccessService::class)
                         ->assignments($user, Meet::current()->id)
                         ->map(fn ($assignment): string => $assignment->role->value)
@@ -94,6 +97,7 @@ class HandleInertiaRequests extends Middleware
                         || $user->coachOnboardingRequest()->whereIn('status', ['pending', 'rejected'])->exists(),
                     'can_manage_school_master_data' => $user->canManageSchoolMasterData(),
                     'can_manage_accounts' => $user->canManageProductionAccounts(),
+                    'can_manage_data_integrity' => app(DataIntegrityAccess::class)->allows($user, Meet::current()->id),
                     'can_manage_announcements' => $user->canManageAnnouncements(),
                     'can_access_content_management' => $user->canAccessContentManagement(),
                     'can_manage_editorial_content' => $user->canManageEditorialContent(),
@@ -102,7 +106,7 @@ class HandleInertiaRequests extends Middleware
                     'can_file_protest' => $user->canFileProtest(),
                     'can_view_management_reports' => $user->canViewManagementReports(),
                     'can_view_system_logs' => $user->can('view-system-logs'),
-                    'can_access_meal_stub' => app(\App\Services\MealEntitlementService::class)
+                    'can_access_meal_stub' => app(MealEntitlementService::class)
                         ->isEligible($user, Meet::current()),
                     'can_view_tournament_athletes' => $user->tournamentAthleteSportIds()->isNotEmpty(),
                     'assigned_sports' => $assignedSports->values(),

@@ -47,6 +47,12 @@ type Placement = {
     id: number;
     coaches: string[];
     attribution: Attribution;
+    reporting_completeness?: {
+        complete: boolean;
+        label: string;
+        missing: string[];
+        blocks_operation: boolean;
+    };
     can_attribute: boolean;
     entry_id: number | null;
     team_entry_id: number | null;
@@ -102,6 +108,8 @@ type Result = {
     can_upload_photo: boolean;
     can_review: boolean;
     can_cancel: boolean;
+    can_return: boolean;
+    is_non_medal: boolean;
     can_request_cancellation: boolean;
     cancellation_request: {
         reason: string;
@@ -224,11 +232,13 @@ function PlacementAttribution({
                       ? 'Athlete linked: Complete'
                       : 'Athlete linked: Missing'}
             </p>
-            {((result.is_team_event &&
-                (!placement.attribution.athlete_ids.length ||
-                    !placement.attribution.coaches.length)) ||
-                (!result.is_team_event &&
-                    !placement.attribution.athlete_id)) && (
+            {(placement.reporting_completeness
+                ? !placement.reporting_completeness.complete
+                : (result.is_team_event &&
+                      (!placement.attribution.athlete_ids.length ||
+                          !placement.attribution.coaches.length)) ||
+                  (!result.is_team_event &&
+                      !placement.attribution.athlete_id)) && (
                 <Badge variant="outline">Reporting data incomplete</Badge>
             )}
             {placement.attribution.players?.length ? (
@@ -1930,46 +1940,47 @@ export default function Results({
                                                 </>
                                             )}
                                         {result.can_review &&
-                                            result.status === 'submitted' && (
-                                                <>
-                                                    <Button
-                                                        size="sm"
-                                                        onClick={() =>
-                                                            router.post(
-                                                                `/results/${result.id}/event-secretariat-validation`,
-                                                                {},
-                                                                {
-                                                                    preserveScroll: true,
-                                                                },
-                                                            )
-                                                        }
-                                                    >
-                                                        Validate
-                                                    </Button>
-                                                    <Button
-                                                        variant="destructive"
-                                                        size="sm"
-                                                        onClick={() => {
-                                                            const reason =
-                                                                window.prompt(
-                                                                    'Reason for returning this result',
-                                                                );
-
-                                                            if (reason) {
-                                                                router.post(
-                                                                    `/results/${result.id}/return`,
-                                                                    { reason },
-                                                                    {
-                                                                        preserveScroll: true,
-                                                                    },
-                                                                );
-                                                            }
-                                                        }}
-                                                    >
-                                                        Return
-                                                    </Button>
-                                                </>
+                                            result.status === 'submitted' &&
+                                            !result.is_non_medal && (
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        router.post(
+                                                            `/results/${result.id}/event-secretariat-validation`,
+                                                            {},
+                                                            {
+                                                                preserveScroll: true,
+                                                            },
+                                                        )
+                                                    }
+                                                >
+                                                    Validate
+                                                </Button>
                                             )}
+                                        {result.can_return && (
+                                            <Button
+                                                variant="destructive"
+                                                size="sm"
+                                                onClick={() => {
+                                                    const reason =
+                                                        window.prompt(
+                                                            'Reason for returning this result for correction',
+                                                        );
+
+                                                    if (reason) {
+                                                        router.post(
+                                                            `/results/${result.id}/return`,
+                                                            { reason },
+                                                            {
+                                                                preserveScroll: true,
+                                                            },
+                                                        );
+                                                    }
+                                                }}
+                                            >
+                                                Return for correction
+                                            </Button>
+                                        )}
                                         {result.can_request_cancellation && (
                                             <Button
                                                 variant="destructive"

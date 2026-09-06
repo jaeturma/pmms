@@ -31,17 +31,16 @@ beforeEach(function () {
     config()->set('uploads.disk', 'local');
 });
 
-test('versus measurements preserve decimals without mandatory entries rosters matches or schedules', function (string $measurement, string $winner, string $loser) {
+test('versus measurements preserve decimals and auto-accept on submission', function (string $measurement, string $winner, string $loser) {
     $c = directResultContext();
     $this->actingAs($c['ict'])->post('/results/direct', versusPayload($c, ['measurement_type' => $measurement, 'winner_value' => $winner, 'loser_value' => $loser]))->assertSessionDoesntHaveErrors();
     $result = EventResult::sole();
-    expect($result->measurement_type)->toBe($measurement)->and($result->status)->toBe(ResultStatus::Submitted)
+    expect($result->measurement_type)->toBe($measurement)->and($result->status)->toBe(ResultStatus::Official)
         ->and($result->placements()->count())->toBe(2)->and($result->placements()->where('rank', 1)->sole()->result_value)->toBe(number_format((float) $winner, 6, '.', ''))
         ->and($result->match_id)->toBeNull()->and($result->event_schedule_id)->toBeNull()->and(Entry::count())->toBe(0)
-        ->and(EventMatch::count())->toBe(0)->and(eventStandingRows($c))->toBe([])->and($result->medalAwards()->count())->toBe(0);
-    $this->actingAs($c['secretariat'])->post(route('results.event-secretariat.validate', $result))->assertSessionDoesntHaveErrors();
-    expect(eventStandingRows($c))->toBe([])->and($result->fresh()->status)->toBe(ResultStatus::Validated);
-    $this->post(route('results.official', $result))->assertSessionDoesntHaveErrors();
+        ->and(EventMatch::count())->toBe(0)->and($result->medalAwards()->count())->toBe(0);
+    // The manual Event Secretariat accept transition is now idempotent.
+    $this->actingAs($c['secretariat'])->post(route('results.official', $result))->assertSessionDoesntHaveErrors();
     $this->post(route('results.official', $result))->assertSessionDoesntHaveErrors();
     expect($result->fresh()->status)->toBe(ResultStatus::Official)->and(eventStandingRows($c)[0]['wins'])->toBe(1)
         ->and(eventStandingRows($c)[0]['played'])->toBe(1)->and(eventStandingRows($c)[1]['losses'])->toBe(1)
@@ -56,6 +55,28 @@ test('versus measurements preserve decimals without mandatory entries rosters ma
 })->with([
     ['score', '85', '74'], ['points', '3.5', '2.5'], ['time', '48.21', '49.05'], ['distance', '6.42', '6.11'],
 ]);
+
+test('an auto-accepted versus result can be returned for correction or cancelled', function () {
+    $c = directResultContext();
+    $this->actingAs($c['ict'])->post('/results/direct', versusPayload($c))->assertSessionDoesntHaveErrors();
+    $result = EventResult::sole();
+    expect($result->status)->toBe(ResultStatus::Official)->and(eventStandingRows($c)[0]['wins'])->toBe(1);
+
+    $this->actingAs($c['secretariat'])->post(route('results.return', $result), ['reason' => 'Wrong winner recorded.'])
+        ->assertSessionDoesntHaveErrors();
+    expect($result->fresh()->status)->toBe(ResultStatus::Returned)
+        ->and($result->fresh()->official_at)->toBeNull()
+        ->and(eventStandingRows($c))->toBe([]);
+
+    $this->actingAs($c['ict'])->post(route('results.direct.update', $result), versusPayload($c, ['winner_value' => '90', 'loser_value' => '70']))
+        ->assertSessionDoesntHaveErrors();
+    expect($result->fresh()->status)->toBe(ResultStatus::Official);
+
+    $this->actingAs($c['secretariat'])->post(route('results.cancel', $result), ['reason' => 'Duplicate sheet.'])
+        ->assertSessionDoesntHaveErrors();
+    expect($result->fresh()->status)->toBe(ResultStatus::Cancelled)
+        ->and(eventStandingRows($c))->toBe([]);
+});
 
 test('versus rejects identical delegates invalid measurements values and unauthorized ICT', function () {
     $c = directResultContext();

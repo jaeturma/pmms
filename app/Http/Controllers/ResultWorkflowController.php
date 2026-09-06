@@ -14,6 +14,7 @@ use App\Models\Event;
 use App\Models\EventResult;
 use App\Models\Meet;
 use App\Models\ResultAttachment;
+use App\Models\ResultPlacement;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\CompetitionAccessService;
@@ -176,6 +177,13 @@ class ResultWorkflowController extends Controller
 
             return $result;
         });
+
+        if ($this->isNonMedalFinalResult($result)) {
+            $this->autoAcceptNonMedalResult($result, $user);
+
+            return redirect()->route('results.index')
+                ->with('success', 'Non-medal Event Result submitted and automatically accepted. It can still be returned for correction or cancelled.');
+        }
 
         return redirect()->route('results.index')->with('success', 'Direct Event Result submitted to the Event Secretariat.');
     }
@@ -370,6 +378,12 @@ class ResultWorkflowController extends Controller
 
         $this->audit->record($action, $result, $this->context($result));
 
+        if ($this->isNonMedalFinalResult($result)) {
+            $this->autoAcceptNonMedalResult($result, $request->user());
+
+            return back()->with('success', 'Non-medal result submitted and automatically accepted. It can still be returned for correction or cancelled.');
+        }
+
         return back()->with('success', 'Result submitted to the Event Secretariat.');
     }
 
@@ -418,7 +432,84 @@ class ResultWorkflowController extends Controller
         ]);
         $this->audit->record('result.submitted', $result, $this->context($result));
 
+        if ($this->isNonMedalFinalResult($result)) {
+            $this->autoAcceptNonMedalResult($result, $request->user());
+        }
+
         return back()->with('success', 'Result accepted and posted. Incomplete information is recorded in backend remarks for later resolution, and available medal placements now count in the tally.');
+    }
+
+    /**
+     * A non-medal outcome the owner wants accepted without the Event
+     * Secretariat's manual validate + accept steps: a versus result, a
+     * result for an event that awards no medals, or a direct "standing"
+     * result whose placements carry no medal quantities. Always a final
+     * Sports Event result — a Match Result is never officialised at all.
+     */
+    private function isNonMedalFinalResult(EventResult $result): bool
+    {
+        if (! $result->isFinalEventResult()) {
+            return false;
+        }
+
+        if ($result->result_type === 'versus') {
+            return true;
+        }
+
+        $result->loadMissing('event.medalConfig', 'placements');
+
+        if ($result->event === null) {
+            return false;
+        }
+
+        if (! $result->event->resolvedMedalConfig()->awards_medals) {
+            return true;
+        }
+
+        return $result->result_source === 'direct'
+            && $result->placements->isNotEmpty()
+            && $result->placements->every(fn (ResultPlacement $placement): bool => (int) ($placement->tally_quantity ?? 0) === 0);
+    }
+
+    /**
+     * Collapse the medal workflow's validate + officialise steps into one
+     * automatic transition the moment a non-medal result is submitted. The
+     * result stays fully reversible — the Event Secretariat can still
+     * return it for correction or cancel it.
+     */
+    private function autoAcceptNonMedalResult(EventResult $result, User $actor): void
+    {
+        DB::transaction(function () use ($result, $actor): void {
+            $locked = EventResult::query()->lockForUpdate()
+                ->with(['event.medalConfig', 'placements', 'attachments'])
+                ->findOrFail($result->id);
+
+            if ($locked->status !== ResultStatus::Submitted || ! $locked->isFinalEventResult()) {
+                return;
+            }
+
+            if ($locked->result_source === 'direct') {
+                $this->assertDirectResultIntegrity($locked);
+            }
+
+            $this->medalAwards->synchronize($locked, $actor);
+
+            $locked->forceFill([
+                'status' => ResultStatus::Official,
+                'validated_by' => $actor->id,
+                'validated_at' => now(),
+                'official_by' => $actor->id,
+                'official_at' => now(),
+            ])->save();
+
+            $this->audit->record('result.made_official', $locked, [
+                ...$this->context($locked),
+                'automatic' => true,
+                'reason' => 'Non-medal result auto-accepted on submission.',
+            ]);
+        });
+
+        $result->refresh();
     }
 
     public function requestCancellation(Request $request, EventResult $result): RedirectResponse
@@ -480,7 +571,8 @@ class ResultWorkflowController extends Controller
         DB::transaction(function () use ($result, $validated): void {
             $result = EventResult::query()->lockForUpdate()->findOrFail($result->id);
             abort_unless(in_array($result->status, [ResultStatus::Submitted, ResultStatus::Returned, ResultStatus::Validated], true)
-                || ($result->result_source === 'direct' && $result->status === ResultStatus::Official), 422);
+                || ($result->status === ResultStatus::Official
+                    && ($result->result_source === 'direct' || $this->isNonMedalFinalResult($result))), 422);
             $previousStatus = $result->status->value;
             $result->medalAwards()->delete();
             $result->forceFill([
@@ -523,8 +615,14 @@ class ResultWorkflowController extends Controller
     public function returnResult(Request $request, EventResult $result): RedirectResponse
     {
         $this->authorizeEventSecretariat($request->user(), $result);
-        abort_unless(in_array($result->status, [ResultStatus::Submitted, ResultStatus::Validated], true), 422);
+        $fromOfficial = $result->status === ResultStatus::Official;
+        abort_unless(in_array($result->status, [ResultStatus::Submitted, ResultStatus::Validated], true)
+            || ($fromOfficial && $this->isNonMedalFinalResult($result)), 422);
         $validated = $request->validate(['reason' => ['required', 'string', 'max:1000']]);
+
+        if ($fromOfficial) {
+            $result->medalAwards()->delete();
+        }
 
         $result->forceFill([
             'status' => ResultStatus::Returned,
@@ -534,6 +632,8 @@ class ResultWorkflowController extends Controller
             'version' => $result->version + 1,
             'tm_confirmed_by' => null,
             'tm_confirmed_at' => null,
+            'official_by' => null,
+            'official_at' => null,
         ])->save();
 
         $this->audit->record('result.returned', $result, [...$this->context($result), 'reason' => $validated['reason']]);

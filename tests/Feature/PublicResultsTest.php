@@ -69,6 +69,20 @@ test('validated but unaccepted results are not public', function () {
             ->has('results', 0));
 });
 
+test('non-medal and versus results never appear on the public results page', function () {
+    $meet = Meet::factory()->active()->published()->create();
+
+    $versus = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'result_type' => 'versus']);
+    ResultPlacement::factory()->create(['event_result_id' => $versus->id, 'rank' => 1]);
+
+    $standing = EventResult::factory()->validated()->create(['meet_id' => $meet->id]);
+    ResultPlacement::factory()->create(['event_result_id' => $standing->id, 'rank' => 1]);
+
+    $this->get("/meets/{$meet->id}/results")
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page->has('results', 0));
+});
+
 test('unpublished meets have no public results page', function () {
     $meet = Meet::factory()->active()->create();
     EventResult::factory()->validated()->create(['meet_id' => $meet->id]);
