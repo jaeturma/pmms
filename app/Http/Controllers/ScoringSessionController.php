@@ -38,6 +38,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Exists as ExistsRule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -160,7 +161,7 @@ class ScoringSessionController extends Controller
         $session = $match->scoringSessions()->latest('id')->first();
 
         return response()->json([
-            'session' => $session === null ? null : $session->toLivePayload(),
+            'session' => $session === null ? null : $session->toLivePayload(operational: true),
         ]);
     }
 
@@ -194,6 +195,8 @@ class ScoringSessionController extends Controller
             ? $teamEntries->map(fn ($team): string => ($team->delegation?->registrantName() ?? __('Missing delegation')))->values()
             : $entries->map(fn (Entry $entry): string => $entry->athlete?->school?->name ?? __('School not provided'))->values();
 
+        $canManage = $this->canManage($user, $match);
+
         return Inertia::render('scoring/show', [
             'match' => [
                 'id' => $match->id,
@@ -220,14 +223,77 @@ class ScoringSessionController extends Controller
             'delegationOptions' => $match->event->is_team_event && $teamEntries->isEmpty()
                 ? $this->competingDelegationOptions($match)
                 : [],
+            // Every active Meet Delegation the operator may pick when
+            // manually setting up or overriding participants (spec §4/§6) —
+            // authority is already scoped to this event by `canManage`.
+            'meetDelegationOptions' => $canManage ? $this->meetDelegationOptions($match) : [],
+            // Individual events only: the athletes carrying an Entry for
+            // this event, offered as an *optional* label helper for a
+            // manual/override setup (spec §5). A soft-deleted athlete is
+            // still listed for display but flagged unlinked.
+            'athleteOptions' => $canManage && ! $match->event->is_team_event
+                ? $this->eventAthleteOptions($match)
+                : [],
             'suggestedBoardType' => ScoreboardType::forSport($match->event->sport->name)->value,
-            'session' => $session === null ? null : $session->toLivePayload(),
+            'session' => $session === null ? null : $session->toLivePayload(operational: true),
             'channel' => "match.{$match->id}.scoring",
-            'canManage' => $this->canManage($user, $match),
+            'canManage' => $canManage,
+            'canOverrideParticipants' => $canManage,
             'participants' => $match->event->is_team_event
                 ? [null, null]
                 : $this->matchParticipants($entries),
         ]);
+    }
+
+    /**
+     * Every Delegation active in this match's Meet — the pool the operator
+     * picks a Side A / Side B from during a manual scoreboard setup or a
+     * participant override (spec §4/§6). Selection carries the Delegation's
+     * identity only; it never completes a roster or attaches a Team Entry.
+     *
+     * @return array<int, array{id: int, label: string}>
+     */
+    private function meetDelegationOptions(EventMatch $match): array
+    {
+        return Delegation::query()
+            ->where('meet_id', $match->meet_id)
+            ->whereIn('status', [DelegationStatus::Submitted->value, DelegationStatus::Approved->value])
+            ->get()
+            ->map(fn (Delegation $delegation): array => [
+                'id' => $delegation->id,
+                'label' => $delegation->registrantName() ?? __('Missing delegation'),
+            ])
+            ->sortBy('label')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Individual event only: athletes that hold an Entry for this event,
+     * offered purely as an optional display-name helper when the operator
+     * sets up or overrides the scoreboard manually (spec §5). A
+     * soft-deleted athlete is still resolved (for the label) but marked
+     * `unlinked` — picking one never restores its operational authority
+     * and never creates an Entry.
+     *
+     * @return array<int, array{athlete_id: int, label: string, unlinked: bool}>
+     */
+    private function eventAthleteOptions(EventMatch $match): array
+    {
+        return Entry::query()
+            ->where('event_id', $match->event_id)
+            ->with(['athlete' => fn ($athlete) => $athlete->withTrashed()])
+            ->get()
+            ->filter(fn (Entry $entry): bool => $entry->athlete !== null)
+            ->map(fn (Entry $entry): array => [
+                'athlete_id' => $entry->athlete->id,
+                'label' => $entry->athlete->fullName(),
+                'unlinked' => $entry->athlete->trashed(),
+            ])
+            ->unique('athlete_id')
+            ->sortBy('label')
+            ->values()
+            ->all();
     }
 
     /**
@@ -291,14 +357,29 @@ class ScoringSessionController extends Controller
             'scoreboard_mode' => ['sometimes', 'required', Rule::in(['test', 'finals', 'championship'])],
             'delegation_a_id' => ['nullable', 'integer', 'required_with:delegation_b_id', Rule::exists('delegations', 'id')],
             'delegation_b_id' => ['nullable', 'integer', 'required_with:delegation_a_id', 'different:delegation_a_id', Rule::exists('delegations', 'id')],
+            // Spec §6: the operator asserts the generated Match participants
+            // are wrong/incomplete and supplies the factual Side A / Side B
+            // by hand. Purely operational — never rewrites Entries, roster,
+            // or Coach data.
+            'override_participants' => ['sometimes', 'boolean'],
+            // The frontend sets this when it rendered free-text participant
+            // inputs because no two authoritative participants existed —
+            // purely so the operator console can carry a "manual setup"
+            // remark. It never changes what is persisted.
+            'manual_setup' => ['sometimes', 'boolean'],
+            'override_reason' => ['nullable', 'string', 'max:500'],
+            'side_a_athlete_id' => ['nullable', 'integer', $this->meetAthleteRule($match)],
+            'side_b_athlete_id' => ['nullable', 'integer', 'different:side_a_athlete_id', $this->meetAthleteRule($match)],
         ]);
+
+        $override = (bool) ($data['override_participants'] ?? false);
 
         /** @var User $user */
         $user = $request->user();
 
         $match->loadMissing('event');
 
-        if (($data['delegation_a_id'] ?? null) !== null) {
+        if (! $override && ($data['delegation_a_id'] ?? null) !== null) {
             $this->attachCompetingTeams($match, (int) $data['delegation_a_id'], (int) $data['delegation_b_id']);
         }
 
@@ -311,7 +392,9 @@ class ScoringSessionController extends Controller
             'teamEntries.delegation.district:id,name',
         ]);
 
-        $extractedCount = $match->event->is_team_event && $match->teamEntries->count() === 2
+        // When the operator overrides participants, the generated roster is
+        // exactly what they're saying is wrong — don't auto-extract it.
+        $extractedCount = ! $override && $match->event->is_team_event && $match->teamEntries->count() === 2
             ? $this->extractRosterFromTeamEntries($match)
             : 0;
 
@@ -319,9 +402,56 @@ class ScoringSessionController extends Controller
             ? $match->teamEntries->map(fn ($team): string => ($team->delegation?->registrantName() ?? __('Missing delegation')))->values()
             : $match->entries->map(fn (Entry $entry): string => $entry->athlete?->school?->name ?? __('School not provided'))->values();
 
-        if ($scheduledLabels->count() === 2) {
+        // A scheduled head-to-head match's assigned participants are
+        // authoritative — the operator must not silently start under
+        // hand-typed names — UNLESS they have explicitly chosen to override
+        // them (spec §6), in which case their typed Side A / Side B stand.
+        if (! $override && $scheduledLabels->count() === 2) {
             $data['side_a_label'] = $scheduledLabels[0];
             $data['side_b_label'] = $scheduledLabels[1];
+        }
+
+        // Provenance for a manual setup or an override, kept in the
+        // session's own JSON state (spec §11 — no schema change) and
+        // stripped from every public payload (spec §12).
+        $participantProvenance = null;
+        if ($override) {
+            $participantProvenance = [
+                'mode' => 'override',
+                'by' => $user->id,
+                'by_name' => $user->name,
+                'at' => now()->toIso8601String(),
+                'reason' => $data['override_reason'] ?? null,
+                'previous' => [
+                    'a' => $scheduledLabels[0] ?? null,
+                    'b' => $scheduledLabels[1] ?? null,
+                ],
+                'side_a' => array_filter([
+                    'display_name' => $data['side_a_label'],
+                    'athlete_id' => $data['side_a_athlete_id'] ?? null,
+                ], fn ($value): bool => $value !== null),
+                'side_b' => array_filter([
+                    'display_name' => $data['side_b_label'],
+                    'athlete_id' => $data['side_b_athlete_id'] ?? null,
+                ], fn ($value): bool => $value !== null),
+            ];
+        } elseif (($data['manual_setup'] ?? false) && $scheduledLabels->count() < 2) {
+            // No two authoritative participants existed — the operator
+            // supplied the minimum by hand (spec §3).
+            $participantProvenance = [
+                'mode' => 'manual_setup',
+                'by' => $user->id,
+                'by_name' => $user->name,
+                'at' => now()->toIso8601String(),
+                'side_a' => array_filter([
+                    'display_name' => $data['side_a_label'],
+                    'athlete_id' => $data['side_a_athlete_id'] ?? null,
+                ], fn ($value): bool => $value !== null),
+                'side_b' => array_filter([
+                    'display_name' => $data['side_b_label'],
+                    'athlete_id' => $data['side_b_athlete_id'] ?? null,
+                ], fn ($value): bool => $value !== null),
+            ];
         }
 
         if ($match->scoreboard_mode !== null && isset($data['scoreboard_mode'])) {
@@ -429,11 +559,18 @@ class ScoringSessionController extends Controller
         if ($match->scoreboard_mode !== null) {
             $initialSportState = [...($initialSportState ?? []), 'scoreboard_mode' => $match->scoreboard_mode];
         }
+        if ($participantProvenance !== null) {
+            $initialSportState = [...($initialSportState ?? []), 'participants' => $participantProvenance];
+        }
         if ($initialSportState !== null) {
             $session->forceFill(['sport_state' => $initialSportState])->save();
         }
 
         $this->audit->record('scoring.started', $session, [...$this->context($session), 'board_type' => $session->boardType()->value, 'athletes_extracted' => $extractedCount]);
+
+        if ($participantProvenance !== null) {
+            $this->recordParticipantProvenance($session, $user, $participantProvenance);
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Live scoring started.')]);
 
@@ -502,6 +639,138 @@ class ScoringSessionController extends Controller
         }
 
         return $extracted;
+    }
+
+    /**
+     * Spec §6 — override the scoreboard's *operational* participant fields
+     * on an already-running session. The Tournament ICT asserts that the
+     * generated Match data is wrong or conflicts with what is actually
+     * competing, and supplies the factual Side A / Side B by hand (plus,
+     * for an individual event, an optional Athlete for display only).
+     *
+     * This rewrites nothing in the registration domain — not the Athlete,
+     * Entries, Confirmed Entries, Team Entries, roster, or Coach
+     * assignments. It changes the session's display labels and records the
+     * change (previous + new) in the audit trail and the session history
+     * (spec §12). Available while the session is active.
+     */
+    public function participants(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+
+        $session->loadMissing('match.event');
+        $match = $session->match;
+
+        $data = $request->validate([
+            'side_a_label' => ['required', 'string', 'max:255'],
+            'side_b_label' => ['required', 'string', 'max:255'],
+            'side_a_athlete_id' => ['nullable', 'integer', $this->meetAthleteRule($match)],
+            'side_b_athlete_id' => ['nullable', 'integer', 'different:side_a_athlete_id', $this->meetAthleteRule($match)],
+            'side_a_delegation_id' => ['nullable', 'integer', $this->meetDelegationRule($match)],
+            'side_b_delegation_id' => ['nullable', 'integer', $this->meetDelegationRule($match)],
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        /** @var User $user */
+        $user = $request->user();
+
+        $previous = ['a' => $session->side_a_label, 'b' => $session->side_b_label];
+
+        $provenance = [
+            'mode' => 'override',
+            'by' => $user->id,
+            'by_name' => $user->name,
+            'at' => now()->toIso8601String(),
+            'reason' => $data['reason'] ?? null,
+            'previous' => $previous,
+            'side_a' => array_filter([
+                'display_name' => $data['side_a_label'],
+                'athlete_id' => $data['side_a_athlete_id'] ?? null,
+                'delegation_id' => $data['side_a_delegation_id'] ?? null,
+            ], fn ($value): bool => $value !== null),
+            'side_b' => array_filter([
+                'display_name' => $data['side_b_label'],
+                'athlete_id' => $data['side_b_athlete_id'] ?? null,
+                'delegation_id' => $data['side_b_delegation_id'] ?? null,
+            ], fn ($value): bool => $value !== null),
+        ];
+
+        $session->forceFill([
+            'side_a_label' => $data['side_a_label'],
+            'side_b_label' => $data['side_b_label'],
+            'sport_state' => [...($session->sport_state ?? []), 'participants' => $provenance],
+        ])->save();
+
+        $this->recordParticipantProvenance($session, $user, $provenance);
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Scoreboard participants updated.')]);
+
+        return back();
+    }
+
+    /**
+     * The audit-trail + session-history record for a manual setup or an
+     * override (shared by `startSession()` and `participants()`).
+     *
+     * @param  array<string, mixed>  $provenance
+     */
+    private function recordParticipantProvenance(ScoringSession $session, User $user, array $provenance): void
+    {
+        $action = ($provenance['mode'] ?? null) === 'override'
+            ? 'scoring.participants_overridden'
+            : 'scoring.participants_manual';
+
+        $this->audit->record($action, $session, [
+            ...$this->context($session),
+            'previous' => $provenance['previous'] ?? null,
+            'side_a' => $provenance['side_a'] ?? null,
+            'side_b' => $provenance['side_b'] ?? null,
+            'reason' => $provenance['reason'] ?? null,
+        ]);
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::Note,
+            'payload' => [
+                'message' => ($provenance['mode'] ?? null) === 'override'
+                    ? __('Participants overridden by Tournament ICT: :a vs :b.', [
+                        'a' => $session->side_a_label,
+                        'b' => $session->side_b_label,
+                    ])
+                    : __('Manual scoreboard setup: :a vs :b.', [
+                        'a' => $session->side_a_label,
+                        'b' => $session->side_b_label,
+                    ]),
+            ],
+            'recorded_by' => $user->id,
+        ]);
+    }
+
+    /**
+     * Validation rule: an athlete id must belong to a Delegation active in
+     * this match's Meet — a display-only pick that never crosses Meets.
+     * `withTrashed` is intentionally NOT applied: a soft-deleted athlete
+     * is not selectable here (spec §2), only shown as a historical name.
+     */
+    private function meetAthleteRule(EventMatch $match): ExistsRule
+    {
+        return Rule::exists('athletes', 'id')->where(function ($query) use ($match): void {
+            $query->whereIn('delegation_id', Delegation::query()->where('meet_id', $match->meet_id)->select('id'));
+        });
+    }
+
+    /**
+     * Validation rule: a delegation id must be active in this match's Meet.
+     */
+    private function meetDelegationRule(EventMatch $match): ExistsRule
+    {
+        return Rule::exists('delegations', 'id')->where(function ($query) use ($match): void {
+            $query->where('meet_id', $match->meet_id)
+                ->whereIn('status', [DelegationStatus::Submitted->value, DelegationStatus::Approved->value]);
+        });
     }
 
     /**

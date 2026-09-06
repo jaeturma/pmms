@@ -62,6 +62,7 @@ import {
 import { index as matchesIndex } from '@/routes/matches';
 import {
     end as endRoute,
+    participants as participantsRoute,
     pause as pauseRoute,
     period as periodRoute,
     resume as resumeRoute,
@@ -100,6 +101,8 @@ type Props = {
     };
     suggestedLabels: [string | null, string | null];
     delegationOptions: Array<{ id: number; label: string }>;
+    meetDelegationOptions: Array<{ id: number; label: string }>;
+    athleteOptions: Array<{ athlete_id: number; label: string; unlinked: boolean }>;
     suggestedBoardType:
         | 'generic'
         | 'basketball'
@@ -117,6 +120,7 @@ type Props = {
     session: Session | null;
     channel: string;
     canManage: boolean;
+    canOverrideParticipants: boolean;
     participants: [Participant | null, Participant | null];
 };
 
@@ -639,10 +643,13 @@ export default function ScoringBoard({
     match,
     suggestedLabels,
     delegationOptions,
+    meetDelegationOptions,
+    athleteOptions,
     suggestedBoardType,
     session: initialSession,
     channel,
     canManage,
+    canOverrideParticipants,
     participants,
 }: Props) {
     const [session, setSession] = useState(initialSession);
@@ -655,13 +662,17 @@ export default function ScoringBoard({
     const [delegationAId, setDelegationAId] = useState('');
     const [delegationBId, setDelegationBId] = useState('');
     const [forceGeneric, setForceGeneric] = useState(false);
+    const [overrideParticipants, setOverrideParticipants] = useState(false);
+    const [overrideReason, setOverrideReason] = useState('');
     const [gameType, setGameType] = useState(match.scoreboard_mode ?? 'test');
     const [showSettings, setShowSettings] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const canPickCompetingTeams =
         match.is_team_event &&
         suggestedLabels[0] === null &&
-        delegationOptions.length > 0;
+        delegationOptions.length > 0 &&
+        !overrideParticipants;
+    const hasGeneratedParticipants = suggestedLabels[0] !== null;
     const settingsFields = forceGeneric
         ? null
         : settingsFieldsFor(suggestedBoardType, match.sport);
@@ -749,6 +760,15 @@ export default function ScoringBoard({
                 side_a_label: sideALabel,
                 side_b_label: sideBLabel,
                 ...(forceGeneric ? { board_type: 'generic' } : {}),
+                ...(overrideParticipants
+                    ? {
+                          override_participants: true,
+                          override_reason: overrideReason,
+                      }
+                    : {}),
+                ...(suggestedLabels[0] === null && !canPickCompetingTeams
+                    ? { manual_setup: true }
+                    : {}),
                 ...(canPickCompetingTeams
                     ? {
                           delegation_a_id: delegationAId,
@@ -1020,6 +1040,7 @@ export default function ScoringBoard({
                                         ) : (
                                             <Input
                                                 id="side-a"
+                                                list="participant-label-options"
                                                 value={sideALabel}
                                                 onChange={(e) =>
                                                     setSideALabel(
@@ -1028,7 +1049,8 @@ export default function ScoringBoard({
                                                 }
                                                 required
                                                 readOnly={
-                                                    suggestedLabels[0] !== null
+                                                    hasGeneratedParticipants &&
+                                                    !overrideParticipants
                                                 }
                                             />
                                         )}
@@ -1075,6 +1097,7 @@ export default function ScoringBoard({
                                         ) : (
                                             <Input
                                                 id="side-b"
+                                                list="participant-label-options"
                                                 value={sideBLabel}
                                                 onChange={(e) =>
                                                     setSideBLabel(
@@ -1083,7 +1106,8 @@ export default function ScoringBoard({
                                                 }
                                                 required
                                                 readOnly={
-                                                    suggestedLabels[1] !== null
+                                                    hasGeneratedParticipants &&
+                                                    !overrideParticipants
                                                 }
                                             />
                                         )}
@@ -1095,6 +1119,89 @@ export default function ScoringBoard({
                                             match automatically.
                                         </p>
                                     )}
+                                    <datalist id="participant-label-options">
+                                        {meetDelegationOptions.map((option) => (
+                                            <option
+                                                key={`d-${option.id}`}
+                                                value={option.label}
+                                            />
+                                        ))}
+                                        {athleteOptions.map((option) => (
+                                            <option
+                                                key={`a-${option.athlete_id}`}
+                                                value={option.label}
+                                            />
+                                        ))}
+                                    </datalist>
+                                    {(suggestedLabels[0] === null &&
+                                        !canPickCompetingTeams) && (
+                                        <p className="text-sm text-muted-foreground sm:col-span-2">
+                                            Supporting entry data for this match
+                                            is incomplete — type the competing
+                                            Side A and Side B exactly as they
+                                            should appear on the scoreboard. The
+                                            list suggests active delegations and
+                                            entered athletes.
+                                        </p>
+                                    )}
+                                    {hasGeneratedParticipants &&
+                                        canOverrideParticipants && (
+                                            <div className="flex flex-col gap-2 sm:col-span-2">
+                                                <div className="flex items-center gap-2">
+                                                    <Checkbox
+                                                        id="override-participants"
+                                                        checked={
+                                                            overrideParticipants
+                                                        }
+                                                        onCheckedChange={(
+                                                            checked,
+                                                        ) =>
+                                                            setOverrideParticipants(
+                                                                checked === true,
+                                                            )
+                                                        }
+                                                    />
+                                                    <Label
+                                                        htmlFor="override-participants"
+                                                        className="font-normal"
+                                                    >
+                                                        Override participants for
+                                                        scoreboard — the
+                                                        generated Side A / Side B
+                                                        are wrong or incomplete
+                                                    </Label>
+                                                </div>
+                                                {overrideParticipants && (
+                                                    <>
+                                                        <p className="text-sm text-muted-foreground">
+                                                            This changes only the
+                                                            scoreboard's
+                                                            operational
+                                                            participant labels
+                                                            and is recorded in
+                                                            the match history. It
+                                                            does not modify
+                                                            athlete registration,
+                                                            entries, confirmed
+                                                            entries, team rosters
+                                                            or coach assignments.
+                                                        </p>
+                                                        <Input
+                                                            aria-label="Reason for override"
+                                                            placeholder="Reason (optional)"
+                                                            value={overrideReason}
+                                                            maxLength={500}
+                                                            onChange={(e) =>
+                                                                setOverrideReason(
+                                                                    e.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                        />
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
                                     {match.is_team_event &&
                                         suggestedLabels[0] !== null && (
                                             <div className="sm:col-span-2">
@@ -1213,6 +1320,32 @@ export default function ScoringBoard({
                             participants={participants}
                             hidePlayByPlay={isManager && isActive}
                         />
+
+                        {isManager &&
+                            !fullscreen &&
+                            (session.operational_remarks?.length ?? 0) > 0 && (
+                                <div className="mx-auto w-full max-w-2xl rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200 print:hidden">
+                                    <p className="font-medium">
+                                        Scoreboard operations note
+                                    </p>
+                                    <ul className="list-disc pl-5">
+                                        {session.operational_remarks?.map(
+                                            (remark) => (
+                                                <li key={remark}>{remark}</li>
+                                            ),
+                                        )}
+                                    </ul>
+                                </div>
+                            )}
+
+                        {isManager && isActive && canOverrideParticipants && (
+                            <OverrideParticipantsPanel
+                                session={session}
+                                isTeamEvent={match.is_team_event}
+                                delegationOptions={meetDelegationOptions}
+                                athleteOptions={athleteOptions}
+                            />
+                        )}
 
                         {isManager && isActive && basketballState && (
                             <BasketballGameControl
@@ -1466,6 +1599,172 @@ export default function ScoringBoard({
                 )}
             </div>
         </>
+    );
+}
+
+/**
+ * Spec §6 — lets an authorized Tournament ICT correct the scoreboard's
+ * operational Side A / Side B on a running session when the generated
+ * Match data is wrong or conflicts with what is actually competing. The
+ * optional athlete pick is display-only; nothing in the registration
+ * domain is touched, and the change is recorded in the match history.
+ */
+function OverrideParticipantsPanel({
+    session,
+    isTeamEvent,
+    delegationOptions,
+    athleteOptions,
+}: {
+    session: Session;
+    isTeamEvent: boolean;
+    delegationOptions: Array<{ id: number; label: string }>;
+    athleteOptions: Array<{
+        athlete_id: number;
+        label: string;
+        unlinked: boolean;
+    }>;
+}) {
+    const [open, setOpen] = useState(false);
+    const [sideA, setSideA] = useState(session.side_a_label);
+    const [sideB, setSideB] = useState(session.side_b_label);
+    const [athleteA, setAthleteA] = useState('');
+    const [athleteB, setAthleteB] = useState('');
+    const [reason, setReason] = useState('');
+
+    const submit = (e: FormEvent) => {
+        e.preventDefault();
+        router.patch(
+            participantsRoute(session.id).url,
+            {
+                side_a_label: sideA,
+                side_b_label: sideB,
+                reason,
+                ...(!isTeamEvent && athleteA
+                    ? { side_a_athlete_id: Number(athleteA) }
+                    : {}),
+                ...(!isTeamEvent && athleteB
+                    ? { side_b_athlete_id: Number(athleteB) }
+                    : {}),
+            },
+            {
+                preserveScroll: true,
+                onSuccess: () => setOpen(false),
+            },
+        );
+    };
+
+    return (
+        <div className="mx-auto w-full max-w-2xl print:hidden">
+            <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setOpen((current) => !current)}
+            >
+                {open ? 'Hide' : 'Override participants for scoreboard'}
+            </Button>
+            {open && (
+                <form
+                    onSubmit={submit}
+                    className="mt-3 grid gap-3 rounded-lg border p-4 sm:grid-cols-2"
+                >
+                    <p className="text-sm text-muted-foreground sm:col-span-2">
+                        Sets the operational scoreboard labels only. Recorded in
+                        the match history with the previous values. Does not
+                        change athlete registration, entries, confirmed entries,
+                        team rosters or coach assignments.
+                    </p>
+                    <datalist id="override-label-options">
+                        {delegationOptions.map((option) => (
+                            <option key={option.id} value={option.label} />
+                        ))}
+                        {athleteOptions.map((option) => (
+                            <option
+                                key={option.athlete_id}
+                                value={option.label}
+                            />
+                        ))}
+                    </datalist>
+                    <div className="grid gap-2">
+                        <Label htmlFor="override-side-a">Side A</Label>
+                        <Input
+                            id="override-side-a"
+                            list="override-label-options"
+                            value={sideA}
+                            onChange={(e) => setSideA(e.target.value)}
+                            required
+                        />
+                        {!isTeamEvent && athleteOptions.length > 0 && (
+                            <select
+                                aria-label="Side A athlete (optional)"
+                                value={athleteA}
+                                onChange={(e) => setAthleteA(e.target.value)}
+                                className="h-9 rounded-md border bg-background px-2 text-sm"
+                            >
+                                <option value="">
+                                    Link athlete (optional)
+                                </option>
+                                {athleteOptions.map((option) => (
+                                    <option
+                                        key={option.athlete_id}
+                                        value={String(option.athlete_id)}
+                                    >
+                                        {option.label}
+                                        {option.unlinked ? ' — unlinked' : ''}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
+                    </div>
+                    <div className="grid gap-2">
+                        <Label htmlFor="override-side-b">Side B</Label>
+                        <Input
+                            id="override-side-b"
+                            list="override-label-options"
+                            value={sideB}
+                            onChange={(e) => setSideB(e.target.value)}
+                            required
+                        />
+                        {!isTeamEvent && athleteOptions.length > 0 && (
+                            <select
+                                aria-label="Side B athlete (optional)"
+                                value={athleteB}
+                                onChange={(e) => setAthleteB(e.target.value)}
+                                className="h-9 rounded-md border bg-background px-2 text-sm"
+                            >
+                                <option value="">
+                                    Link athlete (optional)
+                                </option>
+                                {athleteOptions.map((option) => (
+                                    <option
+                                        key={option.athlete_id}
+                                        value={String(option.athlete_id)}
+                                    >
+                                        {option.label}
+                                        {option.unlinked ? ' — unlinked' : ''}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
+                    </div>
+                    <Input
+                        aria-label="Reason for override"
+                        placeholder="Reason (optional)"
+                        value={reason}
+                        maxLength={500}
+                        onChange={(e) => setReason(e.target.value)}
+                        className="sm:col-span-2"
+                    />
+                    <Button
+                        type="submit"
+                        variant="outline"
+                        className="sm:col-span-2"
+                    >
+                        Save scoreboard participants
+                    </Button>
+                </form>
+            )}
+        </div>
     );
 }
 

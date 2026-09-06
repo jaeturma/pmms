@@ -397,6 +397,100 @@ already exists would orphan that state, so this is out of scope by design.
 though the operator's choice itself isn't a separate mutation-with-reason
 like a score correction.
 
+## Manual setup and participant override (blank-page fix)
+
+### The blank page
+
+`MatchRosterPlayer::groupBySide()` built every roster line with
+`$player->entry->athlete->fullName()` — no null guard. Deleting an athlete
+from the registry is a soft delete (`Athlete` uses `SoftDeletes`;
+`AthleteDeletionService`), but the `Entry` and `match_roster_players` rows
+it leaves behind are hard rows with no `SoftDeletes` of their own, so
+`entry->athlete` becomes `null` under the global scope while the roster row
+still lists the player. The `fullName()` on `null` was a PHP fatal, which
+Apache/mod_fcgid surfaces as *"Premature end of script headers: index.php"*
+— a blank page on the internal board's first render (`board()` →
+`toLivePayload()` → `onCourtPayload()`), on the 5-second `scoring.show`
+poll, on the substitution modal (`match-roster.show`), and on the **public**
+scoreboard and its poll. Dev never hit it because dev data has no
+soft-deleted athletes sitting on a roster.
+
+The fix is null-safe, not `withTrashed()`-everywhere:
+
+- `MatchRosterPlayer::groupBySide()` reads `$player->entry?->athlete?->
+  fullName() ?? __('Data incomplete')` and the same for the photo.
+- `payloadForMatch()` / `payloadForIds()` eager-load the athlete
+  `withTrashed()` **for display only** — a soft-deleted athlete still shows
+  their real name in historical roster display, but a genuinely missing
+  link shows `Data incomplete`.
+- `MatchRosterController`: `canManage()` now also recognises the base
+  `TournamentICT` / `TournamentManager` / `TournamentSecretary` roles (an
+  ICT running the board was getting a 403 on the substitution modal);
+  `store()` refuses an entry whose athlete is soft-deleted (a deleted
+  entity never regains operational authority); `destroy()` audit context
+  and `eligibleAthletes()` are null-safe.
+
+No `withTrashed()` global scope, no `catch (\Throwable) { return success }`.
+
+### Always-available manual setup
+
+A Tournament ICT must be able to open the board and start it with the
+factual minimum even when relational data is incomplete. `startSession()`
+already accepts free-text `side_a_label` / `side_b_label` when fewer than
+two authoritative participants exist, `board_type => generic`, and a
+two-Delegation pick for a team match with no Team Entries — that path is
+unchanged. Added:
+
+- `board()` sends `meetDelegationOptions` (every active Delegation in the
+  meet) and, for individual events, `athleteOptions` (athletes carrying an
+  Entry for the event, `withTrashed` for the label, flagged `unlinked`) —
+  a `<datalist>` the operator can pull a Side A / Side B name from. A
+  soft-deleted athlete is a display suggestion only, never selectable as an
+  operational athlete link.
+- The frontend sends `manual_setup: true` when it rendered the free-text
+  inputs. It changes nothing that is persisted — it only lets the operator
+  console carry a *"Manual scoreboard setup"* remark.
+
+### Participant override (§6)
+
+When the generated participants exist but are wrong or conflict with what
+is actually competing, an authorized operator may **override the
+scoreboard's operational participant fields**:
+
+- At start: `startSession()` accepts `override_participants: true` (+
+  optional `override_reason`, `side_a_athlete_id` / `side_b_athlete_id`).
+  It skips the "assigned participants are authoritative" label overwrite
+  and the automatic roster extraction — the operator's typed Side A / Side
+  B stand.
+- After start: `PATCH scoring-sessions/{session}/participants`
+  (`scoring.participants`) sets `side_a_label` / `side_b_label` and
+  optional display-only athlete/delegation ids on a running session.
+
+Both record provenance in `sport_state['participants']` — **no migration**,
+per §11: `mode` (`manual_setup` | `override`), `by` / `by_name` / `at`,
+`reason`, `previous` (the labels it replaced), and the chosen `side_a` /
+`side_b`. `ScoringSession::toLivePayload()` **strips that key from every
+payload** and, only for the internal console (`operational: true`), adds
+`operational_remarks` (terse notices like *"Participants overridden by
+Tournament ICT"*) and `participant_provenance`. The public scoreboard sees
+the manual labels as ordinary side names and nothing else. Each override
+also writes an `AuditLog` (`scoring.participants_overridden` /
+`scoring.participants_manual`, with previous + new) and a `ScoreEvent`
+(`note` type) so it shows in the match's own play-by-play history.
+
+Nothing in the registration domain is touched: no Athlete,
+SportRosterMember, Entry, Confirmed Entry, Team Entry, Coach assignment or
+Schedule is created or updated by a manual setup or an override.
+`meetAthleteRule()` keeps an optional athlete link inside the match's own
+Meet.
+
+Tests: `tests/Feature/LiveScoreboardManualSetupTest.php` (19 cases —
+soft-deleted roster athlete, missing schedule/entry, team + individual
+manual naming, optional athlete link, override at start and after start,
+audit logging, single/idempotent session creation, generic fallback,
+standard workflow unchanged, out-of-sport operator blocked, public labels,
+provenance never public, scoring mutations after manual start).
+
 ## Public exposure (WP-07-08)
 
 Live scoring was internal-only through WP-07-07 — per owner instruction,

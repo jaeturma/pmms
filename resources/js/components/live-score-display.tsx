@@ -256,6 +256,17 @@ export type LiveSession = {
     started_at: string | null;
     elapsed_seconds: number;
     clock_running: boolean;
+    /** Operator console only (never the public scoreboard) — short
+     * backend-only notices when the board is running on manually
+     * supplied or overridden participant data. */
+    operational_remarks?: string[];
+    participant_provenance?: {
+        mode?: 'manual_setup' | 'override';
+        by_name?: string;
+        at?: string;
+        reason?: string | null;
+        previous?: { a: string | null; b: string | null };
+    } | null;
 };
 
 /** A participant's real photo — boxing's red/blue corner display only.

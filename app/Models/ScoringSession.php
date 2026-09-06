@@ -116,11 +116,31 @@ class ScoringSession extends Model
      * endpoint or the Reverb broadcast — kept identical so the client
      * never has to reconcile two different payload shapes.
      *
+     * `$operational` is set only for the internal operator console
+     * (`ScoringSessionController::board()`/`show()`). It adds the
+     * backend-only operational remarks describing a manual setup or a
+     * participant override; the public scoreboard never receives them
+     * (spec §12/§13) and never sees the raw `sport_state.participants`
+     * provenance block either — that key is stripped from every payload.
+     *
      * @return array<string, mixed>
      */
-    public function toLivePayload(): array
+    public function toLivePayload(bool $operational = false): array
     {
         [$sideAAthlete, $sideBAthlete] = $this->athleteParticipants();
+
+        $sportState = $this->sport_state;
+        if (is_array($sportState) && array_key_exists('participants', $sportState)) {
+            unset($sportState['participants']);
+
+            // A session whose only stored state was the participant
+            // provenance (e.g. a manual generic-board setup) still reports
+            // `sport_state` as null, exactly as it did before — the
+            // provenance is bookkeeping, not board state.
+            if ($sportState === []) {
+                $sportState = null;
+            }
+        }
 
         return [
             'id' => $this->id,
@@ -139,13 +159,64 @@ class ScoringSession extends Model
             'period_label' => $this->period_label,
             'status_note' => $this->status_note,
             'board_type' => $this->boardType()->value,
-            'sport_state' => $this->sport_state,
+            'sport_state' => $sportState,
             'onCourt' => $this->onCourtPayload(),
             'playByPlay' => $this->playByPlay(),
             'started_at' => $this->started_at?->toIso8601String(),
             'elapsed_seconds' => $this->activeElapsedSeconds(),
             'clock_running' => $this->status === ScoringSessionStatus::InProgress,
+            ...($operational ? [
+                'operational_remarks' => $this->operationalRemarks(),
+                'participant_provenance' => $this->participantProvenance(),
+            ] : []),
         ];
+    }
+
+    /**
+     * The `sport_state.participants` bookkeeping block, if a manual setup
+     * or an override ever wrote one — the record of who supplied the
+     * scoreboard's operational participant data and what it replaced
+     * (spec §11/§12). Never part of the public payload.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function participantProvenance(): ?array
+    {
+        $participants = $this->sport_state['participants'] ?? null;
+
+        return is_array($participants) ? $participants : null;
+    }
+
+    /**
+     * Short backend-only notices for the operator console when the
+     * scoreboard is running on manually-supplied or overridden
+     * participant data (spec §12). Deliberately terse and non-alarming —
+     * the board itself is working normally.
+     *
+     * @return array<int, string>
+     */
+    public function operationalRemarks(): array
+    {
+        $provenance = $this->participantProvenance();
+
+        if ($provenance === null) {
+            return [];
+        }
+
+        return match ($provenance['mode'] ?? null) {
+            'manual_setup' => [__('Manual scoreboard setup — participant data entered by the Tournament ICT.')],
+            'override' => array_values(array_filter([
+                __('Participants overridden by Tournament ICT.'),
+                isset($provenance['previous']['a'], $provenance['previous']['b'])
+                    ? __('Generated participants were: :a vs :b.', [
+                        'a' => $provenance['previous']['a'] ?: __('Data incomplete'),
+                        'b' => $provenance['previous']['b'] ?: __('Data incomplete'),
+                    ])
+                    : null,
+                ($provenance['reason'] ?? null) ? __('Reason: :reason', ['reason' => $provenance['reason']]) : null,
+            ])),
+            default => [],
+        };
     }
 
     /**
@@ -445,6 +516,9 @@ class ScoringSession extends Model
                 isset($payload['period_label']) ? "Period: {$payload['period_label']}" : null,
                 isset($payload['status_note']) ? (string) $payload['status_note'] : null,
             ]))) ?: 'Period updated',
+            ScoreEventType::Note => isset($payload['message']) && $payload['message'] !== ''
+                ? (string) $payload['message']
+                : 'Operational note',
             ScoreEventType::Paused => 'Game paused',
             ScoreEventType::Resumed => 'Game resumed',
             ScoreEventType::Ended => 'Game ended',

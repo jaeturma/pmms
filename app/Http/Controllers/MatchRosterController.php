@@ -89,6 +89,15 @@ class MatchRosterController extends Controller
             ]);
         }
 
+        // A soft-deleted athlete is not selectable — deleted entities do
+        // not regain operational authority (they may still appear as a
+        // name in historical roster display, but never here).
+        if ($entry->athlete === null) {
+            throw ValidationException::withMessages([
+                'entry_id' => __('This entry’s athlete record is unavailable. Repair the athlete link first.'),
+            ]);
+        }
+
         $sideDelegationId = $match->event->is_team_event ? $this->sideDelegationId($match, $data['side']) : null;
         $validSide = $match->event->is_team_event
             ? ($sideDelegationId !== null
@@ -197,7 +206,7 @@ class MatchRosterController extends Controller
 
         $context = [
             'match_id' => $rosterPlayer->match_id,
-            'athlete' => $rosterPlayer->entry->athlete->fullName(),
+            'athlete' => $rosterPlayer->entry?->athlete?->fullName() ?? __('Data incomplete'),
         ];
 
         $rosterPlayer->delete();
@@ -292,6 +301,7 @@ class MatchRosterController extends Controller
                 ->whereNotIn('id', $rosteredEntryIds)
                 ->with('athlete')
                 ->get()
+                ->filter(fn (Entry $entry): bool => $entry->athlete !== null)
                 ->map(fn (Entry $entry): array => [
                     'id' => $entry->id,
                     'label' => $entry->athlete->fullName(),
@@ -318,7 +328,18 @@ class MatchRosterController extends Controller
             return true;
         }
 
-        if ($user->role === UserRole::TechnicalOfficial) {
+        // A Tournament ICT / Technical Official / Tournament Manager /
+        // Tournament Secretary manages a match's roster whenever they can
+        // access its event — the same rule
+        // `ScoringSessionController::canManage()` uses for the scoreboard
+        // itself, so the substitution modal never 403s on an operator who
+        // can already run the board.
+        if ($user->hasRole(
+            UserRole::TechnicalOfficial,
+            UserRole::TournamentManager,
+            UserRole::TournamentICT,
+            UserRole::TournamentSecretary,
+        )) {
             return app(CompetitionAccessService::class)
                 ->canAccessEvent($user, $match->event, $match->meet_id);
         }

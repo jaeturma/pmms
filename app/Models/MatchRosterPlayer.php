@@ -71,7 +71,7 @@ class MatchRosterPlayer extends Model
     {
         $players = self::query()
             ->where('match_id', $matchId)
-            ->with('entry.athlete')
+            ->with(['entry.athlete' => fn ($athlete) => $athlete->withTrashed()])
             ->orderByDesc('is_starter')
             ->orderBy('jersey_number')
             ->get();
@@ -96,7 +96,7 @@ class MatchRosterPlayer extends Model
 
         $players = self::query()
             ->whereIn('id', $ids)
-            ->with('entry.athlete')
+            ->with(['entry.athlete' => fn ($athlete) => $athlete->withTrashed()])
             ->get();
 
         return self::groupBySide($players);
@@ -108,12 +108,17 @@ class MatchRosterPlayer extends Model
      */
     private static function groupBySide($players): array
     {
+        // Production data can carry a roster row whose Confirmed Entry's
+        // Athlete has since been soft-deleted (a normal registry action) —
+        // `entry->athlete` is then null. Never let that blank the live
+        // scoreboard: fall back to the (possibly trashed) athlete's name
+        // for historical display, then to a plain "Data incomplete" label.
         $describe = fn (self $player): array => [
             'id' => $player->id,
-            'name' => $player->entry->athlete->fullName(),
+            'name' => $player->entry?->athlete?->fullName() ?? __('Data incomplete'),
             'jersey_number' => $player->jersey_number,
             'is_starter' => $player->is_starter,
-            'photo_url' => $player->entry->athlete->photo_upload_id === null
+            'photo_url' => ($player->entry?->athlete?->photo_upload_id ?? null) === null
                 ? null
                 : route('athletes.photo', $player->entry->athlete),
         ];
