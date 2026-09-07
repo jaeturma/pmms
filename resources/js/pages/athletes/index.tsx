@@ -2,8 +2,8 @@ import { Head, Link, router, useForm } from '@inertiajs/react';
 import { Contact, Pencil, Plus, RotateCcw, Save, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { ConfirmDialog } from '@/components/confirm-dialog';
 import { AthletePhotoInput } from '@/components/athlete-photo-input';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
@@ -186,7 +186,10 @@ type Props = {
         accreditation: string;
         deleted: boolean;
         unassigned: boolean;
+        meet_id: number;
     };
+    meetOptions: Array<{ id: number; name: string }>;
+    currentMeetId: number;
     canViewDeleted: boolean;
     canViewUnassigned: boolean;
     delegationOptions: DelegationOption[];
@@ -832,7 +835,9 @@ function EditAthleteDialog({
         _method: 'put',
     });
 
-    if (!athlete) return null;
+    if (!athlete) {
+        return null;
+    }
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -1103,6 +1108,8 @@ function EditAthleteDialog({
 export default function Athletes({
     athletes,
     filters,
+    meetOptions,
+    currentMeetId,
     delegationOptions,
     schoolOptionsByDelegation,
     fixedDelegationId,
@@ -1135,6 +1142,9 @@ export default function Athletes({
             : {}),
         ...(filters.deleted ? { deleted: '1' } : {}),
         ...(filters.unassigned ? { unassigned: '1' } : {}),
+        ...(filters.meet_id && filters.meet_id !== currentMeetId
+            ? { meet_id: String(filters.meet_id) }
+            : {}),
     };
     const applyFilter = (key: string, value: string) =>
         router.get(
@@ -1211,6 +1221,31 @@ export default function Athletes({
                     )}
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                    {meetOptions.length > 1 && (
+                        <Select
+                            value={String(filters.meet_id)}
+                            onValueChange={(value) =>
+                                applyFilter('meet_id', value)
+                            }
+                        >
+                            <SelectTrigger aria-label="Filter by meet">
+                                <SelectValue placeholder="Meet" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {meetOptions.map((meet) => (
+                                    <SelectItem
+                                        key={meet.id}
+                                        value={String(meet.id)}
+                                    >
+                                        {meet.name}
+                                        {meet.id === currentMeetId
+                                            ? ' (current)'
+                                            : ''}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
                     <Select
                         value={String(filters.municipality_id ?? 'all')}
                         onValueChange={(value) =>

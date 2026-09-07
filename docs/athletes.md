@@ -37,7 +37,8 @@ athlete's school; never infer it from the delegation (see `docs/delegations.md`
   delegation therefore sees the delegation's full pooled roster across every
   school it registers under, not just their own school. Accepted and intended,
   not a gap: see `docs/delegations.md` "Officer roster scope" for why.
-- Admins/organizers manage all, at any time.
+- Admins/organizers manage all, at any time (but the registry list defaults to
+  the current meet — see "Meet scope" below).
 - The photo is served through `GET athletes/{athlete}/photo`, authorized by **athlete**
   visibility (not upload ownership), so an officer sees their athletes' photos but
   nobody else's.
@@ -47,6 +48,27 @@ athlete's school; never infer it from the delegation (see `docs/delegations.md`
 `athlete.created|updated|deleted` and — because this is minor data — **every profile
 view** (`athlete.viewed`). Photo storage itself additionally logs `file.uploaded`/
 `file.deleted` via the upload service.
+
+## Meet scope
+
+The registry is a **per-meet** registration table. Every role — admins
+and organizers included — defaults to `Meet::current()`, so the count
+here always reconciles with a delegation's own detail/accreditation page
+and with the ICT dashboard (previously admins/organizers had no meet
+filter and saw athletes accumulated across every past meet, so their
+count looked higher than the delegation page's). A `meet_id` filter
+(shown only when more than one meet exists) still lets an admin look back
+at a previous meet, subject to the same per-role scoping.
+
+## Event picker (registration & edit)
+
+The event checklist offers only events the athlete can actually enter:
+their own sex (plus `Mixed` events) and their own age division (plus
+`Mixed` / `Elementary & Secondary` combined events), ordered by
+`display_order`. On the edit page this is filtered server-side and an
+event the athlete is **already** entered in is always kept in the list
+(so it can still be removed); the coach registration dialog filters the
+same way client-side as the sex/grade fields are filled in.
 
 ## UI
 

@@ -2,15 +2,15 @@
 
 use App\Enums\EligibilityDocumentType;
 use App\Enums\EligibilityStatus;
-use App\Enums\MeetSportAssignmentRole;
-use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\ManagementTeamMemberStatus;
 use App\Enums\ManagementTeamType;
+use App\Enums\MeetSportAssignmentRole;
+use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\RequirementStatus;
 use App\Enums\UserRole;
+use App\Models\Accreditation;
 use App\Models\Athlete;
 use App\Models\AuditLog;
-use App\Models\Accreditation;
 use App\Models\CoachAssignmentRequest;
 use App\Models\Delegation;
 use App\Models\District;
@@ -154,11 +154,15 @@ test('athlete and coach names display in uppercase everywhere', function () {
         ->and($viewer->name)->toBe('Regular Viewer');
 });
 
-test('officers see only their own athletes while managers see all', function () {
+test('officers see only their own athletes while managers see every delegation in the meet', function () {
     $mine = Delegation::factory()->create();
     $officer = athleteOfficerFor($mine);
     Athlete::factory()->create(['delegation_id' => $mine->id]);
-    Athlete::factory()->create();
+    // A different delegation in the same meet — invisible to the officer,
+    // visible to a manager.
+    Athlete::factory()->create([
+        'delegation_id' => Delegation::factory()->create(['meet_id' => $mine->meet_id])->id,
+    ]);
 
     $this->actingAs(User::factory()->admin()->create())
         ->get('/athletes')
@@ -200,8 +204,9 @@ test('an officer assigned to a municipal delegation sees the whole pooled roster
 });
 
 test('the registry can be searched by name and lrn', function () {
-    Athlete::factory()->create(['first_name' => 'Ana', 'last_name' => 'Reyes']);
-    Athlete::factory()->create(['first_name' => 'Ben', 'last_name' => 'Cruz', 'lrn' => '999888777666']);
+    $delegation = Delegation::factory()->create(['meet_id' => Meet::current()->id]);
+    Athlete::factory()->create(['delegation_id' => $delegation->id, 'first_name' => 'Ana', 'last_name' => 'Reyes']);
+    Athlete::factory()->create(['delegation_id' => $delegation->id, 'first_name' => 'Ben', 'last_name' => 'Cruz', 'lrn' => '999888777666']);
 
     $admin = User::factory()->admin()->create();
 
@@ -216,6 +221,36 @@ test('the registry can be searched by name and lrn', function () {
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('athletes.data', 1)
             ->where('athletes.data.0.name', 'BEN CRUZ'));
+});
+
+test('the registry defaults to the current meet for admins too, and reconciles with the delegation page', function () {
+    $meet = Meet::current();
+    $delegation = Delegation::factory()->approved()->create(['meet_id' => $meet->id]);
+    Athlete::factory()->count(7)->create(['delegation_id' => $delegation->id]);
+
+    // Three athletes registered in a previous meet — same registrant, but
+    // they must not inflate the current registration table.
+    $pastMeet = Meet::factory()->create(['is_active' => false]);
+    $pastDelegation = Delegation::factory()->approved()->create(['meet_id' => $pastMeet->id]);
+    Athlete::factory()->count(3)->create(['delegation_id' => $pastDelegation->id]);
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->get('/athletes')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('athletes.data', 7)
+            ->where('filters.meet_id', $meet->id)
+            ->has('meetOptions', 2));
+
+    // The delegation's own accreditation/detail page shows the same 7.
+    $this->actingAs($admin)->get("/delegations/{$delegation->id}/accreditation")
+        ->assertInertia(fn (AssertableInertia $page) => $page->has('athletes', 7));
+
+    // The meet filter still lets an admin look back at the previous meet.
+    $this->actingAs($admin)->get("/athletes?meet_id={$pastMeet->id}")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('athletes.data', 3)
+            ->where('filters.meet_id', $pastMeet->id));
 });
 
 test('a delegation officer cannot register an athlete', function () {
@@ -332,8 +367,8 @@ test('active ICT team members can relink coaches through registration after resu
         ->has('coachOptions', 2));
 
     $entry = Entry::factory()->confirmed()->create(['athlete_id' => $athlete->id, 'delegation_id' => $delegation->id, 'event_id' => $event->id]);
-    $result = \App\Models\EventResult::factory()->create(['meet_id' => $delegation->meet_id, 'event_id' => $event->id, 'status' => 'official']);
-    \App\Models\ResultPlacement::factory()->create(['event_result_id' => $result->id, 'entry_id' => $entry->id]);
+    $result = EventResult::factory()->create(['meet_id' => $delegation->meet_id, 'event_id' => $event->id, 'status' => 'official']);
+    ResultPlacement::factory()->create(['event_result_id' => $result->id, 'entry_id' => $entry->id]);
 
     $this->actingAs($ict)->put("/athletes/{$athlete->id}", [
         ...validAthletePayload($delegation), 'first_name' => 'Updated',

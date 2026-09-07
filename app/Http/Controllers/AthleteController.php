@@ -75,6 +75,12 @@ class AthleteController extends Controller
             || (! $user->isAdmin() && $user->canManageProductionAccounts());
 
         $search = $this->searchTerm($request);
+        // The registry is a per-meet registration table. Every role —
+        // admin and organizer included — defaults to the current meet, so
+        // the count here always reconciles with a delegation's own detail
+        // page and with the ICT dashboard. A `meet_id` filter still allows
+        // looking back at a previous meet.
+        $meetId = $request->integer('meet_id') ?: Meet::current()->id;
         $municipalityId = $request->integer('municipality_id') ?: null;
         $schoolDistrictId = $request->integer('school_district_id') ?: null;
         $schoolId = $request->integer('school_id') ?: null;
@@ -124,10 +130,10 @@ class AthleteController extends Controller
         } elseif ($isIct) {
             // ICT registration totals and rows must describe the same meet-wide
             // athlete population, including athletes not assigned to a sport yet.
-            $query->whereHas('delegation', fn ($delegation) => $delegation->where('meet_id', Meet::current()->id));
+            $query->whereHas('delegation', fn ($delegation) => $delegation->where('meet_id', $meetId));
         } elseif (! $user->hasRole(UserRole::Admin, UserRole::Organizer)
             && $user->hasPermission(Permission::AthleteEligibilityReview, Meet::current())) {
-            $query->whereHas('delegation', fn ($delegation) => $delegation->where('meet_id', Meet::current()->id));
+            $query->whereHas('delegation', fn ($delegation) => $delegation->where('meet_id', $meetId));
         } elseif (! $user->canManageProductionAccounts() && $user->tournamentMeetIds()->isNotEmpty()) {
             if ($unassigned && $ictMeetIds->isNotEmpty()) {
                 $query->whereHas('delegation', fn ($delegations) => $delegations->whereIn('meet_id', $ictMeetIds));
@@ -150,6 +156,12 @@ class AthleteController extends Controller
         if ($unassigned) {
             $query->whereDoesntHave('sportRosterMemberships');
         }
+
+        // Meet scope for every role. The role branches above already narrow
+        // ICT / eligibility reviewers / tournament scopes; this covers the
+        // otherwise-unscoped Officer, Coach, Admin and Organizer views so
+        // the registry never silently mixes in a previous meet's athletes.
+        $query->whereHas('delegation', fn ($delegation) => $delegation->where('meet_id', $meetId));
 
         $query
             ->when($municipalityId !== null, fn ($athletes) => $athletes->whereHas('school', fn ($school) => $school->where('district_id', $municipalityId)))
@@ -251,7 +263,11 @@ class AthleteController extends Controller
                 'sport_id' => $sportId, 'sex' => $sex, 'accreditation' => $accreditation,
                 'deleted' => $deleted,
                 'unassigned' => $unassigned,
+                'meet_id' => $meetId,
             ],
+            'meetOptions' => Meet::query()->orderByDesc('id')->get(['id', 'name'])
+                ->map(fn (Meet $meet): array => ['id' => $meet->id, 'name' => $meet->name]),
+            'currentMeetId' => Meet::current()->id,
             'canViewDeleted' => $user->isAdmin(),
             'canViewUnassigned' => $canViewUnassigned,
             'delegationOptions' => $availableDelegations
