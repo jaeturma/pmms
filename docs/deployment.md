@@ -100,12 +100,31 @@ baseline); there is simply no second always-on process (`php artisan
 reverb:start`) to supervise. This matches Phase 7's own design principle
 that Reverb is strictly additive, never required.
 
+**The `.env` must also have no `VITE_REVERB_*` vars for a production
+build.** The operator scoreboard (`resources/js/pages/scoring/show.tsx`)
+gates its Echo client on `VITE_REVERB_APP_KEY` being compiled into the
+bundle (`realtimeEnabled`) — if the key is *absent* the page runs
+polling-only with no Pusher instantiation; if it is *present but points
+at a Reverb server that isn't running*, pusher-js just logs connection
+errors while polling carries it. A stale build made **with** the key
+baked in and **no** key at runtime was the cause of a production blank
+page + `Uncaught You must pass your app key when you instantiate Pusher.`
+(fixed in the code, but the `.env` + rebuild discipline still matters).
+So: `BROADCAST_CONNECTION=log` **and** `REVERB_*` / `VITE_REVERB_*`
+commented out, then `npm run build`.
+
+*(Applied to the live `pmms.app` deployment 2026-09-08 — `.env` switched
+from `reverb` to `log`, all `REVERB_*`/`VITE_REVERB_*` commented, rebuilt,
+caches cleared, `queue:restart`; both boards verified polling-clean with
+zero WebSocket activity.)*
+
 **Changing this later:** if real-time push is wanted, set
 `BROADCAST_CONNECTION=reverb` and add the `REVERB_APP_ID`/
 `REVERB_APP_KEY`/`REVERB_APP_SECRET`/`REVERB_HOST`/`REVERB_PORT`/
 `REVERB_SCHEME` and `VITE_REVERB_*` variables (see `docs/live-scoring.md`
 for the exact set — this local dev environment already has a working
-example in its own non-production `.env`), then supervise
+example in its own non-production `.env`), **rebuild** (`npm run build`)
+so `realtimeEnabled` compiles to true, then supervise
 `php artisan reverb:start` the same way this WP now supervises the queue
 worker (a second scheduled task, `AtStartup` + restart-on-failure). The
 queue worker stays required either way — Reverb doesn't replace it, it's
@@ -153,7 +172,13 @@ git pull origin main          # or checkout a specific tested commit/tag
 # 2. Backend dependencies (production only, no dev tooling)
 composer install --no-dev --optimize-autoloader
 
-# 3. Frontend build — also regenerates Wayfinder's typed route helpers via
+# 3. Apply the production .env FIRST (see "Production .env" and "Broadcast
+#    decision" above) — the build bakes in every VITE_* var, so a wrong
+#    .env here ships a wrong bundle. For this deployment: no VITE_REVERB_*.
+cp .env.production.example .env   # then fill every REPLACE_… placeholder
+                                 # (or edit the existing .env in place)
+
+# 4. Frontend build — also regenerates Wayfinder's typed route helpers via
 #    the Vite plugin; prefer this over a bare `wayfinder:generate` call,
 #    which needs the `--with-form` flag or several pre-existing pages
 #    silently lose their .form() variant (hit once during Phase 5, see
@@ -161,15 +186,15 @@ composer install --no-dev --optimize-autoloader
 npm install
 npm run build
 
-# 4. Apply the .env (see "Production .env" above) and migrate
+# 5. Migrate
 php artisan migrate --force
 
-# 5. Cache framework config/routes/views for production performance
+# 6. Cache framework config/routes/views for production performance
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
 
-# 6. Restart anything holding old cached config/queued-job class definitions
+# 7. Restart anything holding old cached config/queued-job class definitions
 php artisan queue:restart
 ```
 
@@ -183,7 +208,7 @@ anywhere. There is no web-server restart step beyond Laragon's own
 Apache/Nginx reload, since this deployment doesn't front the app with a
 separate reverse proxy.
 
-**Queue worker after a deploy:** `php artisan queue:restart` (step 6)
+**Queue worker after a deploy:** `php artisan queue:restart` (step 7)
 signals the running worker to finish its current job and exit cleanly;
 the scheduled task from "Queue worker" above then restarts it
 automatically within a minute, now running the newly-deployed code. No
