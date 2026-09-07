@@ -564,10 +564,12 @@ Live Now needs no special-casing for these two: the existing
 `EventMatch` query naturally finds nothing for a sport that has none.
 **Boxing and Chess needed no functional change** — both are genuinely
 head-to-head (2 entries), so the generic match-based shape already fits
-correctly; Boxing's dedicated `ScoreboardType::Boxing` round-history
-display was verified end-to-end (not just assumed) with its own test,
-and Chess's existing null-score-when-no-session behavior was verified
-to never fabricate a result.
+correctly; Boxing's dedicated `ScoreboardType::Boxing` board was verified
+end-to-end (not just assumed) with its own test, and Chess's existing
+null-score-when-no-session behavior was verified to never fabricate a
+result. (The Boxing board was later reworked — 5-judge 10-point-must
+scoring, and a broadcast display slimmed to corners/clock/decision; see
+`docs/live-scoring.md` §"Boxing".)
 
 **Visibility-aware polling added (WP-12-06)**: a new, reusable
 `usePageVisible()` hook (`resources/js/hooks/use-page-visible.ts`,

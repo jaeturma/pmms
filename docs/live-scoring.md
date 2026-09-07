@@ -87,7 +87,8 @@ Secretary/ICT outside their own assignment, still gets `403`.
 | `PATCH /scoring-sessions/{session}/pause` \| `/resume` (`scoring.pause` / `scoring.resume`) | `canManage()`. |
 | `PATCH /scoring-sessions/{session}/end` (`scoring.end`) | `canManage()`. Sets the session `ended`; never touches `EventResult`. |
 | `PATCH /scoring-sessions/{session}/foul` (`scoring.foul`, WP-07-04) | `canManage()`. Basketball board only — `422` for any other board type. `action` = `add` (with `side`) or `reset`; mutates `sport_state.fouls_a`/`fouls_b`. |
-| `PATCH /scoring-sessions/{session}/round` (`scoring.round`, WP-07-05) | `canManage()`. Boxing board only — `422` for any other board type. `score_a`/`score_b` (0-10 each) append a round to `sport_state.rounds` and add to the session's running `score_a`/`score_b`. |
+| `PATCH /scoring-sessions/{session}/round` (`scoring.round`, WP-07-05) | `canManage()`. Boxing / combat-rounds only — `422` for any other board type. **Boxing** takes `cards` (one 10-point-must card per judge); **combat-rounds** takes a single `score_a`/`score_b` pair (0-10). See §"Boxing" below. |
+| `PATCH /scoring-sessions/{session}/boxing-deduction` \| `/boxing-decision` | `canManage()`. Boxing board only. Referee point deductions / the official bout decision — see §"Boxing". |
 | `PATCH /scoring-sessions/{session}/count` (`scoring.count`, WP-07-06) | `canManage()`. Softball/Baseball board only — `422` for any other board type. `action` = `out` \| `ball` \| `strike` \| `reset_count`; advances `sport_state`'s outs/count/inning per the cascading rules below. |
 | `PATCH /scoring-sessions/{session}/inning-run` (`scoring.inning-run`, WP-07-06) | `canManage()`. Softball/Baseball board only — `422` for any other board type. `side` + `runs` (1-20) add to the current inning's row in `sport_state.innings` and to the session's running `score_a`/`score_b`. |
 
