@@ -644,6 +644,7 @@ function TeamPanel({
     photoUrl,
     children,
     logoAfterScore = false,
+    hideScore = false,
 }: {
     label: string;
     score: number;
@@ -652,7 +653,15 @@ function TeamPanel({
     photoUrl?: string | null;
     children?: ReactNode;
     logoAfterScore?: boolean;
+    /** Boxing: the running points total is not shown on the board — the
+     * bout is decided on the judges' cards, surfaced separately as the
+     * decision banner. The panel then only carries the corner, photo and
+     * name. */
+    hideScore?: boolean;
 }) {
+    // A boxing corner panel is a solid red/blue block with light text.
+    const solidCorner = corner !== null && hideScore;
+
     return (
         <div
             className={cn(
@@ -667,8 +676,10 @@ function TeamPanel({
                 // instead.
                 'flex flex-1 flex-nowrap items-center justify-center gap-2 overflow-hidden px-2 text-center sm:gap-4 sm:px-4',
                 fullscreen ? 'py-8' : 'py-5',
-                corner === 'red' && 'bg-red-500/5',
-                corner === 'blue' && 'bg-blue-500/5',
+                solidCorner && corner === 'red' && 'bg-red-600 text-white',
+                solidCorner && corner === 'blue' && 'bg-blue-700 text-white',
+                !solidCorner && corner === 'red' && 'bg-red-500/5',
+                !solidCorner && corner === 'blue' && 'bg-blue-500/5',
             )}
         >
             {/* Logo, then the team name below it — one column. */}
@@ -682,7 +693,11 @@ function TeamPanel({
                     <Badge
                         className={cn(
                             'border-0 text-white',
-                            corner === 'red' ? 'bg-red-600' : 'bg-blue-600',
+                            solidCorner
+                                ? 'bg-white/20'
+                                : corner === 'red'
+                                  ? 'bg-red-600'
+                                  : 'bg-blue-600',
                         )}
                     >
                         {corner === 'red' ? 'Red corner' : 'Blue corner'}
@@ -695,11 +710,13 @@ function TeamPanel({
                         alt={`Photo of ${label}`}
                         className={cn(
                             'rounded-full border-4 object-cover',
-                            corner === 'red'
-                                ? 'border-red-500'
-                                : corner === 'blue'
-                                  ? 'border-blue-500'
-                                  : 'border-border',
+                            solidCorner
+                                ? 'border-white/90'
+                                : corner === 'red'
+                                  ? 'border-red-500'
+                                  : corner === 'blue'
+                                    ? 'border-blue-500'
+                                    : 'border-border',
                             fullscreen ? 'size-24' : 'size-20',
                         )}
                     />
@@ -713,17 +730,25 @@ function TeamPanel({
                     />
                 )}
 
-                <p className="max-w-28 truncate text-base font-medium text-muted-foreground sm:max-w-56 sm:text-lg">
+                <p
+                    className={cn(
+                        'max-w-28 truncate text-base font-medium sm:max-w-56 sm:text-lg',
+                        solidCorner ? 'text-white/90' : 'text-muted-foreground',
+                    )}
+                >
                     {label}
                 </p>
             </div>
 
-            <div
-                aria-hidden="true"
-                className="h-24 shrink-0 border-l-2 border-slate-900/80 dark:border-slate-100/80"
-            />
+            {!hideScore && (
+                <div
+                    aria-hidden="true"
+                    className="h-24 shrink-0 border-l-2 border-slate-900/80 dark:border-slate-100/80"
+                />
+            )}
 
             {/* The score sits beside the logo/name column, not below it. */}
+            {!hideScore && (
             <div
                 className={cn(
                     'flex flex-col items-center gap-2',
@@ -747,6 +772,7 @@ function TeamPanel({
 
                 {children}
             </div>
+            )}
         </div>
     );
 }
@@ -928,51 +954,52 @@ function SoftballLineScore({
 }
 
 /**
- * Boxing's round-by-round history as a real bordered table (matching the
- * scoreboard's overall "boxes and lines" treatment) instead of a plain
- * list — one row per judged round, 10-point-must scores for each corner.
+ * Boxing's decision banner — the only outcome the board shows (the running
+ * points total and the round-by-round cards are deliberately not on the
+ * display; the bout is decided on the judges' cards, and those stay with
+ * the scoring table). `provisional` reads "ahead"; `final` reads "wins",
+ * with the method (Split/Unanimous decision, or RSC/KO/DSQ/WO).
  */
-function BoxingRoundTable({
+function BoxingDecisionBanner({
     session,
-    state,
+    decision,
 }: {
     session: LiveSession;
-    state: BoxingState;
+    decision: NonNullable<BoxingState['decision']>;
 }) {
-    if (state.rounds.length === 0) {
-        return null;
-    }
+    const corner =
+        decision.winner === 'a' ? session.side_a_label : session.side_b_label;
+    const final = decision.status === 'final';
+    const method =
+        decision.method === 'points'
+            ? decision.type
+                ? `${decision.type[0].toUpperCase()}${decision.type.slice(1)} decision`
+                : 'Decision'
+            : decision.method.replace('_', '-').toUpperCase();
+    const score = decision.tally
+        ? ` · ${Math.max(decision.tally.a, decision.tally.b)}–${Math.min(decision.tally.a, decision.tally.b)}`
+        : '';
 
     return (
-        <div className="w-full overflow-x-auto">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead className="w-16">Round</TableHead>
-                        <TableHead className="text-center text-red-600">
-                            {session.side_a_label}
-                        </TableHead>
-                        <TableHead className="text-center text-blue-600">
-                            {session.side_b_label}
-                        </TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {state.rounds.map((round) => (
-                        <TableRow key={round.round}>
-                            <TableCell className="font-medium">
-                                Round {round.round}
-                            </TableCell>
-                            <TableCell className="text-center font-semibold tabular-nums">
-                                {round.score_a}
-                            </TableCell>
-                            <TableCell className="text-center font-semibold tabular-nums">
-                                {round.score_b}
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
+        <div
+            role="status"
+            className={cn(
+                'mx-auto flex w-full max-w-md flex-col items-center gap-0.5 rounded-md px-3 py-2 text-center',
+                final
+                    ? 'bg-emerald-600/10 text-emerald-800 dark:text-emerald-300'
+                    : 'bg-muted text-muted-foreground',
+            )}
+        >
+            <span className="text-xs font-semibold tracking-wide uppercase">
+                {final ? 'Referee’s decision' : 'Currently ahead'}
+            </span>
+            <span className="text-sm font-semibold">
+                {corner} {final ? 'wins' : 'ahead'} — {method}
+                {score}
+            </span>
+            {decision.note && (
+                <span className="text-xs">{decision.note}</span>
+            )}
         </div>
     );
 }
@@ -1536,6 +1563,7 @@ export function LiveScoreDisplay({
                         fullscreen={fullscreen}
                         corner={cornerA}
                         photoUrl={participants?.[0]?.photo_url}
+                        hideScore={boxingState !== null}
                     >
                         {basketballState && (
                             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -1600,6 +1628,7 @@ export function LiveScoreDisplay({
                         corner={cornerB}
                         photoUrl={participants?.[1]?.photo_url}
                         logoAfterScore
+                        hideScore={boxingState !== null}
                     >
                         {basketballState && (
                             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -1663,20 +1692,14 @@ export function LiveScoreDisplay({
                 </div>
             )}
 
-            {boxingState && boxingState.rounds.length > 0 && (
-                <div className="mx-auto w-full max-w-md">
-                    <p className="mb-2 text-center text-sm font-medium text-muted-foreground">
-                        Round-by-round ({boxingState.rounds.length} of{' '}
-                        {boxingState.total_rounds})
-                    </p>
-                    <div className="overflow-hidden rounded-xl border">
-                        <BoxingRoundTable
-                            session={session}
-                            state={boxingState}
-                        />
-                    </div>
-                </div>
-            )}
+            {boxingState?.decision &&
+                (boxingState.decision.winner === 'a' ||
+                    boxingState.decision.winner === 'b') && (
+                    <BoxingDecisionBanner
+                        session={session}
+                        decision={boxingState.decision}
+                    />
+                )}
 
             {softballState && (
                 <div className="flex w-full flex-col items-center gap-3">

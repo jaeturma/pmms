@@ -181,7 +181,7 @@ class ScoringSessionController extends Controller
         $match->loadMissing([
             'meet:id,name',
             'event.sport:id,name',
-            'entries.athlete:id,first_name,last_name,school_id,photo_upload_id',
+            'entries.athlete:id,first_name,last_name,school_id,sports_photo_upload_id',
             'entries.athlete.school:id,name',
             'teamEntries.delegation.school:id,name',
             'teamEntries.delegation.district:id,name',
@@ -3574,9 +3574,10 @@ class ScoringSessionController extends Controller
             return [null, null];
         }
 
-        $photoUrl = fn (Entry $entry): ?string => $entry->athlete?->photo_upload_id === null
-            ? null
-            : route('athletes.photo', $entry->athlete);
+        // The action/competition photo, not the registry ID portrait —
+        // `Athlete::sportsPhotoUrl()` is the one meant for live boards
+        // (matches the public scoreboard's own `athleteParticipants()`).
+        $photoUrl = fn (Entry $entry): ?string => $entry->athlete?->sportsPhotoUrl();
 
         return [
             ['photo_url' => $photoUrl($entries[0])],

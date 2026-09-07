@@ -5,12 +5,9 @@ import {
     knockdownCount,
     readBoutMeta,
     readBoutStats,
-    readDeductions,
     readOfficials,
     readRounds,
-    readWarnings,
 } from '@/apps/portal/lib/boxing-state';
-import { cn } from '@/apps/portal/lib/utils';
 import type { PortalLiveNow } from '@/apps/portal/types';
 
 type PortalBoxingSidebarProps = {
@@ -22,8 +19,6 @@ export function PortalBoxingSidebar({ liveNow }: PortalBoxingSidebarProps) {
     const rounds = readRounds(session.sport_state);
     const boutMeta = readBoutMeta(session.sport_state);
     const boutStats = readBoutStats(session.sport_state);
-    const warnings = readWarnings(session.sport_state);
-    const deductions = readDeductions(session.sport_state);
     const officials = readOfficials(session.sport_state);
     const kdA = knockdownCount(session.sport_state, 'knockdowns_a');
     const kdB = knockdownCount(session.sport_state, 'knockdowns_b');
@@ -124,65 +119,6 @@ export function PortalBoxingSidebar({ liveNow }: PortalBoxingSidebarProps) {
                         tone="ink"
                         title="Punch stats not tracked"
                         description="Punches landed/thrown aren't tracked for this bout."
-                        className="mx-[15px] mb-[13px] rounded-[var(--portal-radius)]"
-                    />
-                )}
-            </article>
-
-            <article className="rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)]">
-                <div className="bg-[var(--portal-ink)] px-[15px] py-2.5 text-sm font-[900] text-[var(--portal-ink-foreground)] uppercase">
-                    Warnings and Deductions
-                </div>
-
-                {warnings || deductions ? (
-                    <div className="px-[15px] pt-2 pb-[13px] text-xs">
-                        {warnings && (
-                            <>
-                                <div className="flex items-center justify-between border-b border-[var(--portal-muted)] py-2.5">
-                                    <span className="font-[750]">{sideALabel}</span>
-                                    <span
-                                        className={cn(
-                                            'rounded-full px-2.5 py-1 text-[10px] font-[900] uppercase',
-                                            warnings.warnings_a > 0
-                                                ? 'bg-[var(--portal-maroon)] text-[var(--portal-maroon-foreground)]'
-                                                : 'bg-[var(--portal-accent)] text-[var(--portal-accent-foreground)]',
-                                        )}
-                                    >
-                                        {warnings.warnings_a > 0 ? `${warnings.warnings_a} Warning${warnings.warnings_a === 1 ? '' : 's'}` : 'No Warning'}
-                                    </span>
-                                </div>
-                                <div className="flex items-center justify-between border-b border-[var(--portal-muted)] py-2.5">
-                                    <span className="font-[750]">{sideBLabel}</span>
-                                    <span
-                                        className={cn(
-                                            'rounded-full px-2.5 py-1 text-[10px] font-[900] uppercase',
-                                            warnings.warnings_b > 0
-                                                ? 'bg-[var(--portal-maroon)] text-[var(--portal-maroon-foreground)]'
-                                                : 'bg-[var(--portal-accent)] text-[var(--portal-accent-foreground)]',
-                                        )}
-                                    >
-                                        {warnings.warnings_b > 0 ? `${warnings.warnings_b} Warning${warnings.warnings_b === 1 ? '' : 's'}` : 'No Warning'}
-                                    </span>
-                                </div>
-                            </>
-                        )}
-                        <div className="flex items-center justify-between border-b border-[var(--portal-muted)] py-2.5 last:border-b-0">
-                            <span className="font-[750]">{sideALabel} — deductions</span>
-                            <span className="font-[900] tabular-nums">
-                                {deductions ? deductions.a : (warnings?.deductions ?? 0)}
-                            </span>
-                        </div>
-                        <div className="flex items-center justify-between py-2.5">
-                            <span className="font-[750]">{sideBLabel} — deductions</span>
-                            <span className="font-[900] tabular-nums">{deductions ? deductions.b : 0}</span>
-                        </div>
-                    </div>
-                ) : (
-                    <PortalEmptyState
-                        icon={ShieldAlert}
-                        tone="ink"
-                        title="No warnings on record"
-                        description="Warnings and point deductions aren't tracked for this bout."
                         className="mx-[15px] mb-[13px] rounded-[var(--portal-radius)]"
                     />
                 )}

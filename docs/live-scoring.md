@@ -216,10 +216,21 @@ separate request.
   - **Public disclosure**: unless `show_live_judge_scores` is on, the
     per-judge cards and the provisional decision are withheld from the
     **public** payload (`ScoringSession::toLivePayload()`) while the bout
-    is live — the consensus line, points total and deduction tallies stay
-    visible; the operator console always sees everything; full disclosure
+    is live; the operator console always sees everything; full disclosure
     once the session ends. A manual RSC/KO/DSQ/WO decision is a public
-    announcement and is never withheld.
+    announcement and is never withheld (though its per-judge `tally.judges`
+    breakdown is still stripped).
+  - **Boards** (`resources/js/components/live-score-display.tsx` operator
+    console, `resources/js/apps/portal/components/boxing-scoreboard.tsx`
+    public) deliberately show **only the corners, the round/rest countdown
+    and the decision** — not the running points total, the round-by-round
+    cards or the deduction tallies. The bout is decided on the judges'
+    cards and that stays with the scoring table; the operator's own
+    control panel keeps every scoring tool. Red corner = solid red panel,
+    blue corner = solid blue; the corner photo is the athlete's
+    `sports_photo_url` (action photo), not the ID portrait
+    (`ScoringSessionController::matchParticipants()` /
+    `ScoringSession::athleteParticipants()`).
   - A mis-recorded round is still corrected the same way as any other
     board type, through `scoring.score` (`type: correction`); the round
     (as in "Round 3") reuses the generic `period_label` free-text field.

@@ -846,8 +846,15 @@ test('the scoreboard page exposes participant photos only for a two-entry match,
     $entryB = confirmedEntryForScoringSession($match);
     $match->entries()->attach([$entryA->id, $entryB->id]);
 
-    $photo = FileUpload::factory()->create();
-    $entryA->athlete->forceFill(['photo_upload_id' => $photo->id])->save();
+    // The live board uses the athlete's action/competition photo, not the
+    // registry ID portrait — so an ID photo alone shows nothing.
+    $idPhoto = FileUpload::factory()->create();
+    $sportsPhoto = FileUpload::factory()->create();
+    $entryA->athlete->forceFill([
+        'photo_upload_id' => $idPhoto->id,
+        'sports_photo_upload_id' => $sportsPhoto->id,
+    ])->save();
+    $entryB->athlete->forceFill(['photo_upload_id' => $idPhoto->id])->save();
 
     $admin = User::factory()->admin()->create();
 
@@ -855,7 +862,7 @@ test('the scoreboard page exposes participant photos only for a two-entry match,
         ->get("/matches/{$match->id}/scoreboard")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('participants', 2)
-            ->where('participants.0.photo_url', route('athletes.photo', $entryA->athlete))
+            ->where('participants.0.photo_url', route('athletes.sports-photo', $entryA->athlete).'?v='.$sportsPhoto->id)
             ->where('participants.1.photo_url', null));
 
     $entryC = confirmedEntryForScoringSession($match);
