@@ -1703,6 +1703,13 @@ test('an authorized official can override the points result with an RSC/KO decis
         ->assertSessionHasNoErrors();
 
     expect($session->fresh()->sport_state['decision'])->toMatchArray(['method' => 'rsc', 'winner' => 'a']);
+
+    // The manual RSC call is announced publicly, but the per-judge
+    // breakdown behind it is still withheld while the bout is live.
+    $publicDecision = $session->fresh()->toLivePayload()['sport_state']['decision'];
+    expect($publicDecision)->toMatchArray(['method' => 'rsc', 'winner' => 'a'])
+        ->and($publicDecision['tally'])->toHaveKeys(['a', 'b', 'even'])
+        ->and($publicDecision['tally'])->not->toHaveKey('judges');
 });
 
 test('a non-points decision needs a winning corner', function () {

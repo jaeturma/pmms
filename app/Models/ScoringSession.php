@@ -208,11 +208,17 @@ class ScoringSession extends Model
             ->all();
         $state['judge_scores_hidden'] = true;
 
-        // A provisional decision leaks the per-judge tally; a manual
-        // referee decision (RSC/KO/DSQ/WO) is a public announcement and
-        // stays.
-        if (is_array($state['decision'] ?? null) && ($state['decision']['manual'] ?? false) !== true) {
-            $state['decision'] = null;
+        // A computed (provisional) decision leaks the per-judge tally, so
+        // it's withheld entirely; a manual referee decision (RSC/KO/DSQ/
+        // WO) is a public announcement and stays — but its per-judge
+        // breakdown (`tally.judges`) is still stripped, only the announced
+        // count (e.g. "5-0") survives.
+        if (is_array($state['decision'] ?? null)) {
+            if (($state['decision']['manual'] ?? false) !== true) {
+                $state['decision'] = null;
+            } elseif (is_array($state['decision']['tally'] ?? null)) {
+                unset($state['decision']['tally']['judges']);
+            }
         }
 
         return $state;
