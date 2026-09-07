@@ -256,6 +256,31 @@ export type PortalMedalTotals = {
     total: number;
 };
 
+/** The four official public medal-tally categories. Strict rule:
+ * OVERALL = ELEMENTARY + SECONDARY. Paragames is a separate tally and is
+ * never folded into Overall; Kickboxing is excluded from all four. */
+export type PortalTallyCategory =
+    'overall' | 'elementary' | 'secondary' | 'paragames';
+
+export type PortalTallyCategoryData = {
+    districts: PortalStandingRow[];
+    schools: PortalSchoolStandingRow[];
+    totals: PortalMedalTotals;
+    /** Whether any medal has actually been posted in this category —
+     * drives the professional empty state (the standings list always
+     * carries every approved municipality at zero, so a row count can't
+     * answer this). */
+    hasResults: boolean;
+    bySport: PortalSportMedals[];
+    recentMedals: PortalMedalTotals;
+    topMedalists: PortalTopMedalistRow[];
+};
+
+export type PortalTallyCategories = Record<
+    PortalTallyCategory,
+    PortalTallyCategoryData
+>;
+
 export type PortalSportMedals = {
     sport: string;
     gold: number;

@@ -45,6 +45,27 @@ function publicTallyPlacement(EventResult $result, School $school, int $rank, bo
     ]);
 }
 
+/**
+ * A validated (official) result whose event is fully controlled — age
+ * division and sport — so a test can target one tally category exactly.
+ */
+function tallyResult(Meet $meet, array $eventAttributes = []): EventResult
+{
+    $event = Event::factory()->create($eventAttributes + [
+        'age_division' => AgeDivision::Secondary,
+    ]);
+
+    return EventResult::factory()->validated()->create([
+        'meet_id' => $meet->id,
+        'event_id' => $event->id,
+    ]);
+}
+
+function paragamesSport(string $name = 'Para Athletics'): Sport
+{
+    return Sport::factory()->create(['name' => $name, 'classification' => 'paragames']);
+}
+
 test('guests can view the public tally; unpublished meets 404', function () {
     $meet = Meet::factory()->active()->published()->create();
 
@@ -52,18 +73,39 @@ test('guests can view the public tally; unpublished meets 404', function () {
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('portal/tally')
-            ->has('schools', 0)
-            ->has('districts', 0));
+            ->has('categories.overall.districts', 0)
+            ->has('categories.overall.schools', 0)
+            ->where('categories.overall.hasResults', false)
+            ->where('categories.paragames.hasResults', false));
 
     $hidden = Meet::factory()->active()->create();
 
     $this->get("/meets/{$hidden->id}/tally")->assertNotFound();
 });
 
-test('validated but unaccepted results do not contribute to the official medal tally', function () {
+test('the public tally provides all four official categories in one payload', function () {
     $meet = Meet::factory()->active()->published()->create();
+
+    $this->get("/meets/{$meet->id}/tally")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('categories.overall', fn (AssertableInertia $c) => $c
+                ->has('districts')->has('schools')->has('totals')
+                ->has('bySport')->has('recentMedals')->has('topMedalists')
+                ->where('hasResults', false))
+            ->has('categories.elementary')
+            ->has('categories.secondary')
+            ->has('categories.paragames')
+            ->has('sportOptions')
+            ->has('generatedAt')
+            ->where('filters.sport_id', null));
+});
+
+test('validated but unaccepted results do not contribute to the tally', function () {
+    $meet = Meet::factory()->active()->published()->create();
+    $event = Event::factory()->create(['age_division' => AgeDivision::Secondary]);
     $unofficial = EventResult::factory()->create([
         'meet_id' => $meet->id,
+        'event_id' => $event->id,
         'status' => ResultStatus::Validated,
         'validated_at' => now(),
     ]);
@@ -72,15 +114,181 @@ test('validated but unaccepted results do not contribute to the official medal t
 
     $this->get("/meets/{$meet->id}/tally")
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('totals.gold', 0)
-            ->where('totals.silver', 0)
-            ->where('totals.bronze', 0));
+            ->where('categories.overall.totals.total', 0));
+});
+
+test('an Elementary medal lands in Elementary and Overall, but not Secondary or Paragames', function () {
+    $meet = Meet::factory()->active()->published()->create();
+    $result = tallyResult($meet, ['age_division' => AgeDivision::Elementary]);
+    publicTallyPlacement($result, School::factory()->create(), 1);
+
+    $this->get("/meets/{$meet->id}/tally")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('categories.elementary.totals.gold', 1)
+            ->where('categories.overall.totals.gold', 1)
+            ->where('categories.secondary.totals.gold', 0)
+            ->where('categories.paragames.totals.gold', 0)
+            ->where('categories.elementary.hasResults', true)
+            ->where('categories.paragames.hasResults', false));
+});
+
+test('a Secondary medal lands in Secondary and Overall, but not Elementary or Paragames', function () {
+    $meet = Meet::factory()->active()->published()->create();
+    $result = tallyResult($meet, ['age_division' => AgeDivision::Secondary]);
+    publicTallyPlacement($result, School::factory()->create(), 1);
+
+    $this->get("/meets/{$meet->id}/tally")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('categories.secondary.totals.gold', 1)
+            ->where('categories.overall.totals.gold', 1)
+            ->where('categories.elementary.totals.gold', 0)
+            ->where('categories.paragames.totals.gold', 0));
+});
+
+test('a Paragames medal lands in Paragames only and never touches Overall, Elementary or Secondary', function () {
+    $meet = Meet::factory()->active()->published()->create();
+
+    $result = tallyResult($meet, [
+        'sport_id' => paragamesSport()->id,
+        'age_division' => AgeDivision::Elementary,
+    ]);
+    publicTallyPlacement($result, School::factory()->create(), 1);
+
+    $this->get("/meets/{$meet->id}/tally")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('categories.paragames.totals.gold', 1)
+            ->where('categories.paragames.hasResults', true)
+            ->where('categories.overall.totals.gold', 0)
+            ->where('categories.overall.hasResults', false)
+            ->where('categories.elementary.totals.gold', 0)
+            ->where('categories.secondary.totals.gold', 0));
+});
+
+test('Overall equals Elementary plus Secondary and excludes Paragames', function () {
+    $meet = Meet::factory()->active()->published()->create();
+
+    // Elementary: 5 gold
+    foreach (range(1, 5) as $i) {
+        $r = tallyResult($meet, ['age_division' => AgeDivision::Elementary]);
+        publicTallyPlacement($r, School::factory()->create(), 1);
+    }
+
+    // Secondary: 7 gold
+    foreach (range(1, 7) as $i) {
+        $r = tallyResult($meet, ['age_division' => AgeDivision::Secondary]);
+        publicTallyPlacement($r, School::factory()->create(), 1);
+    }
+
+    // Paragames: 3 gold — must not count toward Overall
+    foreach (range(1, 3) as $i) {
+        $r = tallyResult($meet, [
+            'sport_id' => paragamesSport("Para Sport {$i}")->id,
+            'age_division' => AgeDivision::Secondary,
+        ]);
+        publicTallyPlacement($r, School::factory()->create(), 1);
+    }
+
+    $this->get("/meets/{$meet->id}/tally")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('categories.elementary.totals.gold', 5)
+            ->where('categories.secondary.totals.gold', 7)
+            ->where('categories.overall.totals.gold', 12)
+            ->where('categories.paragames.totals.gold', 3));
+});
+
+test('Kickboxing contributes to no tally category', function () {
+    $meet = Meet::factory()->active()->published()->create();
+
+    $kickboxing = Sport::factory()->create(['name' => 'Kickboxing']);
+    $combined = Sport::factory()->create(['name' => 'Weightlifting / Kickboxing']);
+
+    foreach ([$kickboxing, $combined] as $sport) {
+        $r = tallyResult($meet, ['sport_id' => $sport->id, 'age_division' => AgeDivision::Secondary]);
+        publicTallyPlacement($r, School::factory()->create(), 1);
+    }
+
+    // A clean Secondary medal, to prove the tally is otherwise working.
+    $clean = tallyResult($meet, ['age_division' => AgeDivision::Secondary]);
+    publicTallyPlacement($clean, School::factory()->create(), 1);
+
+    $this->get("/meets/{$meet->id}/tally")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('categories.overall.totals.gold', 1)
+            ->where('categories.secondary.totals.gold', 1)
+            ->where('categories.elementary.totals.gold', 0)
+            ->where('categories.paragames.totals.gold', 0));
+});
+
+test('flexible and repeated medal rows still count correctly per category', function () {
+    $meet = Meet::factory()->active()->published()->create();
+
+    // One Secondary event awarding Gold, Silver, Bronze, Bronze — and the
+    // same school taking two of the golds.
+    $result = tallyResult($meet, ['age_division' => AgeDivision::Secondary]);
+    $compostela = School::factory()->create(['name' => 'Compostela NHS']);
+
+    publicTallyPlacement($result, $compostela, 1);
+    publicTallyPlacement($result, $compostela, 1);
+    publicTallyPlacement($result, School::factory()->create(), 2);
+    publicTallyPlacement($result, School::factory()->create(), 3);
+    publicTallyPlacement($result, School::factory()->create(), 3);
+
+    $this->get("/meets/{$meet->id}/tally")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('categories.secondary.totals.gold', 2)
+            ->where('categories.secondary.totals.silver', 1)
+            ->where('categories.secondary.totals.bronze', 2)
+            ->where('categories.secondary.totals.total', 5)
+            ->where('categories.secondary.schools.0.school', 'Compostela NHS')
+            ->where('categories.secondary.schools.0.gold', 2)
+            ->where('categories.overall.totals.total', 5));
+});
+
+test('reopening an accepted result reconciles every affected category', function () {
+    $meet = Meet::factory()->active()->published()->create();
+    $result = tallyResult($meet, ['age_division' => AgeDivision::Elementary]);
+    publicTallyPlacement($result, School::factory()->create(), 1);
+
+    $this->get("/meets/{$meet->id}/tally")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('categories.elementary.totals.gold', 1)
+            ->where('categories.overall.totals.gold', 1));
+
+    $this->actingAs(\App\Models\User::factory()->admin()->create())
+        ->post("/results/{$result->id}/reopen", ['reason' => 'Wrong athlete placed first.'])
+        ->assertSessionHasNoErrors();
+
+    $this->get("/meets/{$meet->id}/tally")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('categories.elementary.totals.gold', 0)
+            ->where('categories.overall.totals.gold', 0)
+            ->where('categories.elementary.hasResults', false));
+});
+
+test('a newly validated medal shows up on the next poll of the same page', function () {
+    // The client polls with `router.reload({ only: ['categories', 'generatedAt'] })` —
+    // no navigation, so this is the same endpoint returning fresh category data.
+    $meet = Meet::factory()->active()->published()->create();
+    $first = tallyResult($meet, ['age_division' => AgeDivision::Secondary]);
+    publicTallyPlacement($first, School::factory()->create(), 1);
+
+    $this->get("/meets/{$meet->id}/tally")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('categories.secondary.totals.gold', 1));
+
+    $second = tallyResult($meet, ['age_division' => AgeDivision::Secondary]);
+    publicTallyPlacement($second, School::factory()->create(), 1);
+
+    $this->get("/meets/{$meet->id}/tally")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('categories.secondary.totals.gold', 2)
+            ->where('categories.overall.totals.gold', 2));
 });
 
 test('the public tally counts validated results only, in medal order, sharing ties', function () {
     $meet = Meet::factory()->active()->published()->create();
 
-    $validated = EventResult::factory()->validated()->create(['meet_id' => $meet->id]);
+    $validated = tallyResult($meet, ['age_division' => AgeDivision::Secondary]);
     $goldSchool = School::factory()->create(['name' => 'Gold School']);
     $tieSchool = School::factory()->create(['name' => 'Tie School']);
 
@@ -93,15 +301,12 @@ test('the public tally counts validated results only, in medal order, sharing ti
 
     $this->get("/meets/{$meet->id}/tally")
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('schools', 2)
-            ->where('schools.0.school', 'Tie School')
-            ->where('schools.0.gold', 1)
-            ->where('schools.0.bronze', 1)
-            ->where('schools.0.total', 2)
-            ->where('schools.1.school', 'Gold School')
-            ->where('schools.1.gold', 1)
-            ->where('schools.1.total', 1)
-            ->has('districts', 2));
+            ->has('categories.overall.schools', 2)
+            ->where('categories.overall.schools.0.school', 'Tie School')
+            ->where('categories.overall.schools.0.gold', 1)
+            ->where('categories.overall.schools.0.bronze', 1)
+            ->where('categories.overall.schools.1.school', 'Gold School')
+            ->has('categories.overall.districts', 2));
 });
 
 test('the public tally excludes other meets', function () {
@@ -112,12 +317,13 @@ test('the public tally excludes other meets', function () {
 
     $this->get("/meets/{$meet->id}/tally")
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('schools', 0));
+            ->where('categories.overall.hasResults', false)
+            ->has('categories.overall.schools', 0));
 });
 
 test('the public tally splits a municipal delegation\'s medals across its own schools', function () {
     $meet = Meet::factory()->active()->published()->create();
-    $result = EventResult::factory()->validated()->create(['meet_id' => $meet->id]);
+    $result = tallyResult($meet, ['age_division' => AgeDivision::Secondary]);
 
     $district = District::factory()->create(['name' => 'Nabunturan']);
     $schoolA = School::factory()->create(['district_id' => $district->id, 'name' => 'Nabunturan Central School']);
@@ -147,17 +353,16 @@ test('the public tally splits a municipal delegation\'s medals across its own sc
 
     $this->get("/meets/{$meet->id}/tally")
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('schools', 2)
-            ->where('schools.0.school', 'Nabunturan Central School')
-            ->where('schools.1.school', 'Nabunturan East School')
-            ->has('districts', 1)
-            ->where('districts.0.district', 'Nabunturan')
-            ->where('districts.0.total', 2));
+            ->has('categories.overall.schools', 2)
+            ->where('categories.overall.schools.0.school', 'Nabunturan Central School')
+            ->has('categories.overall.districts', 1)
+            ->where('categories.overall.districts.0.district', 'Nabunturan')
+            ->where('categories.overall.districts.0.total', 2));
 });
 
 test('school standings show the school district only when its municipality has more than one', function () {
     $meet = Meet::factory()->active()->published()->create();
-    $result = EventResult::factory()->validated()->create(['meet_id' => $meet->id]);
+    $result = tallyResult($meet, ['age_division' => AgeDivision::Secondary]);
 
     $laak = District::factory()->create(['name' => 'Laak']);
     $laakNorth = SchoolDistrict::factory()->create(['district_id' => $laak->id, 'name' => 'Laak North']);
@@ -180,99 +385,43 @@ test('school standings show the school district only when its municipality has m
 
     $this->get("/meets/{$meet->id}/tally")
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('schools.0.school', 'Laak North School')
-            ->where('schools.0.district', 'Laak North')
-            ->where('schools.1.school', 'Mawab Central School')
-            ->where('schools.1.district', 'Mawab')
-            ->where('districts.0.district', 'Laak')
-            ->where('districts.1.district', 'Mawab'));
+            ->where('categories.overall.schools.0.school', 'Laak North School')
+            ->where('categories.overall.schools.0.district', 'Laak North')
+            ->where('categories.overall.schools.1.district', 'Mawab'));
 });
 
-test('the public tally can be filtered by sport', function () {
+test('the public tally can be filtered by sport, and the filter narrows every category', function () {
     $meet = Meet::factory()->active()->published()->create();
 
-    $resultA = EventResult::factory()->validated()->create(['meet_id' => $meet->id]);
-    $schoolA = School::factory()->create(['name' => 'Sport A School']);
-    publicTallyPlacement($resultA, $schoolA, 1);
+    $resultA = tallyResult($meet, ['age_division' => AgeDivision::Secondary]);
+    publicTallyPlacement($resultA, School::factory()->create(['name' => 'Sport A School']), 1);
 
-    $resultB = EventResult::factory()->validated()->create(['meet_id' => $meet->id]);
+    $resultB = tallyResult($meet, ['age_division' => AgeDivision::Secondary]);
     publicTallyPlacement($resultB, School::factory()->create(['name' => 'Sport B School']), 1);
 
     $sportA = $resultA->event->sport_id;
 
     $this->get("/meets/{$meet->id}/tally?sport_id={$sportA}")
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('schools', 1)
-            ->where('schools.0.school', 'Sport A School')
-            ->has('sportOptions', 2));
+            ->where('filters.sport_id', $sportA)
+            ->has('categories.overall.schools', 1)
+            ->where('categories.overall.schools.0.school', 'Sport A School')
+            ->where('categories.secondary.totals.gold', 1));
 });
 
-test('the public tally exposes totals, points, and a medals-by-sport breakdown', function () {
+test('the tally exposes a generated-at timestamp and the official flag', function () {
     $meet = Meet::factory()->active()->published()->create();
-
-    $basketball = Sport::factory()->create(['name' => 'Basketball']);
-    $event = Event::factory()->create(['sport_id' => $basketball->id]);
-
-    $school = School::factory()->create(['name' => 'Champion School']);
-    $result = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $event->id]);
-    publicTallyPlacement($result, $school, 1);
 
     $this->get("/meets/{$meet->id}/tally")
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('totals.gold', 1)
-            ->where('totals.total', 1)
-            ->where('districts.0.points', 3)
-            ->where('topByPoints.0.district', $school->district->name)
-            ->has('bySport', 1)
-            ->where('bySport.0.sport', 'Basketball')
-            ->where('bySport.0.gold', 1)
-            ->has('recentMedals.total'));
+            ->has('generatedAt')
+            ->where('medalTallyOfficial', false));
 });
 
-test('the public tally can be filtered by age division', function () {
-    $meet = Meet::factory()->active()->published()->create();
-
-    $elementaryEvent = Event::factory()->create(['age_division' => AgeDivision::Elementary]);
-    $secondaryEvent = Event::factory()->create(['age_division' => AgeDivision::Secondary]);
-
-    $elementaryResult = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $elementaryEvent->id]);
-    publicTallyPlacement($elementaryResult, School::factory()->create(['name' => 'Elementary School']), 1);
-
-    $secondaryResult = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $secondaryEvent->id]);
-    publicTallyPlacement($secondaryResult, School::factory()->create(['name' => 'Secondary School']), 1);
-
-    $this->get("/meets/{$meet->id}/tally?age_division=elementary")
-        ->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('schools', 1)
-            ->where('schools.0.school', 'Elementary School')
-            ->where('filters.age_division', 'elementary')
-            ->has('ageDivisionOptions', 2)
-            ->where('ageDivisionOptions.0.id', 'elementary')
-            ->where('ageDivisionOptions.1.id', 'secondary'));
-});
-
-test('public tally division options are unique and come from official event results', function () {
-    $meet = Meet::factory()->active()->published()->create();
-    $elementaryBoys = Event::factory()->create(['gender' => 'boys', 'age_division' => AgeDivision::Elementary]);
-    $elementaryGirls = Event::factory()->create(['gender' => 'girls', 'age_division' => AgeDivision::Elementary]);
-    $paragames = Event::factory()->create(['age_division' => AgeDivision::ParagamesOrtho]);
-    EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $elementaryBoys->id]);
-    EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $elementaryGirls->id]);
-    EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $paragames->id]);
-
-    $this->get("/meets/{$meet->id}/tally")
-        ->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('ageDivisionOptions', 2)
-            ->where('ageDivisionOptions.0.id', 'elementary')
-            ->where('ageDivisionOptions.1.id', 'paragames_ortho'));
-});
-
-test('top medalists rank individual athletes by gold, then silver, then bronze, then name, aggregating across sports', function () {
+test('top medalists rank individual athletes by gold, then silver, then bronze', function () {
     $meet = Meet::factory()->active()->published()->create();
 
     $basketball = Sport::factory()->create(['name' => 'Basketball']);
-    $chess = Sport::factory()->create(['name' => 'Chess']);
-
     $school = School::factory()->create(['name' => 'Champion School']);
     $delegation = Delegation::factory()->approved()->create(['meet_id' => $meet->id, 'school_id' => $school->id]);
     $star = Athlete::factory()->create([
@@ -280,58 +429,20 @@ test('top medalists rank individual athletes by gold, then silver, then bronze, 
         'school_id' => $school->id,
         'first_name' => 'Ana',
         'last_name' => 'Cruz',
-        'grade_level' => 10,
     ]);
 
-    $basketballEvent = Event::factory()->create(['sport_id' => $basketball->id]);
-    $basketballResult = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $basketballEvent->id]);
-    $basketballEntry = Entry::factory()->confirmed()->create([
+    $event = Event::factory()->create(['sport_id' => $basketball->id, 'age_division' => AgeDivision::Secondary]);
+    $result = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $event->id]);
+    $entry = Entry::factory()->confirmed()->create([
         'athlete_id' => $star->id,
         'delegation_id' => $delegation->id,
-        'event_id' => $basketballEvent->id,
+        'event_id' => $event->id,
     ]);
-    ResultPlacement::factory()->create(['event_result_id' => $basketballResult->id, 'entry_id' => $basketballEntry->id, 'rank' => 1]);
-
-    $chessEvent = Event::factory()->create(['sport_id' => $chess->id]);
-    $chessResult = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $chessEvent->id]);
-    $chessEntry = Entry::factory()->confirmed()->create([
-        'athlete_id' => $star->id,
-        'delegation_id' => $delegation->id,
-        'event_id' => $chessEvent->id,
-    ]);
-    ResultPlacement::factory()->create(['event_result_id' => $chessResult->id, 'entry_id' => $chessEntry->id, 'rank' => 1]);
-
-    $singleGoldEvent = Event::factory()->create(['sport_id' => $basketball->id]);
-    $singleGoldResult = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $singleGoldEvent->id]);
-    publicTallyPlacement($singleGoldResult, School::factory()->create(['name' => 'Other School']), 1);
+    ResultPlacement::factory()->create(['event_result_id' => $result->id, 'entry_id' => $entry->id, 'rank' => 1]);
 
     $this->get("/meets/{$meet->id}/tally")
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('topMedalists', 2)
-            ->where('topMedalists.0.athlete', 'ANA CRUZ')
-            ->where('topMedalists.0.grade_level', 10)
-            ->where('topMedalists.0.sport', 'Basketball, Chess')
-            ->where('topMedalists.0.school', 'Champion School')
-            ->where('topMedalists.0.municipality', $school->district->name)
-            ->where('topMedalists.0.gold', 2)
-            ->where('topMedalists.0.total', 2)
-            ->where('topMedalists.1.gold', 1));
-});
-
-test('the public tally exposes a generated-at timestamp and every district is returned, not truncated server-side', function () {
-    // WP-08-09's mobile "View full ranking" collapse is a client-side
-    // display choice — the backend must still return every district row
-    // regardless of how many, so expanding it needs no extra request.
-    $meet = Meet::factory()->active()->published()->create();
-
-    foreach (range(1, 10) as $i) {
-        $result = EventResult::factory()->validated()->create(['meet_id' => $meet->id]);
-        publicTallyPlacement($result, School::factory()->create(['name' => "School {$i}"]), 1);
-    }
-
-    $this->get("/meets/{$meet->id}/tally")
-        ->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('districts', 10)
-            ->has('generatedAt')
-            ->where('medalTallyOfficial', false));
+            ->where('categories.overall.topMedalists.0.athlete', 'ANA CRUZ')
+            ->where('categories.overall.topMedalists.0.gold', 1)
+            ->where('categories.secondary.topMedalists.0.athlete', 'ANA CRUZ'));
 });

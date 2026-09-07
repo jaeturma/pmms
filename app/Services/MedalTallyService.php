@@ -36,6 +36,66 @@ class MedalTallyService
     private const BRONZE_POINTS = 1;
 
     /**
+     * The four public medal-tally categories. The official rule
+     * (docs/medal-tally.md) is:
+     *
+     *   OVERALL = ELEMENTARY + SECONDARY   (Paragames is NOT added in)
+     *
+     * `overall` counts every non-Paragames event (which, in real meet
+     * data, is exactly the Elementary + Secondary divisions — no medal is
+     * ever silently dropped from Overall by an unexpected division), while
+     * `paragames` counts Paragames-classified sports only. Paragames is
+     * never folded into Overall, and every category — Overall included —
+     * excludes Kickboxing entirely.
+     */
+    public const CATEGORIES = ['overall', 'elementary', 'secondary', 'paragames'];
+
+    /**
+     * Kickboxing never contributes to any official medal tally. Matched on
+     * the Sport name so both the standalone "Kickboxing" catalog row and
+     * the combined "Weightlifting / Kickboxing" row seen in production data
+     * are covered — a slug/id would miss one of the two. Applied in
+     * `basePlacements()` for every caller, not just the public portal.
+     */
+    private const KICKBOXING_NAME_LIKE = '%kickbox%';
+
+    /**
+     * Resolve a public category name to the `[$ageDivision, $paragames]`
+     * pair the query methods take. Unknown values fall through to Overall.
+     *
+     * @return array{0: string|array<int, string>|null, 1: bool}
+     */
+    public static function categoryFilter(string $category): array
+    {
+        return match ($category) {
+            'elementary' => [AgeDivision::Elementary->value, false],
+            'secondary' => [AgeDivision::Secondary->value, false],
+            'paragames' => [null, true],
+            // Overall: no age-division filter, but Paragames sports
+            // excluded — so Overall = Elementary + Secondary for real data,
+            // without ever losing a medal to an unforeseen division.
+            default => [null, false],
+        };
+    }
+
+    /**
+     * `standings()` for one public category tab — Overall / Elementary /
+     * Secondary / Paragames. Overall excludes Paragames-classified sports
+     * (so a Paragames medal is never folded into it — the rule is
+     * OVERALL = ELEMENTARY + SECONDARY, Paragames stays separate);
+     * Elementary/Secondary additionally restrict to that one age division.
+     * Kickboxing is excluded from all four by `basePlacements()`.
+     *
+     * @return array{districts: array<int, array<string, mixed>>, schools: array<int, array<string, mixed>>}
+     */
+    public function categoryStandings(?int $meetId, string $category, ?int $sportId = null): array
+    {
+        [$ageDivision, $paragames] = self::categoryFilter($category);
+
+        return $this->standings($meetId, $sportId, $ageDivision, $paragames);
+    }
+
+    /**
      * Divisions represented by official results in the selected tally scope.
      * Event configuration is authoritative; gender and legacy sport categories
      * must not create additional division options.
@@ -70,9 +130,9 @@ class MedalTallyService
      *
      * @return array{districts: array<int, array<string, mixed>>, schools: array<int, array<string, mixed>>}
      */
-    public function standings(?int $meetId = null, ?int $sportId = null, ?string $ageDivision = null): array
+    public function standings(?int $meetId = null, ?int $sportId = null, string|array|null $ageDivision = null, ?bool $paragames = null): array
     {
-        $placements = $this->basePlacements($meetId, $sportId, $ageDivision)
+        $placements = $this->basePlacements($meetId, $sportId, $ageDivision, null, $paragames)
             ->with('result.event', 'entry.delegation', 'entry.athlete.school.district', 'entry.athlete.school.schoolDistrict', 'teamEntry.delegation.district', 'teamEntry.delegation.school.district', 'delegation.district', 'delegation.school.district')
             ->get();
         $tallyPlacements = $this->medalUnits($placements);
@@ -223,9 +283,9 @@ class MedalTallyService
      *
      * @return array<int, array{sport: string, gold: int, silver: int, bronze: int, total: int}>
      */
-    public function medalsBySport(?int $meetId = null, ?int $sportId = null, ?string $ageDivision = null): array
+    public function medalsBySport(?int $meetId = null, ?int $sportId = null, string|array|null $ageDivision = null, ?bool $paragames = null): array
     {
-        $placements = $this->basePlacements($meetId, $sportId, $ageDivision)
+        $placements = $this->basePlacements($meetId, $sportId, $ageDivision, null, $paragames)
             ->with('result.event.sport')
             ->get();
 
@@ -248,9 +308,9 @@ class MedalTallyService
      *
      * @return array{gold: int, silver: int, bronze: int, total: int}
      */
-    public function recentMedals(?int $meetId = null, ?int $sportId = null, ?string $ageDivision = null, int $hours = 24): array
+    public function recentMedals(?int $meetId = null, ?int $sportId = null, string|array|null $ageDivision = null, int $hours = 24, ?bool $paragames = null): array
     {
-        $placements = $this->basePlacements($meetId, $sportId, $ageDivision)
+        $placements = $this->basePlacements($meetId, $sportId, $ageDivision, null, $paragames)
             ->whereHas('result', fn ($result) => $result->where('validated_at', '>=', Carbon::now()->subHours($hours)))
             ->get();
 
@@ -268,9 +328,9 @@ class MedalTallyService
      *
      * @return array<int, array<string, mixed>>
      */
-    public function topMedalists(?int $meetId = null, ?int $sportId = null, ?string $ageDivision = null, int $limit = 20): array
+    public function topMedalists(?int $meetId = null, ?int $sportId = null, string|array|null $ageDivision = null, int $limit = 20, ?bool $paragames = null): array
     {
-        $placements = $this->basePlacements($meetId, $sportId, $ageDivision)
+        $placements = $this->basePlacements($meetId, $sportId, $ageDivision, null, $paragames)
             ->with([
                 'entry.athlete.school.district',
                 'entry.athlete.school.schoolDistrict',
@@ -313,18 +373,30 @@ class MedalTallyService
     }
 
     /**
+     * @param  string|array<int, string>|null  $ageDivision  A single
+     *                                                       `AgeDivision` value, or a list of them (matched with `whereIn`, used
+     *                                                       by the Overall category to mean Elementary + Secondary).
      * @return Builder<ResultPlacement>
      */
     private function basePlacements(
         ?int $meetId,
         ?int $sportId,
-        ?string $ageDivision,
+        string|array|null $ageDivision,
         ?int $districtId = null,
         ?bool $paragames = null,
     ): Builder {
+        $ageDivisions = array_values(array_filter(
+            is_array($ageDivision) ? $ageDivision : [$ageDivision],
+            fn ($value): bool => $value !== null && $value !== '',
+        ));
+
         return ResultPlacement::query()
             ->with('medalAward')
             ->whereIn('rank', [1, 2, 3])
+            // Kickboxing never feeds any official medal tally (Overall,
+            // Elementary, Secondary or Paragames) — enforced here at the
+            // query layer for every caller, never only hidden in the UI.
+            ->whereHas('result.event.sport', fn ($sport) => $sport->where('name', 'not like', self::KICKBOXING_NAME_LIKE))
             // Direct results contribute only their canonical award snapshots.
             ->where(fn ($placements) => $placements->whereHas('medalAward')
                 ->orWhereHas('result', fn ($result) => $result->where('result_source', '!=', 'direct')->orWhereNull('result_source')))
@@ -343,10 +415,10 @@ class MedalTallyService
                 ),
             )
             ->when(
-                $ageDivision !== null && $ageDivision !== '',
+                $ageDivisions !== [],
                 fn ($query) => $query->whereHas(
                     'result.event',
-                    fn ($event) => $event->where('age_division', $ageDivision),
+                    fn ($event) => $event->whereIn('age_division', $ageDivisions),
                 ),
             )
             // The placed athlete's own school's municipality — not the
@@ -365,22 +437,30 @@ class MedalTallyService
                         ->where('district_id', $districtId)
                         ->orWhereHas('school', fn ($school) => $school->where('district_id', $districtId)))),
             )
-            // Paragames is a real, seeded Sport-name prefix
-            // ('Paragames - Athletics', 'Paragames - Swimming' —
-            // `SportsCatalogSeeder`), not an `AgeDivision` case — this app
-            // has no separate Paragames classification field. `true` scopes
-            // to Paragames sports only; `false` explicitly excludes them
-            // (so the Elementary/Secondary tabs never double-count a
-            // Paragames medal that also happens to carry an Elementary/
-            // Secondary `age_division`); `null` (default) applies no filter
-            // at all.
+            // Paragames is identified by the canonical
+            // `sports.classification = 'paragames'` structured field, with
+            // the legacy "Paragames …" name prefix kept as a fallback —
+            // the same dual test `PortalController::sportProfile()` already
+            // uses, so a Paragames sport is caught even where classification
+            // was never backfilled. `true` scopes to Paragames sports only;
+            // `false` excludes them (so Overall / Elementary / Secondary
+            // never fold a Paragames medal in — the rule is
+            // OVERALL = ELEMENTARY + SECONDARY, Paragames stays separate);
+            // `null` (default) applies no classification filter at all,
+            // leaving every non-portal caller (internal tally, rankings,
+            // dashboards, reports) unchanged.
             ->when($paragames === true, fn ($query) => $query->whereHas(
                 'result.event.sport',
-                fn ($sport) => $sport->where('name', 'like', 'Paragames%'),
+                fn ($sport) => $sport->where(fn ($scope) => $scope
+                    ->where('classification', 'paragames')
+                    ->orWhere('name', 'like', 'Paragames%')),
             ))
             ->when($paragames === false, fn ($query) => $query->whereHas(
                 'result.event.sport',
-                fn ($sport) => $sport->where('name', 'not like', 'Paragames%'),
+                fn ($sport) => $sport->where(fn ($scope) => $scope
+                    ->where('classification', '!=', 'paragames')
+                    ->orWhereNull('classification'))
+                    ->where('name', 'not like', 'Paragames%'),
             ));
     }
 

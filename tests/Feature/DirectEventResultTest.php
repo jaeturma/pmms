@@ -165,7 +165,7 @@ test('accepting submitted direct result awards same Delegation Gold Silver Bronz
     expect($result->placements()->orderBy('rank')->pluck('mark')->all())->toBe(['56.81 seconds', '10.25 m', '98.5 points']);
     expect($result->placements()->pluck('tally_quantity')->all())->toBe([1, 1, 1]);
     $this->get("/meets/{$meet->id}/results")->assertInertia(fn ($page) => $page->has('results', 0));
-    $this->get("/meets/{$meet->id}/tally")->assertInertia(fn ($page) => $page->where('totals.total', 0));
+    $this->get("/meets/{$meet->id}/tally")->assertInertia(fn ($page) => $page->where('categories.overall.totals.total', 0));
     $this->actingAs($secretariat)->get('/results')->assertInertia(fn ($page) => $page->where('results.data.0.can_officialize', true));
     $this->get(route('results.attachments.download', [$result, $attachment]))->assertOk();
     $this->post(route('results.official', $result))->assertRedirect()->assertSessionDoesntHaveErrors();
@@ -187,7 +187,8 @@ test('accepting submitted direct result awards same Delegation Gold Silver Bronz
     expect($result->medalAwards()->count())->toBe(3)
         ->and(collect(app(MedalTallyService::class)->standings($meet->id)['districts'])->sum('total'))->toBe(3);
     $this->get("/meets/{$meet->id}/tally")->assertInertia(fn ($page) => $page
-        ->where('totals.gold', 1)->where('totals.silver', 1)->where('totals.bronze', 1)->where('totals.total', 3));
+        ->where('categories.overall.totals.gold', 1)->where('categories.overall.totals.silver', 1)
+        ->where('categories.overall.totals.bronze', 1)->where('categories.overall.totals.total', 3));
 });
 
 test('every active meet delegation is selectable independently and inactive or other meet delegations are rejected', function () {

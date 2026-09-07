@@ -10,11 +10,12 @@ type PortalAnimatedNumberProps = {
     reduced?: boolean;
 };
 
-/** Renders a tally number and briefly pulses it (colour + gentle scale)
- * the moment it *increases*. Unchanged values never animate; a decrease
- * (a correction/reopen) updates silently. Honours
- * `prefers-reduced-motion`. Pure CSS transform/colour — no reflow, so it
- * can never widen or shift the column. */
+/** Renders a tally number and pulses it — a quick scale pop settling
+ * into a ~3s colour/glow fade (`--portal-tally-motion`) — the moment it
+ * *increases*. The value updates in place; unchanged values never
+ * animate and a decrease (a correction/reopen) updates silently. Honours
+ * `prefers-reduced-motion`. Pure CSS transform / colour / shadow — no
+ * reflow, so it can never widen or shift the column. */
 export function PortalAnimatedNumber({
     value,
     className,

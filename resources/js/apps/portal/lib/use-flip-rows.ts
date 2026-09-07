@@ -1,13 +1,41 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
+import {
+    TALLY_HIGHLIGHT_MS,
+    TALLY_MOTION_MS,
+    TALLY_ROW_TRANSITION,
+} from '@/apps/portal/lib/tally-motion';
 import { usePortalReducedMotion } from '@/apps/portal/lib/use-reduced-motion';
-
-const FLASH_MS = 2400;
 
 // `useLayoutEffect` on the client (the transform must be applied before
 // paint or the row flashes at its new spot first); harmless `useEffect`
 // where there is no DOM.
 const useBeforePaint =
     typeof window === 'undefined' ? useEffect : useLayoutEffect;
+
+/** Current animated translateY of a row, mid-transition — so an
+ * interrupted slide resumes from where it visually is rather than
+ * snapping. */
+function currentTranslateY(el: HTMLElement): number {
+    const transform = getComputedStyle(el).transform;
+
+    if (!transform || transform === 'none') {
+        return 0;
+    }
+
+    const matrix = transform.match(/matrix\(([^)]+)\)/);
+
+    if (matrix) {
+        return Number.parseFloat(matrix[1].split(',')[5]) || 0;
+    }
+
+    const matrix3d = transform.match(/matrix3d\(([^)]+)\)/);
+
+    if (matrix3d) {
+        return Number.parseFloat(matrix3d[1].split(',')[13]) || 0;
+    }
+
+    return 0;
+}
 
 type Options = {
     /** key → a value (e.g. Total medals) whose increase since the last
@@ -22,10 +50,12 @@ type Options = {
  *
  * `prevTops` keeps each row's layout offset from the previous commit;
  * after every commit this reads the new offset, applies the inverted
- * difference with an instant transform, then releases it so the row
- * transitions to zero — a smooth slide to its new rank however many
- * places it moved. `offsetTop` (not `getBoundingClientRect().top`) so a
- * page scroll between polls can never corrupt the delta.
+ * difference (carrying over any in-flight translate so a mid-slide poll
+ * reconciles without a jump) as an instant transform, then releases it
+ * so the row transitions to zero over ~3s — a smooth slide to its new
+ * rank however many places it moved. `offsetTop` (not
+ * `getBoundingClientRect().top`) so a page scroll between polls can
+ * never corrupt the delta.
  *
  * A no-op — and adds no transitions — when `enabled` is false or the
  * viewer prefers reduced motion.
@@ -39,6 +69,7 @@ export function usePortalFlipRows(enabled: boolean, options: Options = {}) {
     );
     const prevTops = useRef(new Map<string, number>());
     const prevFlash = useRef(new Map<string, number>());
+    const settleTimers = useRef(new Map<string, number>());
 
     useBeforePaint(() => {
         if (!enabled || reduced) {
@@ -56,26 +87,35 @@ export function usePortalFlipRows(enabled: boolean, options: Options = {}) {
             prevTops.current.set(key, nextTop);
 
             if (previousTop !== undefined) {
-                const delta = previousTop - nextTop;
+                // Classic FLIP delta + whatever is left of an in-flight
+                // slide, so a second poll mid-animation continues smoothly
+                // from the row's current on-screen position.
+                const delta = previousTop - nextTop + currentTranslateY(el);
 
                 if (Math.abs(delta) >= 1) {
+                    const previousTimer = settleTimers.current.get(key);
+
+                    if (previousTimer !== undefined) {
+                        window.clearTimeout(previousTimer);
+                    }
+
                     el.style.transition = 'none';
                     el.style.transform = `translateY(${delta}px)`;
                     el.style.zIndex = '1';
 
                     requestAnimationFrame(() => {
-                        el.style.transition =
-                            'transform 500ms var(--portal-ease, cubic-bezier(0.22, 1, 0.36, 1))';
+                        el.style.transition = TALLY_ROW_TRANSITION;
                         el.style.transform = '';
                     });
 
-                    const clear = () => {
-                        el.style.transition = '';
-                        el.style.zIndex = '';
-                        el.removeEventListener('transitionend', clear);
-                    };
-
-                    el.addEventListener('transitionend', clear);
+                    settleTimers.current.set(
+                        key,
+                        window.setTimeout(() => {
+                            el.style.transition = '';
+                            el.style.zIndex = '';
+                            settleTimers.current.delete(key);
+                        }, TALLY_MOTION_MS + 80),
+                    );
                 }
             }
 
@@ -87,7 +127,7 @@ export function usePortalFlipRows(enabled: boolean, options: Options = {}) {
                     el.setAttribute('data-updated', 'true');
                     window.setTimeout(
                         () => el.removeAttribute('data-updated'),
-                        FLASH_MS,
+                        TALLY_HIGHLIGHT_MS + 120,
                     );
                 }
 
@@ -100,6 +140,13 @@ export function usePortalFlipRows(enabled: boolean, options: Options = {}) {
                 prevTops.current.delete(key);
                 prevFlash.current.delete(key);
                 refCallbacks.current.delete(key);
+
+                const timer = settleTimers.current.get(key);
+
+                if (timer !== undefined) {
+                    window.clearTimeout(timer);
+                    settleTimers.current.delete(key);
+                }
             }
         }
     });

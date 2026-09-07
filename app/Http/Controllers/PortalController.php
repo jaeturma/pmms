@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\AgeDivision;
 use App\Enums\MatchStatus;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetStatus;
@@ -100,7 +99,7 @@ class PortalController extends Controller
         // calling `MedalTallyService::standings()` a second time in the
         // same request would just repeat its query and grouping for no
         // reason.
-        $districtStandings = $meet === null ? null : collect($tally->standings($meet->id)['districts'])
+        $districtStandings = $meet === null ? null : collect($tally->categoryStandings($meet->id, 'overall')['districts'])
             ->sortByDesc('points')
             ->values();
 
@@ -270,47 +269,55 @@ class PortalController extends Controller
 
     /**
      * Public medal tally: standings derived from validated results only,
-     * via the same service the internal tally uses. Unpublished meets 404.
+     * via the same service the internal tally uses. Split into the four
+     * official categories — Overall / Elementary / Secondary / Paragames —
+     * with the strict rule OVERALL = ELEMENTARY + SECONDARY (Paragames is a
+     * separate tally, never folded into Overall) and Kickboxing excluded
+     * from every category (both enforced in `MedalTallyService`, not here).
+     *
+     * All four categories are sent in one payload so the tab strip switches
+     * instantly client-side with no reload; the 20s live poll refreshes
+     * `categories` + `generatedAt` only. Unpublished meets 404.
      */
     public function tally(Request $request, int $meet, MedalTallyService $tally): Response
     {
         $meet = Meet::query()->published()->findOrFail($meet);
 
-        $sportId = $request->integer('sport_id');
-        $ageDivision = AgeDivision::tryFrom((string) $request->query('age_division', ''))?->value;
+        $sportId = $request->integer('sport_id') > 0 ? $request->integer('sport_id') : null;
 
-        $standings = $tally->standings(
-            $meet->id,
-            $sportId > 0 ? $sportId : null,
-            $ageDivision,
-        );
+        $categories = collect(MedalTallyService::CATEGORIES)
+            ->mapWithKeys(function (string $category) use ($tally, $meet, $sportId): array {
+                [$ageDivision, $paragames] = MedalTallyService::categoryFilter($category);
 
-        $districts = collect($standings['districts']);
+                $standings = $tally->categoryStandings($meet->id, $category, $sportId);
+                $districts = collect($standings['districts']);
+
+                return [$category => [
+                    'districts' => $this->attachDistrictLogos($standings['districts']),
+                    'schools' => $standings['schools'],
+                    'totals' => [
+                        'gold' => (int) $districts->sum('gold'),
+                        'silver' => (int) $districts->sum('silver'),
+                        'bronze' => (int) $districts->sum('bronze'),
+                        'total' => (int) $districts->sum('total'),
+                    ],
+                    // The zero-fill in `standings()` lists every approved
+                    // municipality even before its first medal, so "is this
+                    // category empty" must look at the medal counts, not the
+                    // row count — drives the professional empty state.
+                    'hasResults' => $districts->sum('total') > 0,
+                    'bySport' => $tally->medalsBySport($meet->id, $sportId, $ageDivision, $paragames),
+                    'recentMedals' => $tally->recentMedals($meet->id, $sportId, $ageDivision, 24, $paragames),
+                    'topMedalists' => $tally->topMedalists($meet->id, $sportId, $ageDivision, 20, $paragames),
+                ]];
+            })
+            ->all();
 
         return Inertia::render('portal/tally', [
             'meet' => $this->meetSummary($meet),
-            'schools' => $standings['schools'],
-            'districts' => $this->attachDistrictLogos($standings['districts']),
-            'totals' => [
-                'gold' => (int) $districts->sum('gold'),
-                'silver' => (int) $districts->sum('silver'),
-                'bronze' => (int) $districts->sum('bronze'),
-                'total' => (int) $districts->sum('total'),
-            ],
-            'topByPoints' => $districts
-                ->sortByDesc('points')
-                ->take(5)
-                ->values()
-                ->all(),
-            'bySport' => $tally->medalsBySport($meet->id, $sportId > 0 ? $sportId : null, $ageDivision),
-            'recentMedals' => $tally->recentMedals($meet->id, $sportId > 0 ? $sportId : null, $ageDivision),
-            'topMedalists' => $tally->topMedalists($meet->id, $sportId > 0 ? $sportId : null, $ageDivision),
-            'filters' => [
-                'sport_id' => $sportId > 0 ? $sportId : null,
-                'age_division' => $ageDivision,
-            ],
+            'categories' => $categories,
+            'filters' => ['sport_id' => $sportId],
             'sportOptions' => $this->validatedSportOptions($meet),
-            'ageDivisionOptions' => $tally->ageDivisionOptions($meet->id, $sportId > 0 ? $sportId : null),
             'generatedAt' => now()->toDayDateTimeString(),
             'medalTallyOfficial' => Setting::current()->medalTallyIsOfficial(),
         ]);
@@ -331,7 +338,10 @@ class PortalController extends Controller
 
         return Inertia::render('portal/standings', [
             'meet' => $this->meetSummary($meet),
-            'districts' => $this->attachDistrictLogos($tally->standings($meet->id)['districts']),
+            // The same Overall category the tally page's board leads with —
+            // Elementary + Secondary only, no Paragames, no Kickboxing — so
+            // the two pages can never disagree.
+            'districts' => $this->attachDistrictLogos($tally->categoryStandings($meet->id, 'overall')['districts']),
             'generatedAt' => now()->toDayDateTimeString(),
         ]);
     }
@@ -1434,7 +1444,7 @@ class PortalController extends Controller
         return [
             'id' => $match->id,
             'round_label' => $match->round_label,
-                'scoreboard_mode' => $match->scoreboard_mode,
+            'scoreboard_mode' => $match->scoreboard_mode,
             'status' => $match->status->value,
             'status_label' => $match->status->label(),
             'category' => sprintf('%s %s', $match->event->gender->label(), $match->event->age_division->label()),

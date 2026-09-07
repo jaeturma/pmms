@@ -19,6 +19,67 @@ medals from the tally automatically, and re-validation restores them.
 - District standings sum their schools' medals.
 - Filters: per meet and per sport (via the placement's entry → event → sport).
 
+## Public categories: Overall / Elementary / Secondary / Paragames
+
+The public `/tally` board (`PortalController::tally()`) is split into four
+official categories, served in one payload so the tab strip switches
+instantly client-side with no reload (the 20s live poll refreshes
+`categories` + `generatedAt` only):
+
+| Category   | Filter (`MedalTallyService::categoryFilter()`) |
+|------------|------------------------------------------------|
+| Overall    | every non-Paragames sport, no age-division restriction |
+| Elementary | `event.age_division = 'elementary'`, non-Paragames |
+| Secondary  | `event.age_division = 'secondary'`, non-Paragames |
+| Paragames  | Paragames-classified sports only |
+
+The official rule is **`OVERALL = ELEMENTARY + SECONDARY`** — Paragames is a
+completely separate tally and is **never** folded into Overall. Overall is
+implemented as "all non-Paragames medals" rather than a literal
+`elementary + secondary` age filter so a medal in an unexpected division
+(`mixed`, a combined category) is never silently dropped from Overall; for
+real DdOPAA data, where only Elementary and Secondary divisions exist, the
+two are identical.
+
+`categoryStandings(?meetId, category, ?sportId)` wraps `standings()` with
+the right `[$ageDivision, $paragames]` pair. `standings()`,
+`medalsBySport()`, `recentMedals()` and `topMedalists()` all take an
+optional `?bool $paragames` (last arg) and a `string|array` `$ageDivision`
+(Overall passes no age filter; the two-division array form is still
+supported). The standalone `/rankings` page and the portal home
+"current leaders" widget both use the `overall` category, so they can
+never disagree with the board's Overall tab. The internal admin tally
+(`TallyController`) keeps its own `age_division` dropdown and is otherwise
+unchanged.
+
+### Paragames classification
+
+Paragames is the canonical structured field **`sports.classification =
+'paragames'`** (Bocce, Goalball, Para Athletics, Para Swimming —
+`SportsCatalogSeeder`), with the legacy `"Paragames …"` name prefix kept
+as a fallback (the same dual test `PortalController::sportProfile()`
+uses). It is **not** an `AgeDivision` case — the `paragames_*` age
+divisions are a separate athlete-classification dimension.
+
+## Kickboxing exclusion
+
+Kickboxing never contributes to **any** official medal tally — Overall,
+Elementary, Secondary or Paragames. Enforced once in
+`MedalTallyService::basePlacements()` (`sports.name NOT LIKE '%kickbox%'`,
+so both the standalone `"Kickboxing"` catalog row and the combined
+`"Weightlifting / Kickboxing"` production row are covered), for **every**
+caller — the internal tally, rankings, dashboards and reports included —
+not merely hidden in the frontend.
+
+## Caching
+
+There is no tally cache, by design (see "Derivation" above): the standings
+are recomputed per request from Official results only, so an accepted /
+corrected / reopened / cancelled result is reflected on the very next read
+with nothing to invalidate. The public board's 20s poll therefore always
+sees current data, and a poll that fails keeps the last good board on
+screen rather than blanking it.
+
 ## Points (WP-08-05, display-only)
 
 `MedalTallyService` also computes a **Gold=3/Silver=2/Bronze=1** weighted
@@ -147,6 +208,23 @@ WP-08-01/02/03/04 already found, see their completion reports):
 - "Export report" (the pre-existing CSV download route,
   `reports.tally.download`, not previously linked from this page) added
   next to the existing "Printable report" link.
+
+## Public board (`apps/portal/pages/portal/tally.tsx`)
+
+The public tally lives in the strictly-separated portal app. Its board is
+`PortalMedalBoard` (`apps/portal/components/medal-board.tsx`) — a fixed-
+column-width official medal board (Rank · Delegation · Gold · Silver ·
+Bronze · Total) with restrained podium treatment for ranks 1-3, medal-
+badge column headers, a ● LIVE / "Last updated" indicator, and the
+existing `usePortalFlipRows` + `PortalAnimatedNumber` ~3s live animation
+(unchanged — count pulses on increase, FLIP row movement, reduced-motion
+aware, no layout shift). The four category tabs switch client-side (each
+board remounts by `key={category}` so no FLIP offsets bleed across
+datasets and switching is instant). School standings, Top Medalist and
+Medals-by-sport sit in a collapsed "More statistics" panel below, each
+scoped to the active category. Empty categories (a Paragames tab before
+any Paragames result) render a plain message, never a broken or zero-
+filled table. The board reads well at `?kiosk=1` (TV/LED) and on mobile.
 
 ## Standalone Rankings page (Phase 11, WP-11-02)
 

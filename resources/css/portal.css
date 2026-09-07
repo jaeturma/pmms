@@ -53,6 +53,11 @@
     --portal-radius: 0.75rem;
     --portal-ease: cubic-bezier(0.16, 1, 0.3, 1);
 
+    /* Live `/tally` animation timing — mirrored in
+       `resources/js/apps/portal/lib/tally-motion.ts`. */
+    --portal-tally-motion: 3000ms;
+    --portal-tally-highlight: 2800ms;
+
     --portal-gradient-page: linear-gradient(
         160deg,
         oklch(0.92 0.035 90) 0%,
@@ -298,22 +303,30 @@
 }
 
 /* Live `/tally` page: medal-number pulse + row-movement polish. The
-   pulse is transform/colour only (no reflow) so it can never widen or
-   shift a column; row sliding is driven from JS (FLIP) — this only
-   supplies the "just updated" row accent and the reduced-motion off
-   switch. */
+   pulse is transform / colour / shadow only (no reflow) so it can never
+   widen or shift a column; row sliding is driven from JS (FLIP) — this
+   supplies the ~3s medal-number pulse, the "just updated" row accent,
+   and the reduced-motion off switch. Durations come from
+   `--portal-tally-motion` / `--portal-tally-highlight`. */
 @keyframes portal-tally-bump {
     0% {
         transform: scale(1);
         color: inherit;
+        text-shadow: 0 0 0 transparent;
     }
-    18% {
+    8% {
         transform: scale(1.28);
         color: var(--portal-accent);
+    }
+    22% {
+        transform: scale(1);
+        color: var(--portal-accent);
+        text-shadow: 0 0 10px var(--portal-accent-soft);
     }
     100% {
         transform: scale(1);
         color: inherit;
+        text-shadow: 0 0 0 transparent;
     }
 }
 
@@ -323,7 +336,8 @@
 }
 
 .pmms-portal .portal-tally-num--bump {
-    animation: portal-tally-bump 1.1s var(--portal-ease);
+    animation: portal-tally-bump var(--portal-tally-motion, 3000ms)
+        var(--portal-ease);
 }
 
 .pmms-portal .portal-tally-row {
@@ -332,12 +346,13 @@
 }
 
 .pmms-portal .portal-tally-row[data-updated='true'] {
-    animation: portal-tally-row-flash 2.4s var(--portal-ease);
+    animation: portal-tally-row-flash var(--portal-tally-highlight, 2800ms)
+        var(--portal-ease);
 }
 
 @keyframes portal-tally-row-flash {
     0%,
-    70% {
+    65% {
         background-color: var(--portal-accent-soft);
         box-shadow: inset 3px 0 0 var(--portal-accent);
     }
@@ -345,6 +360,95 @@
         background-color: transparent;
         box-shadow: inset 3px 0 0 transparent;
     }
+}
+
+/* Premium medal board — the public `/tally` centrepiece. Restrained:
+   a tint + a thin medal-coloured rail on the podium rows and a coloured
+   medallion for ranks 1-3, nothing that competes with the counts or the
+   delegation names for attention. Column widths are fixed by the table's
+   own `table-fixed` + <colgroup>, so a live count change never reflows. */
+.pmms-portal .portal-medal-board {
+    --gold: var(--portal-accent);
+    --silver: oklch(0.72 0.02 258);
+    --bronze: var(--portal-maroon);
+}
+
+.pmms-portal .portal-medal-board__podium td {
+    font-weight: 600;
+}
+
+.pmms-portal .portal-medal-board__rank-1 {
+    background: color-mix(in oklch, var(--gold) 12%, transparent);
+    box-shadow: inset 4px 0 0 var(--gold);
+}
+
+.pmms-portal .portal-medal-board__rank-2 {
+    background: color-mix(in oklch, var(--silver) 14%, transparent);
+    box-shadow: inset 4px 0 0 var(--silver);
+}
+
+.pmms-portal .portal-medal-board__rank-3 {
+    background: color-mix(in oklch, var(--bronze) 10%, transparent);
+    box-shadow: inset 4px 0 0 var(--bronze);
+}
+
+.pmms-portal .portal-medal-board__medallion {
+    color: var(--portal-ink-foreground);
+}
+
+.pmms-portal .portal-medal-board__rank-1 .portal-medal-board__medallion {
+    background: var(--gold);
+}
+
+.pmms-portal .portal-medal-board__rank-2 .portal-medal-board__medallion {
+    background: var(--silver);
+}
+
+.pmms-portal .portal-medal-board__rank-3 .portal-medal-board__medallion {
+    background: var(--bronze);
+    color: var(--portal-maroon-foreground);
+}
+
+/* Live pill "just updated" acknowledgement — a single ~3s glow, then
+   back to the steady state. Never loops. */
+.pmms-portal .portal-tally-live--updated {
+    animation: portal-tally-live-updated var(--portal-tally-motion, 3000ms)
+        var(--portal-ease);
+}
+
+@keyframes portal-tally-live-updated {
+    0% {
+        box-shadow: 0 0 0 0
+            color-mix(in oklch, var(--portal-live) 60%, transparent);
+    }
+    30% {
+        box-shadow: 0 0 0 6px
+            color-mix(in oklch, var(--portal-live) 0%, transparent);
+    }
+    100% {
+        box-shadow: 0 0 0 0 transparent;
+    }
+}
+
+.pmms-portal .portal-more-stats summary {
+    list-style: none;
+}
+
+.pmms-portal .portal-more-stats summary::-webkit-details-marker,
+.pmms-portal .portal-more-stats summary::marker {
+    display: none;
+    content: '';
+}
+
+.pmms-portal .portal-more-stats summary::before {
+    content: '▸';
+    display: inline-block;
+    margin-right: 0.5rem;
+    color: var(--portal-muted-foreground);
+}
+
+.pmms-portal .portal-more-stats[open] summary::before {
+    content: '▾';
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -359,7 +463,8 @@
     .pmms-portal .portal-hero-orbit,
     .pmms-portal .portal-hero-in,
     .pmms-portal .portal-tally-num--bump,
-    .pmms-portal .portal-tally-row[data-updated='true'] {
+    .pmms-portal .portal-tally-row[data-updated='true'],
+    .pmms-portal .portal-tally-live--updated {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
     }

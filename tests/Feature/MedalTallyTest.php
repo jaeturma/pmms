@@ -387,6 +387,63 @@ test('medals by sport groups placements by their event\'s sport', function () {
             ->where('bySport.1.total', 1));
 });
 
+test('Kickboxing is excluded from standings for every caller', function () {
+    $kickboxing = Sport::factory()->create(['name' => 'Kickboxing']);
+    $combined = Sport::factory()->create(['name' => 'Weightlifting / Kickboxing']);
+
+    $kickResult = EventResult::factory()->validated()->create([
+        'event_id' => Event::factory()->create(['sport_id' => $kickboxing->id])->id,
+    ]);
+    placeSchool($kickResult, School::factory()->create(), 1);
+
+    $combinedResult = EventResult::factory()->validated()->create([
+        'meet_id' => $kickResult->meet_id,
+        'event_id' => Event::factory()->create(['sport_id' => $combined->id])->id,
+    ]);
+    placeSchool($combinedResult, School::factory()->create(), 1);
+
+    $clean = EventResult::factory()->validated()->create(['meet_id' => $kickResult->meet_id]);
+    placeSchool($clean, School::factory()->create(), 1);
+
+    $standings = app(MedalTallyService::class)->standings($kickResult->meet_id);
+
+    expect(collect($standings['districts'])->sum('gold'))->toBe(1)
+        ->and(collect($standings['schools']))->toHaveCount(1);
+});
+
+test('categoryStandings splits Overall, Elementary, Secondary and Paragames by the canonical fields', function () {
+    $meet = Meet::current();
+    $tally = app(MedalTallyService::class);
+
+    $elem = EventResult::factory()->validated()->create([
+        'meet_id' => $meet->id,
+        'event_id' => Event::factory()->create(['age_division' => AgeDivision::Elementary])->id,
+    ]);
+    placeSchool($elem, School::factory()->create(), 1);
+
+    $sec = EventResult::factory()->validated()->create([
+        'meet_id' => $meet->id,
+        'event_id' => Event::factory()->create(['age_division' => AgeDivision::Secondary])->id,
+    ]);
+    placeSchool($sec, School::factory()->create(), 1);
+
+    $para = EventResult::factory()->validated()->create([
+        'meet_id' => $meet->id,
+        'event_id' => Event::factory()->create([
+            'age_division' => AgeDivision::Secondary,
+            'sport_id' => Sport::factory()->create(['name' => 'Para Swimming', 'classification' => 'paragames'])->id,
+        ])->id,
+    ]);
+    placeSchool($para, School::factory()->create(), 1);
+
+    $goldFor = fn (string $category) => collect($tally->categoryStandings($meet->id, $category)['districts'])->sum('gold');
+
+    expect($goldFor('elementary'))->toBe(1)
+        ->and($goldFor('secondary'))->toBe(1)
+        ->and($goldFor('paragames'))->toBe(1)
+        ->and($goldFor('overall'))->toBe(2);
+});
+
 test('recent medals only count placements validated within the last 24 hours', function () {
     $recent = EventResult::factory()->validated()->create();
     placeSchool($recent, School::factory()->create(), 1);
