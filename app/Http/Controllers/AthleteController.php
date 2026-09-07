@@ -2,12 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AgeDivision;
 use App\Enums\EligibilityDocumentType;
 use App\Enums\EligibilityStatus;
+use App\Enums\MeetSportAssignmentRole;
 use App\Enums\Permission;
 use App\Enums\ResultStatus;
 use App\Enums\UserRole;
-use App\Enums\MeetSportAssignmentRole;
 use App\Http\Controllers\Concerns\BuildsSchoolOptionsByDelegation;
 use App\Http\Controllers\Concerns\SearchesAndPaginates;
 use App\Http\Requests\AthleteRequest;
@@ -27,11 +28,11 @@ use App\Models\SchoolDistrict;
 use App\Models\Sport;
 use App\Models\SportRosterMember;
 use App\Models\User;
-use App\Services\AthletePhotoService;
+use App\Services\AthleteDeletionService;
 use App\Services\AthleteEligibilityService;
 use App\Services\AthleteMedicalClearanceService;
+use App\Services\AthletePhotoService;
 use App\Services\AthleteRegistrationScope;
-use App\Services\AthleteDeletionService;
 use App\Services\AuditLogger;
 use App\Services\CompetitionAccessService;
 use App\Services\FileUploadService;
@@ -279,6 +280,11 @@ class AthleteController extends Controller
                             'label' => $event->sport->name.' — '.$event->name,
                             'category' => $event->sportCategory?->display_name ?? $event->age_division->label(),
                             'gender' => $event->gender->label(),
+                            // Raw values so the registration form can narrow
+                            // the list to the athlete's own sex + level as
+                            // those fields are filled in.
+                            'gender_value' => $event->gender->value,
+                            'age_division' => $event->age_division->value,
                             'grade_level' => match ($event->age_division->value) {
                                 'elementary' => __('Grades 1–6'),
                                 'secondary' => __('Grades 7–12'),
@@ -316,13 +322,28 @@ class AthleteController extends Controller
         $allowedEventIds = $isTournamentIct
             ? app(CompetitionAccessService::class)->eventIds($request->user(), $athlete->delegation->meet_id)
             : ($isCoach ? $request->user()->approvedCoachEventIdsForDelegation($athlete->delegation) : null);
+        // Only events the athlete can actually enter: their own gender
+        // (plus Mixed events) and their own age division (plus Mixed /
+        // Elementary&Secondary combined events). An event the athlete is
+        // *already* entered in stays in the list even if it no longer
+        // matches — so it can still be seen and removed.
+        $assignedEventIds = $athlete->entries->pluck('event_id')->map(fn ($id) => (int) $id)->all();
+        $athleteDivision = $athlete->ageDivision();
+        $athleteSex = $athlete->sex;
+        $eventFitsAthlete = fn (Event $event): bool => in_array($event->id, $assignedEventIds, true)
+            || ($event->gender->accepts($athleteSex)
+                && ($event->age_division === $athleteDivision
+                    || in_array($event->age_division, [AgeDivision::Mixed, AgeDivision::ElementaryAndSecondary], true)));
+
         $meetSports = MeetSport::query()->where('meet_id', $athlete->delegation->meet_id)
             ->when($allowedEventIds !== null, fn ($query) => $query->whereIn('sport_id', Event::query()->whereKey($allowedEventIds)->select('sport_id')))
             ->with('sport:id,name')->orderBy('display_order')->get();
         $events = $athlete->delegation->meet->events()
             ->when($allowedEventIds !== null, fn ($query) => $query->whereIn('events.id', $allowedEventIds))
             ->with(['sport:id,name', 'sportCategory:id,display_name'])
-            ->orderBy('display_order')->orderBy('name')->get();
+            ->orderBy('display_order')->orderBy('name')->get()
+            ->filter($eventFitsAthlete)
+            ->values();
         $allowedSportIds = $allowedEventIds === null
             ? collect()
             : Event::query()->whereKey($allowedEventIds)->pluck('sport_id')->unique();
@@ -742,8 +763,25 @@ class AthleteController extends Controller
                 : $athlete->sportRosterMemberships()->pluck('meet_sport_id'))
                 ->map(fn ($id) => (int) $id)->unique();
 
-            if ($canReassignCoach && ($request->has('coach_ids') || $request->filled('registered_by'))) {
-                $coachIds = collect($request->input('coach_ids', [$request->integer('registered_by')]))->filter()->map(fn ($id) => (int) $id)->unique();
+            // Only re-validate the coach assignment when it actually
+            // changed. The edit form always echoes the current `coach_ids`,
+            // so without this an unrelated edit (a photo, an event, a grade
+            // level) would re-run the "every selected Coach must be
+            // approved for this athlete's delegation, sports, and events"
+            // check against the athlete's full — possibly multi-coach,
+            // possibly ICT-assigned — event set and wrongly reject it.
+            $submittedCoachIds = collect($request->input('coach_ids', [$request->integer('registered_by')]))
+                ->filter()->map(fn ($id) => (int) $id)->unique()->sort()->values();
+            $currentCoachIds = $athlete->coaches()->pluck('users.id')->map(fn ($id) => (int) $id);
+            if ($currentCoachIds->isEmpty() && $athlete->registered_by !== null && $athlete->registrar?->hasRole(UserRole::Coach)) {
+                $currentCoachIds = collect([(int) $athlete->registered_by]);
+            }
+            $currentCoachIds = $currentCoachIds->unique()->sort()->values();
+            $coachAssignmentChanged = ($request->has('coach_ids') || $request->filled('registered_by'))
+                && $submittedCoachIds->all() !== $currentCoachIds->all();
+
+            if ($canReassignCoach && $coachAssignmentChanged) {
+                $coachIds = $submittedCoachIds;
                 $coaches = User::query()->where('role', UserRole::Coach->value)->whereKey($coachIds)->get();
                 if ($coaches->count() !== $coachIds->count()) {
                     throw ValidationException::withMessages(['coach_ids' => __('Select one or two valid Coaches.')]);

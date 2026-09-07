@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests;
 
-use App\Enums\Sex;
 use App\Enums\AgeDivision;
+use App\Enums\Sex;
 use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\Delegation;
@@ -248,7 +248,12 @@ class AthleteRequest extends FormRequest
 
             $grade = $this->integer('grade_level');
             $selectedDivision = AgeDivision::tryFrom((string) $this->input('age_division'));
-            if ($event !== null && $selectedDivision !== null && ! $event->age_division->accepts($selectedDivision)) {
+            // A Mixed / Elementary&Secondary event is open to any division —
+            // same rule the athlete event picker uses.
+            $divisionMatches = $selectedDivision !== null && $event !== null
+                && ($event->age_division === $selectedDivision
+                    || in_array($event->age_division, [AgeDivision::Mixed, AgeDivision::ElementaryAndSecondary], true));
+            if ($event !== null && $selectedDivision !== null && ! $divisionMatches) {
                 $validator->errors()->add('event_id', __('The athlete\'s grade level does not match this event\'s age division.'));
             }
 

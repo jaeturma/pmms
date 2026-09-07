@@ -139,8 +139,40 @@ type CoachEventOption = {
     label: string;
     category: string;
     gender: string;
+    gender_value: 'boys' | 'girls' | 'mixed';
+    age_division: string;
     grade_level: string;
 };
+
+/** An event is offered to an athlete only for their own sex (plus Mixed)
+ * and their own age division (plus Mixed / Elementary&Secondary). Before
+ * sex or grade is entered, nothing is filtered out. */
+function eventMatchesAthlete(
+    event: { gender_value: string; age_division: string },
+    sex: string,
+    gradeLevel: string,
+): boolean {
+    const genderOk =
+        event.gender_value === 'mixed' ||
+        (sex === 'male' && event.gender_value === 'boys') ||
+        (sex === 'female' && event.gender_value === 'girls') ||
+        sex === '';
+
+    const grade = Number(gradeLevel);
+    const division =
+        grade >= 1 && grade <= 6
+            ? 'elementary'
+            : grade >= 7
+              ? 'secondary'
+              : null;
+    const divisionOk =
+        division === null ||
+        event.age_division === division ||
+        event.age_division === 'mixed' ||
+        event.age_division === 'elementary_secondary';
+
+    return genderOk && divisionOk;
+}
 
 type Props = {
     athletes: Paginated<AthleteRow>;
@@ -369,23 +401,34 @@ function AthleteFormDialog({
                                                 coachEventOptionsByDelegation[
                                                     Number(data.delegation_id)
                                                 ] ?? []
-                                            ).map((event) => (
-                                                <SelectItem
-                                                    key={event.id}
-                                                    value={String(event.id)}
-                                                >
-                                                    <span className="flex flex-col py-1">
-                                                        <span className="font-medium">
-                                                            {event.label}
+                                            )
+                                                .filter((event) =>
+                                                    eventMatchesAthlete(
+                                                        event,
+                                                        data.sex,
+                                                        data.grade_level,
+                                                    ),
+                                                )
+                                                .map((event) => (
+                                                    <SelectItem
+                                                        key={event.id}
+                                                        value={String(event.id)}
+                                                    >
+                                                        <span className="flex flex-col py-1">
+                                                            <span className="font-medium">
+                                                                {event.label}
+                                                            </span>
+                                                            <span className="text-xs text-muted-foreground">
+                                                                {event.category}{' '}
+                                                                · {event.gender}{' '}
+                                                                ·{' '}
+                                                                {
+                                                                    event.grade_level
+                                                                }
+                                                            </span>
                                                         </span>
-                                                        <span className="text-xs text-muted-foreground">
-                                                            {event.category} ·{' '}
-                                                            {event.gender} ·{' '}
-                                                            {event.grade_level}
-                                                        </span>
-                                                    </span>
-                                                </SelectItem>
-                                            ))}
+                                                    </SelectItem>
+                                                ))}
                                         </SelectContent>
                                     </Select>
                                     <InputError message={errors.event_id} />
@@ -473,14 +516,21 @@ function AthleteFormDialog({
                                         <Select
                                             value={data.school_id || 'none'}
                                             onValueChange={(value) =>
-                                                setData('school_id', value === 'none' ? '' : value)
+                                                setData(
+                                                    'school_id',
+                                                    value === 'none'
+                                                        ? ''
+                                                        : value,
+                                                )
                                             }
                                         >
                                             <SelectTrigger id="athlete-school">
                                                 <SelectValue placeholder="Select a school" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="none">Not provided</SelectItem>
+                                                <SelectItem value="none">
+                                                    Not provided
+                                                </SelectItem>
                                                 {allSchoolOptions.map(
                                                     (school) => (
                                                         <SelectItem
@@ -598,12 +648,18 @@ function AthleteFormDialog({
                                     [
                                         ['athlete_history', 'Athlete Record'],
                                         ['form_10', 'School Form 10 - Page 1'],
-                                        ['form_10_page_2', 'School Form 10 - Page 2'],
+                                        [
+                                            'form_10_page_2',
+                                            'School Form 10 - Page 2',
+                                        ],
                                         [
                                             'birth_certificate',
                                             'PSA / Birth Certificate - Page 1',
                                         ],
-                                        ['birth_certificate_page_2', 'PSA / Birth Certificate - Page 2'],
+                                        [
+                                            'birth_certificate_page_2',
+                                            'PSA / Birth Certificate - Page 2',
+                                        ],
                                         ['parental_consent', 'Parents Consent'],
                                         [
                                             'medical_certificate',
@@ -933,9 +989,7 @@ function EditAthleteDialog({
                         <DivisionSelect
                             id="edit-athlete-division"
                             value={data.age_division}
-                            onChange={(value) =>
-                                setData('age_division', value)
-                            }
+                            onChange={(value) => setData('age_division', value)}
                         />
                         <InputError message={errors.age_division} />
                     </div>
@@ -968,12 +1022,18 @@ function EditAthleteDialog({
                                 [
                                     ['athlete_history', 'Athlete Record'],
                                     ['form_10', 'School Form 10 - Page 1'],
-                                    ['form_10_page_2', 'School Form 10 - Page 2'],
+                                    [
+                                        'form_10_page_2',
+                                        'School Form 10 - Page 2',
+                                    ],
                                     [
                                         'birth_certificate',
                                         'PSA / Birth Certificate - Page 1',
                                     ],
-                                    ['birth_certificate_page_2', 'PSA / Birth Certificate - Page 2'],
+                                    [
+                                        'birth_certificate_page_2',
+                                        'PSA / Birth Certificate - Page 2',
+                                    ],
                                     ['parental_consent', 'Parents Consent'],
                                     [
                                         'medical_certificate',
@@ -1088,7 +1148,9 @@ export default function Athletes({
             <Head title="Athletes" />
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
-                    title={filters.unassigned ? 'Non-Listed Athletes' : 'Athletes'}
+                    title={
+                        filters.unassigned ? 'Non-Listed Athletes' : 'Athletes'
+                    }
                     description={
                         filters.unassigned
                             ? 'Registered athletes that need a Sport and Coach assignment.'
@@ -1115,9 +1177,7 @@ export default function Athletes({
                             )}
                             {!filters.unassigned &&
                                 delegationOptions.length > 0 && (
-                                    <Button
-                                        onClick={() => setCreateOpen(true)}
-                                    >
+                                    <Button onClick={() => setCreateOpen(true)}>
                                         <Plus />
                                         Register athlete
                                     </Button>
@@ -1372,7 +1432,10 @@ export default function Athletes({
                                                 <div>{athlete.delegation}</div>
                                                 {athlete.registration_concern && (
                                                     <div className="mt-1 max-w-xs text-xs text-amber-700 dark:text-amber-400">
-                                                        Remark: {athlete.registration_concern}
+                                                        Remark:{' '}
+                                                        {
+                                                            athlete.registration_concern
+                                                        }
                                                     </div>
                                                 )}
                                             </TableCell>
@@ -1472,8 +1535,12 @@ export default function Athletes({
                                                     {athlete.can_cancel_deletion && (
                                                         <ConfirmDialog
                                                             trigger={
-                                                                <Button variant="outline" size="sm">
-                                                                    Cancel deletion
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                >
+                                                                    Cancel
+                                                                    deletion
                                                                 </Button>
                                                             }
                                                             title="Cancel athlete deletion request?"
@@ -1483,33 +1550,42 @@ export default function Athletes({
                                                                 router.patch(
                                                                     `/athletes/${athlete.id}/deletion-request/cancel`,
                                                                     {},
-                                                                    { preserveScroll: true },
-                                                                )
-                                                            }
-                                                        />
-                                                    )}
-                                                    {athlete.deleted && canViewDeleted && (
-                                                        <ConfirmDialog
-                                                            trigger={
-                                                                <Button variant="destructive" size="sm">
-                                                                    Delete permanently
-                                                                </Button>
-                                                            }
-                                                            title="Permanently delete athlete?"
-                                                            description="This cannot be undone. The athlete's LRN will become available so the athlete can be encoded again."
-                                                            confirmLabel="Delete permanently"
-                                                            destructive
-                                                            onConfirm={() =>
-                                                                router.delete(
-                                                                    `/athletes/${athlete.id}/permanent`,
                                                                     {
-                                                                        data: { confirm: true },
                                                                         preserveScroll: true,
                                                                     },
                                                                 )
                                                             }
                                                         />
                                                     )}
+                                                    {athlete.deleted &&
+                                                        canViewDeleted && (
+                                                            <ConfirmDialog
+                                                                trigger={
+                                                                    <Button
+                                                                        variant="destructive"
+                                                                        size="sm"
+                                                                    >
+                                                                        Delete
+                                                                        permanently
+                                                                    </Button>
+                                                                }
+                                                                title="Permanently delete athlete?"
+                                                                description="This cannot be undone. The athlete's LRN will become available so the athlete can be encoded again."
+                                                                confirmLabel="Delete permanently"
+                                                                destructive
+                                                                onConfirm={() =>
+                                                                    router.delete(
+                                                                        `/athletes/${athlete.id}/permanent`,
+                                                                        {
+                                                                            data: {
+                                                                                confirm: true,
+                                                                            },
+                                                                            preserveScroll: true,
+                                                                        },
+                                                                    )
+                                                                }
+                                                            />
+                                                        )}
                                                 </div>
                                             </TableCell>
                                         </TableRow>
