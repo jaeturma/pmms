@@ -18,6 +18,7 @@ use App\Models\ManagementTeamMember;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
+use App\Models\Sport;
 use App\Models\TeamEntry;
 use App\Models\User;
 use App\Services\MedalAwardService;
@@ -677,4 +678,59 @@ test('rule 6: every Medal Result row needs a tally count of at least 1, with a r
     ])->assertSessionDoesntHaveErrors(['medal_placements.0.count', 'medal_placements.2.count']);
 
     expect(EventResult::query()->count())->toBe(0);
+});
+
+test('an event enabled only through meet_sports (no meet_events row) is submittable and appears in the picker', function () {
+    Storage::fake('local');
+    config()->set('uploads.disk', 'local');
+
+    // Production shape: the sport is enabled meet-wide via meet_sports,
+    // but there is no meet_events pivot row for the event.
+    $meet = Meet::factory()->active()->published()->create();
+    $sport = Sport::factory()->create();
+    $event = Event::factory()->create(['sport_id' => $sport->id, 'is_team_event' => true, 'active' => true]);
+    EventMedalConfig::query()->create([
+        'event_id' => $event->id, 'awards_medals' => true, 'award_type' => 'TEAM',
+        'physical_quantity_mode' => 'FIXED', 'gold_physical_quantity' => 1,
+        'silver_physical_quantity' => 1, 'bronze_physical_quantity' => 1,
+        'gold_tally_quantity' => 1, 'silver_tally_quantity' => 1, 'bronze_tally_quantity' => 1,
+    ]);
+    MeetSport::factory()->create(['meet_id' => $meet->id, 'sport_id' => $sport->id, 'active' => true]);
+    expect($meet->events()->whereKey($event->id)->exists())->toBeFalse();
+
+    $team = Delegation::factory()->approved()->create(['meet_id' => $meet->id]);
+    $ict = User::factory()->create(['role' => UserRole::TournamentICT]);
+    MeetSportAssignment::factory()->create([
+        'meet_sport_id' => MeetSport::query()->where('meet_id', $meet->id)->where('sport_id', $sport->id)->value('id'),
+        'user_id' => $ict->id,
+        'role' => MeetSportAssignmentRole::TournamentICT, 'status' => MeetSportAssignmentStatus::Active,
+    ]);
+    $team2 = ManagementTeam::factory()->create([
+        'meet_id' => $meet->id, 'team_type' => ManagementTeamType::MeetManagement,
+        'source_code' => 'EVENT_SECRETARIAT', 'status' => ManagementTeamStatus::Active,
+    ]);
+    $secretariat = User::factory()->create();
+    ManagementTeamMember::factory()->create([
+        'management_team_id' => $team2->id, 'user_id' => $secretariat->id,
+        'status' => ManagementTeamMemberStatus::Active,
+    ]);
+
+    // The event shows in the Submit Result picker for the assigned ICT.
+    $this->actingAs($ict)->get('/results/submit')->assertInertia(fn ($page) => $page
+        ->where('eventOptionsByMeet', fn ($options) => collect($options)
+            ->contains(fn ($o) => $o['id'] === $event->id && $o['meet_id'] === $meet->id)));
+
+    // And a Direct Result submits fine — binding the event to meet_events.
+    $this->actingAs($ict)->post('/results/direct', [
+        'event_id' => $event->id, 'result_type' => 'medal',
+        'medal_placements' => [['medal_type' => 'gold', 'delegation_id' => $team->id, 'count' => 1]],
+        'evidence' => UploadedFile::fake()->image('sport-only.png'),
+    ])->assertRedirect('/results')->assertSessionDoesntHaveErrors();
+
+    expect($meet->events()->whereKey($event->id)->exists())->toBeTrue();
+
+    $result = EventResult::query()->sole();
+    $this->actingAs($secretariat)->post(route('results.official', $result))->assertSessionDoesntHaveErrors();
+    expect($result->fresh()->status)->toBe(ResultStatus::Official)
+        ->and($result->medalAwards()->count())->toBe(1);
 });

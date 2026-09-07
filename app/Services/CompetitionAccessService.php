@@ -199,8 +199,14 @@ class CompetitionAccessService
                 && ! ($user->role === UserRole::TournamentManager && $user->managedSport !== null)) {
                 $scope->whereRaw('1 = 0');
             }
-        })->when($meetId !== null, fn ($query) => $query
-            ->whereHas('meets', fn ($meets) => $meets->whereKey($meetId)));
+        })->when($meetId !== null, fn ($query) => $query->where(fn ($scope) => $scope
+            // An event belongs to a meet via the explicit `meet_events`
+            // pivot OR because its whole sport is enabled through
+            // `meet_sports` (the production import creates no `meet_events`
+            // rows). Both count as "in the meet" for scope purposes.
+            ->whereHas('meets', fn ($meets) => $meets->whereKey($meetId))
+            ->orWhereHas('sport.meetSports', fn ($meetSports) => $meetSports
+                ->where('meet_id', $meetId)->where('active', true))));
 
         return $events->distinct()->pluck('events.id');
     }

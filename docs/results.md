@@ -13,6 +13,21 @@ results alone.
   `EntryController::destroy` also refuses entries with placements), `rank`,
   optional `mark` (score/time text, ≤60), `is_tie`. Unique per (result, entry).
 
+## Which events are submittable
+
+An event belongs to a meet **either** through the explicit `meet_events`
+pivot (older meet setup, and a side effect of coach-assignment approval)
+**or** because its whole sport is enabled through `meet_sports` — the
+production import (`pmms_provincial_meet_2026_migration.sql`) creates
+**no `meet_events` rows at all** and enables everything sport-wide. The
+Submit Result page (`ResultController::index()` `eventOptionsByMeet`),
+the encode guard (`assertEncodable()`), the Direct Result submission
+(`ResultWorkflowController::storeDirect()`) and tournament-scoped access
+(`CompetitionAccessService::eventIds()`) all honour both sources —
+matching the schedule picker, which already did. Submitting or encoding a
+result for such an event binds it to `meet_events` so every later
+acceptance check (`$event->meets()->whereKey(...)`) sees it.
+
 ## Flow
 
 1. **Encode** (`result.encoded`) — Admin/Organizer for any event, or (Phase 16) a

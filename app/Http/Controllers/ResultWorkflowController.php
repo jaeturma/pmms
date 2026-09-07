@@ -173,11 +173,20 @@ class ResultWorkflowController extends Controller
         // Everything below is normal, user-fixable validation — surfaced as
         // Inertia form errors so the operator stays on the Result form with
         // their data intact, never the generic 422 page.
-        if (! $event->meets()->whereKey($meet->id)->exists()) {
+        //
+        // An event belongs to the meet either via the explicit `meet_events`
+        // pivot or because its whole sport is enabled through `meet_sports`
+        // (the production import populates no `meet_events` rows). Submitting
+        // a result for such an event binds it to `meet_events` so every
+        // later acceptance check (`$event->meets()->whereKey(...)`) sees it.
+        $eventInMeet = $event->meets()->whereKey($meet->id)->exists()
+            || $meet->meetSports()->where('active', true)->where('sport_id', $event->sport_id)->exists();
+        if (! $eventInMeet) {
             throw ValidationException::withMessages([
                 'event_id' => 'The selected Sports Event is not part of the current Meet.',
             ]);
         }
+        $meet->events()->syncWithoutDetaching([$event->id]);
 
         if ($result !== null) {
             // A tampered/foreign result id is not a normal validation case.

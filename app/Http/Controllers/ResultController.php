@@ -102,6 +102,12 @@ class ResultController extends Controller
             || $access->hasAssignmentRole($user, [MeetSportAssignmentRole::TournamentICT->value], Meet::current()->id);
 
         $meetId = Meet::current()->id;
+        // A meet enables events one of two ways: the explicit `meet_events`
+        // pivot (older setup / coach-assignment side effect), or enabling
+        // the whole sport via `meet_sports` (the production import — which
+        // populates no `meet_events` rows at all). The Submit Result event
+        // picker must honour both, exactly like the schedule picker does.
+        $activeMeetSportIds = Meet::current()->meetSports()->where('active', true)->pluck('sport_id');
         $eventId = $request->integer('event_id');
         $sportId = $request->integer('sport_id');
         $status = $request->string('status')->toString();
@@ -458,18 +464,29 @@ class ResultController extends Controller
             'meetOptions' => Meet::query()->orderBy('name')->get(['id', 'name'])
                 ->map(fn (Meet $meet): array => ['id' => $meet->id, 'label' => $meet->name]),
             'eventOptionsByMeet' => Event::query()->real()
-                ->whereHas('meets')
+                ->where(fn ($query) => $query
+                    ->whereHas('meets')
+                    ->when($activeMeetSportIds->isNotEmpty(), fn ($events) => $events->orWhereIn('sport_id', $activeMeetSportIds)))
                 ->when($isTournamentScoped, fn ($events) => $events->whereKey($assignedEventIds))
                 ->with(['sport:id,name', 'meets:id', 'medalConfig'])
                 ->get(['id', 'sport_id', 'name', 'gender', 'age_division', 'is_team_event', 'is_medal_event'])
-                ->flatMap(fn (Event $event) => $event->meets->map(fn (Meet $meet): array => [
-                    'id' => $event->id,
-                    'sport_id' => $event->sport_id,
-                    'meet_id' => $meet->id,
-                    'is_team_event' => $event->is_team_event,
-                    'default_result_type' => $event->resolvedMedalConfig()->awards_medals ? 'medal' : 'versus',
-                    'label' => $this->eventLabel($event),
-                ]))
+                ->flatMap(function (Event $event) use ($meetId, $activeMeetSportIds): array {
+                    // Meets the event is explicitly attached to, plus the
+                    // current meet whenever its sport is enabled meet-wide.
+                    $meetIds = $event->meets->pluck('id');
+                    if ($activeMeetSportIds->contains($event->sport_id)) {
+                        $meetIds = $meetIds->push($meetId);
+                    }
+
+                    return $meetIds->unique()->map(fn (int $meet): array => [
+                        'id' => $event->id,
+                        'sport_id' => $event->sport_id,
+                        'meet_id' => $meet,
+                        'is_team_event' => $event->is_team_event,
+                        'default_result_type' => $event->resolvedMedalConfig()->awards_medals ? 'medal' : 'versus',
+                        'label' => $this->eventLabel($event),
+                    ])->all();
+                })
                 ->values(),
             'scheduleOptions' => EventSchedule::query()->real()
                 ->when($isTournamentScoped, fn ($schedules) => $schedules->whereIn('event_id', $assignedEventIds))
@@ -891,11 +908,18 @@ class ResultController extends Controller
             ]);
         }
 
-        if (! $meet->events()->whereKey($eventId)->exists()) {
+        // `meet_events` pivot OR the whole sport enabled via `meet_sports`
+        // (the production import populates no `meet_events` rows). Encoding
+        // binds the event to the meet so later checks see it.
+        $event = Event::query()->findOrFail($eventId);
+        $inMeet = $meet->events()->whereKey($eventId)->exists()
+            || $meet->meetSports()->where('active', true)->where('sport_id', $event->sport_id)->exists();
+        if (! $inMeet) {
             throw ValidationException::withMessages([
                 'event_id' => __('That event is not part of the selected meet.'),
             ]);
         }
+        $meet->events()->syncWithoutDetaching([$eventId]);
     }
 
     /**
