@@ -186,7 +186,7 @@ export default function PortalTally({
     return (
         <>
             <Head title={`Official Medal Tally — ${meet.name}`} />
-            <div className="portal-tally-page flex flex-col gap-6">
+            <div className="flex flex-col gap-6">
                 <PortalHero
                     eyebrow={meet.name}
                     title="Official Medal Tally"

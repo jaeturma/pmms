@@ -362,31 +362,6 @@
     }
 }
 
-/* Mobile only: a narrower/thinner type presentation so the medal tally
-   fits cleanly on a phone. Arial Narrow where the device has it, then a
-   condensed sans fallback, then `font-stretch` for variable faces — no
-   bundled font files. Desktop/tablet keep the standard portal font. The
-   full-bleed hero keeps the normal face so the page title still reads as
-   a headline. */
-@media (max-width: 639.98px) {
-    .pmms-portal .portal-tally-page {
-        font-family:
-            'Arial Narrow', 'Roboto Condensed', 'Helvetica Neue Condensed',
-            'Liberation Sans Narrow', 'Franklin Gothic Medium Cond',
-            ui-sans-serif, system-ui, sans-serif;
-        font-stretch: 87.5%;
-    }
-
-    .pmms-portal .portal-tally-page .portal-hero-gradient {
-        font-family:
-            ui-sans-serif,
-            system-ui,
-            -apple-system,
-            sans-serif;
-        font-stretch: normal;
-    }
-}
-
 /* Premium medal board — the public `/tally` centrepiece. Restrained:
    a tint + a thin medal-coloured rail on the podium rows and a coloured
    medallion for ranks 1-3, nothing that competes with the counts or the

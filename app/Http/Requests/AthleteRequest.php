@@ -227,15 +227,18 @@ class AthleteRequest extends FormRequest
             if ($this->user()?->role === UserRole::Coach && $event === null && $sex !== null) {
                 $level = $this->integer('grade_level') <= 6 ? 'elementary' : 'secondary';
                 $gender = $sex === Sex::Male ? ['boys', 'mixed'] : ['girls', 'mixed'];
+                // A Mixed / Elementary&Secondary event is open to this
+                // athlete too — same rule the event picker uses.
+                $divisions = [$level, AgeDivision::Mixed->value, AgeDivision::ElementaryAndSecondary->value];
                 $matchingIndividualEvents = Event::query()
                     ->whereIn('id', $this->user()->approvedCoachEventIdsForDelegation($delegation))
-                    ->whereIn('age_division', [$level, AgeDivision::ElementaryAndSecondary->value])
+                    ->whereIn('age_division', $divisions)
                     ->whereIn('gender', $gender)
                     ->where('is_team_event', false)
                     ->count();
                 $hasMatchingScope = $matchingIndividualEvents > 0 || Event::query()
                     ->whereIn('id', $this->user()->approvedCoachEventIdsForDelegation($delegation))
-                    ->whereIn('age_division', [$level, AgeDivision::ElementaryAndSecondary->value])
+                    ->whereIn('age_division', $divisions)
                     ->whereIn('gender', $gender)
                     ->exists();
                 if (! $hasMatchingScope) {

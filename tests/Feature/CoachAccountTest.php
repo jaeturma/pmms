@@ -564,6 +564,24 @@ test('coach athlete registration synchronizes the submitted school district and 
         ->and($school->fresh()->school_district_id)->toBe($schoolDistrict->id);
 });
 
+test('a coach whose only approved event is a Mixed-division event can still register an athlete', function () {
+    $delegation = Delegation::factory()->create(['status' => DelegationStatus::Draft]);
+    $coach = coachFor($delegation);
+    // Move the coach's single approved event to a Mixed division/gender.
+    $coach->coachAssignmentRequests()->firstOrFail()->event
+        ->forceFill(['gender' => 'mixed', 'age_division' => 'mixed'])->save();
+
+    $this->actingAs($coach)->post('/athletes', [
+        ...requiredCoachAthleteFields(),
+        'delegation_id' => $delegation->id,
+        'school_id' => schoolForDelegation($delegation)->id,
+        'first_name' => 'Mixed', 'last_name' => 'Scope', 'sex' => 'female',
+        'birthdate' => now()->subYears(15)->toDateString(), 'lrn' => '321654000111', 'grade_level' => 9,
+    ])->assertSessionHasNoErrors();
+
+    expect(Athlete::query()->where('lrn', '321654000111')->exists())->toBeTrue();
+});
+
 test('a sole team event assignment requires manual roster entry', function () {
     $delegation = Delegation::factory()->create(['status' => DelegationStatus::Draft]);
     $coach = coachFor($delegation);

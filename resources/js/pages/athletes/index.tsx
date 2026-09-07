@@ -284,6 +284,20 @@ function AthleteFormDialog({
     const allSchoolOptions = data.delegation_id
         ? (schoolOptionsByDelegation[Number(data.delegation_id)] ?? [])
         : [];
+
+    // Coach's approved events for the chosen delegation, narrowed to the
+    // athlete's own sex + level as those fields are filled in. If the
+    // narrowing would hide *every* option (e.g. the athlete's sex was
+    // entered before being corrected), fall back to the full approved
+    // list so the coach can always pick a real assignment — the server
+    // still validates the final choice.
+    const coachEvents =
+        coachEventOptionsByDelegation[Number(data.delegation_id)] ?? [];
+    const matchingCoachEvents = coachEvents.filter((event) =>
+        eventMatchesAthlete(event, data.sex, data.grade_level),
+    );
+    const eventOptions =
+        matchingCoachEvents.length > 0 ? matchingCoachEvents : coachEvents;
     const availableSchoolDistricts = schoolDistricts.filter(
         (district) => district.district_id === Number(data.district_id),
     );
@@ -400,38 +414,23 @@ function AthleteFormDialog({
                                             <SelectValue placeholder="Select from your approved sports" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {(
-                                                coachEventOptionsByDelegation[
-                                                    Number(data.delegation_id)
-                                                ] ?? []
-                                            )
-                                                .filter((event) =>
-                                                    eventMatchesAthlete(
-                                                        event,
-                                                        data.sex,
-                                                        data.grade_level,
-                                                    ),
-                                                )
-                                                .map((event) => (
-                                                    <SelectItem
-                                                        key={event.id}
-                                                        value={String(event.id)}
-                                                    >
-                                                        <span className="flex flex-col py-1">
-                                                            <span className="font-medium">
-                                                                {event.label}
-                                                            </span>
-                                                            <span className="text-xs text-muted-foreground">
-                                                                {event.category}{' '}
-                                                                · {event.gender}{' '}
-                                                                ·{' '}
-                                                                {
-                                                                    event.grade_level
-                                                                }
-                                                            </span>
+                                            {eventOptions.map((event) => (
+                                                <SelectItem
+                                                    key={event.id}
+                                                    value={String(event.id)}
+                                                >
+                                                    <span className="flex flex-col py-1">
+                                                        <span className="font-medium">
+                                                            {event.label}
                                                         </span>
-                                                    </SelectItem>
-                                                ))}
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {event.category} ·{' '}
+                                                            {event.gender} ·{' '}
+                                                            {event.grade_level}
+                                                        </span>
+                                                    </span>
+                                                </SelectItem>
+                                            ))}
                                         </SelectContent>
                                     </Select>
                                     <InputError message={errors.event_id} />

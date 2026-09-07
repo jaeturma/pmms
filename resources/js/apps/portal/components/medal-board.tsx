@@ -79,12 +79,12 @@ export function PortalMedalBoard({
         <div className="portal-medal-board overflow-x-auto rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] shadow-sm">
             <table className="w-full table-fixed text-[var(--portal-surface-foreground)]">
                 <colgroup>
-                    <col className="w-9 sm:w-20" />
+                    <col className="w-11 sm:w-20" />
                     <col />
-                    <col className="w-10 sm:w-24 lg:w-28" />
-                    <col className="w-10 sm:w-24 lg:w-28" />
-                    <col className="w-10 sm:w-24 lg:w-28" />
                     <col className="w-11 sm:w-24 lg:w-28" />
+                    <col className="w-11 sm:w-24 lg:w-28" />
+                    <col className="w-11 sm:w-24 lg:w-28" />
+                    <col className="w-12 sm:w-24 lg:w-28" />
                 </colgroup>
                 <thead>
                     <tr className="border-b border-[var(--portal-border)] bg-[var(--portal-muted)] text-[var(--portal-muted-foreground)]">
