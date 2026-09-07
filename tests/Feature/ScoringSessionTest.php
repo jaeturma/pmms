@@ -875,6 +875,37 @@ test('the scoreboard page exposes participant photos only for a two-entry match,
             ->where('participants.1', null));
 });
 
+test('the scoreboard page warns but still opens when an entry has no linked athlete', function () {
+    $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
+    $entryA = confirmedEntryForScoringSession($match);
+    $entryB = confirmedEntryForScoringSession($match);
+    $match->entries()->attach([$entryA->id, $entryB->id]);
+
+    // Stale link: the athlete behind one entry is soft-deleted.
+    $entryA->athlete->delete();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get("/matches/{$match->id}/scoreboard")
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('scoring/show')
+            ->where('dataIssues', fn ($issues) => collect($issues)->contains(fn ($i) => str_contains($i, 'no linked athlete')))
+            // no crash — the board still renders; the unresolvable corner
+            // just carries no photo and falls back to a label
+            ->has('participants', 2));
+});
+
+test('the scoreboard page has no data-issue warning for a clean match', function () {
+    $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
+    $entryA = confirmedEntryForScoringSession($match);
+    $entryB = confirmedEntryForScoringSession($match);
+    $match->entries()->attach([$entryA->id, $entryB->id]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get("/matches/{$match->id}/scoreboard")
+        ->assertInertia(fn (AssertableInertia $page) => $page->where('dataIssues', []));
+});
+
 test('the scoreboard page reflects a score change made through the operator console', function () {
     $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
     $admin = User::factory()->admin()->create();

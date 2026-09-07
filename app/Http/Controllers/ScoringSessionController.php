@@ -191,28 +191,60 @@ class ScoringSessionController extends Controller
         $session = $match->scoringSessions()->latest('id')->first();
         $entries = $match->entries;
         $teamEntries = $match->teamEntries;
-        $sideLabels = $match->event->is_team_event
+
+        // Production carries some incomplete/stale links (an event with no
+        // sport, entries with no linked athlete, …). None of that should
+        // 500 or blank the board — the operator can always run it from a
+        // manual setup — so every relationship access here is null-safe and
+        // anything genuinely missing is surfaced as a `dataIssues` warning.
+        $event = $match->event;
+        $sport = $event?->sport;
+        $isTeamEvent = (bool) ($event?->is_team_event ?? false);
+
+        $sideLabels = $isTeamEvent
             ? $teamEntries->map(fn ($team): string => ($team->delegation?->registrantName() ?? __('Missing delegation')))->values()
             : $entries->map(fn (Entry $entry): string => $entry->athlete?->school?->name ?? __('School not provided'))->values();
 
         $canManage = $this->canManage($user, $match);
 
+        $dataIssues = [];
+        if ($event === null) {
+            $dataIssues[] = __('This match is not linked to a Sports Event. Start the scoreboard with a manual setup.');
+        } elseif ($sport === null) {
+            $dataIssues[] = __('This match’s event has no linked sport — the generic scoreboard will be used.');
+        }
+        if (! $isTeamEvent) {
+            $missingAthletes = $entries->filter(fn (Entry $entry): bool => $entry->athlete === null || $entry->athlete->trashed())->count();
+            if ($missingAthletes > 0) {
+                $dataIssues[] = trans_choice(
+                    '{1}One entry on this match has no linked athlete — its corner falls back to the delegation name.|[2,*]:count entries on this match have no linked athlete — those corners fall back to delegation names.',
+                    $missingAthletes,
+                    ['count' => $missingAthletes],
+                );
+            }
+        }
+
         return Inertia::render('scoring/show', [
             'match' => [
                 'id' => $match->id,
-                'meet' => $match->meet->name,
-                'event' => sprintf('%s — %s', $match->event->sport->name, $match->event->name),
-                'sport' => $match->event->sport->name,
-                'category' => sprintf('%s %s', $match->event->gender->label(), $match->event->age_division->label()),
+                'meet' => $match->meet?->name ?? __('Unknown meet'),
+                'event' => $event === null
+                    ? __('Unlinked event')
+                    : sprintf('%s — %s', $sport?->name ?? __('No sport'), $event->name),
+                'sport' => $sport?->name ?? __('No sport'),
+                'category' => $event === null
+                    ? ''
+                    : sprintf('%s %s', $event->gender->label(), $event->age_division->label()),
                 'round_label' => $match->round_label,
                 'venue' => $match->schedule?->venue?->name,
                 'scheduled_date' => $match->schedule?->scheduled_date?->format('M j, Y'),
                 'status' => $match->status->value,
                 'is_scheduled' => $match->status === MatchStatus::Scheduled,
                 'scoreboard_mode' => $match->scoreboard_mode,
-                'is_team_event' => $match->event->is_team_event,
+                'is_team_event' => $isTeamEvent,
                 'viewer_url' => route('public.scoreboard', [$match->meet_id, $match->id]),
             ],
+            'dataIssues' => $dataIssues,
             'suggestedLabels' => $sideLabels->count() === 2 ? [
                 $sideLabels[0],
                 $sideLabels[1],
@@ -220,7 +252,7 @@ class ScoringSessionController extends Controller
             // Only meaningful before any team is attached — once two Team
             // Entries exist, `suggestedLabels` above already carries them
             // and the operator no longer needs a picker.
-            'delegationOptions' => $match->event->is_team_event && $teamEntries->isEmpty()
+            'delegationOptions' => $isTeamEvent && $teamEntries->isEmpty()
                 ? $this->competingDelegationOptions($match)
                 : [],
             // Every active Meet Delegation the operator may pick when
@@ -231,15 +263,15 @@ class ScoringSessionController extends Controller
             // this event, offered as an *optional* label helper for a
             // manual/override setup (spec §5). A soft-deleted athlete is
             // still listed for display but flagged unlinked.
-            'athleteOptions' => $canManage && ! $match->event->is_team_event
+            'athleteOptions' => $canManage && ! $isTeamEvent
                 ? $this->eventAthleteOptions($match)
                 : [],
-            'suggestedBoardType' => ScoreboardType::forSport($match->event->sport->name)->value,
+            'suggestedBoardType' => ScoreboardType::forSport($sport?->name)->value,
             'session' => $session === null ? null : $session->toLivePayload(operational: true),
             'channel' => "match.{$match->id}.scoring",
             'canManage' => $canManage,
             'canOverrideParticipants' => $canManage,
-            'participants' => $match->event->is_team_event
+            'participants' => $isTeamEvent
                 ? [null, null]
                 : $this->matchParticipants($entries),
         ]);

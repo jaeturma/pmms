@@ -23,14 +23,24 @@ near-real-time push.
 `BROADCAST_CONNECTION` defaults to `log` in `.env.example` (framework
 default, deliberately unchanged, same convention as `DB_CONNECTION=sqlite`)
 — a fresh setup gets polling-only live scoring with zero broadcasting
-infrastructure required. `.env` (this deployment) sets
+infrastructure required. A development `.env` sets
 `BROADCAST_CONNECTION=reverb` plus `REVERB_APP_ID`/`REVERB_APP_KEY`/
 `REVERB_APP_SECRET`/`REVERB_HOST`/`REVERB_PORT`/`REVERB_SCHEME` and their
-`VITE_REVERB_*` mirrors for the frontend Echo client
-(`resources/js/app.tsx`'s `configureEcho({ broadcaster: 'reverb' })`).
-Running a Reverb server (`php artisan reverb:start`) is a new operational
-requirement for real-time updates in production; it is not required for
-the app to function.
+`VITE_REVERB_*` mirrors for the frontend Echo client. Running a Reverb
+server (`php artisan reverb:start`) is an operational requirement for
+real-time updates; it is not required for the app to function.
+
+**Frontend realtime is gated on `VITE_REVERB_APP_KEY` being present at
+build time** (`resources/js/pages/scoring/show.tsx` — `realtimeEnabled`).
+`@laravel/echo-react` bakes that Vite var into the bundle, and its first
+`useEcho()` call does `new Pusher(key)`, which **throws synchronously**
+("You must pass your app key…") when the key is missing — and with no
+error boundary that blanks the operator console. So `configureEcho()` and
+the `useEcho` subscription (isolated in `<RealtimeScoreSync>`, rendered
+only when `realtimeEnabled`) run only when a key was compiled in. A
+production build with `BROADCAST_CONNECTION=log` and no `VITE_REVERB_*`
+therefore runs the console on its polling baseline with **no Pusher
+instantiation at all**. Rebuild whenever the broadcasting env changes.
 
 ## Data model
 
@@ -493,6 +503,13 @@ unchanged. Added:
 - The frontend sends `manual_setup: true` when it rendered the free-text
   inputs. It changes nothing that is persisted — it only lets the operator
   console carry a *"Manual scoreboard setup"* remark.
+- `board()` also sends `dataIssues: string[]` — non-fatal competition-data
+  problems it detected (an event with no linked sport, entries whose
+  athlete is missing/soft-deleted). Every relationship access in `board()`
+  is null-safe (`$match->meet?->name ?? …`, `$event?->sport?->name ?? …`,
+  `ScoreboardType::forSport($sport?->name)`), so a genuinely orphaned
+  match warns and stays runnable from a manual setup rather than 500-ing.
+  The console shows the list as a dismissible amber banner.
 
 ### Participant override (§6)
 

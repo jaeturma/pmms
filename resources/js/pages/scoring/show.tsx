@@ -1,7 +1,7 @@
 import { Head, router } from '@inertiajs/react';
 import { configureEcho, useEcho } from '@laravel/echo-react';
 import { Pause, Play, Radio, Square, Users, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { BasketballGameControl } from '@/components/basketball-game-control';
 import { BilliardGameControl } from '@/components/billiard-game-control';
@@ -72,16 +72,53 @@ import {
 } from '@/routes/scoring';
 import { destroy as removeEventRoute } from '@/routes/scoring/events';
 
-/** Configuring Echo here rather than in `app.tsx` keeps pusher-js out of
- * every other page's bundle — `useEcho` below is the only call site of
- * Echo's realtime hooks app-wide, so there's no reason to pay for it
- * globally. Runs once, the first time this module is imported (Inertia
- * only resolves a page's module when it's actually visited). */
-configureEcho({
-    broadcaster: 'reverb',
-});
+/**
+ * Realtime (Reverb) is opt-in per environment. `@laravel/echo-react` bakes
+ * `import.meta.env.VITE_REVERB_APP_KEY` into the bundle at build time, and
+ * the first `useEcho()` call instantiates a `new Pusher(key)` — which
+ * throws **synchronously** ("You must pass your app key when you
+ * instantiate Pusher.") when the key is missing. With no error boundary
+ * that blanks the whole page.
+ *
+ * Development builds carry a real `VITE_REVERB_APP_KEY`; production builds
+ * (`BROADCAST_CONNECTION=log`, no `VITE_REVERB_*`) do not. So we gate both
+ * the one-time `configureEcho()` and the `useEcho` subscription
+ * (`RealtimeScoreSync`, rendered only when this is true) on the key's
+ * presence. When it's absent the page runs on its polling baseline alone
+ * — which it is designed to do regardless (see the `useEffect` poll
+ * below). Configuring Echo here rather than in `app.tsx` also keeps
+ * pusher-js out of every other page's bundle. */
+const realtimeEnabled = Boolean(import.meta.env.VITE_REVERB_APP_KEY);
+
+if (realtimeEnabled) {
+    configureEcho({ broadcaster: 'reverb' });
+}
 
 type Session = LiveSession;
+
+/**
+ * Isolated into its own component so `useEcho` — which instantiates Echo
+ * on mount — is only ever mounted when realtime is actually configured
+ * (`realtimeEnabled`). Rules of hooks forbid calling `useEcho`
+ * conditionally; conditionally *rendering* the component that calls it is
+ * the supported pattern.
+ */
+function RealtimeScoreSync({
+    channel,
+    onSession,
+}: {
+    channel: string;
+    onSession: (session: Session | null) => void;
+}) {
+    useEcho<{ session: Session }>(
+        channel,
+        'score.updated',
+        (payload) => onSession(payload.session),
+        [channel],
+    );
+
+    return null;
+}
 
 type Props = {
     match: {
@@ -99,6 +136,11 @@ type Props = {
         is_team_event: boolean;
         viewer_url: string;
     };
+    /** Non-fatal competition-data problems for this match (an event with
+     * no sport, entries with no linked athlete, …) — the board still runs;
+     * these are shown as a dismissible warning so the operator knows to
+     * use manual setup / fix the links. */
+    dataIssues: string[];
     suggestedLabels: [string | null, string | null];
     delegationOptions: Array<{ id: number; label: string }>;
     meetDelegationOptions: Array<{ id: number; label: string }>;
@@ -652,6 +694,7 @@ function PreStartRosterManager({
 
 export default function ScoringBoard({
     match,
+    dataIssues,
     suggestedLabels,
     delegationOptions,
     meetDelegationOptions,
@@ -731,16 +774,12 @@ export default function ScoringBoard({
         return () => clearInterval(interval);
     }, [match.id]);
 
-    useEcho<{ session: Session }>(
-        channel,
-        'score.updated',
-        (payload) => {
-            setSession(payload.session);
-            setPollFailures(0);
-            setLastUpdatedAt(Date.now());
-        },
-        [channel],
-    );
+    // Applied by both the poll above and the realtime subscription below.
+    const applyLiveSession = useCallback((next: Session | null) => {
+        setSession(next);
+        setPollFailures(0);
+        setLastUpdatedAt(Date.now());
+    }, []);
 
     useEffect(() => {
         const onFullscreenChange = () =>
@@ -890,6 +929,12 @@ export default function ScoringBoard({
     return (
         <>
             <Head title={`Live scoring — ${match.event}`} />
+            {realtimeEnabled && (
+                <RealtimeScoreSync
+                    channel={channel}
+                    onSession={applyLiveSession}
+                />
+            )}
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
                     title={`Live scoring — ${match.event}`}
@@ -900,6 +945,26 @@ export default function ScoringBoard({
                         </Button>
                     }
                 />
+
+                {dataIssues.length > 0 && (
+                    <div
+                        role="status"
+                        className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200 print:hidden"
+                    >
+                        <p className="font-medium">
+                            Some competition data for this match is incomplete
+                        </p>
+                        <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                            {dataIssues.map((issue) => (
+                                <li key={issue}>{issue}</li>
+                            ))}
+                        </ul>
+                        <p className="mt-1 text-xs">
+                            The scoreboard still works — start it with a manual
+                            setup, or fix the links in Registration / Schedule.
+                        </p>
+                    </div>
+                )}
 
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
                     <span className="font-medium text-foreground">
