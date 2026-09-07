@@ -16,7 +16,10 @@ comparisons behave identically on MySQL and the SQLite test database.
 
 ## Rules (server-enforced in `ScheduleController`)
 
-- Slots may only reference events attached to the meet (`meet_events`).
+- Slots may only reference events that belong to the meet — through an explicit
+  `meet_events` row **or** an active `meet_sports` row for the event's sport (the
+  production import uses only the latter). See `docs/meets.md` §"Two ways a meet
+  enables an event".
 - Scheduling (create/update/delete) is allowed only while the meet is
   **registration-closed or active** — before that the event list may still change,
   after completion the schedule is historical record.
