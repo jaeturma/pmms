@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\AgeDivision;
 use App\Models\Meet;
 use App\Models\Sport;
 use App\Services\MedalTallyService;
@@ -18,54 +17,35 @@ class TallyController extends Controller
      * Medal tally: official district/municipality standings plus a
      * school-level reference table — aggregates of validated results only,
      * readable by every authenticated role.
+     *
+     * Uses the exact same `MedalTallyService::categoryBreakdown()` the
+     * public `/tally` board consumes, so the internal page, the dashboard
+     * widget and the reports can never show a different medal count from
+     * the public tally. `category` is the same Overall / Elementary /
+     * Secondary / Paragames selector (default Overall = Elementary +
+     * Secondary, no Paragames, no Kickboxing).
      */
     public function index(Request $request): Response
     {
         $meetId = Meet::current()->id;
-        $sportId = $request->integer('sport_id');
-        $ageDivisionRaw = (string) $request->query('age_division', '');
-        $ageDivision = AgeDivision::tryFrom($ageDivisionRaw)?->value;
-
-        $standings = $this->tally->standings(
-            $meetId,
-            $sportId > 0 ? $sportId : null,
-            $ageDivision,
-        );
-
-        $districts = collect($standings['districts']);
+        $sportId = $request->integer('sport_id') > 0 ? $request->integer('sport_id') : null;
+        $category = $this->resolveCategory($request->query('category'));
 
         return Inertia::render('tally/index', [
-            'schools' => $standings['schools'],
-            'districts' => $standings['districts'],
-            'totals' => [
-                'gold' => (int) $districts->sum('gold'),
-                'silver' => (int) $districts->sum('silver'),
-                'bronze' => (int) $districts->sum('bronze'),
-                'total' => (int) $districts->sum('total'),
-            ],
-            'topByPoints' => $districts
-                ->sortByDesc('points')
-                ->take(5)
-                ->values()
-                ->all(),
-            'bySport' => $this->tally->medalsBySport(
-                $meetId,
-                $sportId > 0 ? $sportId : null,
-                $ageDivision,
-            ),
-            'recentMedals' => $this->tally->recentMedals(
-                $meetId,
-                $sportId > 0 ? $sportId : null,
-                $ageDivision,
-            ),
+            ...$this->tally->categoryBreakdown($meetId, $category, $sportId),
             'filters' => [
-                'sport_id' => $sportId > 0 ? $sportId : null,
-                'age_division' => $ageDivision,
+                'sport_id' => $sportId,
+                'category' => $category,
             ],
             'sportOptions' => Sport::query()->orderBy('name')->get(['id', 'name'])
                 ->map(fn (Sport $sport): array => ['id' => $sport->id, 'label' => $sport->name]),
-            'ageDivisionOptions' => $this->tally->ageDivisionOptions($meetId, $sportId > 0 ? $sportId : null),
+            'categoryOptions' => MedalTallyService::categoryOptions(),
             'generatedAt' => now()->toDayDateTimeString(),
         ]);
+    }
+
+    private function resolveCategory(mixed $value): string
+    {
+        return in_array($value, MedalTallyService::CATEGORIES, true) ? $value : 'overall';
     }
 }

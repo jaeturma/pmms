@@ -64,12 +64,13 @@ type Props = {
     topByPoints: DistrictRow[];
     bySport: SportRow[];
     recentMedals: Totals;
+    hasResults: boolean;
     filters: {
         sport_id: number | null;
-        age_division: string | null;
+        category: string;
     };
     sportOptions: Option[];
-    ageDivisionOptions: StringOption[];
+    categoryOptions: StringOption[];
     generatedAt: string;
 };
 
@@ -80,9 +81,10 @@ export default function Tally({
     topByPoints,
     bySport,
     recentMedals,
+    hasResults,
     filters,
     sportOptions,
-    ageDivisionOptions,
+    categoryOptions,
     generatedAt,
 }: Props) {
     const { division } = usePage().props;
@@ -90,20 +92,19 @@ export default function Tally({
 
     const applyFilters = (overrides: {
         sport_id?: string;
-        age_division?: string;
+        category?: string;
     }) => {
         const params: Record<string, string> = {};
 
         const sportId = overrides.sport_id ?? String(filters.sport_id ?? '');
-        const ageDivision =
-            overrides.age_division ?? filters.age_division ?? '';
+        const category = overrides.category ?? filters.category;
 
         if (sportId && sportId !== 'all') {
             params.sport_id = sportId;
         }
 
-        if (ageDivision && ageDivision !== 'all') {
-            params.age_division = ageDivision;
+        if (category && category !== 'overall') {
+            params.category = category;
         }
 
         router.get(index().url, params, {
@@ -114,6 +115,9 @@ export default function Tally({
 
     const reportQuery = {
         ...(filters.sport_id ? { sport_id: filters.sport_id } : {}),
+        ...(filters.category !== 'overall'
+            ? { category: filters.category }
+            : {}),
     };
 
     return (
@@ -176,20 +180,19 @@ export default function Tally({
                         </SelectContent>
                     </Select>
                     <Select
-                        value={filters.age_division ?? 'all'}
+                        value={filters.category}
                         onValueChange={(value) =>
-                            applyFilters({ age_division: value })
+                            applyFilters({ category: value })
                         }
                     >
                         <SelectTrigger
                             className="w-48"
-                            aria-label="Filter by division"
+                            aria-label="Filter by category"
                         >
-                            <SelectValue placeholder="All divisions" />
+                            <SelectValue placeholder="Overall" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">All divisions</SelectItem>
-                            {ageDivisionOptions.map((option) => (
+                            {categoryOptions.map((option) => (
                                 <SelectItem key={option.id} value={option.id}>
                                     {option.label}
                                 </SelectItem>
@@ -198,7 +201,7 @@ export default function Tally({
                     </Select>
                 </div>
 
-                {districts.length === 0 ? (
+                {!hasResults ? (
                     <EmptyState
                         icon={Crown}
                         title="No medals yet"

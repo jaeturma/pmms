@@ -23,10 +23,10 @@ use App\Models\Meet;
 use App\Models\Personnel;
 use App\Models\Protest;
 use App\Models\User;
-use App\Services\MedalTallyService;
-use App\Services\MeetReadinessService;
 use App\Services\AthleteEligibilityService;
 use App\Services\AthleteMedicalClearanceService;
+use App\Services\MedalTallyService;
+use App\Services\MeetReadinessService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -92,6 +92,7 @@ class DashboardController extends Controller
             'sportsEventReport' => $this->sportsEventReport($user, $currentMeet),
             'readiness' => $readinessScope === null ? null : (function () use ($readiness, $currentMeet, $readinessScope): array {
                 $data = $readiness->calculate($currentMeet, [...$readinessScope, 'scope_label' => $readinessScope['label']]);
+
                 return ['overall' => $data['overall'], 'status' => $data['overall_status'], 'scope' => $data['scope_label'], 'issues' => $data['summary']['open_issues'],
                     'sports_ready' => $data['summary']['sports_ready'], 'sports_total' => $data['summary']['sports_total'], 'events_ready' => $data['summary']['events_ready'], 'events_total' => $data['summary']['events_total'],
                     'athletes_eligible' => $data['summary']['athletes_eligible'], 'athletes_total' => $data['summary']['athletes_total']];
@@ -433,7 +434,10 @@ class DashboardController extends Controller
                 })
                 ->values()
                 ->all(),
-            'tallyTop' => $isTournamentScoped ? [] : array_slice($tally->standings($meet->id)['districts'], 0, 5),
+            // Same canonical Overall category as the public `/tally` board
+            // (Elementary + Secondary, no Paragames, no Kickboxing) so the
+            // dashboard widget and the tally page can never disagree.
+            'tallyTop' => $isTournamentScoped ? [] : array_slice($tally->categoryStandings($meet->id, 'overall')['districts'], 0, 5),
             'eventsOverview' => $this->eventsOverview($meet, $isTournamentScoped ? $scopedEventIds : null),
             'queues' => $canManage ? [
                 'pending_results' => EventResult::query()->real()

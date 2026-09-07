@@ -158,6 +158,7 @@ export default function PortalTally({
     }, [signature]);
 
     const data = categories[activeTab];
+    const medalledTeams = data.districts.filter((d) => d.total > 0).length;
 
     const updateSport = (sportId: string) => {
         router.get(
@@ -185,7 +186,7 @@ export default function PortalTally({
     return (
         <>
             <Head title={`Official Medal Tally — ${meet.name}`} />
-            <div className="flex flex-col gap-6">
+            <div className="portal-tally-page flex flex-col gap-6">
                 <PortalHero
                     eyebrow={meet.name}
                     title="Official Medal Tally"
@@ -230,7 +231,7 @@ export default function PortalTally({
                     title={`${TABS.find((t) => t.value === activeTab)?.label} Standings`}
                     description={
                         data.hasResults
-                            ? `${data.totals.total} medal${data.totals.total === 1 ? '' : 's'} awarded across ${data.districts.filter((d) => d.total > 0).length} delegation${data.districts.filter((d) => d.total > 0).length === 1 ? '' : 's'}.`
+                            ? `${data.totals.total} medal${data.totals.total === 1 ? '' : 's'} awarded across ${medalledTeams} team${medalledTeams === 1 ? '' : 's'}.`
                             : undefined
                     }
                     action={sportFilter}

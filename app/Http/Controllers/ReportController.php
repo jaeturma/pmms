@@ -256,6 +256,7 @@ class ReportController extends Controller
                 $rows[] = [$placement['rank'] === 1 ? 'Winner' : 'Loser', $placement['athlete'], $placement['school'], $placement['result_value'], $result->measurement_type,
                     implode('; ', $placement['attribution']['players']),
                     collect($placement['attribution']['coaches'])->map(fn ($coach) => $coach['role'].': '.$coach['name'])->implode('; '), $result->status->value];
+
                 continue;
             }
             $rows[] = [
@@ -280,20 +281,31 @@ class ReportController extends Controller
     public function tallyReport(Request $request, MedalTallyService $tally): Response
     {
         $meet = Meet::current();
-        $sportId = $request->integer('sport_id');
+        $sportId = $request->integer('sport_id') > 0 ? $request->integer('sport_id') : null;
+        $category = $this->resolveTallyCategory($request->query('category'));
 
-        $standings = $tally->standings($meet->id, $sportId > 0 ? $sportId : null);
+        // Same canonical aggregation as the public `/tally` board and the
+        // internal tally page — never a report-only counting path.
+        $standings = $tally->categoryStandings($meet->id, $category, $sportId);
 
         return Inertia::render('reports/medal-tally', [
             'schools' => $standings['schools'],
             'districts' => $standings['districts'],
             'meet' => $meet->name,
-            'sport' => $sportId > 0 ? Sport::query()->find($sportId)?->name : null,
+            'sport' => $sportId !== null ? Sport::query()->find($sportId)?->name : null,
+            'category' => $category,
+            'categoryLabel' => ucfirst($category),
             'filters' => [
-                'sport_id' => $sportId > 0 ? $sportId : null,
+                'sport_id' => $sportId,
+                'category' => $category,
             ],
             'generatedAt' => now()->toDayDateTimeString(),
         ]);
+    }
+
+    private function resolveTallyCategory(mixed $value): string
+    {
+        return in_array($value, MedalTallyService::CATEGORIES, true) ? $value : 'overall';
     }
 
     /**
@@ -302,13 +314,15 @@ class ReportController extends Controller
     public function downloadTallyReport(Request $request, MedalTallyService $tally): StreamedResponse
     {
         $meet = Meet::current();
-        $sportId = $request->integer('sport_id');
+        $sportId = $request->integer('sport_id') > 0 ? $request->integer('sport_id') : null;
+        $category = $this->resolveTallyCategory($request->query('category'));
 
-        $standings = $tally->standings($meet->id, $sportId > 0 ? $sportId : null);
+        $standings = $tally->categoryStandings($meet->id, $category, $sportId);
 
         $this->audit->record('report.tally_exported', null, [
             'meet' => $meet->name,
-            'sport' => $sportId > 0 ? Sport::query()->find($sportId)?->name : 'all sports',
+            'category' => $category,
+            'sport' => $sportId !== null ? Sport::query()->find($sportId)?->name : 'all sports',
         ]);
 
         $areaLabel = Division::current()->areaLabel();

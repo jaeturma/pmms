@@ -91,6 +91,7 @@ test('the public tally provides all four official categories in one payload', fu
             ->has('categories.overall', fn (AssertableInertia $c) => $c
                 ->has('districts')->has('schools')->has('totals')
                 ->has('bySport')->has('recentMedals')->has('topMedalists')
+                ->has('topByPoints')
                 ->where('hasResults', false))
             ->has('categories.elementary')
             ->has('categories.secondary')

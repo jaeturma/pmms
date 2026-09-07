@@ -331,36 +331,85 @@ test('district points are weighted gold=3/silver=2/bronze=1 and never change the
             ->where('topByPoints.0.district', 'Silver District'));
 });
 
-test('the tally can be filtered by age division', function () {
+test('the internal tally can be filtered by category, matching the public board', function () {
+    $meet = Meet::current();
     $elementaryEvent = Event::factory()->create(['age_division' => AgeDivision::Elementary]);
     $secondaryEvent = Event::factory()->create(['age_division' => AgeDivision::Secondary]);
 
-    $elementaryResult = EventResult::factory()->validated()->create(['event_id' => $elementaryEvent->id]);
-    $elementarySchool = School::factory()->create(['name' => 'Elementary School']);
-    placeSchool($elementaryResult, $elementarySchool, 1);
+    $elementaryResult = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $elementaryEvent->id]);
+    placeSchool($elementaryResult, School::factory()->create(['name' => 'Elementary School']), 1);
 
-    $secondaryResult = EventResult::factory()->validated()->create(['meet_id' => $elementaryResult->meet_id, 'event_id' => $secondaryEvent->id]);
-    $secondarySchool = School::factory()->create(['name' => 'Secondary School']);
-    placeSchool($secondaryResult, $secondarySchool, 1);
+    $secondaryResult = EventResult::factory()->validated()->create(['meet_id' => $meet->id, 'event_id' => $secondaryEvent->id]);
+    placeSchool($secondaryResult, School::factory()->create(['name' => 'Secondary School']), 1);
 
     $this->actingAs(User::factory()->create())
-        ->get('/tally?age_division=elementary')
+        ->get('/tally?category=elementary')
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('schools', 1)
             ->where('schools.0.school', 'Elementary School')
-            ->where('filters.age_division', 'elementary'));
+            ->where('filters.category', 'elementary')
+            ->has('categoryOptions', 4));
 });
 
-test('an invalid age division filter is ignored rather than erroring', function () {
-    $result = EventResult::factory()->validated()->create();
+test('an unknown internal tally category falls back to Overall rather than erroring', function () {
+    $result = EventResult::factory()->validated()->create(['meet_id' => Meet::current()->id]);
     placeSchool($result, School::factory()->create(), 1);
 
     $this->actingAs(User::factory()->create())
-        ->get('/tally?age_division=not-a-real-division')
+        ->get('/tally?category=not-a-real-category')
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->has('schools', 1)
-            ->where('filters.age_division', null));
+            ->where('filters.category', 'overall'));
+});
+
+test('the internal tally, dashboard widget and reports all match the public /tally Overall counts', function () {
+    $meet = Meet::current();
+    $tally = app(MedalTallyService::class);
+
+    // A regular Secondary medal, a Paragames medal and a Kickboxing medal.
+    $sec = EventResult::factory()->validated()->create([
+        'meet_id' => $meet->id,
+        'event_id' => Event::factory()->create(['age_division' => AgeDivision::Secondary])->id,
+    ]);
+    placeSchool($sec, School::factory()->create(), 1);
+
+    $para = EventResult::factory()->validated()->create([
+        'meet_id' => $meet->id,
+        'event_id' => Event::factory()->create([
+            'age_division' => AgeDivision::Secondary,
+            'sport_id' => Sport::factory()->create(['name' => 'Para Athletics', 'classification' => 'paragames'])->id,
+        ])->id,
+    ]);
+    placeSchool($para, School::factory()->create(), 1);
+
+    $kick = EventResult::factory()->validated()->create([
+        'meet_id' => $meet->id,
+        'event_id' => Event::factory()->create([
+            'sport_id' => Sport::factory()->create(['name' => 'Kickboxing'])->id,
+        ])->id,
+    ]);
+    placeSchool($kick, School::factory()->create(), 1);
+
+    $canonicalTotal = collect($tally->categoryStandings($meet->id, 'overall')['districts'])->sum('total');
+    $publicTotal = $tally->categoryBreakdown($meet->id, 'overall')['totals']['total'];
+
+    expect($canonicalTotal)->toBe(1)  // only the clean Secondary medal
+        ->and($publicTotal)->toBe(1);
+
+    // Internal /tally page — same categoryBreakdown() the public board uses.
+    $this->actingAs(User::factory()->admin()->create())
+        ->get('/tally')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('totals.total', 1)
+            ->where('filters.category', 'overall'));
+
+    // Printable report — same canonical aggregation.
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('reports.tally'))
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('categoryLabel', 'Overall')
+            ->where('districts.0.total', 1));
 });
 
 test('medals by sport groups placements by their event\'s sport', function () {
@@ -442,6 +491,75 @@ test('categoryStandings splits Overall, Elementary, Secondary and Paragames by t
         ->and($goldFor('secondary'))->toBe(1)
         ->and($goldFor('paragames'))->toBe(1)
         ->and($goldFor('overall'))->toBe(2);
+});
+
+test('accepting then reopening a result reconciles the internal tally, the public board and the report together', function () {
+    $meet = Meet::current();
+    $meet->forceFill(['is_published' => true])->save();
+
+    $result = EventResult::factory()->validated()->create([
+        'meet_id' => $meet->id,
+        'event_id' => Event::factory()->create(['age_division' => AgeDivision::Secondary])->id,
+    ]);
+    placeSchool($result, School::factory()->create(), 1);
+
+    $viewer = User::factory()->create();
+    $admin = User::factory()->admin()->create();
+
+    $seesOne = function () use ($viewer, $admin, $meet): void {
+        $this->actingAs($viewer)->get("/meets/{$meet->id}/tally")
+            ->assertInertia(fn (AssertableInertia $p) => $p->where('categories.overall.totals.total', 1));
+        $this->actingAs($admin)->get('/tally')
+            ->assertInertia(fn (AssertableInertia $p) => $p->where('totals.total', 1));
+        $this->actingAs($admin)->get(route('reports.tally'))
+            ->assertInertia(fn (AssertableInertia $p) => $p->where('districts.0.total', 1));
+    };
+
+    $seesOne();
+
+    $this->actingAs($admin)
+        ->post("/results/{$result->id}/reopen", ['reason' => 'Wrong placement.'])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($viewer)->get("/meets/{$meet->id}/tally")
+        ->assertInertia(fn (AssertableInertia $p) => $p
+            ->where('categories.overall.totals.total', 0)
+            ->where('categories.overall.hasResults', false));
+    $this->actingAs($admin)->get('/tally')
+        ->assertInertia(fn (AssertableInertia $p) => $p
+            ->where('totals.total', 0)
+            ->where('hasResults', false));
+});
+
+test('the printable and CSV tally reports accept the same category selector', function () {
+    $meet = Meet::current();
+    $tally = app(MedalTallyService::class);
+
+    $para = EventResult::factory()->validated()->create([
+        'meet_id' => $meet->id,
+        'event_id' => Event::factory()->create([
+            'age_division' => AgeDivision::Secondary,
+            'sport_id' => Sport::factory()->create(['name' => 'Para Swimming', 'classification' => 'paragames'])->id,
+        ])->id,
+    ]);
+    placeSchool($para, School::factory()->create(), 1);
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->get(route('reports.tally'))
+        ->assertInertia(fn (AssertableInertia $p) => $p
+            ->where('categoryLabel', 'Overall')
+            ->where('districts.0.total', 0)); // paragames not in Overall
+
+    $this->actingAs($admin)->get(route('reports.tally', ['category' => 'paragames']))
+        ->assertInertia(fn (AssertableInertia $p) => $p
+            ->where('categoryLabel', 'Paragames')
+            ->where('districts.0.total', 1));
+
+    $this->actingAs($admin)
+        ->get(route('reports.tally.download', ['category' => 'paragames']))
+        ->assertOk()
+        ->assertHeader('content-type', 'text/csv; charset=UTF-8');
 });
 
 test('recent medals only count placements validated within the last 24 hours', function () {

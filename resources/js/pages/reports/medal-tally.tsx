@@ -39,7 +39,8 @@ type Props = {
     districts: DistrictRow[];
     meet: string;
     sport: string | null;
-    filters: { sport_id: number | null };
+    categoryLabel: string;
+    filters: { sport_id: number | null; category: string };
     generatedAt: string;
 };
 
@@ -48,6 +49,7 @@ export default function MedalTallyReport({
     districts,
     meet,
     sport,
+    categoryLabel,
     filters,
     generatedAt,
 }: Props) {
@@ -56,6 +58,9 @@ export default function MedalTallyReport({
 
     const query = {
         ...(filters.sport_id ? { sport_id: filters.sport_id } : {}),
+        ...(filters.category !== 'overall'
+            ? { category: filters.category }
+            : {}),
     };
 
     return (
@@ -64,7 +69,7 @@ export default function MedalTallyReport({
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
                     title="Medal tally report"
-                    description={`${meet} · ${sport ?? 'All sports'} — validated results only`}
+                    description={`${meet} · ${categoryLabel} · ${sport ?? 'All sports'} — validated results only`}
                     actions={
                         <ReportActions downloadUrl={download({ query }).url} />
                     }

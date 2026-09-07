@@ -287,29 +287,13 @@ class PortalController extends Controller
 
         $categories = collect(MedalTallyService::CATEGORIES)
             ->mapWithKeys(function (string $category) use ($tally, $meet, $sportId): array {
-                [$ageDivision, $paragames] = MedalTallyService::categoryFilter($category);
+                $breakdown = $tally->categoryBreakdown($meet->id, $category, $sportId);
 
-                $standings = $tally->categoryStandings($meet->id, $category, $sportId);
-                $districts = collect($standings['districts']);
+                // Only the public portal decorates rows with municipality
+                // crests; the numeric aggregation is identical everywhere.
+                $breakdown['districts'] = $this->attachDistrictLogos($breakdown['districts']);
 
-                return [$category => [
-                    'districts' => $this->attachDistrictLogos($standings['districts']),
-                    'schools' => $standings['schools'],
-                    'totals' => [
-                        'gold' => (int) $districts->sum('gold'),
-                        'silver' => (int) $districts->sum('silver'),
-                        'bronze' => (int) $districts->sum('bronze'),
-                        'total' => (int) $districts->sum('total'),
-                    ],
-                    // The zero-fill in `standings()` lists every approved
-                    // municipality even before its first medal, so "is this
-                    // category empty" must look at the medal counts, not the
-                    // row count — drives the professional empty state.
-                    'hasResults' => $districts->sum('total') > 0,
-                    'bySport' => $tally->medalsBySport($meet->id, $sportId, $ageDivision, $paragames),
-                    'recentMedals' => $tally->recentMedals($meet->id, $sportId, $ageDivision, 24, $paragames),
-                    'topMedalists' => $tally->topMedalists($meet->id, $sportId, $ageDivision, 20, $paragames),
-                ]];
+                return [$category => $breakdown];
             })
             ->all();
 

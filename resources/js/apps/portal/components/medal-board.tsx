@@ -3,6 +3,7 @@ import { Medal } from 'lucide-react';
 import { useMemo } from 'react';
 import { PortalAnimatedNumber } from '@/apps/portal/components/animated-number';
 import { MunicipalityCrest } from '@/apps/portal/components/municipality-crest';
+import { teamAbbreviation } from '@/apps/portal/lib/team-abbreviations';
 import { usePortalFlipRows } from '@/apps/portal/lib/use-flip-rows';
 import { cn } from '@/apps/portal/lib/utils';
 import type { PortalStandingRow } from '@/apps/portal/types';
@@ -40,8 +41,10 @@ type PortalMedalBoardProps = {
 
 /**
  * The public medal tally's centrepiece — an official-competition medal
- * board (Rank · Delegation · Gold · Silver · Bronze · Total) built for
- * desktop, projector, LED wall and mobile alike. Column widths are fixed
+ * board (Rank · Team · Gold · Silver · Bronze · Total) built for
+ * desktop, projector, LED wall and mobile alike. On a phone the Team
+ * column shows the short label from `teamAbbreviation()`; tablet and up
+ * show the full name. Column widths are fixed
  * so a live count change never shifts the layout; the top three get a
  * restrained medallion + tinted row, never neon or motion for its own
  * sake. Ranking/sort order is decided server-side
@@ -76,12 +79,12 @@ export function PortalMedalBoard({
         <div className="portal-medal-board overflow-x-auto rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] shadow-sm">
             <table className="w-full table-fixed text-[var(--portal-surface-foreground)]">
                 <colgroup>
-                    <col className="w-14 sm:w-20" />
+                    <col className="w-9 sm:w-20" />
                     <col />
-                    <col className="w-16 sm:w-24 lg:w-28" />
-                    <col className="w-16 sm:w-24 lg:w-28" />
-                    <col className="w-16 sm:w-24 lg:w-28" />
-                    <col className="w-16 sm:w-24 lg:w-28" />
+                    <col className="w-10 sm:w-24 lg:w-28" />
+                    <col className="w-10 sm:w-24 lg:w-28" />
+                    <col className="w-10 sm:w-24 lg:w-28" />
+                    <col className="w-11 sm:w-24 lg:w-28" />
                 </colgroup>
                 <thead>
                     <tr className="border-b border-[var(--portal-border)] bg-[var(--portal-muted)] text-[var(--portal-muted-foreground)]">
@@ -89,13 +92,17 @@ export function PortalMedalBoard({
                             Rank
                         </th>
                         <th className="px-2 py-3 text-left text-xs font-semibold tracking-wide uppercase sm:px-4">
-                            Delegation
+                            Team
                         </th>
                         {MEDALS.map(({ key, label, bg, fg }) => (
-                            <th key={key} className="px-1 py-2 sm:px-2">
+                            <th
+                                key={key}
+                                className="px-0.5 py-2 sm:px-2"
+                                title={label}
+                            >
                                 <span className="flex flex-col items-center gap-1">
                                     <span
-                                        className="portal-icon-badge size-6 sm:size-8"
+                                        className="portal-icon-badge size-5 sm:size-8"
                                         style={{
                                             backgroundColor: bg,
                                             color: fg,
@@ -103,37 +110,43 @@ export function PortalMedalBoard({
                                     >
                                         <Medal
                                             aria-hidden="true"
-                                            className="size-3.5 sm:size-4"
+                                            className="size-3 sm:size-4"
                                         />
                                     </span>
-                                    <span className="text-[0.65rem] font-semibold tracking-wide text-[var(--portal-muted-foreground)] uppercase sm:text-xs">
+                                    <span className="hidden text-[0.65rem] font-semibold tracking-wide text-[var(--portal-muted-foreground)] uppercase sm:inline sm:text-xs">
                                         {label}
                                     </span>
                                 </span>
                             </th>
                         ))}
-                        <th className="px-1 py-2 text-center text-[0.65rem] font-bold tracking-wide text-[var(--portal-fg)] uppercase sm:px-2 sm:text-xs">
+                        <th className="px-0.5 py-2 text-center text-[0.6rem] font-bold tracking-wide text-[var(--portal-fg)] uppercase sm:px-2 sm:text-xs">
                             Total
                         </th>
                     </tr>
                 </thead>
-                <tbody className="divide-y divide-[var(--portal-border)] text-lg sm:text-xl lg:text-2xl xl:text-[26px]">
+                <tbody className="divide-y divide-[var(--portal-border)] text-sm sm:text-xl lg:text-2xl xl:text-[26px]">
                     {rows.map((row, index) => {
                         const key = rowKey(row);
                         const rank = index + 1;
                         const podium = rank <= 3;
 
                         const identity = (
-                            <span className="flex min-w-0 items-center gap-2 sm:gap-3">
+                            <span className="flex min-w-0 items-center gap-1.5 sm:gap-3">
                                 <MunicipalityCrest
                                     name={row.district}
                                     logoUrl={row.team_logo_url ?? row.logo_url}
                                     size="sm"
                                     shape="square"
-                                    className="size-8 shrink-0 sm:size-11 lg:size-12"
+                                    className="size-6 shrink-0 sm:size-11 lg:size-12"
                                 />
                                 <span className="truncate font-semibold">
-                                    {row.district}
+                                    {/* Mobile: short Team label; tablet/desktop: full name. */}
+                                    <span className="sm:hidden">
+                                        {teamAbbreviation(row.district)}
+                                    </span>
+                                    <span className="hidden sm:inline">
+                                        {row.district}
+                                    </span>
                                 </span>
                             </span>
                         );
@@ -148,10 +161,10 @@ export function PortalMedalBoard({
                                     `portal-medal-board__rank-${podium ? rank : 'x'}`,
                                 )}
                             >
-                                <td className="px-2 py-2 text-center sm:px-4 sm:py-3">
+                                <td className="px-1 py-2 text-center sm:px-4 sm:py-3">
                                     <span
                                         className={cn(
-                                            'inline-flex size-8 items-center justify-center rounded-full text-sm font-bold tabular-nums sm:size-10 sm:text-base',
+                                            'inline-flex size-6 items-center justify-center rounded-full text-xs font-bold tabular-nums sm:size-10 sm:text-base',
                                             podium
                                                 ? 'portal-medal-board__medallion'
                                                 : 'text-[var(--portal-muted-foreground)]',
@@ -160,7 +173,7 @@ export function PortalMedalBoard({
                                         {rank}
                                     </span>
                                 </td>
-                                <td className="px-2 py-2 sm:px-4 sm:py-3">
+                                <td className="px-1 py-2 sm:px-4 sm:py-3">
                                     {row.slug ? (
                                         <Link
                                             href={teamShow(row.slug).url}
@@ -172,16 +185,16 @@ export function PortalMedalBoard({
                                         identity
                                     )}
                                 </td>
-                                <td className="px-1 py-2 text-center tabular-nums sm:px-2">
+                                <td className="px-0.5 py-2 text-center tabular-nums sm:px-2">
                                     {count(row.gold)}
                                 </td>
-                                <td className="px-1 py-2 text-center tabular-nums sm:px-2">
+                                <td className="px-0.5 py-2 text-center tabular-nums sm:px-2">
                                     {count(row.silver)}
                                 </td>
-                                <td className="px-1 py-2 text-center tabular-nums sm:px-2">
+                                <td className="px-0.5 py-2 text-center tabular-nums sm:px-2">
                                     {count(row.bronze)}
                                 </td>
-                                <td className="px-1 py-2 text-center font-bold tabular-nums sm:px-2">
+                                <td className="px-0.5 py-2 text-center font-bold tabular-nums sm:px-2">
                                     {count(row.total)}
                                 </td>
                             </tr>

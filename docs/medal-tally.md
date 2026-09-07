@@ -71,6 +71,44 @@ so both the standalone `"Kickboxing"` catalog row and the combined
 caller — the internal tally, rankings, dashboards and reports included —
 not merely hidden in the frontend.
 
+## One canonical aggregation for every surface
+
+`MedalTallyService::categoryBreakdown(?meetId, category, ?sportId)` is the
+**single** medal-tally payload — districts, schools, totals, `hasResults`,
+`topByPoints`, `bySport`, `recentMedals`, `topMedalists`. Every surface
+builds from it and none keeps its own counting logic:
+
+| Surface | Consumer |
+|---|---|
+| Public `/tally` board | `PortalController::tally()` — all four categories |
+| Internal `/tally` page | `TallyController::index()` — `?category=` (default `overall`) |
+| Dashboard "top five" widget | `DashboardController::operations()` — `categoryStandings(_, 'overall')` |
+| Printable / CSV tally report | `ReportController::tallyReport()` / `downloadTallyReport()` — `?category=` |
+| Cross-meet management report | `ManagementDashboardController::performanceHistory()` — Overall |
+| Standalone `/rankings` | `PortalController::rankings()` — Overall |
+
+So the ICT dashboard, the internal tally page and every report show
+**exactly** the counts the public `/tally` Overall tab shows for the same
+sport scope — Elementary + Secondary, no Paragames, no Kickboxing.
+Result acceptance itself does no counting: it writes the canonical
+`MedalAward` snapshot rows (`gold_tally_quantity` etc.), which this
+service reads. An accepted / corrected / reopened / cancelled result is
+reflected on the next read of any surface with nothing to reconcile.
+
+## Public board: Team label and mobile presentation
+
+The public board (`PortalMedalBoard`) labels the first column **Team**
+(not "Delegation") — a UI terminology change only; no model, table or
+relationship is renamed. On phones the Team column shows a short label
+from `apps/portal/lib/team-abbreviations.ts` (`Compostela → Com`,
+`Nabunturan → Nab`, …); tablet and desktop always show the full stored
+name, and any name not in the map falls back to its full name. Mobile
+also drops to a narrower type presentation (Arial Narrow → condensed
+sans fallback → `font-stretch`, no bundled fonts) and tighter columns so
+the six-column board fits a 360-375px screen without horizontal overflow.
+The ~3s live animation, stable Team-ID row keys, FLIP ranking movement
+and the four category tabs are unchanged.
+
 ## Caching
 
 There is no tally cache, by design (see "Derivation" above): the standings

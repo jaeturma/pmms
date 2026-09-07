@@ -271,6 +271,11 @@ export type PortalTallyCategoryData = {
      * carries every approved municipality at zero, so a row count can't
      * answer this). */
     hasResults: boolean;
+    /** Top 5 delegations by weighted points — the internal tally page's
+     * "Top by points" widget consumes this; the public board does not
+     * render it, but the payload is deliberately identical across every
+     * tally surface (one `MedalTallyService::categoryBreakdown()`). */
+    topByPoints: PortalStandingRow[];
     bySport: PortalSportMedals[];
     recentMedals: PortalMedalTotals;
     topMedalists: PortalTopMedalistRow[];

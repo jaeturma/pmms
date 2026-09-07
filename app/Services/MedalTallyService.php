@@ -96,6 +96,65 @@ class MedalTallyService
     }
 
     /**
+     * The single canonical medal-tally payload for one category — the one
+     * aggregation every surface consumes so they can never disagree: the
+     * public `/tally` board, the internal `/tally` page, the dashboard
+     * "top five" widget, the printable/CSV reports and the management
+     * report all build from this, not their own counting logic. District
+     * crests are the caller's concern (only the public portal attaches
+     * them); everything numeric is decided here.
+     *
+     * @return array{
+     *     districts: array<int, array<string, mixed>>,
+     *     schools: array<int, array<string, mixed>>,
+     *     totals: array{gold:int,silver:int,bronze:int,total:int},
+     *     hasResults: bool,
+     *     topByPoints: array<int, array<string, mixed>>,
+     *     bySport: array<int, array<string, mixed>>,
+     *     recentMedals: array{gold:int,silver:int,bronze:int,total:int},
+     *     topMedalists: array<int, array<string, mixed>>,
+     * }
+     */
+    public function categoryBreakdown(?int $meetId, string $category, ?int $sportId = null): array
+    {
+        [$ageDivision, $paragames] = self::categoryFilter($category);
+
+        $standings = $this->standings($meetId, $sportId, $ageDivision, $paragames);
+        $districts = collect($standings['districts']);
+
+        return [
+            'districts' => $standings['districts'],
+            'schools' => $standings['schools'],
+            'totals' => [
+                'gold' => (int) $districts->sum('gold'),
+                'silver' => (int) $districts->sum('silver'),
+                'bronze' => (int) $districts->sum('bronze'),
+                'total' => (int) $districts->sum('total'),
+            ],
+            // The standings list carries every approved municipality at
+            // zero, so "is this category empty" must look at medal counts.
+            'hasResults' => $districts->sum('total') > 0,
+            'topByPoints' => $districts->sortByDesc('points')->take(5)->values()->all(),
+            'bySport' => $this->medalsBySport($meetId, $sportId, $ageDivision, $paragames),
+            'recentMedals' => $this->recentMedals($meetId, $sportId, $ageDivision, 24, $paragames),
+            'topMedalists' => $this->topMedalists($meetId, $sportId, $ageDivision, 20, $paragames),
+        ];
+    }
+
+    /**
+     * The four categories as `{id,label}` option rows for a filter select.
+     *
+     * @return array<int, array{id: string, label: string}>
+     */
+    public static function categoryOptions(): array
+    {
+        return array_map(
+            fn (string $category): array => ['id' => $category, 'label' => ucfirst($category)],
+            self::CATEGORIES,
+        );
+    }
+
+    /**
      * Divisions represented by official results in the selected tally scope.
      * Event configuration is authoritative; gender and legacy sport categories
      * must not create additional division options.

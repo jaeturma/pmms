@@ -14,8 +14,8 @@ use App\Models\BilletingAssignment;
 use App\Models\Delegation;
 use App\Models\Division;
 use App\Models\EligibilityReview;
-use App\Models\Entry;
 use App\Models\EmergencyIncident;
+use App\Models\Entry;
 use App\Models\EquipmentItem;
 use App\Models\Event;
 use App\Models\EventResult;
@@ -392,7 +392,10 @@ class ManagementDashboardController extends Controller
         $schoolTotals = [];
 
         foreach ($meets as $meet) {
-            $standings = $tally->standings($meet->id);
+            // Canonical Overall category — identical to the public `/tally`
+            // board and the internal tally page (Elementary + Secondary, no
+            // Paragames, no Kickboxing).
+            $standings = $tally->categoryStandings($meet->id, 'overall');
 
             foreach ($standings['districts'] as $row) {
                 $key = $row['district'];
