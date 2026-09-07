@@ -12,6 +12,7 @@ import {
     Medal,
     Megaphone,
     School,
+    Swords,
     TriangleAlert,
     UserCog,
     UsersRound,
@@ -58,6 +59,7 @@ import { index as protestsIndex } from '@/routes/protests';
 import { schedule as scheduleSheet } from '@/routes/reports';
 import { index as resultsIndex } from '@/routes/results';
 import { index as scheduleIndex } from '@/routes/schedule';
+import { index as scoreboardsIndex } from '@/routes/scoreboards';
 import { index as tallyIndex } from '@/routes/tally';
 
 type Stat = {
@@ -277,6 +279,14 @@ const quickActions: Array<{
         ],
     },
     {
+        // Gated by `can_operate_scoreboard` in QuickActions, not a role
+        // list — same authority as the sidebar's "Scoreboard" item.
+        label: 'Live scoreboards',
+        href: scoreboardsIndex().url,
+        icon: Swords,
+        roles: [],
+    },
+    {
         label: 'Medal tally',
         href: tallyIndex().url,
         icon: Crown,
@@ -301,7 +311,9 @@ function QuickActions({ compact = false }: { compact?: boolean }) {
         (action) =>
             (role && action.roles.includes(role)) ||
             (user?.can_manage_accounts === true &&
-                ['Register athlete', 'Add official'].includes(action.label)),
+                ['Register athlete', 'Add official'].includes(action.label)) ||
+            (user?.can_operate_scoreboard === true &&
+                action.label === 'Live scoreboards'),
     );
 
     if (permittedActions.length === 0) return null;
