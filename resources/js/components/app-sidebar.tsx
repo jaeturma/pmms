@@ -55,6 +55,7 @@ import { index as announcementsIndex } from '@/routes/announcements';
 import { index as athletesIndex } from '@/routes/athletes';
 import { index as auditLogsIndex } from '@/routes/audit-logs';
 import { index as billetingIndex } from '@/routes/billeting';
+import { index as davraaReportsIndex } from '@/routes/davraa-reports';
 import { index as delegationsIndex } from '@/routes/delegations';
 import { index as districtsIndex } from '@/routes/districts';
 import { edit as divisionEdit } from '@/routes/division';
@@ -793,6 +794,27 @@ export function AppSidebar() {
                 },
             ],
         });
+    }
+
+    if (auth.user?.can_manage_davraa_reports) {
+        const reporting = navSections.find(
+            (section) => section.title === 'Reporting',
+        );
+        const davraaItem: NavItem = {
+            title: 'DAVRAA Report',
+            href: davraaReportsIndex(),
+            icon: ClipboardList,
+        };
+
+        if (reporting) {
+            reporting.items.push(davraaItem);
+        } else {
+            navSections.push({
+                title: 'Reporting',
+                icon: ClipboardList,
+                items: [davraaItem],
+            });
+        }
     }
 
     if (canAccessContentManagement) {

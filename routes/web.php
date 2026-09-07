@@ -15,6 +15,7 @@ use App\Http\Controllers\ContentManagementController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DataIntegrityController;
 use App\Http\Controllers\DataRepairController;
+use App\Http\Controllers\DavraaReportController;
 use App\Http\Controllers\DelegationController;
 use App\Http\Controllers\DemoDataController;
 use App\Http\Controllers\DistrictController;
@@ -233,6 +234,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('administration/data-integrity/rosters/{roster}/candidates', [DataIntegrityController::class, 'candidates'])->name('data-integrity.candidates');
     Route::patch('administration/data-integrity/rosters/{roster}', [DataIntegrityController::class, 'link'])->name('data-integrity.link');
     Route::post('administration/data-integrity/rosters/{roster}/athlete', [DataIntegrityController::class, 'create'])->name('data-integrity.create');
+
+    // DAVRAA Report — Tournament ICT builds the "List of Recommended
+    // Qualifiers to DAVRAA" by hand; per-request authorization lives in
+    // DavraaReportController / DavraaReportAccess (sport-scoped ICT), not
+    // a flat role gate.
+    Route::get('davraa-reports', [DavraaReportController::class, 'index'])->name('davraa-reports.index');
+    Route::get('davraa-reports/create', [DavraaReportController::class, 'create'])->name('davraa-reports.create');
+    Route::get('davraa-reports/options', [DavraaReportController::class, 'options'])->name('davraa-reports.options');
+    Route::post('davraa-reports', [DavraaReportController::class, 'store'])->name('davraa-reports.store');
+    Route::get('davraa-reports/{davraaReportGroup}/edit', [DavraaReportController::class, 'edit'])->name('davraa-reports.edit');
+    Route::put('davraa-reports/{davraaReportGroup}', [DavraaReportController::class, 'update'])->name('davraa-reports.update');
+    Route::post('davraa-reports/{davraaReportGroup}/duplicate', [DavraaReportController::class, 'duplicate'])->name('davraa-reports.duplicate');
+    Route::patch('davraa-reports/{davraaReportGroup}/status', [DavraaReportController::class, 'updateStatus'])->name('davraa-reports.status');
+    Route::get('davraa-reports/{davraaReportGroup}/print', [DavraaReportController::class, 'print'])->name('davraa-reports.print');
+    Route::get('davraa-reports/{davraaReportGroup}/export', [DavraaReportController::class, 'export'])->name('davraa-reports.export');
+
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::post('dashboard/eligibility/mark-complete', [DashboardController::class, 'markCompleteAthletesEligible'])
         ->name('dashboard.eligibility.mark-complete');

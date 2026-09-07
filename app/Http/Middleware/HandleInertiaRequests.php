@@ -11,6 +11,7 @@ use App\Models\ScoringSession;
 use App\Models\Setting;
 use App\Services\CompetitionAccessService;
 use App\Services\DataIntegrityAccess;
+use App\Services\DavraaReportAccess;
 use App\Services\MealEntitlementService;
 use App\Services\ScheduleScoreboardService;
 use Illuminate\Http\Request;
@@ -98,6 +99,7 @@ class HandleInertiaRequests extends Middleware
                     'can_manage_school_master_data' => $user->canManageSchoolMasterData(),
                     'can_manage_accounts' => $user->canManageProductionAccounts(),
                     'can_manage_data_integrity' => app(DataIntegrityAccess::class)->allows($user, Meet::current()->id),
+                    'can_manage_davraa_reports' => app(DavraaReportAccess::class)->canBrowse($user, Meet::current()->id),
                     'can_manage_announcements' => $user->canManageAnnouncements(),
                     'can_access_content_management' => $user->canAccessContentManagement(),
                     'can_manage_editorial_content' => $user->canManageEditorialContent(),
