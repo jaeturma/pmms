@@ -147,10 +147,45 @@ class BoxingLiveDemoSeeder extends Seeder
             'started_at' => now()->subMinutes(6),
         ])->save();
 
+        // Round 1: 4 judges 10-9 Red, 1 judge 10-9 Blue → consensus 10-9 Red,
+        // Red currently leading 4-1 on the judges' cards (provisional).
+        $round1Cards = [
+            ['judge' => 1, 'red' => 10, 'blue' => 9],
+            ['judge' => 2, 'red' => 10, 'blue' => 9],
+            ['judge' => 3, 'red' => 10, 'blue' => 9],
+            ['judge' => 4, 'red' => 9, 'blue' => 10],
+            ['judge' => 5, 'red' => 10, 'blue' => 9],
+        ];
+
         $state = [
             'rounds' => [
                 ['round' => 1, 'score_a' => 10, 'score_b' => 9],
             ],
+            'judge_count' => 5,
+            'judge_rounds' => [
+                ['round' => 1, 'cards' => $round1Cards],
+            ],
+            'deductions_a' => 0, 'deductions_b' => 0,
+            'decision' => [
+                'manual' => false,
+                'status' => 'provisional',
+                'method' => 'points',
+                'winner' => 'a',
+                'type' => 'split',
+                'tally' => [
+                    'a' => 4, 'b' => 1, 'even' => 0,
+                    'judges' => collect($round1Cards)
+                        ->map(fn (array $c): array => [
+                            'judge' => $c['judge'],
+                            'red' => $c['red'],
+                            'blue' => $c['blue'],
+                            'pick' => $c['red'] > $c['blue'] ? 'a' : 'b',
+                        ])->all(),
+                ],
+                'rounds_scored' => 1,
+                'total_rounds' => 3,
+            ],
+            'show_live_judge_scores' => false,
             'round_duration_seconds' => 120, 'rest_duration_seconds' => 60, 'total_rounds' => 3,
             'clock_seconds' => 60, 'clock_updated_at' => null, 'clock_phase' => 'rest',
             'bell_sounded_at' => null,
@@ -169,7 +204,10 @@ class BoxingLiveDemoSeeder extends Seeder
         };
 
         $log(ScoreEventType::Bell);
-        $log(ScoreEventType::RoundScore, ['round' => 1, 'score_a' => 10, 'score_b' => 9]);
+        $log(ScoreEventType::JudgeRound, [
+            'round' => 1, 'cards' => $round1Cards,
+            'score_a' => 10, 'score_b' => 9, 'judges_a' => 4, 'judges_b' => 1,
+        ]);
         $log(ScoreEventType::Bell);
         $state['bell_sounded_at'] = $t->toIso8601String();
 

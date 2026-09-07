@@ -142,6 +142,10 @@ class ScoringSession extends Model
             }
         }
 
+        if (! $operational && is_array($sportState)) {
+            $sportState = $this->redactLiveJudgeScores($sportState);
+        }
+
         return [
             'id' => $this->id,
             'match_id' => $this->match_id,
@@ -170,6 +174,48 @@ class ScoringSession extends Model
                 'participant_provenance' => $this->participantProvenance(),
             ] : []),
         ];
+    }
+
+    /**
+     * Boxing only: unless the meet has opted into live judge-score
+     * disclosure (`sport_state.show_live_judge_scores`), the per-judge
+     * card breakdown and the provisional computed decision are withheld
+     * from the PUBLIC payload while the bout is still running — many
+     * amateur-boxing bodies forbid revealing judges' running cards
+     * mid-bout. The round-by-round consensus line, the unofficial points
+     * total and the deduction tallies stay visible; the operator console
+     * (`$operational`) always sees everything. Full disclosure the moment
+     * the session ends.
+     *
+     * @param  array<string, mixed>  $state
+     * @return array<string, mixed>
+     */
+    private function redactLiveJudgeScores(array $state): array
+    {
+        $isBoxing = $this->boardType() === ScoreboardType::Boxing;
+        $ended = $this->status === ScoringSessionStatus::Ended;
+        $disclosed = (bool) ($state['show_live_judge_scores'] ?? false);
+
+        $hasJudgeData = ($state['judge_rounds'] ?? []) !== []
+            || (is_array($state['decision'] ?? null) && ($state['decision']['manual'] ?? false) !== true);
+
+        if (! $isBoxing || $ended || $disclosed || ! $hasJudgeData) {
+            return $state;
+        }
+
+        $state['judge_rounds'] = collect($state['judge_rounds'] ?? [])
+            ->map(fn ($round): array => ['round' => (int) ($round['round'] ?? 0), 'cards_hidden' => true])
+            ->all();
+        $state['judge_scores_hidden'] = true;
+
+        // A provisional decision leaks the per-judge tally; a manual
+        // referee decision (RSC/KO/DSQ/WO) is a public announcement and
+        // stays.
+        if (is_array($state['decision'] ?? null) && ($state['decision']['manual'] ?? false) !== true) {
+            $state['decision'] = null;
+        }
+
+        return $state;
     }
 
     /**
@@ -389,7 +435,11 @@ class ScoringSession extends Model
                 } elseif (($payload['side'] ?? null) === 'b') {
                     $runningB += $runs;
                 }
-            } elseif ($event->type === ScoreEventType::RoundScore) {
+            } elseif (in_array($event->type, [ScoreEventType::RoundScore, ScoreEventType::JudgeRound], true)) {
+                // JudgeRound carries the same `score_a`/`score_b` keys as
+                // RoundScore — the round's consensus line (the modal judge
+                // card among all judges), not an average — so the running
+                // "unofficial points total" reconstructs identically.
                 $runningA += (int) ($payload['score_a'] ?? 0);
                 $runningB += (int) ($payload['score_b'] ?? 0);
             } elseif ($event->type === ScoreEventType::SetComplete) {
@@ -530,6 +580,24 @@ class ScoringSession extends Model
                 (int) ($payload['score_b'] ?? 0),
                 $this->side_b_label,
             ),
+            ScoreEventType::JudgeRound => sprintf(
+                'Round %s judged: %s %d–%d %s (judges %d–%d)',
+                (string) ($payload['round'] ?? '?'),
+                $this->side_a_label,
+                (int) ($payload['score_a'] ?? 0),
+                (int) ($payload['score_b'] ?? 0),
+                $this->side_b_label,
+                (int) ($payload['judges_a'] ?? 0),
+                (int) ($payload['judges_b'] ?? 0),
+            ),
+            ScoreEventType::Deduction => ($payload['action'] ?? null) === 'reset'
+                ? 'Point deductions reset'
+                : sprintf(
+                    '−%d point%s — %s (deduction)',
+                    (int) ($payload['points'] ?? 1),
+                    ((int) ($payload['points'] ?? 1)) === 1 ? '' : 's',
+                    $sideLabel($payload['side'] ?? null) ?? 'Unknown',
+                ),
             ScoreEventType::InningRun => sprintf(
                 '+%d run%s — %s (Inning %s)',
                 (int) ($payload['runs'] ?? 0),

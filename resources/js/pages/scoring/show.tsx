@@ -226,6 +226,17 @@ function settingsFieldsFor(
                     max: 12,
                     defaultValue: 3,
                 },
+                ...(boardType === 'boxing'
+                    ? [
+                          {
+                              key: 'judge_count',
+                              label: 'Judges',
+                              kind: 'select' as const,
+                              options: [3, 5],
+                              defaultValue: 5,
+                          },
+                      ]
+                    : []),
             ];
         case 'softball_baseball':
             return [

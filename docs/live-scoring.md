@@ -174,24 +174,55 @@ separate request.
   ignore the badge). Every foul action is also a `score_events` row
   (`App\Enums\ScoreEventType::Foul`) and an `AuditLogger` event
   (`scoring.foul_recorded` / `scoring.fouls_reset`).
-- **Boxing** (`ScoreboardType::Boxing`, sport name "Boxing", WP-07-05):
-  `sport_state` is `{rounds: [{round, score_a, score_b}, ...]}` — a
-  round-by-round history, 10-point-must style (each round's two scores are
-  validated to `0..10`, not forced to include a `10` — a meet's own judging
-  convention decides that, this app doesn't enforce it). Initialized to
-  `{rounds: []}` when a session starts for a Boxing match. Recording a round
-  (`scoring.round`, `add`-only — no `reset`, unlike fouls) appends to the
-  history **and** adds both scores into the session's running `score_a`/
-  `score_b`, so the main scoreboard's cumulative total is always the sum of
-  every round judged so far; a mis-recorded round isn't edited in place —
-  the operator corrects the running total the same way as any other board
-  type, through the existing generic `scoring.score` correction endpoint
-  (`type: correction`, reason required). The round number itself isn't
-  operator-input — it's always `count(rounds) + 1`, so rounds can't be
-  recorded out of order or duplicated under a wrong number. The round
-  (as in "Round 3") reuses the existing generic `period_label` free-text
-  field, same convention as basketball's quarter — no new structured field
-  for it.
+- **Boxing** (`ScoreboardType::Boxing`, sport name "Boxing", WP-07-05;
+  judge scorecards added later): the clock/bell keys are shared with
+  combat-rounds (`round_duration_seconds`, `rest_duration_seconds`,
+  `total_rounds`, `clock_seconds`, `clock_updated_at`, `clock_phase`,
+  `bell_sounded_at`). On top of those, boxing models the **5-judge
+  10-point-must system**:
+  - `judge_count` (3 or 5, default 5; locked once a round is scored),
+    `judge_rounds: [{round, cards: [{judge, red, blue}, ...]}]` — every
+    judge's own card for every completed round, `deductions_a` /
+    `deductions_b` (referee point deductions, bout-wide), `decision`
+    (see below), `show_live_judge_scores` (default `false`).
+  - `scoring.round` for a **boxing** session takes `cards` (one per
+    judge). Each card must be 10-point-must — exactly one side on 10, the
+    other on 7/8/9; `10-10`, `9-9` and "no side on 10" are rejected
+    (boxing has no drawn round). Combat-rounds still passes the single
+    `score_a`/`score_b` pair to the same route.
+  - Recording a round appends every card to `judge_rounds`, derives the
+    round's **consensus line** (the modal winning corner + modal winning
+    margin among the judges — never an average) into
+    `rounds: [{round, score_a, score_b}]` and the running `score_a`/
+    `score_b`, so the existing round table, play-by-play (a `JudgeRound`
+    score event, reconstructed exactly like `RoundScore`) and "unofficial
+    points total" keep working unchanged. Round number stays derived
+    (`count(judge_rounds) + 1`), capped at `total_rounds`.
+  - `scoring.boxing-deduction` (`side` + `points` 1-3, or `action:
+    reset`) — bout-wide, subtracted from that corner's total on **every**
+    judge's card when the decision is computed; never touches a raw round
+    score. Logs a `Deduction` score event.
+  - `decision` is computed from each judge's **full card** (round totals
+    minus deductions), never the aggregate points: tally the judges'
+    picks → `unanimous` (all agree) / `majority` (one card even, no card
+    for the loser) / `split` / `draw`. `status: 'provisional'` until every
+    scheduled round is scored, then `'final'`.
+  - `scoring.boxing-decision` (`method`: `points` / `rsc` / `rsc_i` /
+    `ko` / `dsq` / `wo` / `abd` / `nc`, plus `winner` and optional
+    `note`) — an authorized ICT/Admin call that **overrides** the points
+    computation for a referee/official stoppage; `method: points` with no
+    winner clears the override and reverts to the computed result. Audit
+    `scoring.decision_recorded`.
+  - **Public disclosure**: unless `show_live_judge_scores` is on, the
+    per-judge cards and the provisional decision are withheld from the
+    **public** payload (`ScoringSession::toLivePayload()`) while the bout
+    is live — the consensus line, points total and deduction tallies stay
+    visible; the operator console always sees everything; full disclosure
+    once the session ends. A manual RSC/KO/DSQ/WO decision is a public
+    announcement and is never withheld.
+  - A mis-recorded round is still corrected the same way as any other
+    board type, through `scoring.score` (`type: correction`); the round
+    (as in "Round 3") reuses the generic `period_label` free-text field.
 - **Softball/Baseball** (`ScoreboardType::SoftballBaseball`, sport name
   "Softball" or "Baseball", WP-07-06): `sport_state` is `{inning, half
   (top|bottom), outs, balls, strikes, innings: [{inning, runs_a, runs_b},
@@ -524,13 +555,17 @@ correct side and reset zeroes both, the `scoring.foul` endpoint 422s for a
 non-Basketball session, is forbidden for non-managers, and rejects a
 mutation once the session has ended, and the scoreboard page exposes
 `board_type`/`sport_state` for a Basketball match; a Boxing match's session
-initializes an empty round history and the right `board_type`, recording
-round scores appends to the history and sums into the running total
-correctly across multiple rounds with correct round numbers, a round score
-outside `0..10` is rejected, the `scoring.round` endpoint 422s for a
-non-Boxing session, is forbidden for non-managers, rejects a mutation on an
-ended session, and the scoreboard page exposes `board_type`/`sport_state`
-for a Boxing match; a Softball or Baseball match's session both correctly
+initializes the judge-scorecard state and the right `board_type`, a round
+stores every judge's card verbatim and derives the consensus line + running
+total, cards that aren't 10-point-must (`10-10`, `9-9`, no side on 10, an
+over-wide margin) are rejected, referee deductions shift every judge card in
+the decision without touching a raw score, unanimous / majority / split
+decisions are computed from each judge's card, an authorized official can
+override the points result with an RSC/KO decision (and a later round score
+doesn't overwrite it), the public payload withholds live judge cards until
+the bout ends unless disclosure is on, the deduction/decision endpoints are
+boxing-only and manager-only, and the manual participant fallback still
+starts a bout with no entries; a Softball or Baseball match's session both correctly
 initialize the same `softball_baseball` board type and count/inning state,
 recording a run appends to the current inning's row and sums into the
 running total (a later inning starts its own row rather than merging),

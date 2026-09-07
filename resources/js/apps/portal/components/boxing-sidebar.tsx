@@ -1,6 +1,15 @@
 import { ShieldAlert, User, Users } from 'lucide-react';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
-import { accuracy, knockdownCount, readBoutMeta, readBoutStats, readOfficials, readRounds, readWarnings } from '@/apps/portal/lib/boxing-state';
+import {
+    accuracy,
+    knockdownCount,
+    readBoutMeta,
+    readBoutStats,
+    readDeductions,
+    readOfficials,
+    readRounds,
+    readWarnings,
+} from '@/apps/portal/lib/boxing-state';
 import { cn } from '@/apps/portal/lib/utils';
 import type { PortalLiveNow } from '@/apps/portal/types';
 
@@ -14,6 +23,7 @@ export function PortalBoxingSidebar({ liveNow }: PortalBoxingSidebarProps) {
     const boutMeta = readBoutMeta(session.sport_state);
     const boutStats = readBoutStats(session.sport_state);
     const warnings = readWarnings(session.sport_state);
+    const deductions = readDeductions(session.sport_state);
     const officials = readOfficials(session.sport_state);
     const kdA = knockdownCount(session.sport_state, 'knockdowns_a');
     const kdB = knockdownCount(session.sport_state, 'knockdowns_b');
@@ -124,46 +134,47 @@ export function PortalBoxingSidebar({ liveNow }: PortalBoxingSidebarProps) {
                     Warnings and Deductions
                 </div>
 
-                {warnings ? (
+                {warnings || deductions ? (
                     <div className="px-[15px] pt-2 pb-[13px] text-xs">
-                        <div className="flex items-center justify-between border-b border-[var(--portal-muted)] py-2.5">
-                            <span className="font-[750]">{sideALabel}</span>
-                            <span
-                                className={cn(
-                                    'rounded-full px-2.5 py-1 text-[10px] font-[900] uppercase',
-                                    warnings.warnings_a > 0
-                                        ? 'bg-[var(--portal-maroon)] text-[var(--portal-maroon-foreground)]'
-                                        : 'bg-[var(--portal-accent)] text-[var(--portal-accent-foreground)]',
-                                )}
-                            >
-                                {warnings.warnings_a > 0 ? `${warnings.warnings_a} Warning${warnings.warnings_a === 1 ? '' : 's'}` : 'No Warning'}
-                            </span>
-                        </div>
-                        <div className="flex items-center justify-between border-b border-[var(--portal-muted)] py-2.5">
-                            <span className="font-[750]">{sideBLabel}</span>
-                            <span
-                                className={cn(
-                                    'rounded-full px-2.5 py-1 text-[10px] font-[900] uppercase',
-                                    warnings.warnings_b > 0
-                                        ? 'bg-[var(--portal-maroon)] text-[var(--portal-maroon-foreground)]'
-                                        : 'bg-[var(--portal-accent)] text-[var(--portal-accent-foreground)]',
-                                )}
-                            >
-                                {warnings.warnings_b > 0 ? `${warnings.warnings_b} Warning${warnings.warnings_b === 1 ? '' : 's'}` : 'No Warning'}
+                        {warnings && (
+                            <>
+                                <div className="flex items-center justify-between border-b border-[var(--portal-muted)] py-2.5">
+                                    <span className="font-[750]">{sideALabel}</span>
+                                    <span
+                                        className={cn(
+                                            'rounded-full px-2.5 py-1 text-[10px] font-[900] uppercase',
+                                            warnings.warnings_a > 0
+                                                ? 'bg-[var(--portal-maroon)] text-[var(--portal-maroon-foreground)]'
+                                                : 'bg-[var(--portal-accent)] text-[var(--portal-accent-foreground)]',
+                                        )}
+                                    >
+                                        {warnings.warnings_a > 0 ? `${warnings.warnings_a} Warning${warnings.warnings_a === 1 ? '' : 's'}` : 'No Warning'}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between border-b border-[var(--portal-muted)] py-2.5">
+                                    <span className="font-[750]">{sideBLabel}</span>
+                                    <span
+                                        className={cn(
+                                            'rounded-full px-2.5 py-1 text-[10px] font-[900] uppercase',
+                                            warnings.warnings_b > 0
+                                                ? 'bg-[var(--portal-maroon)] text-[var(--portal-maroon-foreground)]'
+                                                : 'bg-[var(--portal-accent)] text-[var(--portal-accent-foreground)]',
+                                        )}
+                                    >
+                                        {warnings.warnings_b > 0 ? `${warnings.warnings_b} Warning${warnings.warnings_b === 1 ? '' : 's'}` : 'No Warning'}
+                                    </span>
+                                </div>
+                            </>
+                        )}
+                        <div className="flex items-center justify-between border-b border-[var(--portal-muted)] py-2.5 last:border-b-0">
+                            <span className="font-[750]">{sideALabel} — deductions</span>
+                            <span className="font-[900] tabular-nums">
+                                {deductions ? deductions.a : (warnings?.deductions ?? 0)}
                             </span>
                         </div>
                         <div className="flex items-center justify-between py-2.5">
-                            <span className="font-[750]">Point Deductions</span>
-                            <span
-                                className={cn(
-                                    'rounded-full px-2.5 py-1 text-[10px] font-[900] uppercase',
-                                    warnings.deductions > 0
-                                        ? 'bg-[var(--portal-maroon)] text-[var(--portal-maroon-foreground)]'
-                                        : 'bg-[var(--portal-accent)] text-[var(--portal-accent-foreground)]',
-                                )}
-                            >
-                                {warnings.deductions > 0 ? warnings.deductions : 'None'}
-                            </span>
+                            <span className="font-[750]">{sideBLabel} — deductions</span>
+                            <span className="font-[900] tabular-nums">{deductions ? deductions.b : 0}</span>
                         </div>
                     </div>
                 ) : (

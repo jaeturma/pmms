@@ -13,6 +13,8 @@ enum ScoreEventType: string
     case Ended = 'ended';
     case Foul = 'foul';
     case RoundScore = 'round_score';
+    case JudgeRound = 'judge_round';
+    case Deduction = 'deduction';
     case InningRun = 'inning_run';
     case Count = 'count';
     case Possession = 'possession';
@@ -46,6 +48,8 @@ enum ScoreEventType: string
             self::Ended => 'Ended',
             self::Foul => 'Foul',
             self::RoundScore => 'Round score',
+            self::JudgeRound => 'Judge scorecards',
+            self::Deduction => 'Point deduction',
             self::InningRun => 'Inning run',
             self::Count => 'Count',
             self::Possession => 'Possession',

@@ -25,5 +25,8 @@ test('boxing live-score demo is isolated, playable, and idempotent', function ()
         ->and($session->score_a)->toBe(10)
         ->and($session->score_b)->toBe(9)
         ->and($session->sport_state['rounds'])->toHaveCount(1)
+        ->and($session->sport_state['judge_rounds'])->toHaveCount(1)
+        ->and($session->sport_state['judge_rounds'][0]['cards'])->toHaveCount(5)
+        ->and($session->sport_state['decision'])->toMatchArray(['winner' => 'a', 'status' => 'provisional'])
         ->and($session->events()->count())->toBe(3);
 });

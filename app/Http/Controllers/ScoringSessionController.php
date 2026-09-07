@@ -501,8 +501,25 @@ class ScoringSessionController extends Controller
             // does — real round/rest duration varies more by age
             // division/weight class than by sport, and the operator can
             // already adjust it via settings().
-            ScoreboardType::Boxing, ScoreboardType::CombatRounds => [
+            // Combat-rounds (taekwondo/wushu/pencak silat/arnis) keep the
+            // original simple one-pair-per-round shape; boxing adds the
+            // 5-judge 10-point-must scorecard model on top (WP: boxing
+            // scorecards). `rounds` stays on both — for boxing it holds
+            // each round's consensus line so the shared round table /
+            // play-by-play / running total keep working unchanged.
+            ScoreboardType::CombatRounds => [
                 'rounds' => [],
+                'round_duration_seconds' => 120, 'rest_duration_seconds' => 60, 'total_rounds' => 3,
+                'clock_seconds' => 120, 'clock_updated_at' => null, 'clock_phase' => 'round',
+                'bell_sounded_at' => null,
+            ],
+            ScoreboardType::Boxing => [
+                'rounds' => [],
+                'judge_count' => 5,
+                'judge_rounds' => [],
+                'deductions_a' => 0, 'deductions_b' => 0,
+                'decision' => null,
+                'show_live_judge_scores' => false,
                 'round_duration_seconds' => 120, 'rest_duration_seconds' => 60, 'total_rounds' => 3,
                 'clock_seconds' => 120, 'clock_updated_at' => null, 'clock_phase' => 'round',
                 'bell_sounded_at' => null,
@@ -1087,20 +1104,27 @@ class ScoringSessionController extends Controller
     }
 
     /**
-     * Record a judged round score for both sides at once (boxing
-     * scoreboard — WP-07-05 — and taekwondo/wushu/pencak silat/arnis, which
-     * share this exact round-clock+judged-round-points shape), 10-point-
-     * must style. Appends to the round-by-round history in `sport_state`
-     * and adds to the session's running `score_a`/`score_b` total — the
-     * same cumulative total every board type displays. Past rounds are
-     * not individually editable here; a mis-scored round is fixed the
-     * same way as any other board type, through the generic `score`
-     * correction endpoint.
+     * Record one round of the bout.
+     *
+     * Combat-rounds (taekwondo/wushu/pencak silat/arnis) pass a single
+     * judged `score_a`/`score_b` pair (0-10, 10-point-must). Boxing passes
+     * a full set of `cards` — one 10-point-must card per judge — and this
+     * derives the round's consensus line from them (never an average, see
+     * `boxingRoundConsensus()`) so the shared round table / play-by-play /
+     * running total keep working, while `sport_state.judge_rounds` keeps
+     * every judge's card for the decision calculation. Past rounds are not
+     * editable here; a mis-scored round is fixed through the generic
+     * `score` correction endpoint, same as every other board type.
      */
     public function round(Request $request, ScoringSession $session): RedirectResponse
     {
         $this->authorizeManageSession($request, $session);
         $this->assertActive($session);
+
+        if ($session->boardType() === ScoreboardType::Boxing) {
+            return $this->recordBoxingJudgeRound($request, $session);
+        }
+
         $this->assertBoxingOrCombatRounds($session);
 
         $data = $request->validate([
@@ -1137,6 +1161,233 @@ class ScoringSessionController extends Controller
         ]);
 
         $this->audit->record('scoring.round_scored', $session, [...$this->context($session), 'round' => $roundNumber, ...$data]);
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Boxing: record all judges' 10-point-must cards for the next round.
+     * Each card must have exactly one 10 and the other side on 7, 8 or 9
+     * (a 10-9 close round, 10-8 clear, 10-7 dominant) — 10-10, 9-9 and
+     * any "no side on 10" card is rejected, boxing has no drawn round.
+     */
+    private function recordBoxingJudgeRound(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $state = $session->sport_state ?? [];
+        $judgeCount = (int) ($state['judge_count'] ?? 5);
+        $totalRounds = $state['total_rounds'] ?? null;
+        $judgeRounds = $state['judge_rounds'] ?? [];
+
+        if ($totalRounds !== null && count($judgeRounds) >= $totalRounds) {
+            throw ValidationException::withMessages([
+                'cards' => __('All :n scheduled rounds have already been scored.', ['n' => $totalRounds]),
+            ]);
+        }
+
+        $data = $request->validate([
+            'cards' => ['required', 'array', 'size:'.$judgeCount],
+            'cards.*.judge' => ['required', 'integer', 'min:1', 'max:'.$judgeCount],
+            'cards.*.red' => ['required', 'integer', 'min:0', 'max:10'],
+            'cards.*.blue' => ['required', 'integer', 'min:0', 'max:10'],
+        ]);
+
+        $judges = collect($data['cards']);
+
+        if ($judges->pluck('judge')->unique()->count() !== $judgeCount) {
+            throw ValidationException::withMessages([
+                'cards' => __('Provide exactly one card for each of the :n judges.', ['n' => $judgeCount]),
+            ]);
+        }
+
+        foreach ($data['cards'] as $i => $card) {
+            $pair = [(int) $card['red'], (int) $card['blue']];
+            $valid = ($pair[0] === 10 && in_array($pair[1], [7, 8, 9], true))
+                || ($pair[1] === 10 && in_array($pair[0], [7, 8, 9], true));
+
+            if (! $valid) {
+                throw ValidationException::withMessages([
+                    "cards.{$i}.red" => __('Each judge scores the round winner 10 and the other boxer 9, 8 or 7 — no even rounds.'),
+                ]);
+            }
+        }
+
+        $roundNumber = count($judgeRounds) + 1;
+        $cards = $judges
+            ->sortBy('judge')
+            ->map(fn ($card): array => [
+                'judge' => (int) $card['judge'],
+                'red' => (int) $card['red'],
+                'blue' => (int) $card['blue'],
+            ])
+            ->values()
+            ->all();
+
+        $judgeRounds[] = ['round' => $roundNumber, 'cards' => $cards];
+        $consensus = $this->boxingRoundConsensus($cards);
+        $judgesFor = $this->boxingRoundJudgeSplit($cards);
+
+        $state['judge_rounds'] = $judgeRounds;
+        $state['rounds'] = [...($state['rounds'] ?? []), [
+            'round' => $roundNumber,
+            'score_a' => $consensus['a'],
+            'score_b' => $consensus['b'],
+        ]];
+        $state['decision'] = $this->computeBoxingDecision($state);
+
+        $session->forceFill([
+            'sport_state' => $state,
+            'score_a' => $session->score_a + $consensus['a'],
+            'score_b' => $session->score_b + $consensus['b'],
+        ])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::JudgeRound,
+            'payload' => [
+                'round' => $roundNumber,
+                'cards' => $cards,
+                'score_a' => $consensus['a'],
+                'score_b' => $consensus['b'],
+                'judges_a' => $judgesFor['a'],
+                'judges_b' => $judgesFor['b'],
+            ],
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record('scoring.judge_round_scored', $session, [
+            ...$this->context($session),
+            'round' => $roundNumber,
+            'cards' => $cards,
+        ]);
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Record a referee point deduction against one corner — boxing only.
+     * Bout-wide (every judge's card is reduced by the same amount when the
+     * decision is computed), never applied to a raw judge round score.
+     * `action: 'reset'` clears both corners' deductions.
+     */
+    public function boxingDeduction(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertBoxing($session);
+
+        $data = $request->validate([
+            'action' => ['nullable', Rule::in(['add', 'reset'])],
+            'side' => ['required_unless:action,reset', 'nullable', Rule::in(['a', 'b'])],
+            'points' => ['nullable', 'integer', 'min:1', 'max:3'],
+        ]);
+
+        $state = $session->sport_state ?? [];
+        $action = $data['action'] ?? 'add';
+
+        if ($action === 'reset') {
+            $state['deductions_a'] = 0;
+            $state['deductions_b'] = 0;
+        } else {
+            $key = $data['side'] === 'a' ? 'deductions_a' : 'deductions_b';
+            $state[$key] = max(0, (int) ($state[$key] ?? 0) + ($data['points'] ?? 1));
+        }
+
+        $state['decision'] = $this->computeBoxingDecision($state);
+
+        $session->forceFill(['sport_state' => $state])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::Deduction,
+            'payload' => $action === 'reset'
+                ? ['action' => 'reset']
+                : ['action' => 'add', 'side' => $data['side'], 'points' => $data['points'] ?? 1],
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record('scoring.deduction_recorded', $session, [
+            ...$this->context($session),
+            'action' => $action,
+            'side' => $data['side'] ?? null,
+            'points' => $data['points'] ?? ($action === 'reset' ? null : 1),
+        ]);
+
+        broadcast(new ScoreUpdated($session))->toOthers();
+
+        return back();
+    }
+
+    /**
+     * Record the official bout decision — boxing only, authorized
+     * ICT/Admin. A `points` method with no winner clears any manual
+     * decision and reverts the board to the computed result; every other
+     * method (RSC/RSC-I/KO/DSQ/WO/ABD/NC) is a referee/official call that
+     * overrides the points calculation and needs a winner (except NC).
+     */
+    public function boxingDecision(Request $request, ScoringSession $session): RedirectResponse
+    {
+        $this->authorizeManageSession($request, $session);
+        $this->assertActive($session);
+        $this->assertBoxing($session);
+
+        $data = $request->validate([
+            'method' => ['required', Rule::in(['points', 'rsc', 'rsc_i', 'ko', 'dsq', 'wo', 'abd', 'nc'])],
+            'winner' => ['nullable', Rule::in(['a', 'b'])],
+            'note' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        if (! in_array($data['method'], ['points', 'nc'], true) && ($data['winner'] ?? null) === null) {
+            throw ValidationException::withMessages([
+                'winner' => __('Select the winning corner for a :method decision.', ['method' => mb_strtoupper($data['method'])]),
+            ]);
+        }
+
+        $state = $session->sport_state ?? [];
+
+        if ($data['method'] === 'points' && ($data['winner'] ?? null) === null) {
+            // Drop any manual decision first so the computation isn't
+            // short-circuited by its own `manual` guard.
+            $state['decision'] = null;
+            $state['decision'] = $this->computeBoxingDecision($state);
+        } else {
+            $state['decision'] = [
+                'manual' => true,
+                'status' => 'final',
+                'method' => $data['method'],
+                'winner' => $data['winner'] ?? null,
+                'note' => $data['note'] ?? null,
+                'tally' => $this->boxingJudgeTally($state),
+            ];
+        }
+
+        $session->forceFill(['sport_state' => $state])->save();
+
+        /** @var User $user */
+        $user = $request->user();
+
+        ScoreEvent::create([
+            'scoring_session_id' => $session->id,
+            'type' => ScoreEventType::Note,
+            'payload' => ['message' => $this->describeBoxingDecision($session, $state['decision'])],
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->audit->record('scoring.decision_recorded', $session, [
+            ...$this->context($session),
+            'method' => $data['method'],
+            'winner' => $data['winner'] ?? null,
+            'note' => $data['note'] ?? null,
+        ]);
 
         broadcast(new ScoreUpdated($session))->toOthers();
 
@@ -2272,7 +2523,20 @@ class ScoringSessionController extends Controller
         }
         $data = $request->validate($rules);
 
-        $state = [...($session->sport_state ?? []), ...$data];
+        $currentState = $session->sport_state ?? [];
+
+        // Boxing: the judge panel size is fixed once the first round has
+        // been scored — changing it would orphan the recorded cards.
+        if ($session->boardType() === ScoreboardType::Boxing
+            && array_key_exists('judge_count', $data)
+            && (int) $data['judge_count'] !== (int) ($currentState['judge_count'] ?? 5)
+            && ($currentState['judge_rounds'] ?? []) !== []) {
+            throw ValidationException::withMessages([
+                'judge_count' => __('The number of judges cannot change once a round has been scored.'),
+            ]);
+        }
+
+        $state = [...$currentState, ...$data];
 
         $session->forceFill(['sport_state' => $state])->save();
 
@@ -2302,10 +2566,20 @@ class ScoringSessionController extends Controller
                 'team_color_b' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
                 'quarters' => ['required', 'integer', Rule::in([2, 4])],
             ],
-            ScoreboardType::Boxing, ScoreboardType::CombatRounds => [
+            ScoreboardType::CombatRounds => [
                 'round_duration_seconds' => ['required', 'integer', 'min:30', 'max:600'],
                 'rest_duration_seconds' => ['required', 'integer', 'min:15', 'max:300'],
                 'total_rounds' => ['required', 'integer', 'min:1', 'max:12'],
+            ],
+            // `judge_count` / `show_live_judge_scores` are `sometimes` so
+            // the clock-and-rounds settings form can post its three fields
+            // on their own, exactly as before this WP.
+            ScoreboardType::Boxing => [
+                'round_duration_seconds' => ['required', 'integer', 'min:30', 'max:600'],
+                'rest_duration_seconds' => ['required', 'integer', 'min:15', 'max:300'],
+                'total_rounds' => ['required', 'integer', 'min:1', 'max:12'],
+                'judge_count' => ['sometimes', 'integer', Rule::in([3, 5])],
+                'show_live_judge_scores' => ['sometimes', 'boolean'],
             ],
             ScoreboardType::SoftballBaseball => [
                 'team_color_a' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
@@ -2850,6 +3124,190 @@ class ScoringSessionController extends Controller
         if (! in_array($session->boardType(), [ScoreboardType::Boxing, ScoreboardType::CombatRounds], true)) {
             abort(422, __('This action is only available for a boxing, taekwondo, wushu, pencak silat, or arnis scoring session.'));
         }
+    }
+
+    private function assertBoxing(ScoringSession $session): void
+    {
+        if ($session->boardType() !== ScoreboardType::Boxing) {
+            abort(422, __('This action is only available for a boxing scoring session.'));
+        }
+    }
+
+    /**
+     * The round's consensus line for the shared round table / running
+     * total — the modal winning corner and the modal winning margin among
+     * the judges (never a mean). If the judges split evenly on the corner,
+     * the corner with more cards wins the line; ties there fall to the
+     * closest margin (10-9). This is a display summary only; the bout
+     * decision is computed from every judge's full card, never from this.
+     *
+     * @param  array<int, array{judge: int, red: int, blue: int}>  $cards
+     * @return array{a: int, b: int}
+     */
+    private function boxingRoundConsensus(array $cards): array
+    {
+        $redWins = collect($cards)->filter(fn ($card): bool => $card['red'] > $card['blue']);
+        $blueWins = collect($cards)->filter(fn ($card): bool => $card['blue'] > $card['red']);
+
+        $winner = $redWins->count() >= $blueWins->count() ? 'red' : 'blue';
+        $winningCards = $winner === 'red' ? $redWins : $blueWins;
+
+        // Modal margin among the judges who scored it for the winner;
+        // ties on frequency fall to the closest margin (10-9); 1 when
+        // there are no winning cards at all.
+        $margins = $winningCards->map(fn ($card): int => 10 - min($card['red'], $card['blue']))->countBy();
+        $margin = 1;
+        if ($margins->isNotEmpty()) {
+            $topFrequency = $margins->max();
+            $margin = (int) $margins->filter(fn (int $count): bool => $count === $topFrequency)->keys()->min();
+        }
+
+        return $winner === 'red'
+            ? ['a' => 10, 'b' => 10 - $margin]
+            : ['a' => 10 - $margin, 'b' => 10];
+    }
+
+    /**
+     * How many judges scored this round for each corner.
+     *
+     * @param  array<int, array{judge: int, red: int, blue: int}>  $cards
+     * @return array{a: int, b: int}
+     */
+    private function boxingRoundJudgeSplit(array $cards): array
+    {
+        return [
+            'a' => collect($cards)->filter(fn ($card): bool => $card['red'] > $card['blue'])->count(),
+            'b' => collect($cards)->filter(fn ($card): bool => $card['blue'] > $card['red'])->count(),
+        ];
+    }
+
+    /**
+     * Each judge's running card total across the rounds scored so far,
+     * with the referee's bout-wide point deductions applied to that
+     * corner's total (standard amateur rule — a deduction is official and
+     * shows on every judge's card).
+     *
+     * @param  array<string, mixed>  $state
+     * @return array{a: int, b: int, even: int, judges: array<int, array{judge: int, red: int, blue: int, pick: string}>}
+     */
+    private function boxingJudgeTally(array $state): array
+    {
+        $deductA = (int) ($state['deductions_a'] ?? 0);
+        $deductB = (int) ($state['deductions_b'] ?? 0);
+        $judgeCount = (int) ($state['judge_count'] ?? 5);
+
+        $totals = [];
+        foreach (range(1, max(1, $judgeCount)) as $judge) {
+            $totals[$judge] = ['red' => 0, 'blue' => 0];
+        }
+
+        foreach ($state['judge_rounds'] ?? [] as $round) {
+            foreach ($round['cards'] ?? [] as $card) {
+                $judge = (int) ($card['judge'] ?? 0);
+                if (! isset($totals[$judge])) {
+                    continue;
+                }
+                $totals[$judge]['red'] += (int) ($card['red'] ?? 0);
+                $totals[$judge]['blue'] += (int) ($card['blue'] ?? 0);
+            }
+        }
+
+        $picks = ['a' => 0, 'b' => 0, 'even' => 0];
+        $judges = [];
+
+        foreach ($totals as $judge => $total) {
+            $red = $total['red'] - $deductA;
+            $blue = $total['blue'] - $deductB;
+            $pick = $red === $blue ? 'even' : ($red > $blue ? 'a' : 'b');
+            $picks[$pick]++;
+            $judges[] = ['judge' => $judge, 'red' => $red, 'blue' => $blue, 'pick' => $pick];
+        }
+
+        return ['a' => $picks['a'], 'b' => $picks['b'], 'even' => $picks['even'], 'judges' => $judges];
+    }
+
+    /**
+     * The bout decision derived from every judge's full card (never the
+     * aggregate points). Provisional until all scheduled rounds are in.
+     * A manual referee decision already on the state is preserved.
+     *
+     * @param  array<string, mixed>  $state
+     * @return array<string, mixed>|null
+     */
+    private function computeBoxingDecision(array $state): ?array
+    {
+        if (is_array($state['decision'] ?? null) && ($state['decision']['manual'] ?? false) === true) {
+            return $state['decision'];
+        }
+
+        $roundsScored = count($state['judge_rounds'] ?? []);
+        if ($roundsScored === 0) {
+            return null;
+        }
+
+        $totalRounds = (int) ($state['total_rounds'] ?? $roundsScored);
+        $tally = $this->boxingJudgeTally($state);
+        $final = $roundsScored >= $totalRounds;
+
+        $winner = null;
+        $type = null;
+
+        if ($tally['a'] !== $tally['b']) {
+            $winner = $tally['a'] > $tally['b'] ? 'a' : 'b';
+            $loserPicks = $winner === 'a' ? $tally['b'] : $tally['a'];
+
+            if ($loserPicks === 0 && $tally['even'] === 0) {
+                $type = 'unanimous';
+            } elseif ($loserPicks === 0) {
+                $type = 'majority';
+            } else {
+                $type = 'split';
+            }
+        } elseif ($tally['even'] > 0 || $tally['a'] === $tally['b']) {
+            $type = 'draw';
+        }
+
+        return [
+            'manual' => false,
+            'status' => $final ? 'final' : 'provisional',
+            'method' => 'points',
+            'winner' => $winner,
+            'type' => $type,
+            'tally' => $tally,
+            'rounds_scored' => $roundsScored,
+            'total_rounds' => $totalRounds,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $decision
+     */
+    private function describeBoxingDecision(ScoringSession $session, ?array $decision): string
+    {
+        if ($decision === null) {
+            return __('Bout decision cleared.');
+        }
+
+        $corner = match ($decision['winner'] ?? null) {
+            'a' => $session->side_a_label,
+            'b' => $session->side_b_label,
+            default => null,
+        };
+
+        $method = mb_strtoupper(str_replace('_', '-', (string) ($decision['method'] ?? 'points')));
+
+        if ($corner === null) {
+            return __('Bout decision: :method (no contest).', ['method' => $method]);
+        }
+
+        $tally = $decision['tally'] ?? null;
+        $score = is_array($tally) && isset($tally['a'], $tally['b'])
+            ? sprintf(' %d-%d', max($tally['a'], $tally['b']), min($tally['a'], $tally['b']))
+            : '';
+
+        $type = ($decision['type'] ?? null) ? ucfirst((string) $decision['type']).' decision' : $method;
+
+        return __(':corner wins by :type:score.', ['corner' => $corner, 'type' => $type, 'score' => $score]);
     }
 
     private function assertSoftballBaseball(ScoringSession $session): void

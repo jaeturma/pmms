@@ -710,9 +710,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('scoring-sessions/{session}/horn', [ScoringSessionController::class, 'horn'])->name('scoring.horn');
         Route::patch('scoring-sessions/{session}/lineup', [ScoringSessionController::class, 'lineup'])->name('scoring.lineup');
 
-        // Boxing-only: the round/rest countdown clock and the bell signal.
+        // Boxing/combat-rounds: the round/rest countdown clock and the bell signal.
         Route::patch('scoring-sessions/{session}/round-clock', [ScoringSessionController::class, 'roundClock'])->name('scoring.round-clock');
         Route::patch('scoring-sessions/{session}/bell', [ScoringSessionController::class, 'bell'])->name('scoring.bell');
+
+        // Boxing-only: referee point deductions and the official bout decision.
+        Route::patch('scoring-sessions/{session}/boxing-deduction', [ScoringSessionController::class, 'boxingDeduction'])->name('scoring.boxing-deduction');
+        Route::patch('scoring-sessions/{session}/boxing-decision', [ScoringSessionController::class, 'boxingDecision'])->name('scoring.boxing-decision');
 
         // Volleyball/Sepak Takraw-only: rally-point scoring within a set.
         Route::patch('scoring-sessions/{session}/rally-point', [ScoringSessionController::class, 'rallyPoint'])->name('scoring.rally-point');

@@ -62,6 +62,37 @@ export type BoxingRound = {
     score_b: number;
 };
 
+export type BoxingJudgeCard = {
+    judge: number;
+    red: number;
+    blue: number;
+};
+
+export type BoxingJudgeRound = {
+    round: number;
+    cards?: BoxingJudgeCard[];
+    /** present instead of `cards` on the public payload while judge
+     * scores are withheld during a live bout. */
+    cards_hidden?: boolean;
+};
+
+export type BoxingDecision = {
+    manual: boolean;
+    status: 'provisional' | 'final';
+    method: 'points' | 'rsc' | 'rsc_i' | 'ko' | 'dsq' | 'wo' | 'abd' | 'nc';
+    winner: 'a' | 'b' | null;
+    type?: 'unanimous' | 'majority' | 'split' | 'draw' | null;
+    note?: string | null;
+    tally?: {
+        a: number;
+        b: number;
+        even: number;
+        judges: { judge: number; red: number; blue: number; pick: 'a' | 'b' | 'even' }[];
+    };
+    rounds_scored?: number;
+    total_rounds?: number;
+};
+
 export type BoxingState = {
     rounds: BoxingRound[];
     round_duration_seconds: number;
@@ -71,6 +102,14 @@ export type BoxingState = {
     clock_updated_at: string | null;
     clock_phase: 'round' | 'rest';
     bell_sounded_at: string | null;
+    /** boxing only — combat-rounds sessions omit these. */
+    judge_count?: number;
+    judge_rounds?: BoxingJudgeRound[];
+    deductions_a?: number;
+    deductions_b?: number;
+    decision?: BoxingDecision | null;
+    show_live_judge_scores?: boolean;
+    judge_scores_hidden?: boolean;
 };
 
 export type SoftballInning = {
@@ -295,7 +334,10 @@ export function isBasketballState(
 export function isBoxingState(
     state: LiveSession['sport_state'],
 ): state is BoxingState {
-    return state !== null && 'rounds' in state;
+    // Shared by boxing and combat-rounds (taekwondo/wushu/pencak silat/
+    // arnis) — `bell_sounded_at` is unique to those two board shapes
+    // (wrestling uses a horn, not a bell).
+    return state !== null && 'bell_sounded_at' in state;
 }
 
 export function isSoftballState(

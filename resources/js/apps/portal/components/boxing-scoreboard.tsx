@@ -3,7 +3,17 @@ import { useEffect, useState } from 'react';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { initialsFor } from '@/apps/portal/components/municipality-crest';
 import { ScoreboardGameLabel } from '@/apps/portal/components/scoreboard-game-label';
-import { knockdownCount, readJudges, readRounds, totalRounds } from '@/apps/portal/lib/boxing-state';
+import {
+    judgeCardTotals,
+    judgeScoresHidden,
+    knockdownCount,
+    readDecision,
+    readDeductions,
+    readJudgeRounds,
+    readJudges,
+    readRounds,
+    totalRounds,
+} from '@/apps/portal/lib/boxing-state';
 import { cn } from '@/apps/portal/lib/utils';
 import type { PortalLiveNow, PortalPlayByPlayEntry } from '@/apps/portal/types';
 
@@ -101,6 +111,11 @@ export function PortalBoxingScoreboard({ liveNow, className }: PortalBoxingScore
     const rounds = readRounds(session.sport_state);
     const roundsTotal = totalRounds(session.sport_state);
     const judges = readJudges(session.sport_state);
+    const judgeRounds = readJudgeRounds(session.sport_state);
+    const judgesHidden = judgeScoresHidden(session.sport_state);
+    const judgeTotals = judgeCardTotals(session.sport_state);
+    const deductions = readDeductions(session.sport_state);
+    const decision = readDecision(session.sport_state);
     const kdA = knockdownCount(session.sport_state, 'knockdowns_a');
     const kdB = knockdownCount(session.sport_state, 'knockdowns_b');
     const showKnockdowns = kdA !== undefined && kdB !== undefined;
@@ -109,6 +124,15 @@ export function PortalBoxingScoreboard({ liveNow, className }: PortalBoxingScore
     const sideBLabel = session.side_b_label ?? 'TBD';
     const athleteA = session.side_a_athlete;
     const athleteB = session.side_b_athlete;
+
+    const decisionCorner =
+        decision?.winner === 'a' ? sideALabel : decision?.winner === 'b' ? sideBLabel : null;
+    const decisionMethod =
+        decision?.method === 'points'
+            ? decision.type
+                ? `${decision.type[0].toUpperCase()}${decision.type.slice(1)} decision`
+                : 'Decision'
+            : (decision?.method ?? '').replace('_', '-').toUpperCase();
 
     const roundBadge = roundsTotal
         ? `${(session.period_label ?? 'ROUND').toUpperCase()} OF ${roundsTotal}`
@@ -261,19 +285,87 @@ export function PortalBoxingScoreboard({ liveNow, className }: PortalBoxingScore
                         </div>
                     </div>
 
-                    {judges && (
-                        <div className="mx-auto mt-[18px] grid max-w-[520px] grid-cols-3 gap-2.5">
-                            {judges.map((judge) => (
-                                <div key={judge.name} className="rounded-[10px] border border-[var(--portal-border)] px-3 py-2.5 text-center">
-                                    <strong className="mb-1.5 block text-[11px] text-[var(--portal-ink)]">{judge.name}</strong>
-                                    <div className="grid grid-cols-[1fr_auto_1fr] gap-1.5 text-lg font-[950]">
-                                        <span className="text-[var(--portal-maroon)]">{judge.red}</span>
-                                        <span className="text-[var(--portal-muted-foreground)]">—</span>
-                                        <span className="text-[var(--portal-accent)]">{judge.blue}</span>
-                                    </div>
-                                </div>
-                            ))}
+                    {(deductions?.a ?? 0) > 0 || (deductions?.b ?? 0) > 0 ? (
+                        <p className="mx-auto mt-3 max-w-[460px] text-center text-xs font-[850] text-[var(--portal-maroon)] uppercase">
+                            Point deductions — {sideALabel}: {deductions?.a ?? 0} · {sideBLabel}: {deductions?.b ?? 0}
+                        </p>
+                    ) : null}
+
+                    {decision && decisionCorner && (
+                        <div className="mx-auto mt-3.5 max-w-[520px] rounded-[10px] border-2 border-[var(--portal-ink)] bg-[var(--portal-ink)] px-4 py-3 text-center text-[var(--portal-ink-foreground)]">
+                            <span className="block text-[11px] font-[850] uppercase opacity-80">
+                                {decision.status === 'final' ? 'Result' : 'Currently leading'}
+                            </span>
+                            <strong className="text-lg font-[950] uppercase">
+                                {decisionCorner} {decision.status === 'final' ? 'wins' : 'ahead'}
+                            </strong>
+                            <span className="block text-xs font-[750]">
+                                {decisionMethod}
+                                {decision.tally
+                                    ? ` · ${Math.max(decision.tally.a, decision.tally.b)}–${Math.min(decision.tally.a, decision.tally.b)}`
+                                    : ''}
+                            </span>
+                            {decision.note && <span className="mt-0.5 block text-[11px] opacity-80">{decision.note}</span>}
                         </div>
+                    )}
+
+                    {judgeRounds.length > 0 ? (
+                        <div className="mx-auto mt-[18px] max-w-[560px] overflow-x-auto">
+                            <table className="w-full border-collapse border border-[var(--portal-border)] text-[12px]">
+                                <thead>
+                                    <tr className="bg-[var(--portal-muted)] text-[11px] text-[var(--portal-ink)]">
+                                        <th className="border border-[var(--portal-border)] px-2 py-1.5 text-left font-semibold">Judge</th>
+                                        {judgeRounds.map((round) => (
+                                            <th key={round.round} className="border border-[var(--portal-border)] px-2 py-1.5 font-semibold">
+                                                R{round.round}
+                                            </th>
+                                        ))}
+                                        <th className="border border-[var(--portal-border)] px-2 py-1.5 font-semibold">Card</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {(judgeTotals.length > 0 ? judgeTotals : []).map((total) => (
+                                        <tr key={total.judge}>
+                                            <td className="border border-[var(--portal-border)] px-2 py-1.5 text-left font-bold">
+                                                Judge {total.judge}
+                                            </td>
+                                            {judgeRounds.map((round) => {
+                                                const card = round.cards.find((c) => c.judge === total.judge);
+
+                                                return (
+                                                    <td key={round.round} className="border border-[var(--portal-border)] px-2 py-1.5 text-center tabular-nums">
+                                                        {card ? `${card.red}-${card.blue}` : '—'}
+                                                    </td>
+                                                );
+                                            })}
+                                            <td className="border border-[var(--portal-border)] px-2 py-1.5 text-center font-[950] tabular-nums">
+                                                {total.red}-{total.blue}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : judgesHidden ? (
+                        <p className="mx-auto mt-[18px] max-w-[520px] rounded-[9px] border border-dashed border-[var(--portal-border)] px-3 py-2.5 text-center text-xs font-[750] text-[var(--portal-muted-foreground)]">
+                            Judges’ scorecards are not disclosed while the bout is live. They will be
+                            published once the bout ends.
+                        </p>
+                    ) : (
+                        judges && (
+                            <div className="mx-auto mt-[18px] grid max-w-[520px] grid-cols-3 gap-2.5">
+                                {judges.map((judge) => (
+                                    <div key={judge.name} className="rounded-[10px] border border-[var(--portal-border)] px-3 py-2.5 text-center">
+                                        <strong className="mb-1.5 block text-[11px] text-[var(--portal-ink)]">{judge.name}</strong>
+                                        <div className="grid grid-cols-[1fr_auto_1fr] gap-1.5 text-lg font-[950]">
+                                            <span className="text-[var(--portal-maroon)]">{judge.red}</span>
+                                            <span className="text-[var(--portal-muted-foreground)]">—</span>
+                                            <span className="text-[var(--portal-accent)]">{judge.blue}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )
                     )}
 
                     <p className="mx-auto mt-3.5 max-w-[520px] rounded-[9px] bg-[var(--portal-accent-soft)] px-3 py-2.5 text-center text-xs text-[var(--portal-muted-foreground)]">

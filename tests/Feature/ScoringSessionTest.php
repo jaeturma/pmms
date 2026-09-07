@@ -14,12 +14,15 @@ use App\Models\EventMatch;
 use App\Models\EventResult;
 use App\Models\FileUpload;
 use App\Models\MatchRosterPlayer;
+use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
 use App\Models\ResultPlacement;
 use App\Models\ScoreEvent;
 use App\Models\ScoringSession;
 use App\Models\Sport;
+use App\Models\TeamEntry;
+use App\Models\TeamEntryMember;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Inertia\Testing\AssertableInertia;
@@ -65,6 +68,10 @@ function boxingMatch(): EventMatch
 }
 
 /**
+ * The clock/bell shape shared by boxing and combat-rounds (taekwondo/
+ * wushu/pencak silat/arnis). Boxing adds the judge-scorecard keys on top
+ * — see `boxingBoardState()`.
+ *
  * @return array<string, mixed>
  */
 function boxingInitialSportState(): array
@@ -75,6 +82,45 @@ function boxingInitialSportState(): array
         'clock_seconds' => 120, 'clock_updated_at' => null, 'clock_phase' => 'round',
         'bell_sounded_at' => null,
     ];
+}
+
+/**
+ * A full boxing session `sport_state` as `store()` initializes it.
+ *
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function boxingBoardState(array $overrides = []): array
+{
+    return [
+        'rounds' => [],
+        'judge_count' => 5,
+        'judge_rounds' => [],
+        'deductions_a' => 0, 'deductions_b' => 0,
+        'decision' => null,
+        'show_live_judge_scores' => false,
+        'round_duration_seconds' => 120, 'rest_duration_seconds' => 60, 'total_rounds' => 3,
+        'clock_seconds' => 120, 'clock_updated_at' => null, 'clock_phase' => 'round',
+        'bell_sounded_at' => null,
+        ...$overrides,
+    ];
+}
+
+/**
+ * One 10-point-must card per judge. `$winners` is a per-judge list of
+ * `'a'` (Red) / `'b'` (Blue); the winner gets 10, the loser `10 - $margin`
+ * (1 = 10-9, 2 = 10-8, 3 = 10-7).
+ *
+ * @param  list<string>  $winners
+ * @return list<array{judge: int, red: int, blue: int}>
+ */
+function boxingCards(array $winners, int $margin = 1): array
+{
+    return collect($winners)->values()->map(fn (string $w, int $i): array => [
+        'judge' => $i + 1,
+        'red' => $w === 'a' ? 10 : 10 - $margin,
+        'blue' => $w === 'b' ? 10 : 10 - $margin,
+    ])->all();
 }
 
 /**
@@ -1135,12 +1181,7 @@ test('starting a session for a boxing match initializes an empty round history a
 
     expect($session->toLivePayload())->toMatchArray([
         'board_type' => 'boxing',
-        'sport_state' => [
-            'rounds' => [],
-            'round_duration_seconds' => 120, 'rest_duration_seconds' => 60, 'total_rounds' => 3,
-            'clock_seconds' => 120, 'clock_updated_at' => null, 'clock_phase' => 'round',
-            'bell_sounded_at' => null,
-        ],
+        'sport_state' => boxingBoardState(),
     ]);
 });
 
@@ -1194,92 +1235,165 @@ test('the live payload leaves side athletes null for a team event even with two 
     ]);
 });
 
-test('recording round scores appends to the round history and sums into the running total', function () {
+test('recording a boxing round stores every judge card and sums the consensus line into the running total', function () {
     $match = boxingMatch();
     $session = ScoringSession::factory()->create([
         'match_id' => $match->id,
-        'sport_state' => ['rounds' => []],
+        'sport_state' => boxingBoardState(),
     ]);
     $admin = User::factory()->admin()->create();
 
+    // Round 1: 4 judges 10-9 Red, 1 judge 10-9 Blue → consensus 10-9 Red.
     $this->actingAs($admin)
-        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 10, 'score_b' => 9])
+        ->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['a', 'a', 'a', 'a', 'b'])])
         ->assertSessionHasNoErrors();
 
     $session->refresh();
 
-    expect($session->sport_state)->toBe(['rounds' => [['round' => 1, 'score_a' => 10, 'score_b' => 9]]])
+    expect($session->sport_state['judge_rounds'])->toBe([[
+        'round' => 1,
+        'cards' => boxingCards(['a', 'a', 'a', 'a', 'b']),
+    ]])
+        ->and($session->sport_state['rounds'])->toBe([['round' => 1, 'score_a' => 10, 'score_b' => 9]])
         ->and($session->score_a)->toBe(10)
         ->and($session->score_b)->toBe(9);
 
+    // Round 2: all 5 judges 10-8 Blue → consensus 8-10.
     $this->actingAs($admin)
-        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 9, 'score_b' => 10])
+        ->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['b', 'b', 'b', 'b', 'b'], 2)])
         ->assertSessionHasNoErrors();
 
     $session->refresh();
 
-    expect($session->sport_state)->toBe(['rounds' => [
+    expect($session->sport_state['rounds'])->toBe([
         ['round' => 1, 'score_a' => 10, 'score_b' => 9],
-        ['round' => 2, 'score_a' => 9, 'score_b' => 10],
-    ]])
-        ->and($session->score_a)->toBe(19)
+        ['round' => 2, 'score_a' => 8, 'score_b' => 10],
+    ])
+        ->and($session->score_a)->toBe(18)
         ->and($session->score_b)->toBe(19)
-        ->and(AuditLog::query()->where('action', 'scoring.round_scored')->count())->toBe(2);
+        ->and(AuditLog::query()->where('action', 'scoring.judge_round_scored')->count())->toBe(2);
 });
 
-test('the play-by-play feed reconstructs running scores across rounds for boxing (WP-08-12 fix)', function () {
+test('each judge card is stored independently — a 5-way split is preserved verbatim', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => boxingBoardState(),
+    ]);
+
+    $cards = [
+        ['judge' => 1, 'red' => 10, 'blue' => 9],
+        ['judge' => 2, 'red' => 10, 'blue' => 8],
+        ['judge' => 3, 'red' => 9, 'blue' => 10],
+        ['judge' => 4, 'red' => 10, 'blue' => 7],
+        ['judge' => 5, 'red' => 9, 'blue' => 10],
+    ];
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/round", ['cards' => $cards])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state['judge_rounds'][0]['cards'])->toBe($cards);
+});
+
+test('a boxing round accepts 10-9, 10-8 and 10-7 cards for either corner', function (array $card) {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => boxingBoardState(),
+    ]);
+
+    $cards = collect(range(1, 5))->map(fn (int $j): array => ['judge' => $j, ...$card])->all();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/round", ['cards' => $cards])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state['judge_rounds'])->toHaveCount(1);
+})->with([
+    '10-9 red' => [['red' => 10, 'blue' => 9]],
+    '10-8 red' => [['red' => 10, 'blue' => 8]],
+    '10-7 red' => [['red' => 10, 'blue' => 7]],
+    '9-10 blue' => [['red' => 9, 'blue' => 10]],
+    '8-10 blue' => [['red' => 8, 'blue' => 10]],
+    '7-10 blue' => [['red' => 7, 'blue' => 10]],
+]);
+
+test('a boxing round rejects a card that is not 10-point-must', function (array $card) {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => boxingBoardState(),
+    ]);
+
+    $cards = collect(range(1, 5))->map(fn (int $j): array => ['judge' => $j, ...$card])->all();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/round", ['cards' => $cards])
+        ->assertSessionHasErrors('cards.0.red');
+
+    expect($session->fresh()->sport_state['judge_rounds'])->toBe([]);
+})->with([
+    '10-10 (no drawn round)' => [['red' => 10, 'blue' => 10]],
+    '9-9' => [['red' => 9, 'blue' => 9]],
+    'no side on 10' => [['red' => 9, 'blue' => 8]],
+    '10-6 (margin too wide)' => [['red' => 10, 'blue' => 6]],
+]);
+
+test('a boxing round needs exactly one card per judge', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => boxingBoardState(),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['a', 'a', 'a'])])
+        ->assertSessionHasErrors('cards');
+});
+
+test('the play-by-play feed reconstructs running scores across boxing rounds', function () {
     $match = boxingMatch();
     $session = ScoringSession::factory()->create([
         'match_id' => $match->id,
         'side_a_label' => 'Red',
         'side_b_label' => 'Blue',
-        'sport_state' => ['rounds' => []],
+        'sport_state' => boxingBoardState(),
     ]);
     $admin = User::factory()->admin()->create();
 
     $this->actingAs($admin)
-        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 10, 'score_b' => 9])
+        ->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['a', 'a', 'a', 'a', 'a'])])
         ->assertSessionHasNoErrors();
 
     $this->actingAs($admin)
-        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 9, 'score_b' => 10])
+        ->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['b', 'b', 'b', 'a', 'a'])])
         ->assertSessionHasNoErrors();
 
-    $plays = $session->refresh()->toLivePayload()['playByPlay'];
+    $plays = $session->refresh()->toLivePayload(operational: true)['playByPlay'];
 
     expect($plays)->toHaveCount(2)
-        ->and($plays[0]['description'])->toBe('Round 2: Red 9 – 10 Blue')
         ->and($plays[0]['score_a'])->toBe(19)
         ->and($plays[0]['score_b'])->toBe(19)
-        ->and($plays[1]['description'])->toBe('Round 1: Red 10 – 9 Blue')
         ->and($plays[1]['score_a'])->toBe(10)
         ->and($plays[1]['score_b'])->toBe(9);
 });
 
-test('a round score must be between 0 and 10', function () {
-    $match = boxingMatch();
-    $session = ScoringSession::factory()->create(['match_id' => $match->id, 'sport_state' => ['rounds' => []]]);
-
-    $this->actingAs(User::factory()->admin()->create())
-        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 11, 'score_b' => 9])
-        ->assertSessionHasErrors('score_a');
-});
-
-test('the round endpoint is rejected for a non-boxing scoring session', function () {
+test('the round endpoint is rejected for a non-boxing, non-combat scoring session', function () {
     $match = EventMatch::factory()->create(['status' => MatchStatus::Scheduled]);
     $session = ScoringSession::factory()->create(['match_id' => $match->id]);
 
     $this->actingAs(User::factory()->admin()->create())
-        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 10, 'score_b' => 9])
+        ->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['a', 'a', 'a', 'a', 'a'])])
         ->assertStatus(422);
 });
 
-test('non-managers cannot record a round score', function (User $user) {
+test('non-managers cannot record a boxing round', function (User $user) {
     $match = boxingMatch();
-    $session = ScoringSession::factory()->create(['match_id' => $match->id, 'sport_state' => ['rounds' => []]]);
+    $session = ScoringSession::factory()->create(['match_id' => $match->id, 'sport_state' => boxingBoardState()]);
 
     $this->actingAs($user)
-        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 10, 'score_b' => 9])
+        ->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['a', 'a', 'a', 'a', 'a'])])
         ->assertForbidden();
 })->with([
     'viewer' => fn () => User::factory()->create(),
@@ -1287,16 +1401,16 @@ test('non-managers cannot record a round score', function (User $user) {
     'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
 ]);
 
-test('a round score cannot be recorded once the session has ended', function () {
+test('a boxing round cannot be recorded once the session has ended', function () {
     $match = boxingMatch();
-    $session = ScoringSession::factory()->ended()->create(['match_id' => $match->id, 'sport_state' => ['rounds' => []]]);
+    $session = ScoringSession::factory()->ended()->create(['match_id' => $match->id, 'sport_state' => boxingBoardState()]);
 
     $this->actingAs(User::factory()->admin()->create())
-        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 10, 'score_b' => 9])
+        ->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['a', 'a', 'a', 'a', 'a'])])
         ->assertSessionHasErrors('status');
 });
 
-test('the scoreboard page exposes board type and round history for a boxing match', function () {
+test('the scoreboard page exposes the board type and judge scorecards for a boxing match', function () {
     $match = boxingMatch();
     $admin = User::factory()->admin()->create();
 
@@ -1307,19 +1421,17 @@ test('the scoreboard page exposes board type and round history for a boxing matc
     $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
 
     $this->actingAs($admin)
-        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 10, 'score_b' => 9])
+        ->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['a', 'a', 'a', 'a', 'b'])])
         ->assertSessionHasNoErrors();
 
     $this->actingAs($admin)
         ->get("/matches/{$match->id}/scoreboard")
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('session.board_type', 'boxing')
-            ->where('session.sport_state', [
-                'rounds' => [['round' => 1, 'score_a' => 10, 'score_b' => 9]],
-                'round_duration_seconds' => 120, 'rest_duration_seconds' => 60, 'total_rounds' => 3,
-                'clock_seconds' => 120, 'clock_updated_at' => null, 'clock_phase' => 'round',
-                'bell_sounded_at' => null,
-            ]));
+            ->where('session.sport_state.rounds', [['round' => 1, 'score_a' => 10, 'score_b' => 9]])
+            ->where('session.sport_state.judge_rounds.0.cards', boxingCards(['a', 'a', 'a', 'a', 'b']))
+            ->where('session.sport_state.decision.status', 'provisional')
+            ->where('session.sport_state.decision.winner', 'a'));
 });
 
 test('a manager can start a fresh round or rest phase on the round clock', function () {
@@ -1389,11 +1501,11 @@ test('a manager can sound the bell and it is recorded in play-by-play', function
         ->and($session->fresh()->playByPlay()[0]['description'])->toBe('Bell sounded');
 });
 
-test('a manager can update boxing game settings', function () {
+test('a manager can update boxing game settings, including the judge panel and disclosure toggle', function () {
     $match = boxingMatch();
     $session = ScoringSession::factory()->create([
         'match_id' => $match->id,
-        'sport_state' => boxingInitialSportState(),
+        'sport_state' => boxingBoardState(),
     ]);
     $admin = User::factory()->admin()->create();
 
@@ -1402,6 +1514,8 @@ test('a manager can update boxing game settings', function () {
             'round_duration_seconds' => 90,
             'rest_duration_seconds' => 30,
             'total_rounds' => 5,
+            'judge_count' => 3,
+            'show_live_judge_scores' => true,
         ])
         ->assertSessionHasNoErrors();
 
@@ -1409,26 +1523,306 @@ test('a manager can update boxing game settings', function () {
         'round_duration_seconds' => 90,
         'rest_duration_seconds' => 30,
         'total_rounds' => 5,
+        'judge_count' => 3,
+        'show_live_judge_scores' => true,
     ]);
 });
 
-test('a round score cannot be recorded once every scheduled round is already judged', function () {
+test('the judge panel size is locked once a round has been scored', function () {
     $match = boxingMatch();
     $session = ScoringSession::factory()->create([
         'match_id' => $match->id,
-        'sport_state' => [...boxingInitialSportState(), 'total_rounds' => 1],
+        'sport_state' => boxingBoardState(['judge_rounds' => [['round' => 1, 'cards' => boxingCards(['a', 'a', 'a', 'a', 'a'])]]]),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/settings", [
+            'round_duration_seconds' => 120, 'rest_duration_seconds' => 60, 'total_rounds' => 3,
+            'judge_count' => 3,
+        ])
+        ->assertSessionHasErrors('judge_count');
+});
+
+test('a boxing round cannot be recorded once every scheduled round is already judged', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => boxingBoardState(['total_rounds' => 1]),
     ]);
     $admin = User::factory()->admin()->create();
 
     $this->actingAs($admin)
-        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 10, 'score_b' => 9])
+        ->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['a', 'a', 'a', 'a', 'a'])])
         ->assertSessionHasNoErrors();
 
     $this->actingAs($admin)
-        ->patch("/scoring-sessions/{$session->id}/round", ['score_a' => 10, 'score_b' => 9])
-        ->assertSessionHasErrors('score_a');
+        ->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['a', 'a', 'a', 'a', 'a'])])
+        ->assertSessionHasErrors('cards');
 
-    expect($session->fresh()->sport_state['rounds'])->toHaveCount(1);
+    expect($session->fresh()->sport_state['judge_rounds'])->toHaveCount(1);
+});
+
+// WP: Boxing judge scorecards — deductions, decision, disclosure
+
+test('a referee point deduction is bout-wide and shifts every judge card in the decision', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => boxingBoardState(['total_rounds' => 3]),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    // Three rounds, all 5 judges 10-9 Red → every card Red 30, Blue 27.
+    foreach (range(1, 3) as $ignored) {
+        $this->actingAs($admin)
+            ->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['a', 'a', 'a', 'a', 'a'])])
+            ->assertSessionHasNoErrors();
+    }
+
+    expect($session->fresh()->sport_state['decision'])->toMatchArray(['winner' => 'a', 'type' => 'unanimous', 'status' => 'final']);
+
+    // Two points off Red — every card is now Red 28, Blue 27: still Red,
+    // and the raw round cards are untouched.
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/boxing-deduction", ['side' => 'a', 'points' => 2])
+        ->assertSessionHasNoErrors();
+
+    $state = $session->fresh()->sport_state;
+    expect($state['deductions_a'])->toBe(2)
+        ->and($state['judge_rounds'][0]['cards'])->toBe(boxingCards(['a', 'a', 'a', 'a', 'a']))
+        ->and($state['decision']['tally']['judges'][0])->toMatchArray(['red' => 28, 'blue' => 27, 'pick' => 'a']);
+
+    // Two more points off Red (total 4) flips every card to Blue 27-26.
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/boxing-deduction", ['side' => 'a', 'points' => 2])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state['decision'])->toMatchArray(['winner' => 'b', 'type' => 'unanimous']);
+});
+
+test('a unanimous decision is computed once every round is scored', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => boxingBoardState(['total_rounds' => 2]),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    // Provisional after round 1, final and unanimous after round 2.
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['a', 'a', 'a', 'a', 'a'])]);
+    expect($session->fresh()->sport_state['decision']['status'])->toBe('provisional');
+
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['a', 'a', 'a', 'a', 'a'])]);
+
+    expect($session->fresh()->sport_state['decision'])->toMatchArray([
+        'status' => 'final',
+        'method' => 'points',
+        'winner' => 'a',
+        'type' => 'unanimous',
+    ]);
+});
+
+test('a majority decision is one where a judge card is even', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => boxingBoardState(['total_rounds' => 2]),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    // Judge 3 splits the two rounds (Red then Blue) → even card; the rest Red.
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['a', 'a', 'a', 'a', 'a'])]);
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['a', 'a', 'b', 'a', 'a'])]);
+
+    $decision = $session->fresh()->sport_state['decision'];
+    expect($decision)->toMatchArray(['winner' => 'a', 'type' => 'majority'])
+        ->and($decision['tally'])->toMatchArray(['a' => 4, 'b' => 0, 'even' => 1]);
+});
+
+test('a split decision is computed from each judge card, not the points aggregate', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => boxingBoardState(['total_rounds' => 2]),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    // Round 1: judges 1-3 Red 10-9, judges 4-5 Blue 10-7 (a wide Blue round).
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/round", ['cards' => [
+        ['judge' => 1, 'red' => 10, 'blue' => 9],
+        ['judge' => 2, 'red' => 10, 'blue' => 9],
+        ['judge' => 3, 'red' => 10, 'blue' => 9],
+        ['judge' => 4, 'red' => 7, 'blue' => 10],
+        ['judge' => 5, 'red' => 7, 'blue' => 10],
+    ]])->assertSessionHasNoErrors();
+
+    // Round 2: judges 1-3 Blue 10-9, judges 4-5 Red 10-9.
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/round", ['cards' => [
+        ['judge' => 1, 'red' => 9, 'blue' => 10],
+        ['judge' => 2, 'red' => 9, 'blue' => 10],
+        ['judge' => 3, 'red' => 9, 'blue' => 10],
+        ['judge' => 4, 'red' => 10, 'blue' => 9],
+        ['judge' => 5, 'red' => 10, 'blue' => 9],
+    ]])->assertSessionHasNoErrors();
+
+    // Judges 1-3: 19-19 even. Judges 4-5: 17-19 Blue. Cards → Blue 2, even 3.
+    $decision = $session->fresh()->sport_state['decision'];
+    expect($decision)->toMatchArray(['status' => 'final', 'winner' => 'b'])
+        ->and($decision['tally'])->toMatchArray(['a' => 0, 'b' => 2, 'even' => 3]);
+});
+
+test('an authorized official can override the points result with an RSC/KO decision', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'side_a_label' => 'Red',
+        'side_b_label' => 'Blue',
+        'sport_state' => boxingBoardState(['total_rounds' => 3]),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['b', 'b', 'b', 'b', 'b'])])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/boxing-decision", [
+            'method' => 'rsc',
+            'winner' => 'a',
+            'note' => 'Referee stopped the contest in round 2.',
+        ])
+        ->assertSessionHasNoErrors();
+
+    $state = $session->fresh()->sport_state;
+    expect($state['decision'])->toMatchArray(['manual' => true, 'status' => 'final', 'method' => 'rsc', 'winner' => 'a'])
+        ->and(AuditLog::query()->where('action', 'scoring.decision_recorded')->exists())->toBeTrue();
+
+    // A later round score does not silently overwrite the referee call.
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['b', 'b', 'b', 'b', 'b'])])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state['decision'])->toMatchArray(['method' => 'rsc', 'winner' => 'a']);
+});
+
+test('a non-points decision needs a winning corner', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create(['match_id' => $match->id, 'sport_state' => boxingBoardState()]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch("/scoring-sessions/{$session->id}/boxing-decision", ['method' => 'ko'])
+        ->assertSessionHasErrors('winner');
+});
+
+test('clearing a manual decision reverts the board to the computed points result', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => boxingBoardState(['total_rounds' => 1]),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['a', 'a', 'a', 'a', 'a'])]);
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/boxing-decision", ['method' => 'dsq', 'winner' => 'b']);
+    expect($session->fresh()->sport_state['decision'])->toMatchArray(['method' => 'dsq', 'winner' => 'b']);
+
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/boxing-decision", ['method' => 'points'])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->sport_state['decision'])->toMatchArray(['manual' => false, 'winner' => 'a', 'method' => 'points']);
+});
+
+test('the deduction and decision endpoints are boxing-only', function () {
+    $match = combatRoundsMatch();
+    $session = ScoringSession::factory()->create(['match_id' => $match->id, 'sport_state' => boxingInitialSportState()]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/boxing-deduction", ['side' => 'a'])->assertStatus(422);
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/boxing-decision", ['method' => 'ko', 'winner' => 'a'])->assertStatus(422);
+});
+
+test('non-managers cannot deduct points or record a decision', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create(['match_id' => $match->id, 'sport_state' => boxingBoardState()]);
+    $organizer = User::factory()->organizer()->create();
+
+    $this->actingAs($organizer)->patch("/scoring-sessions/{$session->id}/boxing-deduction", ['side' => 'a'])->assertForbidden();
+    $this->actingAs($organizer)->patch("/scoring-sessions/{$session->id}/boxing-decision", ['method' => 'ko', 'winner' => 'a'])->assertForbidden();
+});
+
+test('the public payload hides live judge cards until the bout ends, unless disclosure is on', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => boxingBoardState(['total_rounds' => 2]),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['a', 'a', 'a', 'a', 'a'])])
+        ->assertSessionHasNoErrors();
+
+    $session->refresh();
+
+    $public = $session->toLivePayload();
+    expect($public['sport_state']['judge_scores_hidden'])->toBeTrue()
+        ->and($public['sport_state']['judge_rounds'][0])->toBe(['round' => 1, 'cards_hidden' => true])
+        ->and($public['sport_state']['decision'])->toBeNull()
+        // consensus line + points total stay visible
+        ->and($public['sport_state']['rounds'])->toBe([['round' => 1, 'score_a' => 10, 'score_b' => 9]])
+        ->and($public['score_a'])->toBe(10);
+
+    // Operator console always sees the cards.
+    expect($session->toLivePayload(operational: true)['sport_state']['judge_rounds'][0]['cards'])
+        ->toBe(boxingCards(['a', 'a', 'a', 'a', 'a']));
+
+    // Disclosure on → public sees them.
+    $session->forceFill(['sport_state' => [...$session->sport_state, 'show_live_judge_scores' => true]])->save();
+    expect($session->fresh()->toLivePayload()['sport_state']['judge_rounds'][0]['cards'])
+        ->toBe(boxingCards(['a', 'a', 'a', 'a', 'a']));
+});
+
+test('an ended boxing bout discloses its full judge cards on the public payload', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->ended()->create([
+        'match_id' => $match->id,
+        'sport_state' => boxingBoardState([
+            'judge_rounds' => [['round' => 1, 'cards' => boxingCards(['a', 'a', 'a', 'a', 'b'])]],
+            'decision' => ['manual' => false, 'status' => 'final', 'method' => 'points', 'winner' => 'a', 'type' => 'majority'],
+        ]),
+    ]);
+
+    expect($session->toLivePayload()['sport_state']['judge_rounds'][0]['cards'])
+        ->toBe(boxingCards(['a', 'a', 'a', 'a', 'b']));
+});
+
+test('the manual participant fallback still starts a boxing bout with no entries or schedule', function () {
+    $sport = Sport::factory()->create(['name' => 'Boxing']);
+    $event = Event::factory()->create(['sport_id' => $sport->id]);
+    $match = EventMatch::factory()->create(['event_id' => $event->id, 'status' => MatchStatus::Scheduled]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post("/matches/{$match->id}/scoring-sessions", ['side_a_label' => 'Nabunturan — J. Cruz', 'side_b_label' => 'New Bataan — R. Reyes'])
+        ->assertSessionHasNoErrors();
+
+    $session = ScoringSession::query()->where('match_id', $match->id)->firstOrFail();
+
+    expect($session->boardType()->value)->toBe('boxing')
+        ->and($session->side_a_label)->toBe('Nabunturan — J. Cruz')
+        ->and($session->toLivePayload()['side_a_athlete'])->toBeNull()
+        ->and($match->entries()->count())->toBe(0);
+});
+
+test('recording a boxing round twice from the same request does not double the history', function () {
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create(['match_id' => $match->id, 'sport_state' => boxingBoardState()]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['a', 'a', 'a', 'a', 'a'])]);
+    $this->actingAs($admin)->patch("/scoring-sessions/{$session->id}/round", ['cards' => boxingCards(['b', 'b', 'b', 'b', 'b'])]);
+
+    expect($session->fresh()->sport_state['judge_rounds'])->toHaveCount(2)
+        ->and(array_column($session->fresh()->sport_state['judge_rounds'], 'round'))->toBe([1, 2]);
 });
 
 // WP-07-06: Softball/Baseball live scoreboard
@@ -3802,15 +4196,15 @@ test('a bocce match session can be forced to the generic board at start', functi
  * `$memberCount` confirmed athletes on its roster — the real registration
  * data `attachCompetingTeams()`/`extractRosterFromTeamEntries()` read from.
  */
-function teamWithConfirmedRoster(Event $event, int $memberCount): \App\Models\TeamEntry
+function teamWithConfirmedRoster(Event $event, int $memberCount): TeamEntry
 {
-    $delegation = \App\Models\Delegation::factory()->approved()->create(['meet_id' => $event->meets()->first()?->id ?? \App\Models\Meet::factory()->create()->id]);
-    $team = \App\Models\TeamEntry::query()->create(['delegation_id' => $delegation->id, 'event_id' => $event->id, 'status' => 'confirmed']);
+    $delegation = Delegation::factory()->approved()->create(['meet_id' => $event->meets()->first()?->id ?? Meet::factory()->create()->id]);
+    $team = TeamEntry::query()->create(['delegation_id' => $delegation->id, 'event_id' => $event->id, 'status' => 'confirmed']);
 
     for ($i = 0; $i < $memberCount; $i++) {
         $athlete = Athlete::factory()->create(['delegation_id' => $delegation->id]);
         $entry = Entry::factory()->confirmed()->create(['athlete_id' => $athlete->id, 'delegation_id' => $delegation->id, 'event_id' => $event->id]);
-        \App\Models\TeamEntryMember::query()->create(['team_entry_id' => $team->id, 'athlete_id' => $athlete->id, 'entry_id' => $entry->id, 'member_order' => $i + 1]);
+        TeamEntryMember::query()->create(['team_entry_id' => $team->id, 'athlete_id' => $athlete->id, 'entry_id' => $entry->id, 'member_order' => $i + 1]);
     }
 
     return $team;

@@ -23,6 +23,29 @@ export type BoxingJudgeScore = {
     blue: number;
 };
 
+export type BoxingJudgeCard = {
+    judge: number;
+    red: number;
+    blue: number;
+};
+
+export type BoxingJudgeRound = {
+    round: number;
+    cards: BoxingJudgeCard[];
+};
+
+export type BoxingDecision = {
+    manual: boolean;
+    status: 'provisional' | 'final';
+    method: 'points' | 'rsc' | 'rsc_i' | 'ko' | 'dsq' | 'wo' | 'abd' | 'nc';
+    winner: 'a' | 'b' | null;
+    type?: 'unanimous' | 'majority' | 'split' | 'draw' | null;
+    note?: string | null;
+    tally?: { a: number; b: number; even: number };
+    rounds_scored?: number;
+    total_rounds?: number;
+};
+
 export type BoxingCornerStats = {
     punches_landed: number;
     punches_thrown: number;
@@ -92,6 +115,104 @@ export function readJudges(state: SportState): BoxingJudgeScore[] | undefined {
     );
 
     return judges.length > 0 ? judges : undefined;
+}
+
+/** The real per-judge 10-point-must scorecards for each completed round
+ * (`ScoringSessionController::recordBoxingJudgeRound()`). On the public
+ * payload the cards are withheld during a live bout unless the meet opted
+ * into disclosure — `judgeScoresHidden()` reports that. */
+export function readJudgeRounds(state: SportState): BoxingJudgeRound[] {
+    if (!isRecord(state) || !Array.isArray(state.judge_rounds)) {
+        return [];
+    }
+
+    return state.judge_rounds
+        .filter(
+            (round): round is BoxingJudgeRound =>
+                isRecord(round) &&
+                typeof round.round === 'number' &&
+                Array.isArray(round.cards) &&
+                round.cards.every(
+                    (card): card is BoxingJudgeCard =>
+                        isRecord(card) &&
+                        typeof card.judge === 'number' &&
+                        typeof card.red === 'number' &&
+                        typeof card.blue === 'number',
+                ),
+        )
+        .sort((a, b) => a.round - b.round);
+}
+
+export function judgeScoresHidden(state: SportState): boolean {
+    return isRecord(state) && state.judge_scores_hidden === true;
+}
+
+export function judgeCount(state: SportState): number | undefined {
+    if (!isRecord(state) || typeof state.judge_count !== 'number') {
+        return undefined;
+    }
+
+    return state.judge_count;
+}
+
+/** Per-side referee point deductions — bout-wide, applied to every judge's
+ * card. Falls back to the legacy single `deductions` count (synthetic demo
+ * data only) split to neither side. */
+export function readDeductions(state: SportState): { a: number; b: number } | undefined {
+    if (!isRecord(state)) {
+        return undefined;
+    }
+
+    if (typeof state.deductions_a === 'number' || typeof state.deductions_b === 'number') {
+        return {
+            a: typeof state.deductions_a === 'number' ? state.deductions_a : 0,
+            b: typeof state.deductions_b === 'number' ? state.deductions_b : 0,
+        };
+    }
+
+    return undefined;
+}
+
+export function readDecision(state: SportState): BoxingDecision | undefined {
+    if (!isRecord(state) || !isRecord(state.decision)) {
+        return undefined;
+    }
+
+    const decision = state.decision;
+
+    if (typeof decision.status !== 'string' || typeof decision.method !== 'string') {
+        return undefined;
+    }
+
+    return decision as unknown as BoxingDecision;
+}
+
+/** Each judge's running card total from the recorded rounds, so the public
+ * board can show the judges' tally exactly as the decision engine derives
+ * it (deductions applied to the corner's total, never a raw round score). */
+export function judgeCardTotals(
+    state: SportState,
+): { judge: number; red: number; blue: number }[] {
+    const rounds = readJudgeRounds(state);
+    const deductions = readDeductions(state) ?? { a: 0, b: 0 };
+    const totals = new Map<number, { red: number; blue: number }>();
+
+    for (const round of rounds) {
+        for (const card of round.cards) {
+            const total = totals.get(card.judge) ?? { red: 0, blue: 0 };
+            total.red += card.red;
+            total.blue += card.blue;
+            totals.set(card.judge, total);
+        }
+    }
+
+    return [...totals.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([judge, total]) => ({
+            judge,
+            red: total.red - deductions.a,
+            blue: total.blue - deductions.b,
+        }));
 }
 
 function readCornerStats(value: unknown): BoxingCornerStats | undefined {
