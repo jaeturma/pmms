@@ -96,6 +96,21 @@ class Meet extends Model
     }
 
     /**
+     * Whether this meet runs the given event — through the `meet_events`
+     * pivot OR an active `meet_sports` row for its sport. The production
+     * import populates only the latter. See docs/meets.md §"Two ways a
+     * meet enables an event".
+     */
+    public function enablesEvent(Event $event): bool
+    {
+        return $this->events()->whereKey($event->getKey())->exists()
+            || $this->meetSports()
+                ->where('active', true)
+                ->where('sport_id', $event->sport_id)
+                ->exists();
+    }
+
+    /**
      * @return HasMany<Delegation, $this>
      */
     public function delegations(): HasMany

@@ -11,7 +11,12 @@ server-side, never taken from the request.
 
 ## Submission rules (all enforced in `EntryController::store`, each tested)
 
-1. The event must be attached to the athlete's meet (`meet_events`).
+1. The event must belong to the athlete's meet — through the explicit
+   `meet_events` pivot **or** an active `meet_sports` row for the event's sport
+   (the production import uses only the latter). Enforced via
+   `Meet::enablesEvent()`; the entry picker (`EntryController::index`
+   `eventOptionsByMeet`) and the team-roster checks (`TeamEntryController`)
+   honour both. See `docs/meets.md` §"Two ways a meet enables an event".
 2. The athlete's sex must match the event's gender category
    (`GenderCategory::accepts()`; mixed accepts both).
 3. The athlete's grade-derived age division must match the event's

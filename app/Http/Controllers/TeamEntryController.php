@@ -115,11 +115,19 @@ class TeamEntryController extends Controller
         if (! $event->is_team_event) {
             throw ValidationException::withMessages(['event_id' => __('Select a team, pair, doubles, or relay event.')]);
         }
+        // An event belongs to a meet via the `meet_events` pivot OR an
+        // active `meet_sports` row for its sport (production uses only the
+        // latter). See docs/meets.md §"Two ways a meet enables an event".
+        $eventBelongsToMeet = fn (int $meetId): bool => $event->meets->contains('id', $meetId)
+            || MeetSport::query()->where('meet_id', $meetId)
+                ->where('sport_id', $event->sport_id)
+                ->where('active', true)
+                ->exists();
         if ($athletes->count() !== $requestedCount) {
             throw ValidationException::withMessages(['athlete_ids' => __('Every selected athlete must exist.')]);
         }
         if ($athletes->isEmpty() && ! $finalizing) {
-            if (! $event->meets->contains('id', $delegation->meet_id)) {
+            if (! $eventBelongsToMeet($delegation->meet_id)) {
                 throw ValidationException::withMessages(['event_id' => __('The team event is not part of the selected delegation’s meet.')]);
             }
 
@@ -172,7 +180,7 @@ class TeamEntryController extends Controller
             if (! $isAssignedIct && $athlete->eligibilityReview?->status !== EligibilityStatus::Approved) {
                 throw ValidationException::withMessages(['athlete_ids' => __('Every team member must be DSAC approved.')]);
             }
-            if (! $event->meets->contains('id', $athlete->delegation->meet_id)) {
+            if (! $eventBelongsToMeet($athlete->delegation->meet_id)) {
                 throw ValidationException::withMessages(['event_id' => __('The team event is not part of the athletes’ meet.')]);
             }
             if (! $event->gender->accepts($athlete->sex) || ! $event->age_division->accepts($athlete->ageDivision())) {

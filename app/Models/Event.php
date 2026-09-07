@@ -6,6 +6,7 @@ use App\Enums\AgeDivision;
 use App\Enums\GenderCategory;
 use Database\Factories\EventFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -78,9 +79,40 @@ class Event extends Model
         ];
     }
 
-    public function scopeReal($query) { return $query->whereNull('demo_scenario_id'); }
-    public function scopeDemo($query) { return $query->whereNotNull('demo_scenario_id'); }
-    public function demoScenario(): BelongsTo { return $this->belongsTo(DemoScenario::class); }
+    public function scopeReal($query)
+    {
+        return $query->whereNull('demo_scenario_id');
+    }
+
+    public function scopeDemo($query)
+    {
+        return $query->whereNotNull('demo_scenario_id');
+    }
+
+    /**
+     * Events that belong to the given meet through EITHER the explicit
+     * `meet_events` pivot OR an active `meet_sports` row for the event's
+     * sport. The production import populates only `meet_sports` (no
+     * `meet_events` rows), so every "events in this meet" query must
+     * accept both. See docs/meets.md §"Two ways a meet enables an event".
+     *
+     * @param  Builder<Event>  $query
+     */
+    public function scopeInMeet($query, Meet|int $meet)
+    {
+        $meetId = $meet instanceof Meet ? $meet->getKey() : $meet;
+
+        return $query->where(fn ($scope) => $scope
+            ->whereHas('meets', fn ($meets) => $meets->whereKey($meetId))
+            ->orWhereHas('sport.meetSports', fn ($meetSports) => $meetSports
+                ->where('meet_id', $meetId)
+                ->where('active', true)));
+    }
+
+    public function demoScenario(): BelongsTo
+    {
+        return $this->belongsTo(DemoScenario::class);
+    }
 
     /**
      * @return BelongsTo<Sport, $this>

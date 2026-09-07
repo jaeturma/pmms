@@ -15,8 +15,8 @@ use App\Models\Event;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
-use App\Models\SportRosterMember;
 use App\Models\School;
+use App\Models\SportRosterMember;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 
@@ -204,6 +204,56 @@ test('events outside the athlete\'s meet are rejected', function () {
     $this->actingAs(User::factory()->admin()->create())
         ->post('/entries', ['athlete_id' => $athlete->id, 'event_id' => $foreignEvent->id])
         ->assertSessionHasErrors('event_id');
+});
+
+test('an event enabled only through meet_sports (no meet_events row) is registrable and appears in the picker', function () {
+    $meet = Meet::factory()->registrationOpen()->create(['medical_clearance_required' => false]);
+    $delegation = Delegation::factory()->create(['meet_id' => $meet->id]);
+    $athlete = Athlete::factory()->create([
+        'delegation_id' => $delegation->id,
+        'sex' => 'male',
+        'grade_level' => 5,
+    ]);
+    $event = Event::factory()->create([
+        'gender' => 'boys',
+        'age_division' => 'elementary',
+        'max_entries_per_delegation' => 2,
+    ]);
+    // Whole sport enabled meet-wide — deliberately NO $meet->events()->attach().
+    $meetSport = MeetSport::factory()->create([
+        'meet_id' => $meet->id,
+        'sport_id' => $event->sport_id,
+        'active' => true,
+    ]);
+    SportRosterMember::query()->create([
+        'meet_sport_id' => $meetSport->id, 'delegation_id' => $delegation->id,
+        'athlete_id' => $athlete->id, 'level' => 'elementary', 'gender' => 'boys',
+    ]);
+    EligibilityReview::factory()->approved()->create([
+        'athlete_id' => $athlete->id,
+        'meet_id' => $meet->id,
+    ]);
+
+    expect($meet->events()->whereKey($event->id)->exists())->toBeFalse();
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->get('/entries')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('eventOptionsByMeet', fn ($options) => collect($options)
+                ->contains(fn ($option) => $option['id'] === $event->id && $option['meet_id'] === $meet->id)));
+
+    $this->actingAs($admin)
+        ->post('/entries', ['athlete_id' => $athlete->id, 'event_id' => $event->id])
+        ->assertRedirect()
+        ->assertSessionDoesntHaveErrors();
+
+    $this->assertDatabaseHas('entries', [
+        'athlete_id' => $athlete->id,
+        'event_id' => $event->id,
+        'delegation_id' => $delegation->id,
+    ]);
 });
 
 test('duplicate entries for the same athlete and event are rejected', function () {

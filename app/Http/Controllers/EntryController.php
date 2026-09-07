@@ -115,6 +115,14 @@ class EntryController extends Controller
                     ->where('status', EligibilityStatus::Approved->value)))
             ->orderBy('last_name');
 
+        // An event belongs to a registration-open meet through the explicit
+        // `meet_events` pivot OR an active `meet_sports` row for its sport
+        // (the production import uses only the latter) — `Event::scopeInMeet`
+        // covers both. See docs/meets.md §"Two ways a meet enables an event".
+        $openMeets = Meet::query()
+            ->where('status', MeetStatus::RegistrationOpen->value)
+            ->get(['id']);
+
         return Inertia::render('entries/index', [
             'entries' => $query->paginate($this->registryPageSize)->withQueryString()
                 ->through(fn (Entry $entry): array => [
@@ -147,7 +155,9 @@ class EntryController extends Controller
                 'delegation_id' => $delegationId > 0 ? $delegationId : null,
             ],
             'eventFilterOptions' => Event::query()
-                ->whereHas('meets')
+                ->where(fn ($scope) => $scope
+                    ->whereHas('meets')
+                    ->orWhereHas('sport.meetSports', fn ($meetSports) => $meetSports->where('active', true)))
                 ->when($user->role === UserRole::Coach, fn ($events) => $events
                     ->whereIn('id', $coachEventIds))
                 ->with('sport:id,name')
@@ -183,14 +193,12 @@ class EntryController extends Controller
                         ->pluck('event_id')->values()->all(),
                 ])
                 ->values(),
-            'eventOptionsByMeet' => Event::query()
-                ->whereHas('meets', fn ($meets) => $meets->where('status', MeetStatus::RegistrationOpen->value))
-                ->when($user->role === UserRole::Coach, fn ($events) => $events->whereIn(
-                    'id', $coachEventIds,
-                ))
-                ->with(['sport:id,name', 'meets:id'])
+            'eventOptionsByMeet' => $openMeets->flatMap(fn (Meet $meet): array => Event::query()
+                ->inMeet($meet)
+                ->when($user->role === UserRole::Coach, fn ($events) => $events->whereIn('id', $coachEventIds))
+                ->with('sport:id,name')
                 ->get(['id', 'sport_id', 'sport_category_id', 'name', 'gender', 'age_division', 'is_team_event', 'team_size'])
-                ->flatMap(fn (Event $event) => $event->meets->map(fn (Meet $meet): array => [
+                ->map(fn (Event $event): array => [
                     'id' => $event->id,
                     'meet_id' => $meet->id,
                     'sport' => $event->sport->name,
@@ -206,7 +214,8 @@ class EntryController extends Controller
                         $event->gender->label(),
                         $event->age_division->label(),
                     ),
-                ]))
+                ])
+                ->all())
                 ->values(),
             'teamEntries' => TeamEntry::query()
                 ->with(['delegation.school', 'delegation.district', 'event.sport', 'event.sportCategory', 'members.athlete'])
@@ -296,7 +305,7 @@ class EntryController extends Controller
                 throw ValidationException::withMessages([$errorKey => __('Add this athlete to the applicable Sport roster before assigning Events.')]);
             }
 
-            if (! $delegation->meet->events()->whereKey($event->id)->exists()) {
+            if (! $delegation->meet->enablesEvent($event)) {
                 throw ValidationException::withMessages([$errorKey => __(':event is not part of the athlete\'s meet.', ['event' => $event->name])]);
             }
             if (! $event->gender->accepts($athlete->sex)) {

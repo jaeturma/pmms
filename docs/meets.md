@@ -28,17 +28,18 @@ coach-assignment approval, as a side effect) populates `meet_events`; the
 production import (`docs/final/pmms_provincial_meet_2026_migration.sql`) creates
 **no `meet_events` rows at all** and enables everything sport-wide via
 `meet_sports`. Every "which events belong to this meet" query must honour both
-sources: the schedule picker (`ScheduleController`), the Submit Result event
-picker and encode/submit guards (`ResultController`, `ResultWorkflowController` —
-which also `syncWithoutDetaching` the event into `meet_events` on first use so
-later acceptance checks see it), and tournament-scoped access
-(`CompetitionAccessService::eventIds()`). See `docs/results.md` §"Which events
-are submittable".
+sources. `Event::scopeInMeet()` and `Meet::enablesEvent()` are the shared
+helpers; the flows that honour both:
 
-Athlete entry registration (`EntryController`, `docs/entries.md`) still keys off
-`meet_events` only — it has not needed the `meet_sports` fallback because the
-production entries were imported directly, but a fresh `registration_open` meet
-built purely from `meet_sports` would not expose its events in the entry picker.
+- the schedule picker (`ScheduleController`);
+- the Submit Result event picker and encode/submit guards (`ResultController`,
+  `ResultWorkflowController` — which also `syncWithoutDetaching` the event into
+  `meet_events` on first use so later acceptance checks see it);
+- tournament-scoped access (`CompetitionAccessService::eventIds()`);
+- athlete entry registration (`EntryController` `eventOptionsByMeet` and `store`,
+  `TeamEntryController` roster checks — see `docs/entries.md`).
+
+See `docs/results.md` §"Which events are submittable".
 
 ## Lifecycle
 

@@ -80,6 +80,50 @@ test('a team roster reuses athlete event entries without duplicating athletes or
         ->and($event->entries()->count())->toBe(2);
 });
 
+test('a team event enabled only through meet_sports (no meet_events row) is registrable', function () {
+    $delegation = Delegation::factory()->create();
+    $delegation->meet->forceFill(['medical_clearance_required' => false])->save();
+    $event = Event::factory()->team()->create([
+        'gender' => GenderCategory::Boys,
+        'age_division' => AgeDivision::Secondary,
+        'team_size' => 2,
+    ]);
+    // Whole sport enabled meet-wide — deliberately NO events()->attach().
+    $meetSport = MeetSport::factory()->create([
+        'meet_id' => $delegation->meet_id,
+        'sport_id' => $event->sport_id,
+        'active' => true,
+    ]);
+    $athletes = collect(range(1, 2))->map(function () use ($delegation, $meetSport): Athlete {
+        $athlete = Athlete::factory()->create([
+            'delegation_id' => $delegation->id,
+            'school_id' => $delegation->school_id,
+            'sex' => 'male',
+            'grade_level' => 8,
+        ]);
+        EligibilityReview::factory()->create([
+            'athlete_id' => $athlete->id,
+            'meet_id' => $delegation->meet_id,
+            'status' => EligibilityStatus::Approved,
+        ]);
+        SportRosterMember::query()->create([
+            'meet_sport_id' => $meetSport->id, 'delegation_id' => $delegation->id,
+            'athlete_id' => $athlete->id, 'level' => 'secondary', 'gender' => 'boys',
+        ]);
+
+        return $athlete;
+    });
+
+    expect($delegation->meet->events()->whereKey($event->id)->exists())->toBeFalse();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/team-entries', ['event_id' => $event->id, 'athlete_ids' => $athletes->pluck('id')->all()])
+        ->assertRedirect()
+        ->assertSessionDoesntHaveErrors();
+
+    expect(TeamEntry::query()->where('event_id', $event->id)->exists())->toBeTrue();
+});
+
 test('a below-minimum team can be saved as submitted but cannot be finalized', function () {
     [, $event, $athletes] = teamEntryContext(2);
     $admin = User::factory()->admin()->create();
