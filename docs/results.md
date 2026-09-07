@@ -102,6 +102,36 @@ delegations, repeated medal types.
   attribution}`). The legacy fixed `gold_/silver_/bronze_*` shape is still
   accepted and folded into `medal_placements` before validation.
 
+### Submission validation rules
+
+`storeDirect()` surfaces every one of these as an **Inertia form error**
+(302 back to the form, data preserved, `DirectResultForm` shows a summary
+at the top and field/row-level messages) — never the generic 422 page.
+Genuine authorization stays 403; genuine integrity/DB failures stay
+409/500.
+
+1. **One active Medal Result per Sports Event.** A second non‑cancelled
+   Medal Result for the same event is refused on `event_id`:
+   *"A Medal Result already exists for this Sports Event. Open the
+   existing result to edit, correct, or replace it."* Versus / Non‑Medal
+   Results are unlimited.
+2. **Team/Delegation (and athlete) optional on a Medal row.** A row may
+   submit with no `delegation_id`; it is stored as an incomplete
+   `result_placements` row (nullable `delegation_id`) and produces no
+   `MedalAward` until a Team is added and the awards are re‑synced.
+3. **Winner ≠ Loser (Versus only).** `loser_delegation_id.different` →
+   *"Winner and Loser cannot be the same Team."* Medal rows are never
+   checked for distinct Teams (rule 4).
+4. **Medal rows may repeat a Team** for any medal type, any number of
+   times — no distinct‑Team validation across rows.
+5. **Result document required** on a new submission: `evidence.required`
+   → *"Please attach the official result photo/document before
+   submitting."* (An edit keeps the existing document unless replaced.)
+6. **Tally count ≥ 1 per row** when the event awards medals — a
+   row‑specific message, e.g. `medal_placements.3.count` →
+   *"Medal row 4: tally count must be at least 1."* A non‑medal event
+   ignores the counts (standing outcome) and rule 6 does not apply.
+
 On acceptance (`makeOfficial()`), `MedalAwardService::synchronizeDirectRows()`
 creates **one `MedalAward` per row**, keyed by `result_placement_id` — never
 collapsed because the event, delegation, or medal type repeats, so two identical

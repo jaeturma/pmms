@@ -14,6 +14,7 @@ import {
     AttributionFields,
     emptyAttribution,
 } from '@/components/result-attribution';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -461,16 +462,34 @@ function DirectResultForm({
             `medal_placements.${index}.${field}`
         ];
 
-    const incompleteMedalRows =
-        withMedals &&
-        (data.medal_rows.length === 0 ||
-            data.medal_rows.some((row) => row.delegation_id === ''));
+    // Rule 2: a medal row with no Team is allowed. The only hard stop the
+    // form itself imposes is "at least one row" — everything else is left
+    // to the server, which returns field/row-level validation errors.
+    const noMedalRows = withMedals && data.medal_rows.length === 0;
+
+    // Human-readable summary of every current validation error, most
+    // useful ones first. Row errors are already phrased "Medal row N: …"
+    // by the server.
+    const errorSummary = Object.entries(errors as Record<string, string>)
+        .filter(([, message]) => Boolean(message))
+        .map(([key, message]) => ({ key, message }));
+
+    const scrollToFirstError = () => {
+        requestAnimationFrame(() => {
+            const el = document.querySelector<HTMLElement>(
+                '[data-result-error-summary], [aria-invalid="true"], .text-destructive',
+            );
+            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el?.focus?.();
+        });
+    };
 
     const submit = (event: FormEvent) => {
         event.preventDefault();
         post(result ? `/results/${result.id}/direct` : '/results/direct', {
             forceFormData: true,
             preserveScroll: true,
+            onError: scrollToFirstError,
             onSuccess: () => {
                 reset();
                 setPreview(null);
@@ -510,6 +529,24 @@ function DirectResultForm({
                 </label>
             </div>
             <form onSubmit={submit} className="space-y-6">
+                {errorSummary.length > 0 && (
+                    <Alert
+                        variant="destructive"
+                        data-result-error-summary
+                        tabIndex={-1}
+                    >
+                        <AlertTitle>
+                            Please fix the following before submitting
+                        </AlertTitle>
+                        <AlertDescription>
+                            <ul className="list-disc space-y-1 pl-5">
+                                {errorSummary.map(({ key, message }) => (
+                                    <li key={key}>{message}</li>
+                                ))}
+                            </ul>
+                        </AlertDescription>
+                    </Alert>
+                )}
                 <section className="space-y-3 rounded-xl border bg-card p-4 sm:p-5">
                     <Label
                         htmlFor="result-event"
@@ -577,15 +614,6 @@ function DirectResultForm({
                             </select>
                         </label>
                     )}
-                    {Object.entries(errors)
-                        .filter(
-                            ([key]) =>
-                                key !== 'event_id' &&
-                                !key.startsWith('medal_placements'),
-                        )
-                        .map(([key, error]) => (
-                            <InputError key={key} message={error as string} />
-                        ))}
                 </section>
                 <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
                     <section
@@ -600,8 +628,8 @@ function DirectResultForm({
                             </h2>
                             <p className="text-sm text-muted-foreground">
                                 {withMedals
-                                    ? 'One row per medal awarded. Any Gold/Silver/Bronze combination is allowed — repeat a medal type or a delegation as the event requires. The tally count is separate from the score.'
-                                    : 'Select a distinct Winner and Loser. Attribution is optional.'}
+                                    ? 'One row per medal awarded. Any Gold/Silver/Bronze combination is allowed — repeat a medal type or a Team as the event requires. Team and athlete are optional; leave a row incomplete and finish it during correction. Every row needs a tally count of at least 1.'
+                                    : 'Select a Winner and a Loser — they must be different Teams. Attribution is optional.'}
                             </p>
                         </div>
 
@@ -684,6 +712,16 @@ function DirectResultForm({
                                                             )}
                                                         </SelectContent>
                                                     </Select>
+                                                    <InputError
+                                                        message={
+                                                            (
+                                                                errors as Record<
+                                                                    string,
+                                                                    string
+                                                                >
+                                                            )[delegationField]
+                                                        }
+                                                    />
                                                     <AttributionFields
                                                         key={`${data.event_id}-${data[delegationField]}`}
                                                         eventId={Number(
@@ -729,6 +767,16 @@ function DirectResultForm({
                                                                 event.target
                                                                     .value,
                                                             )
+                                                        }
+                                                    />
+                                                    <InputError
+                                                        message={
+                                                            (
+                                                                errors as Record<
+                                                                    string,
+                                                                    string
+                                                                >
+                                                            )[`${side}_value`]
                                                         }
                                                     />
                                                 </div>
@@ -807,7 +855,10 @@ function DirectResultForm({
                                                 <Label
                                                     htmlFor={`medal-${index}-delegation`}
                                                 >
-                                                    Delegation / Team
+                                                    Team / Delegation{' '}
+                                                    <span className="text-xs font-normal text-muted-foreground">
+                                                        (optional)
+                                                    </span>
                                                 </Label>
                                                 <Select
                                                     value={
@@ -831,11 +882,11 @@ function DirectResultForm({
                                                         aria-label={`Row ${index + 1} delegation`}
                                                         className="h-auto min-h-10 w-full [&>span]:text-left [&>span]:whitespace-normal"
                                                     >
-                                                        <SelectValue placeholder="Select a delegation" />
+                                                        <SelectValue placeholder="No Team yet" />
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="none">
-                                                            Select a delegation
+                                                            No Team yet
                                                         </SelectItem>
                                                         {delegations.map(
                                                             (option) => (
@@ -863,8 +914,8 @@ function DirectResultForm({
                                                 />
                                                 {row.delegation_id === '' && (
                                                     <p className="text-xs text-muted-foreground">
-                                                        Select a delegation for
-                                                        this row or remove it.
+                                                        You can finish this row
+                                                        during correction.
                                                     </p>
                                                 )}
                                                 {!isTeamEvent &&
@@ -1035,7 +1086,7 @@ function DirectResultForm({
                     <Button
                         type="submit"
                         size="lg"
-                        disabled={processing || incompleteMedalRows}
+                        disabled={processing || noMedalRows}
                         loading={processing}
                         className="w-full sm:w-auto"
                     >

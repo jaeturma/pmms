@@ -2,10 +2,10 @@
 
 use App\Enums\ResultStatus;
 use App\Enums\UserRole;
-use App\Models\EventResult;
 use App\Models\AuditLog;
 use App\Models\Entry;
 use App\Models\EventMatch;
+use App\Models\EventResult;
 use App\Models\User;
 use App\Services\EventTeamStandingsService;
 use App\Services\MedalTallyService;
@@ -131,3 +131,40 @@ test('optional individual versus athletes and team roster edits have no effect o
     expect(eventStandingRows($c))->toBe($before)->and($result->medalAwards()->count())->toBe(0);
     $this->get(route('reports.result-sheet', $result))->assertInertia(fn ($p) => $p->where('result.result_type', 'versus')->where('result.measurement_type', 'score'));
 })->with([true, false]);
+
+test('rule 3: a Versus Result rejects the same Team as Winner and Loser with a clear message', function () {
+    $c = directResultContext();
+
+    $this->actingAs($c['ict'])->from('/results/submit')
+        ->post('/results/direct', versusPayload($c, [
+            'winner_delegation_id' => $c['delegations'][0]->id,
+            'loser_delegation_id' => $c['delegations'][0]->id,
+        ]))
+        ->assertStatus(302)
+        ->assertSessionHasErrors([
+            'loser_delegation_id' => 'Winner and Loser cannot be the same Team.',
+        ]);
+
+    expect(EventResult::query()->count())->toBe(0);
+
+    // Distinct Teams submit fine.
+    $this->actingAs($c['ict'])->post('/results/direct', versusPayload($c))->assertSessionDoesntHaveErrors();
+    expect(EventResult::query()->count())->toBe(1);
+});
+
+test('rule 3 does not apply to Medal Results — the same Team may repeat', function () {
+    $c = directResultContext();
+    $team = $c['delegations'][0];
+
+    $this->actingAs($c['ict'])->post('/results/direct', [
+        'event_id' => $c['event']->id,
+        'result_type' => 'medal',
+        'medal_placements' => [
+            ['medal_type' => 'gold', 'delegation_id' => $team->id, 'count' => 1],
+            ['medal_type' => 'silver', 'delegation_id' => $team->id, 'count' => 1],
+        ],
+        'evidence' => UploadedFile::fake()->image('medal-same-team.png'),
+    ])->assertSessionDoesntHaveErrors();
+
+    expect(EventResult::query()->sole()->placements()->count())->toBe(2);
+});
