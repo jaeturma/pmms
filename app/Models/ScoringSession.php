@@ -154,6 +154,8 @@ class ScoringSession extends Model
             'scoreboard_mode' => $this->sport_state['scoreboard_mode'] ?? null,
             'side_a_label' => $this->side_a_label,
             'side_b_label' => $this->side_b_label,
+            'side_a_team' => $this->districtNicknameFor($this->side_a_label),
+            'side_b_team' => $this->districtNicknameFor($this->side_b_label),
             'side_a_logo_url' => $this->districtLogoUrl($this->side_a_label),
             'side_b_logo_url' => $this->districtLogoUrl($this->side_b_label),
             'side_a_athlete' => $sideAAthlete,
@@ -306,13 +308,60 @@ class ScoringSession extends Model
      */
     private function districtLogoUrl(?string $label): ?string
     {
+        $district = $this->districtForLabel($label);
+
+        return $district?->teamLogoUrl() ?? $district?->logoUrl();
+    }
+
+    /**
+     * Resolve a freeform side label to its `District` (the app's "team").
+     * The label is conventionally a delegation's `registrantName()` — the
+     * municipality/district name — but a manual or overridden setup may
+     * append "– Athlete Name", so this tries the whole label first, then
+     * the part before an en/em dash. Returns `null` for a label that
+     * matches no district (e.g. a City division's school-named side).
+     */
+    private function districtForLabel(?string $label): ?District
+    {
         if ($label === null || $label === '') {
             return null;
         }
 
-        $district = District::query()->where('name', $label)->first();
+        $candidates = [trim($label)];
+        foreach (['–', '—', ' - '] as $separator) {
+            if (str_contains($label, $separator)) {
+                $candidates[] = trim(explode($separator, $label, 2)[0]);
+            }
+        }
 
-        return $district?->teamLogoUrl() ?? $district?->logoUrl();
+        foreach (array_unique($candidates) as $candidate) {
+            if ($candidate === '') {
+                continue;
+            }
+            $district = District::query()->where('name', $candidate)->first();
+            if ($district !== null) {
+                return $district;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * A side's team name for a broadcast title — the `District` nickname
+     * when one is set, otherwise the raw side label (so a side that maps
+     * to no district, or to a district with no nickname, still shows
+     * something sensible).
+     */
+    private function districtNicknameFor(?string $label): ?string
+    {
+        if ($label === null || $label === '') {
+            return null;
+        }
+
+        $nickname = $this->districtForLabel($label)?->nickname;
+
+        return ($nickname !== null && $nickname !== '') ? $nickname : $label;
     }
 
     /**

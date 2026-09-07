@@ -255,6 +255,9 @@ export type LiveSession = {
     status_label: string;
     side_a_label: string;
     side_b_label: string;
+    /** District nickname for a broadcast title, else the raw side label. */
+    side_a_team?: string | null;
+    side_b_team?: string | null;
     score_a: number;
     score_b: number;
     period_label: string | null;

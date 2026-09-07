@@ -135,6 +135,9 @@ export type PortalLiveSession = {
     status_label: string;
     side_a_label: string | null;
     side_b_label: string | null;
+    /** District nickname for a broadcast title, else the raw side label. */
+    side_a_team: string | null;
+    side_b_team: string | null;
     side_a_logo_url: string | null;
     side_b_logo_url: string | null;
     side_a_athlete: PortalAthleteParticipant | null;

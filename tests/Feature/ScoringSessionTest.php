@@ -8,6 +8,7 @@ use App\Enums\ScoringSessionStatus;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
+use App\Models\District;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\EventMatch;
@@ -904,6 +905,40 @@ test('the scoreboard page has no data-issue warning for a clean match', function
     $this->actingAs(User::factory()->admin()->create())
         ->get("/matches/{$match->id}/scoreboard")
         ->assertInertia(fn (AssertableInertia $page) => $page->where('dataIssues', []));
+});
+
+test('the live payload resolves each side to its district nickname for the broadcast title', function () {
+    District::factory()->create(['name' => 'Nabunturan', 'nickname' => 'Warriors']);
+    District::factory()->create(['name' => 'New Bataan', 'nickname' => 'Spartans']);
+
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        // one clean district name, one with an athlete appended (manual setup)
+        'side_a_label' => 'Nabunturan',
+        'side_b_label' => 'New Bataan — J. Reyes',
+    ]);
+
+    expect($session->toLivePayload())->toMatchArray([
+        'side_a_team' => 'Warriors',
+        'side_b_team' => 'Spartans',
+    ]);
+});
+
+test('the live payload falls back to the raw side label when no district or nickname matches', function () {
+    District::factory()->create(['name' => 'Compostela', 'nickname' => null]);
+
+    $match = boxingMatch();
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'side_a_label' => 'Compostela',              // district exists, no nickname
+        'side_b_label' => 'Davao City NHS',          // matches no district
+    ]);
+
+    expect($session->toLivePayload())->toMatchArray([
+        'side_a_team' => 'Compostela',
+        'side_b_team' => 'Davao City NHS',
+    ]);
 });
 
 test('the scoreboard page reflects a score change made through the operator console', function () {

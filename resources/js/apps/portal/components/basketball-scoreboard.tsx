@@ -155,7 +155,11 @@ export function PortalBasketballScoreboard({ liveNow, className }: PortalBasketb
 
     return (
         <div className={cn('flex flex-col gap-3.5', className)}>
-            <ScoreboardGameLabel mode={session.scoreboard_mode} />
+            <ScoreboardGameLabel
+                mode={session.scoreboard_mode}
+                teamA={session.side_a_team}
+                teamB={session.side_b_team}
+            />
             <div className="portal-animate-in relative overflow-hidden rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] text-[var(--portal-surface-foreground)] shadow-[0_6px_24px_rgba(15,23,42,0.08)]">
                 <div className="flex items-center justify-between gap-2 bg-[var(--portal-live)] px-4 py-2 text-[var(--portal-live-foreground)]">
                     <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase">
