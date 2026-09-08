@@ -286,7 +286,7 @@ class ReportController extends Controller
 
         // Same canonical aggregation as the public `/tally` board and the
         // internal tally page — never a report-only counting path.
-        $standings = $tally->categoryStandings($meet->id, $category, $sportId);
+        $standings = $tally->forInternalViewer($request->user())->categoryStandings($meet->id, $category, $sportId);
 
         return Inertia::render('reports/medal-tally', [
             'schools' => $standings['schools'],
@@ -317,7 +317,7 @@ class ReportController extends Controller
         $sportId = $request->integer('sport_id') > 0 ? $request->integer('sport_id') : null;
         $category = $this->resolveTallyCategory($request->query('category'));
 
-        $standings = $tally->categoryStandings($meet->id, $category, $sportId);
+        $standings = $tally->forInternalViewer($request->user())->categoryStandings($meet->id, $category, $sportId);
 
         $this->audit->record('report.tally_exported', null, [
             'meet' => $meet->name,

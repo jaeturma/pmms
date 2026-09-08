@@ -796,6 +796,42 @@ export function AppSidebar() {
         });
     }
 
+    if (role === 'admin') {
+        const reporting = navSections.find(
+            (section) => section.title === 'Reporting',
+        );
+        const item: NavItem = {
+            title: 'Team Report',
+            href: '/reports/team',
+            icon: ClipboardList,
+        };
+        if (reporting) reporting.items.push(item);
+        else
+            navSections.push({
+                title: 'Reporting',
+                icon: ClipboardList,
+                items: [item],
+            });
+    }
+
+    if (auth.user?.can_view_sports_medal_awards) {
+        const reporting = navSections.find(
+            (section) => section.title === 'Reporting',
+        );
+        const item: NavItem = {
+            title: 'Sports Medal Awards',
+            href: '/reports/sports-medal-awards',
+            icon: ClipboardList,
+        };
+        if (reporting) reporting.items.push(item);
+        else
+            navSections.push({
+                title: 'Reporting',
+                icon: ClipboardList,
+                items: [item],
+            });
+    }
+
     if (auth.user?.can_manage_davraa_reports) {
         const reporting = navSections.find(
             (section) => section.title === 'Reporting',

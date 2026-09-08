@@ -72,10 +72,12 @@ use App\Http\Controllers\SchoolDistrictController;
 use App\Http\Controllers\ScoringSessionController;
 use App\Http\Controllers\SportController;
 use App\Http\Controllers\SportRosterController;
+use App\Http\Controllers\SportsMedalAwardsReportController;
 use App\Http\Controllers\SwimmingRosterController;
 use App\Http\Controllers\SystemSettingsController;
 use App\Http\Controllers\TallyController;
 use App\Http\Controllers\TeamEntryController;
+use App\Http\Controllers\TeamReportController;
 use App\Http\Controllers\TechnicalOfficialAccreditationController;
 use App\Http\Controllers\TransportRequestController;
 use App\Http\Controllers\TransportTripController;
@@ -520,6 +522,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('eligibility/reviews/{review}/return', [EligibilityController::class, 'returnReview'])->name('eligibility.return');
     Route::patch('eligibility/reviews/{review}/reject', [EligibilityController::class, 'reject'])->name('eligibility.reject');
 
+    Route::get('reports/team', [TeamReportController::class, 'index'])->name('reports.team');
+    Route::get('reports/sports-medal-awards', [SportsMedalAwardsReportController::class, 'index'])->name('reports.sports-medal-awards');
     Route::get('reports/participation', [ReportController::class, 'participation'])->name('reports.participation');
     Route::get('reports/participation/download', [ReportController::class, 'downloadParticipation'])->name('reports.participation.download');
     Route::get('reports/delegations/{delegation}/roster', [ReportController::class, 'delegationRoster'])->name('reports.roster');

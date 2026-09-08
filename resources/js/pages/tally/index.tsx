@@ -72,6 +72,7 @@ type Props = {
     sportOptions: Option[];
     categoryOptions: StringOption[];
     generatedAt: string;
+    medalTallyOfficial: boolean;
 };
 
 export default function Tally({
@@ -86,9 +87,11 @@ export default function Tally({
     sportOptions,
     categoryOptions,
     generatedAt,
+    medalTallyOfficial,
 }: Props) {
     const { division } = usePage().props;
     const areaLabel = division.areaLabel;
+    const title = medalTallyOfficial ? 'MEDAL TALLY' : 'MEDAL TALLY (Unofficial)';
 
     const applyFilters = (overrides: {
         sport_id?: string;
@@ -122,10 +125,10 @@ export default function Tally({
 
     return (
         <>
-            <Head title="Medal tally" />
+            <Head title={title} />
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
-                    title="Medal Tally & Rankings"
+                    title={title}
                     description="Real-time overall medal count and ranking of municipalities."
                     actions={
                         <>
@@ -205,7 +208,7 @@ export default function Tally({
                     <EmptyState
                         icon={Crown}
                         title="No medals yet"
-                        description="Standings appear as soon as results are validated."
+                        description="Standings are calculated from eligible Results submissions."
                     />
                 ) : (
                     <>
@@ -318,8 +321,8 @@ export default function Tally({
                             <Info aria-hidden="true" />
                             <AlertDescription>
                                 Medal tally is updated in real time as results
-                                are validated. Generated {generatedAt}. Ties
-                                share medals; corrections to validated results
+                                are updated. Generated {generatedAt}. Ties
+                                share medals; corrections to included results
                                 update the tally automatically.
                             </AlertDescription>
                         </Alert>

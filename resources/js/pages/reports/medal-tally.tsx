@@ -69,7 +69,7 @@ export default function MedalTallyReport({
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
                 <PageHeader
                     title="Medal tally report"
-                    description={`${meet} · ${categoryLabel} · ${sport ?? 'All sports'} — validated results only`}
+                    description={`${meet} · ${categoryLabel} · ${sport ?? 'All sports'} — Results submissions`}
                     actions={
                         <ReportActions downloadUrl={download({ query }).url} />
                     }

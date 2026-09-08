@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Meet;
+use App\Models\Setting;
 use App\Models\Sport;
 use App\Services\MedalTallyService;
 use Illuminate\Http\Request;
@@ -14,16 +15,8 @@ class TallyController extends Controller
     public function __construct(private readonly MedalTallyService $tally) {}
 
     /**
-     * Medal tally: official district/municipality standings plus a
-     * school-level reference table — aggregates of validated results only,
-     * readable by every authenticated role.
-     *
-     * Uses the exact same `MedalTallyService::categoryBreakdown()` the
-     * public `/tally` board consumes, so the internal page, the dashboard
-     * widget and the reports can never show a different medal count from
-     * the public tally. `category` is the same Overall / Elementary /
-     * Secondary / Paragames selector (default Overall = Elementary +
-     * Secondary, no Paragames, no Kickboxing).
+     * Admin and ICT standings include submitted Results. Other viewers use
+     * official results. All scopes share the same category and medal rules.
      */
     public function index(Request $request): Response
     {
@@ -32,7 +25,8 @@ class TallyController extends Controller
         $category = $this->resolveCategory($request->query('category'));
 
         return Inertia::render('tally/index', [
-            ...$this->tally->categoryBreakdown($meetId, $category, $sportId),
+            'medalTallyOfficial' => Setting::current()->medalTallyIsOfficial(),
+            ...$this->tally->forInternalViewer($request->user())->categoryBreakdown($meetId, $category, $sportId),
             'filters' => [
                 'sport_id' => $sportId,
                 'category' => $category,

@@ -503,3 +503,12 @@
         background: white !important;
     }
 }
+
+@media print {
+    .medal-awards-report { color: black; font-size: 10pt; }
+    .medal-awards-report .sport-section + .sport-section { break-before: page; }
+    .medal-awards-report thead { display: table-header-group; }
+    .medal-awards-report tr, .medal-awards-report footer { break-inside: avoid; }
+    .medal-awards-report h2, .medal-awards-report h3 { break-after: avoid; }
+    .medal-awards-report th, .medal-awards-report td { padding: 4px; overflow-wrap: anywhere; }
+}

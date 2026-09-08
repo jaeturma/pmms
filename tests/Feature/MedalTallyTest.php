@@ -2,6 +2,7 @@
 
 use App\Enums\AgeDivision;
 use App\Enums\ResultStatus;
+use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\Delegation;
 use App\Models\District;
@@ -578,4 +579,36 @@ test('recent medals only count placements validated within the last 24 hours', f
             ->where('totals.gold', 2)
             ->where('recentMedals.gold', 1)
             ->where('recentMedals.total', 1));
+});
+
+test('admin and ICT tallies include submitted result quantities without publishing them', function () {
+    $meet = Meet::current();
+    $delegation = Delegation::factory()->approved()->create(['meet_id' => $meet->id]);
+    foreach (ResultStatus::cases() as $status) {
+        $result = EventResult::factory()->create([
+            'meet_id' => $meet->id,
+            'status' => $status,
+            'result_source' => 'direct',
+            'submitted_at' => now(),
+        ]);
+        ResultPlacement::factory()->create([
+            'event_result_id' => $result->id,
+            'entry_id' => null,
+            'delegation_id' => $delegation->id,
+            'rank' => 1,
+            'medal_type' => 'gold',
+            'tally_quantity' => 2,
+        ]);
+    }
+
+    foreach ([UserRole::Admin, UserRole::TournamentICT] as $role) {
+        $this->actingAs(User::factory()->create(['role' => $role]))
+            ->get('/tally')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('totals.gold', 6)
+                ->where('recentMedals.gold', 6));
+    }
+
+    expect(collect(app(MedalTallyService::class)->categoryStandings($meet->id, 'overall')['districts'])->sum('gold'))->toBe(0);
 });

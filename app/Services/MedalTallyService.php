@@ -5,11 +5,13 @@ namespace App\Services;
 use App\Enums\AgeDivision;
 use App\Enums\DelegationStatus;
 use App\Enums\ResultStatus;
+use App\Enums\UserRole;
 use App\Models\Delegation;
 use App\Models\EventResult;
 use App\Models\ResultPlacement;
 use App\Models\School;
 use App\Models\SchoolDistrict;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -29,6 +31,24 @@ class MedalTallyService
      * documented official tie-breaking rule (docs/medal-tally.md) and is
      * left untouched here.
      */
+    private bool $includeSubmitted = false;
+
+    public function forInternalViewer(User $user): self
+    {
+        $service = clone $this;
+        $service->includeSubmitted = $user->hasRole(UserRole::Admin, UserRole::TournamentICT)
+            || $user->canReviewCoachRegistrations();
+
+        return $service;
+    }
+
+    private function resultStatuses(): array
+    {
+        return $this->includeSubmitted
+            ? [ResultStatus::Submitted->value, ResultStatus::Validated->value, ResultStatus::Official->value]
+            : [ResultStatus::Official->value];
+    }
+
     private const GOLD_POINTS = 3;
 
     private const SILVER_POINTS = 2;
@@ -166,7 +186,7 @@ class MedalTallyService
         $values = EventResult::query()
             ->real()
             ->where('meet_id', $meetId)
-            ->where('status', ResultStatus::Official->value)
+            ->whereIn('status', $this->resultStatuses())
             ->when($sportId !== null, fn ($query) => $query->whereHas('event', fn ($events) => $events->where('sport_id', $sportId)))
             ->with('event:id,age_division')
             ->get()
@@ -370,7 +390,7 @@ class MedalTallyService
     public function recentMedals(?int $meetId = null, ?int $sportId = null, string|array|null $ageDivision = null, int $hours = 24, ?bool $paragames = null): array
     {
         $placements = $this->basePlacements($meetId, $sportId, $ageDivision, null, $paragames)
-            ->whereHas('result', fn ($result) => $result->where('validated_at', '>=', Carbon::now()->subHours($hours)))
+            ->whereHas('result', fn ($result) => $result->where($this->includeSubmitted ? 'submitted_at' : 'validated_at', '>=', Carbon::now()->subHours($hours)))
             ->get();
 
         return $this->medals($placements);
@@ -456,12 +476,13 @@ class MedalTallyService
             // Elementary, Secondary or Paragames) — enforced here at the
             // query layer for every caller, never only hidden in the UI.
             ->whereHas('result.event.sport', fn ($sport) => $sport->where('name', 'not like', self::KICKBOXING_NAME_LIKE))
-            // Direct results contribute only their canonical award snapshots.
-            ->where(fn ($placements) => $placements->whereHas('medalAward')
-                ->orWhereHas('result', fn ($result) => $result->where('result_source', '!=', 'direct')->orWhereNull('result_source')))
+            // Official-only views require canonical direct award snapshots.
+            // Internal submitted views can also count the entered medal rows.
+            ->when(! $this->includeSubmitted, fn ($query) => $query->where(fn ($placements) => $placements->whereHas('medalAward')
+                ->orWhereHas('result', fn ($result) => $result->where('result_source', '!=', 'direct')->orWhereNull('result_source'))))
             ->whereHas('result', fn ($result) => $result
                 ->whereNull('demo_scenario_id')
-                ->where('status', ResultStatus::Official->value)
+                ->whereIn('status', $this->resultStatuses())
                 ->where(fn ($eligible) => $eligible
                     ->whereNull('match_id')
                     ->orWhereHas('match', fn ($match) => $match->where('awards_medals', true)))
@@ -682,7 +703,8 @@ class MedalTallyService
         $placements = $this->medalUnits($placements);
         $byRank = fn (int $rank): int => (int) $placements
             ->filter(fn (ResultPlacement $placement): bool => $placement->rank === $rank)
-            ->sum(fn (ResultPlacement $placement): int => $placement->medalAward?->tally_quantity ?? 1);
+            ->sum(fn (ResultPlacement $placement): int => $placement->medalAward?->tally_quantity
+                ?? ($this->includeSubmitted && $placement->result->result_source === 'direct' ? ($placement->tally_quantity ?? 1) : 1));
 
         $gold = $byRank(1);
         $silver = $byRank(2);
