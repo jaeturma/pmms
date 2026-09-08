@@ -121,6 +121,22 @@ meet X" list (that's still `/meets/{meet}/sports`, unchanged). A sport
 with no current-meet inclusion still shows its real catalog-wide category
 count rather than 0.
 
+### Medal-awarding progress badge
+
+Each card carries `event_category_count` / `awarded_event_count` — the
+Sports Events this sport contests in the **active meet** (`Event::inMeet()`)
+vs. how many already carry an accepted medal result (a `real()`,
+`Official`-status `EventResult` with a `medalAwards` row whose
+`tally_quantity > 0` — the exact rule `PortalController::sportProfile()`
+uses to flag an event card maroon). Both are `null` when there is no active
+meet, or when the sport contests no event in it (Kickboxing, which is
+meet-excluded), and the card then renders no badge. Otherwise the card
+shows **"Awarded X/Y event categories"** — a soft-maroon badge with a medal
+icon while `X < Y`, flipping to solid maroon with a check icon at parity
+(`X === Y`, every category awarded). The count is meet-scoped by design, so
+the denominator can differ from the catalog "N sports events" line below
+it.
+
 ## Sport mini portal (`/{sportSlug}`)
 
 `sport-portal.tsx`'s existing live-scoring/results sections are unchanged

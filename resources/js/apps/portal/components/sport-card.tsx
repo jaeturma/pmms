@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { Radio } from 'lucide-react';
+import { CheckCircle2, Medal, Radio } from 'lucide-react';
 import { PortalSportIcon } from '@/apps/portal/components/sport-icon';
 import type { PortalSportCard as PortalSportCardData } from '@/apps/portal/types';
 import { sportPortal } from '@/routes/public';
@@ -12,6 +12,11 @@ import { sportPortal } from '@/routes/public';
  * action per card.
  */
 export function PortalSportCard({ sport }: { sport: PortalSportCardData }) {
+    const awarded = sport.awarded_event_count;
+    const total = sport.event_category_count;
+    const showAwardStatus = typeof awarded === 'number' && typeof total === 'number';
+    const allAwarded = showAwardStatus && awarded === total;
+
     return (
         <Link
             href={sportPortal(sport.slug).url}
@@ -51,7 +56,31 @@ export function PortalSportCard({ sport }: { sport: PortalSportCardData }) {
                 )}
             </div>
 
-            <div className="mt-auto flex items-center justify-between pt-2 text-sm">
+            {showAwardStatus && (
+                <div
+                    className={`mt-auto flex items-center gap-1.5 self-start rounded-full px-2.5 py-1 text-xs font-bold ${
+                        allAwarded
+                            ? 'bg-[var(--portal-maroon)] text-[var(--portal-maroon-foreground)]'
+                            : 'bg-[var(--portal-maroon-soft)] text-[var(--portal-maroon)]'
+                    }`}
+                    title={
+                        allAwarded
+                            ? 'Every event category in this sport has an awarded medal result'
+                            : `${awarded} of ${total} event categories have an awarded medal result`
+                    }
+                >
+                    {allAwarded ? (
+                        <CheckCircle2 aria-hidden="true" className="size-3.5" />
+                    ) : (
+                        <Medal aria-hidden="true" className="size-3.5" />
+                    )}
+                    {`Awarded ${awarded}/${total} ${total === 1 ? 'event category' : 'event categories'}`}
+                </div>
+            )}
+
+            <div
+                className={`${showAwardStatus ? '' : 'mt-auto'} flex items-center justify-between pt-2 text-sm`}
+            >
                 <span className="text-[var(--portal-muted-foreground)]">
                     {sport.events.length === 0
                         ? 'No sports events yet'

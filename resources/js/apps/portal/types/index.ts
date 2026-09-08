@@ -468,6 +468,10 @@ export type PortalSportCard = {
     is_paragames: boolean;
     category_count: number;
     is_live: boolean;
+    /** Medal-awarding progress for the active meet. `null` when there is
+     * no active meet or this sport contests no event in it. */
+    event_category_count: number | null;
+    awarded_event_count: number | null;
 };
 
 /** A Tournament Management assignment — Tournament Manager/Assistant/

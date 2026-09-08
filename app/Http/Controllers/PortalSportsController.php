@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ResultStatus;
 use App\Enums\ScoringSessionStatus;
 use App\Enums\SportPortalSlug;
+use App\Models\Event;
+use App\Models\EventResult;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\ScoringSession;
@@ -55,8 +58,25 @@ class PortalSportsController extends Controller
         $meetSportsBySportId = $meet === null ? collect() : $this->meetSportsForMeet($meet);
         $liveSportIds = $meet === null ? collect() : $this->liveSportIds($meet);
 
+        // Medal-awarding progress, per sport, for the active meet: the
+        // Sports Events this meet actually contests vs. how many already
+        // carry an accepted medal result. Computed once here (two queries),
+        // not per card.
+        $meetEventIdsBySport = $meet === null ? collect() : Event::query()
+            ->inMeet($meet)
+            ->get(['id', 'sport_id'])
+            ->groupBy('sport_id')
+            ->map(fn (Collection $events): Collection => $events->pluck('id'));
+        $awardedEventIds = $meet === null
+            ? collect()
+            : EventResult::query()->real()
+                ->where('meet_id', $meet->id)
+                ->where('status', ResultStatus::Official->value)
+                ->whereHas('medalAwards', fn ($awards) => $awards->where('tally_quantity', '>', 0))
+                ->pluck('event_id');
+
         return $sports
-            ->map(function (Sport $sport) use ($meetSportsBySportId, $liveSportIds, $meet): ?array {
+            ->map(function (Sport $sport) use ($meetSportsBySportId, $liveSportIds, $meet, $meetEventIdsBySport, $awardedEventIds): ?array {
                 $slug = SportPortalSlug::fromSportName($sport->name);
 
                 if ($slug === null) {
@@ -64,6 +84,10 @@ class PortalSportsController extends Controller
                 }
 
                 $meetSport = $meetSportsBySportId->get($sport->id);
+
+                $meetEventIds = $meet === null
+                    ? collect()
+                    : ($meetEventIdsBySport->get($sport->id) ?? collect());
 
                 return [
                     'id' => $sport->id,
@@ -80,6 +104,15 @@ class PortalSportsController extends Controller
                         'url' => route('public.sport-event', ['event' => $event, 'meet_id' => $meet?->id]),
                     ])->values()->all(),
                     'is_live' => $liveSportIds->contains($sport->id),
+                    // Medal-awarding progress for the active meet — null when
+                    // there is no active meet, or when this sport contests
+                    // no Sports Event in it (nothing to award).
+                    'event_category_count' => $meet === null || $meetEventIds->isEmpty()
+                        ? null
+                        : $meetEventIds->count(),
+                    'awarded_event_count' => $meet === null || $meetEventIds->isEmpty()
+                        ? null
+                        : $meetEventIds->intersect($awardedEventIds)->count(),
                 ];
             })
             ->filter()
