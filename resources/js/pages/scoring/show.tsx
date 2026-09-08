@@ -518,17 +518,20 @@ type PreStartRosterData = {
         a: { id: number; label: string }[];
         b: { id: number; label: string }[];
     };
+    teamOptions: Array<{ id: number; label: string }>;
+    selectedDelegations: { a: number | null; b: number | null };
 };
+
+type SideMap = { a: string; b: string };
 
 /**
  * Athlete curation before a session exists — the same `match-roster.*`
  * endpoints `BasketballGameControl`'s in-game "Substitute" modal uses
- * (roster persists independently of any session, so these already work
- * pre-start with zero backend changes), just without the on-court/bench
- * split that only makes sense once a game is actually running. "Manual"
- * here means picking any still-eligible registered entry from the
- * dropdown, not free text — this app never records an athlete without a
- * real Entry row behind them.
+ * (roster persists independently of any session), just without the
+ * on-court/bench split that only makes sense once a game is running.
+ * Normally you pick a still-eligible registered entry from the dropdown;
+ * when a side's registration link is missing you can load a chosen team's
+ * athletes, or type a player's name to add them by hand.
  */
 function PreStartRosterManager({
     matchId,
@@ -541,17 +544,43 @@ function PreStartRosterManager({
 }) {
     const [open, setOpen] = useState(false);
     const [data, setData] = useState<PreStartRosterData | null>(null);
-    const [entryId, setEntryId] = useState<{ a: string; b: string }>({
-        a: '',
-        b: '',
-    });
+    const [entryId, setEntryId] = useState<SideMap>({ a: '', b: '' });
+    const [teamId, setTeamId] = useState<SideMap>({ a: '', b: '' });
+    const [manualName, setManualName] = useState<SideMap>({ a: '', b: '' });
 
-    const load = () => {
-        fetch(rosterShowRoute(matchId).url, {
-            headers: { Accept: 'application/json' },
-        })
+    const load = (teams?: SideMap) => {
+        const chosen = teams ?? teamId;
+        const params = new URLSearchParams();
+        if (chosen.a !== '') {
+            params.set('a_delegation_id', chosen.a);
+        }
+        if (chosen.b !== '') {
+            params.set('b_delegation_id', chosen.b);
+        }
+        const query = params.toString();
+
+        fetch(
+            query === ''
+                ? rosterShowRoute(matchId).url
+                : `${rosterShowRoute(matchId).url}?${query}`,
+            { headers: { Accept: 'application/json' } },
+        )
             .then((response) => response.json())
-            .then((json: PreStartRosterData) => setData(json));
+            .then((json: PreStartRosterData) => {
+                setData(json);
+                if (teams === undefined && teamId.a === '' && teamId.b === '') {
+                    setTeamId({
+                        a:
+                            json.selectedDelegations.a !== null
+                                ? String(json.selectedDelegations.a)
+                                : '',
+                        b:
+                            json.selectedDelegations.b !== null
+                                ? String(json.selectedDelegations.b)
+                                : '',
+                    });
+                }
+            });
     };
 
     useEffect(() => {
@@ -561,28 +590,41 @@ function PreStartRosterManager({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
+    const selectTeam = (side: 'a' | 'b', value: string) => {
+        const next = { ...teamId, [side]: value };
+        setTeamId(next);
+        setEntryId((current) => ({ ...current, [side]: '' }));
+        load(next);
+    };
+
     const addPlayer = (side: 'a' | 'b') => {
-        if (entryId[side] === '') {
+        const payload: Record<string, string | number> = { side };
+
+        if (entryId[side] !== '') {
+            payload.entry_id = Number(entryId[side]);
+            if (teamId[side] !== '') {
+                payload.delegation_id = Number(teamId[side]);
+            }
+        } else if (manualName[side].trim() !== '') {
+            payload.manual_name = manualName[side].trim();
+        } else {
             return;
         }
 
-        router.post(
-            rosterStoreRoute(matchId).url,
-            { entry_id: Number(entryId[side]), side },
-            {
-                preserveScroll: true,
-                onSuccess: () => {
-                    setEntryId((current) => ({ ...current, [side]: '' }));
-                    load();
-                },
+        router.post(rosterStoreRoute(matchId).url, payload, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setEntryId((current) => ({ ...current, [side]: '' }));
+                setManualName((current) => ({ ...current, [side]: '' }));
+                load();
             },
-        );
+        });
     };
 
     const removePlayer = (rosterPlayerId: number) => {
         router.delete(rosterDestroyRoute(rosterPlayerId).url, {
             preserveScroll: true,
-            onSuccess: load,
+            onSuccess: () => load(),
         });
     };
 
@@ -647,18 +689,51 @@ function PreStartRosterManager({
                                         </li>
                                     ))}
                                 </ul>
+                                {(data?.teamOptions.length ?? 0) > 0 && (
+                                    <Select
+                                        value={teamId[side]}
+                                        onValueChange={(value) =>
+                                            selectTeam(side, value)
+                                        }
+                                    >
+                                        <SelectTrigger className="mt-2 w-full">
+                                            <SelectValue placeholder="Load a team's athletes" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {data?.teamOptions.map((team) => (
+                                                <SelectItem
+                                                    key={team.id}
+                                                    value={String(team.id)}
+                                                >
+                                                    {team.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                )}
                                 <div className="mt-2 flex gap-2">
                                     <Select
                                         value={entryId[side]}
-                                        onValueChange={(value) =>
+                                        onValueChange={(value) => {
                                             setEntryId((current) => ({
                                                 ...current,
                                                 [side]: value,
-                                            }))
-                                        }
+                                            }));
+                                            setManualName((current) => ({
+                                                ...current,
+                                                [side]: '',
+                                            }));
+                                        }}
                                     >
                                         <SelectTrigger className="flex-1">
-                                            <SelectValue placeholder="Add registered athlete" />
+                                            <SelectValue
+                                                placeholder={
+                                                    (data?.eligibleAthletes[side]
+                                                        .length ?? 0) === 0
+                                                        ? 'No registered athletes'
+                                                        : 'Add registered athlete'
+                                                }
+                                            />
                                         </SelectTrigger>
                                         <SelectContent>
                                             {data?.eligibleAthletes[side].map(
@@ -677,12 +752,43 @@ function PreStartRosterManager({
                                     </Select>
                                     <Button
                                         type="button"
-                                        disabled={entryId[side] === ''}
+                                        disabled={
+                                            entryId[side] === '' &&
+                                            manualName[side].trim() === ''
+                                        }
                                         onClick={() => addPlayer(side)}
                                     >
                                         Add
                                     </Button>
                                 </div>
+                                <Input
+                                    className="mt-2"
+                                    aria-label={`Add ${
+                                        side === 'a' ? sideALabel : sideBLabel
+                                    } player by name`}
+                                    placeholder="…or type a player's name"
+                                    maxLength={60}
+                                    value={manualName[side]}
+                                    onChange={(event) => {
+                                        const value = event.target.value;
+                                        setManualName((current) => ({
+                                            ...current,
+                                            [side]: value,
+                                        }));
+                                        if (value !== '') {
+                                            setEntryId((current) => ({
+                                                ...current,
+                                                [side]: '',
+                                            }));
+                                        }
+                                    }}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter') {
+                                            event.preventDefault();
+                                            addPlayer(side);
+                                        }
+                                    }}
+                                />
                             </div>
                         ))}
                     </div>

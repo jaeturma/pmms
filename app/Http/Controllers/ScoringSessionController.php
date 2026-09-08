@@ -669,7 +669,7 @@ class ScoringSessionController extends Controller
      */
     private function extractRosterFromTeamEntries(EventMatch $match): int
     {
-        $rosteredEntryIds = MatchRosterPlayer::query()->where('match_id', $match->id)->pluck('entry_id');
+        $rosteredEntryIds = MatchRosterPlayer::query()->where('match_id', $match->id)->whereNotNull('entry_id')->pluck('entry_id');
         $extracted = 0;
 
         foreach ($match->teamEntries->values() as $index => $team) {
@@ -872,7 +872,7 @@ class ScoringSessionController extends Controller
                 'result' => $newValue,
                 ...($rosterPlayer !== null ? [
                     'roster_player_id' => $rosterPlayer->id,
-                    'player_name' => ($rosterPlayer->entry?->athlete?->fullName() ?? __('Missing athlete')),
+                    'player_name' => ($this->rosterPlayerName($rosterPlayer)),
                 ] : []),
             ],
             'recorded_by' => $user->id,
@@ -1051,7 +1051,7 @@ class ScoringSessionController extends Controller
                 ...$data,
                 'fouls_a' => $state['fouls_a'],
                 'fouls_b' => $state['fouls_b'],
-                ...($rosterPlayer !== null ? ['player_name' => ($rosterPlayer->entry?->athlete?->fullName() ?? __('Missing athlete'))] : []),
+                ...($rosterPlayer !== null ? ['player_name' => ($this->rosterPlayerName($rosterPlayer))] : []),
             ],
             'recorded_by' => $user->id,
         ]);
@@ -2972,7 +2972,7 @@ class ScoringSessionController extends Controller
                 'side' => $data['side'],
                 'roster_player_id' => $rosterPlayer->id,
                 'on_court' => $data['on_court'],
-                'player_name' => ($rosterPlayer->entry?->athlete?->fullName() ?? __('Missing athlete')),
+                'player_name' => ($this->rosterPlayerName($rosterPlayer)),
             ],
             'recorded_by' => $user->id,
         ]);
@@ -3004,6 +3004,20 @@ class ScoringSessionController extends Controller
             ->where('side', $side)
             ->with('entry.athlete')
             ->first();
+    }
+
+    /**
+     * The display name to attribute a point/foul/substitution to — the
+     * linked athlete's real name, or the operator's hand-typed
+     * `manual_name` when the roster row has no Entry behind it, or a plain
+     * fallback. Written into the append-only play-by-play at event time, so
+     * it survives the roster row later being removed.
+     */
+    private function rosterPlayerName(MatchRosterPlayer $rosterPlayer): string
+    {
+        return $rosterPlayer->entry?->athlete?->fullName()
+            ?? ($rosterPlayer->manual_name !== null && $rosterPlayer->manual_name !== '' ? $rosterPlayer->manual_name : null)
+            ?? __('Missing athlete');
     }
 
     /**

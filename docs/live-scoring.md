@@ -551,6 +551,47 @@ audit logging, single/idempotent session creation, generic fallback,
 standard workflow unchanged, out-of-sport operator blocked, public labels,
 provenance never public, scoring mutations after manual start).
 
+### Roster: load a team, or type a player in
+
+The "Manage roster" (pre-start) and "Substitute" (in-game) modals both run
+off `match-roster.show` / `match-roster.store`. Two additions let an
+operator build a roster when the match's own registration wiring is
+missing or broken:
+
+- **Load a team's athletes.** `GET /matches/{match}/roster` accepts
+  `a_delegation_id` / `b_delegation_id`. When given, that side's
+  `eligibleAthletes` becomes *every Confirmed Entry that Delegation holds
+  for this event* (minus whoever is already rostered) — real registration
+  data, independent of whether a Team Entry or representative entries
+  exist. The response also carries `teamOptions` (every active Meet
+  Delegation) and `selectedDelegations` (what each side resolves to now, an
+  explicit pick or the derived Team Entry / representative Delegation) so
+  the console can render the picker with its current state. `store()`
+  accepts a matching `delegation_id`: the operator's assertion of the
+  side's team, which lets a Confirmed Entry be rostered even with no match
+  linkage to derive the side from (the entry must still really be that
+  Delegation's).
+
+- **Add a player by name.** `store()` accepts `manual_name` in place of
+  `entry_id`. The row is written with a **null `entry_id`** and the
+  hand-typed name (`match_roster_players.manual_name`, migration
+  `2026_09_08_120000`; `entry_id` is now nullable, the
+  `(match_id, entry_id)` unique index still blocks rostering the same
+  Entry twice — MySQL treats each NULL as distinct). A manual player is a
+  first-class roster row: same 15-per-side cap, can be sent on court, and
+  can be attributed points/fouls — `rosterPlayerName()` /
+  `MatchRosterPlayer::groupBySide()` fall back
+  `entry?->athlete?->fullName() → manual_name → "Data incomplete"`, so the
+  name flows into the append-only play-by-play and the on-court payload.
+  Audited as `match_roster.added` with `manual: true`.
+
+Nothing in the registration domain is created or changed — a manual player
+exists only on `match_roster_players`.
+
+Tests: `tests/Feature/MatchRosterTest.php` (load-a-team pool, hand-typed
+player + 15-cap, asserted-delegation accept/reject, manual player in the
+payload and scored in play-by-play).
+
 ## Public exposure (WP-07-08)
 
 Live scoring was internal-only through WP-07-07 — per owner instruction,

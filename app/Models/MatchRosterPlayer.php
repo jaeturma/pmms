@@ -11,21 +11,25 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
- * One athlete on a match's basketball roster (starter or bench), sourced
- * from a real Confirmed Entry — not free text. Persists independently of
- * any ScoringSession's lifecycle; who's currently on court right now is a
- * live-session concern tracked separately in `sport_state.on_court_a/b`.
+ * One athlete on a match's basketball roster (starter or bench). Normally
+ * sourced from a real Confirmed Entry; when a team's registration link is
+ * missing or broken at scoreboard time the operator may instead add a
+ * hand-typed `manual_name` (then `entry_id` is null). Persists
+ * independently of any ScoringSession's lifecycle; who's currently on
+ * court right now is a live-session concern tracked separately in
+ * `sport_state.on_court_a/b`.
  *
  * @property int $id
  * @property int $match_id
- * @property int $entry_id
+ * @property int|null $entry_id
+ * @property string|null $manual_name
  * @property string $side
  * @property string|null $jersey_number
  * @property bool $is_starter
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['match_id', 'entry_id', 'side', 'jersey_number', 'is_starter'])]
+#[Fillable(['match_id', 'entry_id', 'manual_name', 'side', 'jersey_number', 'is_starter'])]
 class MatchRosterPlayer extends Model
 {
     /** @use HasFactory<MatchRosterPlayerFactory> */
@@ -111,11 +115,14 @@ class MatchRosterPlayer extends Model
         // Production data can carry a roster row whose Confirmed Entry's
         // Athlete has since been soft-deleted (a normal registry action) —
         // `entry->athlete` is then null. Never let that blank the live
-        // scoreboard: fall back to the (possibly trashed) athlete's name
-        // for historical display, then to a plain "Data incomplete" label.
+        // scoreboard: fall back to the (possibly trashed) athlete's name,
+        // then to the operator's hand-typed `manual_name`, then to a plain
+        // "Data incomplete" label.
         $describe = fn (self $player): array => [
             'id' => $player->id,
-            'name' => $player->entry?->athlete?->fullName() ?? __('Data incomplete'),
+            'name' => $player->entry?->athlete?->fullName()
+                ?? ($player->manual_name !== null && $player->manual_name !== '' ? $player->manual_name : null)
+                ?? __('Data incomplete'),
             'jersey_number' => $player->jersey_number,
             'is_starter' => $player->is_starter,
             'photo_url' => ($player->entry?->athlete?->photo_upload_id ?? null) === null

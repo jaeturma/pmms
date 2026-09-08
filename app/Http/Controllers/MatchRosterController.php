@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\DelegationStatus;
 use App\Enums\EntryStatus;
 use App\Enums\MeetSportAssignmentRole;
 use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\UserRole;
+use App\Models\Delegation;
 use App\Models\Entry;
 use App\Models\EventMatch;
 use App\Models\MatchRosterPlayer;
@@ -51,16 +53,52 @@ class MatchRosterController extends Controller
         $match->loadMissing('event');
         $entries = $match->entries()->with('athlete:id,school_id')->get();
 
+        // The operator may explicitly load a chosen team's athletes — the
+        // way out when the match itself carries no usable Team Entry / entry
+        // links. `a_delegation_id` / `b_delegation_id` (when given) replace
+        // that side's pool with every Confirmed Entry that Delegation holds
+        // for this event.
+        $data = $request->validate([
+            'a_delegation_id' => ['nullable', 'integer', Rule::exists('delegations', 'id')],
+            'b_delegation_id' => ['nullable', 'integer', Rule::exists('delegations', 'id')],
+        ]);
+
+        $default = ($match->event?->is_team_event ?? false)
+            ? $this->eligibleTeamAthletes($match)
+            : $this->eligibleAthletes($match, $entries);
+
         return response()->json([
             'roster' => MatchRosterPlayer::payloadForMatch($match->id),
-            'eligibleAthletes' => $match->event->is_team_event
-                ? $this->eligibleTeamAthletes($match)
-                : $this->eligibleAthletes($match, $entries),
+            'eligibleAthletes' => [
+                'a' => isset($data['a_delegation_id'])
+                    ? $this->eligibleForDelegation($match, (int) $data['a_delegation_id'])
+                    : $default['a'],
+                'b' => isset($data['b_delegation_id'])
+                    ? $this->eligibleForDelegation($match, (int) $data['b_delegation_id'])
+                    : $default['b'],
+            ],
+            // Every active Delegation in the Meet, so the console can offer a
+            // "load this team's athletes" picker for either side.
+            'teamOptions' => $this->meetDelegationOptions($match),
+            // What each side resolves to today (an explicit pick, else the
+            // Team Entry / representative-entry Delegation) so the picker can
+            // show the current selection.
+            'selectedDelegations' => [
+                'a' => isset($data['a_delegation_id'])
+                    ? (int) $data['a_delegation_id']
+                    : $this->derivedDelegationId($match, 'a', $entries),
+                'b' => isset($data['b_delegation_id'])
+                    ? (int) $data['b_delegation_id']
+                    : $this->derivedDelegationId($match, 'b', $entries),
+            ],
         ]);
     }
 
     /**
-     * Add a registered, confirmed entry to the match's roster for a side.
+     * Add a player to the match's roster for a side. Normally a registered,
+     * Confirmed Entry; when the operator supplies `manual_name` instead
+     * (the fallback for a match with no usable registration link) the row
+     * is stored with a null `entry_id` and the hand-typed name.
      */
     public function store(Request $request, EventMatch $match): RedirectResponse
     {
@@ -69,11 +107,20 @@ class MatchRosterController extends Controller
         $match->loadMissing('event');
 
         $data = $request->validate([
-            'entry_id' => ['required', 'integer', Rule::exists('entries', 'id')],
+            'entry_id' => ['nullable', 'required_without:manual_name', 'integer', Rule::exists('entries', 'id')],
+            'manual_name' => ['nullable', 'required_without:entry_id', 'string', 'max:60'],
+            // The operator's assertion of which Delegation this side is —
+            // lets a linked Entry be rostered even when the match carries no
+            // Team Entry / representative entries to derive the side from.
+            'delegation_id' => ['nullable', 'integer', Rule::exists('delegations', 'id')],
             'side' => ['required', Rule::in(['a', 'b'])],
             'jersey_number' => ['nullable', 'string', 'max:10'],
             'is_starter' => ['nullable', 'boolean'],
         ]);
+
+        if (($data['manual_name'] ?? null) !== null) {
+            return $this->storeManualPlayer($match, $data);
+        }
 
         $entry = Entry::query()->with('athlete.school')->findOrFail($data['entry_id']);
 
@@ -98,19 +145,30 @@ class MatchRosterController extends Controller
             ]);
         }
 
-        $sideDelegationId = $match->event->is_team_event ? $this->sideDelegationId($match, $data['side']) : null;
-        $validSide = $match->event->is_team_event
-            ? ($sideDelegationId !== null
-                ? $sideDelegationId === $entry->delegation_id
+        if (($data['delegation_id'] ?? null) !== null) {
+            // The operator explicitly loaded this side from a chosen team —
+            // trust that assertion, only checking the entry really is that
+            // Delegation's.
+            if ($entry->delegation_id !== (int) $data['delegation_id']) {
+                throw ValidationException::withMessages([
+                    'entry_id' => __('This athlete is not registered under the selected team.'),
+                ]);
+            }
+        } else {
+            $sideDelegationId = $match->event->is_team_event ? $this->sideDelegationId($match, $data['side']) : null;
+            $validSide = $match->event->is_team_event
+                ? ($sideDelegationId !== null
+                    ? $sideDelegationId === $entry->delegation_id
+                    : ($this->sideSchoolId($match, $data['side']) !== null
+                        && $this->sideSchoolId($match, $data['side']) === $entry->athlete->school_id))
                 : ($this->sideSchoolId($match, $data['side']) !== null
-                    && $this->sideSchoolId($match, $data['side']) === $entry->athlete->school_id))
-            : ($this->sideSchoolId($match, $data['side']) !== null
-                && $this->sideSchoolId($match, $data['side']) === $entry->athlete->school_id);
+                    && $this->sideSchoolId($match, $data['side']) === $entry->athlete->school_id);
 
-        if (! $validSide) {
-            throw ValidationException::withMessages([
-                'entry_id' => __('This athlete does not belong to the selected team side.'),
-            ]);
+            if (! $validSide) {
+                throw ValidationException::withMessages([
+                    'entry_id' => __('This athlete does not belong to the selected team side.'),
+                ]);
+            }
         }
 
         if (MatchRosterPlayer::query()->where('match_id', $match->id)->where('entry_id', $entry->id)->exists()) {
@@ -137,6 +195,51 @@ class MatchRosterController extends Controller
             'match_id' => $match->id,
             'athlete' => $entry->athlete->fullName(),
             'side' => $data['side'],
+        ]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Player added to roster.')]);
+
+        return back();
+    }
+
+    /**
+     * Add a hand-typed player — the operator's fallback when a team's
+     * registration link is missing or broken and there is no Entry to
+     * roster. Stored with a null `entry_id`; still subject to the same
+     * 15-per-side cap and audited (`manual: true`).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function storeManualPlayer(EventMatch $match, array $data): RedirectResponse
+    {
+        $name = trim((string) $data['manual_name']);
+
+        if ($name === '') {
+            throw ValidationException::withMessages([
+                'manual_name' => __('Enter the player\'s name.'),
+            ]);
+        }
+
+        if (MatchRosterPlayer::query()->where('match_id', $match->id)->where('side', $data['side'])->count() >= 15) {
+            throw ValidationException::withMessages([
+                'manual_name' => __('This side\'s roster is already at the 15-player cap.'),
+            ]);
+        }
+
+        $rosterPlayer = MatchRosterPlayer::create([
+            'match_id' => $match->id,
+            'entry_id' => null,
+            'manual_name' => $name,
+            'side' => $data['side'],
+            'jersey_number' => $data['jersey_number'] ?? null,
+            'is_starter' => $data['is_starter'] ?? false,
+        ]);
+
+        $this->audit->record('match_roster.added', $rosterPlayer, [
+            'match_id' => $match->id,
+            'athlete' => $name,
+            'side' => $data['side'],
+            'manual' => true,
         ]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Player added to roster.')]);
@@ -206,7 +309,7 @@ class MatchRosterController extends Controller
 
         $context = [
             'match_id' => $rosterPlayer->match_id,
-            'athlete' => $rosterPlayer->entry?->athlete?->fullName() ?? __('Data incomplete'),
+            'athlete' => $rosterPlayer->entry?->athlete?->fullName() ?? $rosterPlayer->manual_name ?? __('Data incomplete'),
         ];
 
         $rosterPlayer->delete();
@@ -254,7 +357,7 @@ class MatchRosterController extends Controller
             return $this->eligibleAthletes($match, $match->entries()->with('athlete:id,school_id')->get());
         }
 
-        $rosteredEntryIds = MatchRosterPlayer::query()->where('match_id', $match->id)->pluck('entry_id');
+        $rosteredEntryIds = MatchRosterPlayer::query()->where('match_id', $match->id)->whereNotNull('entry_id')->pluck('entry_id');
         $payload = fn ($team): array => $team->members
             ->whereNotIn('entry_id', $rosteredEntryIds)
             ->filter(fn ($member): bool => $member->entry?->status === EntryStatus::Confirmed && $member->entry?->athlete !== null)
@@ -285,6 +388,7 @@ class MatchRosterController extends Controller
 
         $rosteredEntryIds = MatchRosterPlayer::query()
             ->where('match_id', $match->id)
+            ->whereNotNull('entry_id')
             ->pluck('entry_id');
 
         $schoolIdFor = fn (int $index): ?int => $entries[$index]->athlete?->school_id;
@@ -314,6 +418,86 @@ class MatchRosterController extends Controller
             'a' => $poolFor($schoolIdFor(0)),
             'b' => $poolFor($schoolIdFor(1)),
         ];
+    }
+
+    /**
+     * Every Confirmed Entry a given Delegation holds for this match's
+     * event, minus whoever is already rostered — the pool the operator
+     * gets after explicitly loading a chosen team for a side. Real
+     * registration data only; empty when that Delegation registered
+     * nobody for the event (the operator then adds players by hand).
+     *
+     * @return array<int, array{id: int, label: string}>
+     */
+    private function eligibleForDelegation(EventMatch $match, int $delegationId): array
+    {
+        $rosteredEntryIds = MatchRosterPlayer::query()
+            ->where('match_id', $match->id)
+            ->whereNotNull('entry_id')
+            ->pluck('entry_id');
+
+        return Entry::query()
+            ->where('event_id', $match->event_id)
+            ->where('delegation_id', $delegationId)
+            ->where('status', EntryStatus::Confirmed->value)
+            ->whereNotIn('id', $rosteredEntryIds)
+            ->with('athlete')
+            ->get()
+            ->filter(fn (Entry $entry): bool => $entry->athlete !== null)
+            ->map(fn (Entry $entry): array => [
+                'id' => (int) $entry->id,
+                'label' => $entry->athlete->fullName(),
+            ])
+            ->sortBy('label')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * The Delegation a side resolves to without an explicit pick — its
+     * Team Entry's Delegation (team event) or its representative entry's
+     * Delegation, or null when neither is set.
+     *
+     * @param  Collection<int, Entry>  $entries
+     */
+    private function derivedDelegationId(EventMatch $match, string $side, $entries): ?int
+    {
+        if ($match->event?->is_team_event) {
+            $id = $this->sideDelegationId($match, $side);
+
+            return $id === null ? null : (int) $id;
+        }
+
+        if ($entries->count() !== 2) {
+            return null;
+        }
+
+        $id = $side === 'a' ? $entries[0]->delegation_id : $entries[1]->delegation_id;
+
+        return $id === null ? null : (int) $id;
+    }
+
+    /**
+     * Every active Delegation in this match's Meet — the pool the console
+     * offers for "load this team's athletes". Mirrors
+     * ScoringSessionController::meetDelegationOptions() (duplicated per
+     * controller, see class docblock).
+     *
+     * @return array<int, array{id: int, label: string}>
+     */
+    private function meetDelegationOptions(EventMatch $match): array
+    {
+        return Delegation::query()
+            ->where('meet_id', $match->meet_id)
+            ->whereIn('status', [DelegationStatus::Submitted->value, DelegationStatus::Approved->value])
+            ->get()
+            ->map(fn (Delegation $delegation): array => [
+                'id' => $delegation->id,
+                'label' => $delegation->registrantName() ?? __('Missing delegation'),
+            ])
+            ->sortBy('label')
+            ->values()
+            ->all();
     }
 
     /**

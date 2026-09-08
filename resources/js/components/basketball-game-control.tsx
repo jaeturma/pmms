@@ -55,11 +55,15 @@ import {
 
 export type EligibleAthlete = { id: number; label: string };
 
+export type RosterTeamOption = { id: number; label: string };
+
 type Side = 'a' | 'b';
 
 type RosterData = {
     roster: { a: RosterPlayer[]; b: RosterPlayer[] };
     eligibleAthletes: { a: EligibleAthlete[]; b: EligibleAthlete[] };
+    teamOptions: RosterTeamOption[];
+    selectedDelegations: { a: number | null; b: number | null };
 };
 
 function SettingsDialog({
@@ -218,6 +222,7 @@ function TeamModal({
     isPaused,
     onToggleCourt,
     onAddPlayer,
+    onAddManual,
     onRemovePlayer,
 }: {
     side: Side;
@@ -226,12 +231,20 @@ function TeamModal({
     onCourtIds: number[];
     isPaused: boolean;
     onToggleCourt: (rosterPlayerId: number, onCourt: boolean) => void;
-    onAddPlayer: (entryId: number, jerseyNumber: string, isStarter: boolean) => void;
+    onAddPlayer: (
+        entryId: number,
+        jerseyNumber: string,
+        isStarter: boolean,
+        delegationId: number | null,
+    ) => void;
+    onAddManual: (name: string, jerseyNumber: string, isStarter: boolean) => void;
     onRemovePlayer: (rosterPlayerId: number) => void;
 }) {
     const [open, setOpen] = useState(false);
     const [data, setData] = useState<RosterData | null>(null);
     const [entryId, setEntryId] = useState('');
+    const [teamId, setTeamId] = useState('');
+    const [manualName, setManualName] = useState('');
     const [jerseyNumber, setJerseyNumber] = useState('');
     const [isStarter, setIsStarter] = useState(false);
 
@@ -240,12 +253,24 @@ function TeamModal({
     // an effect that fetches, per this file's own established convention
     // (see live-score-display.tsx's useTicks: setState only from a timer
     // callback, never synchronously during the effect itself).
-    const load = () => {
-        fetch(rosterShowRoute(matchId).url, {
-            headers: { Accept: 'application/json' },
-        })
+    const load = (delegationId?: string) => {
+        const chosen = delegationId ?? teamId;
+        const url =
+            chosen === ''
+                ? rosterShowRoute(matchId).url
+                : `${rosterShowRoute(matchId).url}?${side}_delegation_id=${chosen}`;
+
+        fetch(url, { headers: { Accept: 'application/json' } })
             .then((response) => response.json())
-            .then((json: RosterData) => setData(json));
+            .then((json: RosterData) => {
+                setData(json);
+                if (delegationId === undefined && teamId === '') {
+                    const current = json.selectedDelegations[side];
+                    if (current !== null) {
+                        setTeamId(String(current));
+                    }
+                }
+            });
     };
 
     useEffect(() => {
@@ -260,6 +285,7 @@ function TeamModal({
 
     const roster = data?.roster[side] ?? [];
     const eligible = data?.eligibleAthletes[side] ?? [];
+    const teamOptions = data?.teamOptions ?? [];
     const onCourt = roster.filter((p) => onCourtIds.includes(p.id));
     const bench = roster.filter((p) => !onCourtIds.includes(p.id));
     const courtFull = onCourt.length >= 5;
@@ -269,15 +295,30 @@ function TeamModal({
     // isn't wired into Inertia's prop refresh.
     const refetchSoon = () => window.setTimeout(load, 400);
 
+    const selectTeam = (value: string) => {
+        setTeamId(value);
+        setEntryId('');
+        load(value);
+    };
+
     const submitAdd = (e: FormEvent) => {
         e.preventDefault();
 
-        if (entryId === '') {
+        if (entryId !== '') {
+            onAddPlayer(
+                Number(entryId),
+                jerseyNumber,
+                isStarter,
+                teamId === '' ? null : Number(teamId),
+            );
+        } else if (manualName.trim() !== '') {
+            onAddManual(manualName.trim(), jerseyNumber, isStarter);
+        } else {
             return;
         }
 
-        onAddPlayer(Number(entryId), jerseyNumber, isStarter);
         setEntryId('');
+        setManualName('');
         setJerseyNumber('');
         setIsStarter(false);
         refetchSoon();
@@ -443,6 +484,32 @@ function TeamModal({
                             </div>
                         </div>
 
+                        {teamOptions.length > 0 && (
+                            <div className="grid gap-2 pt-2">
+                                <Label htmlFor={`team-${side}`}>
+                                    Load a team's athletes
+                                </Label>
+                                <Select
+                                    value={teamId}
+                                    onValueChange={selectTeam}
+                                >
+                                    <SelectTrigger id={`team-${side}`}>
+                                        <SelectValue placeholder="Team registered for this side" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {teamOptions.map((team) => (
+                                            <SelectItem
+                                                key={team.id}
+                                                value={String(team.id)}
+                                            >
+                                                {team.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
+
                         <form
                             onSubmit={submitAdd}
                             className="grid grid-cols-1 items-end gap-3 pt-2 sm:grid-cols-[1fr_auto_auto_auto]"
@@ -453,10 +520,19 @@ function TeamModal({
                                 </Label>
                                 <Select
                                     value={entryId}
-                                    onValueChange={setEntryId}
+                                    onValueChange={(value) => {
+                                        setEntryId(value);
+                                        setManualName('');
+                                    }}
                                 >
                                     <SelectTrigger id={`add-athlete-${side}`}>
-                                        <SelectValue placeholder="Select an athlete" />
+                                        <SelectValue
+                                            placeholder={
+                                                eligible.length === 0
+                                                    ? 'No registered athletes — add by name below'
+                                                    : 'Select an athlete'
+                                            }
+                                        />
                                     </SelectTrigger>
                                     <SelectContent>
                                         {eligible.map((athlete) => (
@@ -469,6 +545,18 @@ function TeamModal({
                                         ))}
                                     </SelectContent>
                                 </Select>
+                                <Input
+                                    aria-label={`Add ${label} player by name`}
+                                    placeholder="…or type a player's name"
+                                    value={manualName}
+                                    onChange={(e) => {
+                                        setManualName(e.target.value);
+                                        if (e.target.value !== '') {
+                                            setEntryId('');
+                                        }
+                                    }}
+                                    maxLength={60}
+                                />
                             </div>
                             <div className="grid gap-2">
                                 <Label htmlFor={`jersey-${side}`}>
@@ -499,7 +587,12 @@ function TeamModal({
                                     Starter
                                 </Label>
                             </div>
-                            <Button type="submit" disabled={entryId === ''}>
+                            <Button
+                                type="submit"
+                                disabled={
+                                    entryId === '' && manualName.trim() === ''
+                                }
+                            >
                                 Add to roster
                             </Button>
                         </form>
@@ -574,6 +667,7 @@ function SidePanel({
     onFoul,
     onToggleCourt,
     onAddPlayer,
+    onAddManual,
     onRemovePlayer,
     onResetFouls,
 }: {
@@ -593,7 +687,9 @@ function SidePanel({
         entryId: number,
         jerseyNumber: string,
         isStarter: boolean,
+        delegationId: number | null,
     ) => void;
+    onAddManual: (name: string, jerseyNumber: string, isStarter: boolean) => void;
     onRemovePlayer: (rosterPlayerId: number) => void;
     onResetFouls: () => void;
 }) {
@@ -632,6 +728,7 @@ function SidePanel({
                     isPaused={isPaused}
                     onToggleCourt={onToggleCourt}
                     onAddPlayer={onAddPlayer}
+                    onAddManual={onAddManual}
                     onRemovePlayer={onRemovePlayer}
                 />
             </div>
@@ -942,11 +1039,33 @@ export function BasketballGameControl({
         entryId: number,
         jerseyNumber: string,
         isStarter: boolean,
+        delegationId: number | null,
     ) => {
         router.post(
             rosterStoreRoute(session.match_id).url,
             {
                 entry_id: entryId,
+                side,
+                jersey_number: jerseyNumber,
+                is_starter: isStarter,
+                ...(delegationId !== null
+                    ? { delegation_id: delegationId }
+                    : {}),
+            },
+            { preserveScroll: true },
+        );
+    };
+
+    const addManualPlayer = (
+        side: Side,
+        name: string,
+        jerseyNumber: string,
+        isStarter: boolean,
+    ) => {
+        router.post(
+            rosterStoreRoute(session.match_id).url,
+            {
+                manual_name: name,
                 side,
                 jersey_number: jerseyNumber,
                 is_starter: isStarter,
@@ -1129,8 +1248,11 @@ export function BasketballGameControl({
                     onToggleCourt={(id, onCourt) =>
                         toggleCourt('a', id, onCourt)
                     }
-                    onAddPlayer={(entryId, jersey, starter) =>
-                        addPlayer('a', entryId, jersey, starter)
+                    onAddPlayer={(entryId, jersey, starter, delegationId) =>
+                        addPlayer('a', entryId, jersey, starter, delegationId)
+                    }
+                    onAddManual={(name, jersey, starter) =>
+                        addManualPlayer('a', name, jersey, starter)
                     }
                     onRemovePlayer={removePlayer}
                     onResetFouls={resetTeamFouls}
@@ -1150,8 +1272,11 @@ export function BasketballGameControl({
                     onToggleCourt={(id, onCourt) =>
                         toggleCourt('b', id, onCourt)
                     }
-                    onAddPlayer={(entryId, jersey, starter) =>
-                        addPlayer('b', entryId, jersey, starter)
+                    onAddPlayer={(entryId, jersey, starter, delegationId) =>
+                        addPlayer('b', entryId, jersey, starter, delegationId)
+                    }
+                    onAddManual={(name, jersey, starter) =>
+                        addManualPlayer('b', name, jersey, starter)
                     }
                     onRemovePlayer={removePlayer}
                     onResetFouls={resetTeamFouls}

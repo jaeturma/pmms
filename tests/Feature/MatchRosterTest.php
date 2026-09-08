@@ -450,6 +450,138 @@ test('the on-demand roster endpoint exposes the full roster and eligible athlete
         ->assertJsonCount(1, 'eligibleAthletes.b');
 });
 
+test('the roster endpoint loads a chosen team\'s confirmed athletes for a side', function () {
+    [$match] = basketballMatchWithSides();
+
+    // A delegation with two confirmed entries for the event but no link to
+    // this match at all — the "registration is there, the match wiring
+    // isn't" case.
+    $delegation = Delegation::factory()->approved()->create(['meet_id' => $match->meet_id]);
+    $entries = collect(range(1, 2))->map(fn () => Entry::factory()->confirmed()->create([
+        'athlete_id' => Athlete::factory()->create(['delegation_id' => $delegation->id])->id,
+        'delegation_id' => $delegation->id,
+        'event_id' => $match->event_id,
+    ]));
+    // A non-confirmed one for the same delegation is not offered.
+    Entry::factory()->create([
+        'athlete_id' => Athlete::factory()->create(['delegation_id' => $delegation->id])->id,
+        'delegation_id' => $delegation->id,
+        'event_id' => $match->event_id,
+    ]);
+
+    $admin = User::factory()->admin()->create();
+
+    $response = $this->actingAs($admin)
+        ->getJson("/matches/{$match->id}/roster?a_delegation_id={$delegation->id}")
+        ->assertOk()
+        ->assertJsonCount(2, 'eligibleAthletes.a')
+        ->assertJsonPath('selectedDelegations.a', $delegation->id)
+        ->assertJsonFragment(['id' => $delegation->id]);
+
+    expect(collect($response->json('eligibleAthletes.a'))->pluck('id')->sort()->values()->all())
+        ->toBe($entries->pluck('id')->sort()->values()->all());
+});
+
+test('a manager can add a hand-typed player when no registration link exists', function () {
+    [$match] = basketballMatchWithSides();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/roster", [
+            'manual_name' => 'Juan Dela Cruz',
+            'side' => 'b',
+            'jersey_number' => '11',
+        ])
+        ->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('match_roster_players', [
+        'match_id' => $match->id,
+        'entry_id' => null,
+        'manual_name' => 'Juan Dela Cruz',
+        'side' => 'b',
+        'jersey_number' => '11',
+    ]);
+});
+
+test('a hand-typed player is capped at 15 per side', function () {
+    [$match] = basketballMatchWithSides();
+    MatchRosterPlayer::factory()->count(15)->create([
+        'match_id' => $match->id,
+        'entry_id' => null,
+        'manual_name' => 'Bench filler',
+        'side' => 'a',
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/roster", ['manual_name' => 'One too many', 'side' => 'a'])
+        ->assertSessionHasErrors('manual_name');
+});
+
+test('an asserted delegation lets an unlinked confirmed entry be rostered', function () {
+    [$match] = basketballMatchWithSides();
+    $delegation = Delegation::factory()->approved()->create(['meet_id' => $match->meet_id]);
+    $entry = Entry::factory()->confirmed()->create([
+        'athlete_id' => Athlete::factory()->create(['delegation_id' => $delegation->id])->id,
+        'delegation_id' => $delegation->id,
+        'event_id' => $match->event_id,
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/roster", [
+            'entry_id' => $entry->id,
+            'delegation_id' => $delegation->id,
+            'side' => 'a',
+        ])
+        ->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('match_roster_players', ['entry_id' => $entry->id, 'side' => 'a']);
+});
+
+test('an asserted delegation still rejects an entry that is not that delegation\'s', function () {
+    [$match, $entryA] = basketballMatchWithSides();
+    $otherDelegation = Delegation::factory()->approved()->create(['meet_id' => $match->meet_id]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post("/matches/{$match->id}/roster", [
+            'entry_id' => $entryA->id,
+            'delegation_id' => $otherDelegation->id,
+            'side' => 'a',
+        ])
+        ->assertSessionHasErrors('entry_id');
+});
+
+test('a hand-typed player shows in the roster payload and can be attributed a point', function () {
+    [$match] = basketballMatchWithSides();
+    $manual = MatchRosterPlayer::factory()->side('a')->create([
+        'match_id' => $match->id,
+        'entry_id' => null,
+        'manual_name' => 'Walk-on Wario',
+    ]);
+    $session = ScoringSession::factory()->create([
+        'match_id' => $match->id,
+        'sport_state' => basketballInitialSportState(),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->getJson("/matches/{$match->id}/roster")
+        ->assertJsonPath('roster.a.0.name', 'Walk-on Wario');
+
+    $this->actingAs($admin)
+        ->patch("/scoring-sessions/{$session->id}/score", [
+            'type' => 'point',
+            'side' => 'a',
+            'delta' => 2,
+            'roster_player_id' => $manual->id,
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect($session->fresh()->playByPlay()[0]['description'])->toContain('Walk-on Wario');
+});
+
 test('non-managers cannot fetch the on-demand roster endpoint', function (User $user) {
     [$match] = basketballMatchWithSides();
 
