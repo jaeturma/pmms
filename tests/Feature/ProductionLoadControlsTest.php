@@ -75,9 +75,11 @@ test('the public medal tally page contains no automatic polling', function () {
         ->not->toContain('usePortalPageVisible');
 
     // The manual control is a plain router.reload of the current URL,
-    // which preserves ?sport_id and the ?category in the address bar.
+    // which preserves ?sport_id and the ?category in the address bar,
+    // guarded by a synchronous ref latch against double-clicks.
     expect($source)->toContain('Refresh Tally')
-        ->and($source)->toContain('router.reload');
+        ->and($source)->toContain('router.reload')
+        ->and($source)->toContain('refreshInFlight');
 });
 
 test('a manual tally refresh returns the current standings and preserves the sport filter', function () {
@@ -100,6 +102,25 @@ test('a manual tally refresh returns the current standings and preserves the spo
 // ============================================================
 // B. Suspend public live scoreboards
 // ============================================================
+
+test('the system settings page exposes the load-control state to the administrator', function () {
+    Setting::current()->forceFill([
+        'live_scoreboards_suspended' => true,
+        'authenticated_inactivity_expiry_enabled' => true,
+        'authenticated_inactivity_timeout_minutes' => 20,
+    ])->save();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get('/system-settings')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('system-settings/edit')
+            ->where('settings.live_scoreboards_suspended', true)
+            ->where('settings.authenticated_inactivity_expiry_enabled', true)
+            ->where('settings.authenticated_inactivity_timeout_minutes', 20)
+            ->where('settings.min_inactivity_timeout_minutes', 5)
+            ->has('settings.active_authenticated_sessions'));
+});
 
 test('a System Administrator can suspend and resume public live scoreboards', function () {
     $admin = User::factory()->admin()->create();

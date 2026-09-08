@@ -113,23 +113,31 @@ export default function PortalTally({
 
     // Manual "Refresh Tally": re-requests the current page (preserving the
     // ?sport_id filter and, via `activeTab`, the selected category) for
-    // just the tally props. `reloading` disables the control and blocks a
-    // second request from a double-click. Animations still run only when
-    // the freshly loaded data actually differs (see the signature check
-    // below) — a refresh that changes nothing animates nothing.
+    // just the tally props. A ref latch — read synchronously, unlike
+    // state — drops every click until the in-flight request finishes, so
+    // repeated / double clicks fire exactly one request; `reloading`
+    // state just drives the disabled/spinner UI. Animations still run
+    // only when the freshly loaded data actually differs (see the
+    // signature check below) — a refresh that changes nothing animates
+    // nothing.
     const [reloading, setReloading] = useState(false);
+    const refreshInFlight = useRef(false);
     const refreshTally = useCallback(() => {
-        if (reloading) {
+        if (refreshInFlight.current) {
             return;
         }
 
+        refreshInFlight.current = true;
         setReloading(true);
         router.reload({
             only: ['categories', 'generatedAt'],
             showProgress: false,
-            onFinish: () => setReloading(false),
+            onFinish: () => {
+                refreshInFlight.current = false;
+                setReloading(false);
+            },
         });
-    }, [reloading]);
+    }, []);
 
     // A brief "updated just now" state on the pill whenever the freshly
     // loaded data actually differs — not on every refresh.
