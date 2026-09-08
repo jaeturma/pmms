@@ -1,6 +1,8 @@
-import { Head, useForm } from '@inertiajs/react';
+import { Head, router, useForm } from '@inertiajs/react';
 import { CheckCircle2, Info } from 'lucide-react';
 import type { FormEvent } from 'react';
+import { useState } from 'react';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
@@ -16,6 +18,12 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import {
+    disconnectInactive as disconnectInactiveRoute,
+    disconnectNonAdmin as disconnectNonAdminRoute,
+    resumeScoreboards as resumeScoreboardsRoute,
+    suspendScoreboards as suspendScoreboardsRoute,
+} from '@/routes/system/load-controls';
 import { edit, update } from '@/routes/system-settings';
 
 type Props = {
@@ -50,6 +58,12 @@ type Props = {
         coach_athlete_registration_enabled: boolean;
         medal_tally_official: boolean;
         team_photo_visibility: 'authenticated' | 'public';
+
+        live_scoreboards_suspended: boolean;
+        authenticated_inactivity_expiry_enabled: boolean;
+        authenticated_inactivity_timeout_minutes: number;
+        min_inactivity_timeout_minutes: number;
+        active_authenticated_sessions: number;
     };
 };
 
@@ -82,11 +96,38 @@ export default function SystemSettingsEdit({ settings }: Props) {
             settings.coach_athlete_registration_enabled,
         medal_tally_official: settings.medal_tally_official,
         team_photo_visibility: settings.team_photo_visibility,
+        authenticated_inactivity_expiry_enabled:
+            settings.authenticated_inactivity_expiry_enabled,
+        authenticated_inactivity_timeout_minutes: String(
+            settings.authenticated_inactivity_timeout_minutes,
+        ),
     });
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
         post(update().url, { preserveScroll: true, forceFormData: true });
+    };
+
+    // Emergency load-control actions POST to their own dedicated
+    // endpoints (not the settings form) and each requires confirmation.
+    const [loadAction, setLoadAction] = useState<
+        'suspend' | 'resume' | 'disconnect-inactive' | 'disconnect-non-admin' | null
+    >(null);
+    const [loadActionProcessing, setLoadActionProcessing] = useState(false);
+
+    const runLoadAction = (url: string) => {
+        setLoadActionProcessing(true);
+        router.post(
+            url,
+            {},
+            {
+                preserveScroll: true,
+                onFinish: () => {
+                    setLoadActionProcessing(false);
+                    setLoadAction(null);
+                },
+            },
+        );
     };
 
     return (
@@ -730,10 +771,195 @@ export default function SystemSettingsEdit({ settings }: Props) {
                         />
                     </section>
 
+                    <section className="space-y-4">
+                        <Heading
+                            variant="small"
+                            title="Authenticated user inactivity timeout"
+                            description="When enabled, a logged-in user with no genuine activity for longer than the timeout is signed out on their next request. Public scoreboard / medal-tally polling never counts as activity, and an open ICT scoring console keeps its own session alive. Minimum 5 minutes."
+                        />
+                        <div className="flex items-center space-x-3">
+                            <Checkbox
+                                id="authenticated_inactivity_expiry_enabled"
+                                checked={
+                                    data.authenticated_inactivity_expiry_enabled
+                                }
+                                onCheckedChange={(checked) =>
+                                    setData(
+                                        'authenticated_inactivity_expiry_enabled',
+                                        checked === true,
+                                    )
+                                }
+                            />
+                            <Label htmlFor="authenticated_inactivity_expiry_enabled">
+                                Sign out inactive authenticated users
+                            </Label>
+                        </div>
+                        <InputError
+                            message={
+                                errors.authenticated_inactivity_expiry_enabled
+                            }
+                        />
+                        <div className="space-y-2">
+                            <Label htmlFor="authenticated_inactivity_timeout_minutes">
+                                Timeout (minutes)
+                            </Label>
+                            <Input
+                                id="authenticated_inactivity_timeout_minutes"
+                                type="number"
+                                inputMode="numeric"
+                                min={settings.min_inactivity_timeout_minutes}
+                                max={720}
+                                className="max-w-32"
+                                value={
+                                    data.authenticated_inactivity_timeout_minutes
+                                }
+                                onChange={(e) =>
+                                    setData(
+                                        'authenticated_inactivity_timeout_minutes',
+                                        e.target.value,
+                                    )
+                                }
+                            />
+                            <InputError
+                                message={
+                                    errors.authenticated_inactivity_timeout_minutes
+                                }
+                            />
+                        </div>
+                    </section>
+
                     <Button type="submit" disabled={processing}>
                         Save changes
                     </Button>
                 </form>
+
+                <section className="max-w-2xl space-y-4 rounded-lg border border-destructive/30 bg-destructive/5 p-5">
+                    <Heading
+                        variant="small"
+                        title="Production Load Controls"
+                        description="Emergency levers for a live meet. System Administrator only. Suspending scoreboards and disconnecting sessions never deletes any scoring data or user account."
+                    />
+
+                    <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+                        <div>
+                            <dt className="text-muted-foreground">
+                                Live Scoreboards
+                            </dt>
+                            <dd className="font-semibold">
+                                {settings.live_scoreboards_suspended
+                                    ? 'SUSPENDED'
+                                    : 'ACTIVE'}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt className="text-muted-foreground">
+                                Medal Tally Auto Refresh
+                            </dt>
+                            <dd className="font-semibold">DISABLED</dd>
+                        </div>
+                        <div>
+                            <dt className="text-muted-foreground">
+                                Session Inactivity Timeout
+                            </dt>
+                            <dd className="font-semibold">
+                                {settings.authenticated_inactivity_expiry_enabled
+                                    ? `${settings.authenticated_inactivity_timeout_minutes} minutes`
+                                    : 'DISABLED'}
+                            </dd>
+                        </div>
+                    </dl>
+
+                    {settings.active_authenticated_sessions > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                            {settings.active_authenticated_sessions} authenticated
+                            session
+                            {settings.active_authenticated_sessions === 1
+                                ? ''
+                                : 's'}{' '}
+                            currently connected.
+                        </p>
+                    )}
+
+                    <div className="flex flex-wrap gap-2">
+                        {settings.live_scoreboards_suspended ? (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setLoadAction('resume')}
+                            >
+                                Resume Live Scoreboards
+                            </Button>
+                        ) : (
+                            <Button
+                                type="button"
+                                variant="destructive"
+                                onClick={() => setLoadAction('suspend')}
+                            >
+                                Suspend Live Scoreboards
+                            </Button>
+                        )}
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setLoadAction('disconnect-inactive')}
+                        >
+                            Disconnect Inactive Users
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            onClick={() => setLoadAction('disconnect-non-admin')}
+                        >
+                            Disconnect All Non-Admin Users
+                        </Button>
+                    </div>
+                </section>
+
+                <ConfirmDialog
+                    open={loadAction === 'suspend'}
+                    onOpenChange={(open) => !open && setLoadAction(null)}
+                    title="Suspend public live scoreboards?"
+                    description="All public live-scoreboard viewing and polling stops immediately. Authenticated ICT scoring is unaffected. You can resume at any time."
+                    confirmLabel="Suspend"
+                    destructive
+                    processing={loadActionProcessing}
+                    onConfirm={() =>
+                        runLoadAction(suspendScoreboardsRoute().url)
+                    }
+                />
+                <ConfirmDialog
+                    open={loadAction === 'resume'}
+                    onOpenChange={(open) => !open && setLoadAction(null)}
+                    title="Resume public live scoreboards?"
+                    description="Public live-scoreboard viewing and polling returns to normal."
+                    confirmLabel="Resume"
+                    processing={loadActionProcessing}
+                    onConfirm={() => runLoadAction(resumeScoreboardsRoute().url)}
+                />
+                <ConfirmDialog
+                    open={loadAction === 'disconnect-inactive'}
+                    onOpenChange={(open) => !open && setLoadAction(null)}
+                    title="Disconnect inactive users?"
+                    description="Every authenticated session idle longer than the inactivity timeout is signed out and must log in again. Your own session is kept. No accounts or data are touched."
+                    confirmLabel="Disconnect inactive"
+                    destructive
+                    processing={loadActionProcessing}
+                    onConfirm={() =>
+                        runLoadAction(disconnectInactiveRoute().url)
+                    }
+                />
+                <ConfirmDialog
+                    open={loadAction === 'disconnect-non-admin'}
+                    onOpenChange={(open) => !open && setLoadAction(null)}
+                    title="Disconnect all non-admin users?"
+                    description="Every authenticated session except System Administrators' is signed out and must log in again. Your own session is kept. No accounts or data are touched."
+                    confirmLabel="Disconnect non-admins"
+                    destructive
+                    processing={loadActionProcessing}
+                    onConfirm={() =>
+                        runLoadAction(disconnectNonAdminRoute().url)
+                    }
+                />
             </div>
         </>
     );

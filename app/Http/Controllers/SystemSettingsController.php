@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\FileUploadService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -66,6 +67,12 @@ class SystemSettingsController extends Controller
                 'coach_athlete_registration_enabled' => $settings->coach_athlete_registration_enabled,
                 'medal_tally_official' => $settings->medalTallyIsOfficial(),
                 'team_photo_visibility' => $settings->team_photo_visibility ?: 'authenticated',
+
+                'live_scoreboards_suspended' => $settings->liveScoreboardsAreSuspended(),
+                'authenticated_inactivity_expiry_enabled' => $settings->inactivityExpiryEnabled(),
+                'authenticated_inactivity_timeout_minutes' => $settings->inactivityTimeoutMinutes(),
+                'min_inactivity_timeout_minutes' => Setting::MIN_INACTIVITY_TIMEOUT_MINUTES,
+                'active_authenticated_sessions' => $this->activeAuthenticatedSessionCount(),
             ],
         ]);
     }
@@ -97,6 +104,9 @@ class SystemSettingsController extends Controller
             'coach_athlete_registration_enabled' => $validated['coach_athlete_registration_enabled'] ?? $settings->coach_athlete_registration_enabled,
             'medal_tally_official' => $validated['medal_tally_official'] ?? $settings->medalTallyIsOfficial(),
             'team_photo_visibility' => $validated['team_photo_visibility'] ?? $settings->team_photo_visibility ?? 'authenticated',
+            'live_scoreboards_suspended' => $validated['live_scoreboards_suspended'] ?? $settings->live_scoreboards_suspended,
+            'authenticated_inactivity_expiry_enabled' => $validated['authenticated_inactivity_expiry_enabled'] ?? $settings->authenticated_inactivity_expiry_enabled,
+            'authenticated_inactivity_timeout_minutes' => $validated['authenticated_inactivity_timeout_minutes'] ?? $settings->inactivityTimeoutMinutes(),
         ]);
 
         if ($request->hasFile('app_logo')) {
@@ -143,6 +153,11 @@ class SystemSettingsController extends Controller
 
         $settings->save();
 
+        // The inactivity middleware and the public-scoreboard gate read a
+        // 60s cached projection of these two flags — refresh it now so a
+        // change takes effect on the very next request.
+        Setting::forgetLoadControlsCache();
+
         // Grandfather every existing account the moment email verification
         // actually becomes *enforced* (not just toggled on — it also needs
         // working SMTP), so no one who already had access is retroactively
@@ -168,11 +183,31 @@ class SystemSettingsController extends Controller
             'medal_tally_official' => $settings->medal_tally_official,
             'team_photo_visibility' => $settings->team_photo_visibility,
             'timezone' => $settings->timezone,
+            'live_scoreboards_suspended' => $settings->live_scoreboards_suspended,
+            'authenticated_inactivity_expiry_enabled' => $settings->authenticated_inactivity_expiry_enabled,
+            'authenticated_inactivity_timeout_minutes' => $settings->authenticated_inactivity_timeout_minutes,
         ]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('System settings updated.')]);
 
         return back();
+    }
+
+    /**
+     * How many authenticated web sessions currently exist — shown on the
+     * Production Load Controls card so the admin has a sense of scale
+     * before disconnecting anyone. Only meaningful for the `database`
+     * session driver (production); returns 0 otherwise.
+     */
+    private function activeAuthenticatedSessionCount(): int
+    {
+        if (config('session.driver') !== 'database') {
+            return 0;
+        }
+
+        return (int) DB::table(config('session.table', 'sessions'))
+            ->whereNotNull('user_id')
+            ->count();
     }
 
     public function logo(): HttpResponse

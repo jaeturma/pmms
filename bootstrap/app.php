@@ -1,7 +1,9 @@
 <?php
 
+use App\Enums\UserRole;
 use App\Http\Middleware\EnsureEmailIsVerifiedIfRequired;
 use App\Http\Middleware\EnsureUserHasRole;
+use App\Http\Middleware\ExpireInactiveSessions;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\ThrottleRegistration;
@@ -24,6 +26,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
         $middleware->web(append: [
+            // Runs after StartSession, before the Inertia share work — an
+            // idle authenticated session is torn down here rather than
+            // paying for a full page render it will never see.
+            ExpireInactiveSessions::class,
             HandleAppearance::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
@@ -51,7 +57,7 @@ return Application::configure(basePath: dirname(__DIR__))
                         'title' => __('Unable to complete this information'),
                         'message' => __('A linked record may be missing or inconsistent. Check the athlete or coach delegation, school, municipality, sport, event entry, and team membership. ICT or System Admin can inspect the exact problems in Data Repair.'),
                         'canRepair' => $user !== null && ($user->isAdmin()
-                            || $user->hasRole(\App\Enums\UserRole::TournamentICT)
+                            || $user->hasRole(UserRole::TournamentICT)
                             || $user->canManageProductionAccounts()),
                     ];
                 }

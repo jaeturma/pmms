@@ -23,8 +23,11 @@ medals from the tally automatically, and re-validation restores them.
 
 The public `/tally` board (`PortalController::tally()`) is split into four
 official categories, served in one payload so the tab strip switches
-instantly client-side with no reload (the 20s live poll refreshes
-`categories` + `generatedAt` only):
+instantly client-side with no reload. **The board does no automatic
+polling** (production load control — see `docs/production-load-controls.md`
+§A): it makes only its initial request, and updates on a browser refresh
+or the **"Refresh Tally"** button (a `router.reload` of `categories` +
+`generatedAt`, preserving the `?category` tab and `?sport_id` filter).
 
 | Category   | Filter (`MedalTallyService::categoryFilter()`) |
 |------------|------------------------------------------------|
@@ -114,9 +117,8 @@ and the four category tabs are unchanged.
 There is no tally cache, by design (see "Derivation" above): the standings
 are recomputed per request from Official results only, so an accepted /
 corrected / reopened / cancelled result is reflected on the very next read
-with nothing to invalidate. The public board's 20s poll therefore always
-sees current data, and a poll that fails keeps the last good board on
-screen rather than blanking it.
+with nothing to invalidate. Since the public board no longer polls, that
+"next read" is a manual refresh (browser or "Refresh Tally").
 
 ## Points (WP-08-05, display-only)
 

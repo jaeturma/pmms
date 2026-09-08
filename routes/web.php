@@ -40,6 +40,7 @@ use App\Http\Controllers\GalleryController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\IncidentController;
 use App\Http\Controllers\InventoryAdjustmentController;
+use App\Http\Controllers\LoadControlController;
 use App\Http\Controllers\ManagementDashboardController;
 use App\Http\Controllers\ManagementTeamController;
 use App\Http\Controllers\ManagementTeamMemberController;
@@ -86,6 +87,8 @@ use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\VenueController;
 use App\Http\Controllers\VenueEmergencyPlanController;
+use App\Http\Middleware\EnsurePublicScoreboardsActive;
+use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\PreventStalePublicResults;
 use Illuminate\Support\Facades\Route;
 
@@ -169,11 +172,12 @@ Route::middleware(['throttle:60,1', PreventStalePublicResults::class])->group(fu
         ->whereNumber('meet')
         ->name('public.search');
     Route::get('meets/{meet}/matches/{match}/scoreboard', [PortalController::class, 'scoreboard'])
+        ->middleware(EnsurePublicScoreboardsActive::class)
         ->whereNumber(['meet', 'match'])
         ->name('public.scoreboard');
     Route::get('meets/{meet}/matches/{match}/scoreboard/poll', [PortalController::class, 'scoreboardPoll'])
-        ->withoutMiddleware('throttle:60,1')
-        ->middleware('throttle:90,1')
+        ->withoutMiddleware(['throttle:60,1', HandleInertiaRequests::class])
+        ->middleware(['throttle:90,1', EnsurePublicScoreboardsActive::class])
         ->whereNumber(['meet', 'match'])
         ->name('public.scoreboard.poll');
 
@@ -206,6 +210,7 @@ Route::middleware(['throttle:60,1', PreventStalePublicResults::class])->group(fu
     // own poll endpoint below (`public.sport-portal.poll`) since the
     // payload shape (`liveNow`/`otherLiveCount`) is identical.
     Route::get('live/{sportSlug}', [PortalController::class, 'liveSportPortal'])
+        ->middleware(EnsurePublicScoreboardsActive::class)
         ->whereIn('sportSlug', SportPortalSlug::liveScoreValues())
         ->name('public.live-sport-portal');
 
@@ -214,6 +219,8 @@ Route::middleware(['throttle:60,1', PreventStalePublicResults::class])->group(fu
     // (`SportPortalSlug::values()`) so this can never intercept any other
     // top-level route.
     Route::get('{sportSlug}/poll', [PortalController::class, 'sportPortalPoll'])
+        ->withoutMiddleware(HandleInertiaRequests::class)
+        ->middleware(EnsurePublicScoreboardsActive::class)
         ->whereIn('sportSlug', SportPortalSlug::values())
         ->name('public.sport-portal.poll');
     Route::get('{sportSlug}', [PortalController::class, 'sportPortal'])
@@ -586,6 +593,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('system-settings', [SystemSettingsController::class, 'update'])
         ->middleware('can:administer')
         ->name('system-settings.update');
+
+    // Production Load Controls — System Administrator emergency levers for
+    // the live meet (suspend public scoreboards, disconnect logged-in
+    // users). System Admin only, server-enforced.
+    Route::middleware('can:administer')->prefix('system/load-controls')->name('system.load-controls.')->group(function (): void {
+        Route::post('suspend-scoreboards', [LoadControlController::class, 'suspendScoreboards'])->name('suspend-scoreboards');
+        Route::post('resume-scoreboards', [LoadControlController::class, 'resumeScoreboards'])->name('resume-scoreboards');
+        Route::post('disconnect-inactive', [LoadControlController::class, 'disconnectInactive'])->name('disconnect-inactive');
+        Route::post('disconnect-non-admin', [LoadControlController::class, 'disconnectNonAdmin'])->name('disconnect-non-admin');
+    });
 
     Route::get('account-provisions', [AccountProvisionController::class, 'index'])->name('account-provisions.index');
     Route::post('account-provisions/{accountProvision}/invite', [AccountProvisionController::class, 'invite'])->name('account-provisions.invite');

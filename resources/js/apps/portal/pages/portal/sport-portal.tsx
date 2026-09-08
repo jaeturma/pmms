@@ -35,6 +35,10 @@ import {
 import { poll as pollSportPortal } from '@/routes/public/sport-portal';
 
 const BACKGROUND_REFRESH_INTERVAL_MS = 45000;
+
+// Stop the Live Now poll after this many consecutive failures — a viewer
+// refreshes to try again.
+const MAX_POLL_FAILURES = 10;
 // Guest scoreboards cannot subscribe to the scorer's private Echo channel,
 // so clock controls need a short polling interval to remain in sync.
 const LIVE_POLL_INTERVAL_MS = 1000;
@@ -75,6 +79,10 @@ export default function PortalSportPortal({
     // updating, for every sport including Softball/Baseball/Boxing, with
     // nothing on screen to explain why.
     const [pollFailures, setPollFailures] = useState(0);
+    // A poll came back `{ suspended: true }` — a System Administrator has
+    // suspended public live scoreboards. The rest of the sport hub (today's
+    // games, results, standings) still works; only Live Now stops.
+    const [liveSuspended, setLiveSuspended] = useState(false);
 
     // Real per-sport wording — "games" for Basketball, "matches" for
     // Volleyball, "bouts" for Boxing, etc. Falls back to "game" for
@@ -98,7 +106,12 @@ export default function PortalSportPortal({
     // separate from the background reload below, so the featured match
     // can change between polls without waiting on the slower interval.
     useEffect(() => {
-        if (!visible || meet === null) {
+        if (
+            !visible ||
+            meet === null ||
+            liveSuspended ||
+            pollFailures >= MAX_POLL_FAILURES
+        ) {
             return;
         }
 
@@ -115,9 +128,18 @@ export default function PortalSportPortal({
                     return response.json() as Promise<{
                         liveNow: PortalLiveNow | null;
                         otherLiveCount: number;
+                        suspended?: boolean;
                     }>;
                 })
                 .then((data) => {
+                    if (data.suspended) {
+                        setLiveSuspended(true);
+                        setLiveNow(null);
+                        setOtherLiveCount(0);
+
+                        return;
+                    }
+
                     setLiveNow(data.liveNow);
                     setOtherLiveCount(data.otherLiveCount);
                     setPollFailures(0);
@@ -125,13 +147,14 @@ export default function PortalSportPortal({
                 .catch(() => {
                     // Retries on its own next tick — no user action
                     // needed, but the banner below flags it after a
-                    // couple of misses.
+                    // couple of misses, and polling stops entirely after
+                    // MAX_POLL_FAILURES.
                     setPollFailures((n) => n + 1);
                 });
         }, LIVE_POLL_INTERVAL_MS);
 
         return () => clearInterval(interval);
-    }, [visible, meet, sport.slug]);
+    }, [visible, meet, sport.slug, liveSuspended, pollFailures]);
 
     useEffect(() => {
         if (!visible || meet === null) {
@@ -339,6 +362,12 @@ export default function PortalSportPortal({
                             Reconnecting — scores may be behind
                         </span>
                     )}
+                    {liveSuspended ? (
+                        <p className="rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-5 text-sm text-[var(--portal-muted-foreground)]">
+                            Live scoreboards are temporarily suspended. Please
+                            check again later — refresh this page to check.
+                        </p>
+                    ) : (
                     <Link
                         href={liveSportPortal(sport.slug).url}
                         className="flex items-center justify-between gap-3 rounded-[var(--portal-radius)] border border-[var(--portal-border)] bg-[var(--portal-surface)] p-5 transition-colors hover:border-[var(--portal-accent)]"
@@ -358,6 +387,7 @@ export default function PortalSportPortal({
                             <ArrowRight aria-hidden="true" className="size-4" />
                         </span>
                     </Link>
+                    )}
                 </section>
 
                 <section className="grid gap-6 md:grid-cols-2">

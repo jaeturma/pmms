@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * @property int $id
@@ -24,6 +25,9 @@ use Illuminate\Support\Carbon;
  * @property bool $coach_registration_enabled
  * @property bool $coach_athlete_registration_enabled
  * @property bool $medal_tally_official
+ * @property bool $live_scoreboards_suspended
+ * @property bool $authenticated_inactivity_expiry_enabled
+ * @property int $authenticated_inactivity_timeout_minutes
  * @property string|null $login_splash_title
  * @property int|null $login_background_upload_id
  * @property Carbon|null $created_at
@@ -48,6 +52,9 @@ use Illuminate\Support\Carbon;
     'coach_registration_enabled',
     'coach_athlete_registration_enabled',
     'medal_tally_official',
+    'live_scoreboards_suspended',
+    'authenticated_inactivity_expiry_enabled',
+    'authenticated_inactivity_timeout_minutes',
     'team_photo_visibility',
     'login_splash_title',
 ])]
@@ -76,8 +83,19 @@ class Setting extends Model
             'coach_registration_enabled' => 'boolean',
             'coach_athlete_registration_enabled' => 'boolean',
             'medal_tally_official' => 'boolean',
+            'live_scoreboards_suspended' => 'boolean',
+            'authenticated_inactivity_expiry_enabled' => 'boolean',
+            'authenticated_inactivity_timeout_minutes' => 'integer',
         ];
     }
+
+    /**
+     * The minimum inactivity window this app will ever enforce — a
+     * shorter value would log ordinary operators out mid-task. Both the
+     * request validation and this accessor clamp to it, so a legacy or
+     * hand-edited row can never drop below it.
+     */
+    public const MIN_INACTIVITY_TIMEOUT_MINUTES = 5;
 
     /**
      * The single system settings row, created empty (every feature off)
@@ -143,5 +161,71 @@ class Setting extends Model
     public function medalTallyIsOfficial(): bool
     {
         return $this->medal_tally_official === true;
+    }
+
+    /**
+     * System Administrator has pulled the public-load emergency lever:
+     * all PUBLIC live-scoreboard viewing/polling is suspended. Never
+     * affects authenticated ICT scoring.
+     */
+    public function liveScoreboardsAreSuspended(): bool
+    {
+        return $this->live_scoreboards_suspended === true;
+    }
+
+    /**
+     * Whether the idle-session logout is switched on at all. Defaults
+     * OFF — enabling the Production Load Controls feature changes no
+     * session behaviour until a System Administrator flips this.
+     */
+    public function inactivityExpiryEnabled(): bool
+    {
+        return $this->authenticated_inactivity_expiry_enabled === true;
+    }
+
+    /**
+     * The idle window (minutes) after which a logged-in web session is
+     * expired on its next genuine request — never below
+     * MIN_INACTIVITY_TIMEOUT_MINUTES regardless of what is stored.
+     */
+    public function inactivityTimeoutMinutes(): int
+    {
+        return max(
+            self::MIN_INACTIVITY_TIMEOUT_MINUTES,
+            (int) ($this->authenticated_inactivity_timeout_minutes ?: self::MIN_INACTIVITY_TIMEOUT_MINUTES),
+        );
+    }
+
+    /**
+     * A 60-second cached projection of the two Production Load Controls,
+     * for the hot paths that read them on every request (the inactivity
+     * middleware, the public-scoreboard gate, Inertia shared props) so
+     * they never add a `system_settings` query per request. Busted by
+     * every writer (`SystemSettingsController`, `LoadControlController`).
+     *
+     * @return array{suspended: bool, inactivity_expiry_enabled: bool, inactivity_timeout_minutes: int}
+     */
+    public static function loadControls(): array
+    {
+        return Cache::remember(
+            self::LOAD_CONTROLS_CACHE_KEY,
+            60,
+            function (): array {
+                $settings = self::current();
+
+                return [
+                    'suspended' => $settings->liveScoreboardsAreSuspended(),
+                    'inactivity_expiry_enabled' => $settings->inactivityExpiryEnabled(),
+                    'inactivity_timeout_minutes' => $settings->inactivityTimeoutMinutes(),
+                ];
+            },
+        );
+    }
+
+    public const LOAD_CONTROLS_CACHE_KEY = 'pmms:load-controls';
+
+    public static function forgetLoadControlsCache(): void
+    {
+        Cache::forget(self::LOAD_CONTROLS_CACHE_KEY);
     }
 }

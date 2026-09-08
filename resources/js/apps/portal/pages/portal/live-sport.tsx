@@ -1,5 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft, Trophy } from 'lucide-react';
+import { ArrowLeft, Radio, Trophy } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { PortalBasketballScoreboard } from '@/apps/portal/components/basketball-scoreboard';
 import { PortalBasketballSidebar } from '@/apps/portal/components/basketball-sidebar';
@@ -18,7 +18,13 @@ import { poll as pollSportPortal } from '@/routes/public/sport-portal';
 
 // Guest scoreboards cannot subscribe to the scorer's private Echo channel,
 // so clock controls need a short polling interval to remain in sync.
+// The backend serves this from a ~1s cache, so viewer count no longer
+// multiplies the query cost.
 const LIVE_POLL_INTERVAL_MS = 1000;
+
+// Stop polling after this many consecutive failures — a viewer refreshes
+// to try again.
+const MAX_POLL_FAILURES = 10;
 
 type Props = {
     sport: PortalSport;
@@ -46,9 +52,15 @@ export default function PortalLiveSport({
     const [liveNow, setLiveNow] = useState(initialLiveNow);
     const [otherLiveCount, setOtherLiveCount] = useState(initialOtherLiveCount);
     const [pollFailures, setPollFailures] = useState(0);
+    const [suspended, setSuspended] = useState(false);
 
     useEffect(() => {
-        if (!visible || meet === null) {
+        if (
+            !visible ||
+            meet === null ||
+            suspended ||
+            pollFailures >= MAX_POLL_FAILURES
+        ) {
             return;
         }
 
@@ -65,9 +77,18 @@ export default function PortalLiveSport({
                     return response.json() as Promise<{
                         liveNow: PortalLiveNow | null;
                         otherLiveCount: number;
+                        suspended?: boolean;
                     }>;
                 })
                 .then((data) => {
+                    if (data.suspended) {
+                        setSuspended(true);
+                        setLiveNow(null);
+                        setOtherLiveCount(0);
+
+                        return;
+                    }
+
                     setLiveNow(data.liveNow);
                     setOtherLiveCount(data.otherLiveCount);
                     setPollFailures(0);
@@ -78,11 +99,27 @@ export default function PortalLiveSport({
         }, LIVE_POLL_INTERVAL_MS);
 
         return () => clearInterval(interval);
-    }, [visible, meet, sport.slug]);
+    }, [visible, meet, sport.slug, suspended, pollFailures]);
 
     const showBasketballLive = liveNow !== null && liveNow.session.board_type === 'basketball';
     const showSoftballLive = liveNow !== null && liveNow.session.board_type === 'softball_baseball';
     const showBoxingLive = liveNow !== null && liveNow.session.board_type === 'boxing';
+
+    if (suspended) {
+        return (
+            <>
+                <Head title="Live scoreboards suspended" />
+                <div className="flex flex-col gap-6">
+                    <PortalEmptyState
+                        icon={Radio}
+                        tone="ink"
+                        title="Live scoreboards are temporarily suspended. Please check again later."
+                        description="Refresh this page to check again."
+                    />
+                </div>
+            </>
+        );
+    }
 
     return (
         <>

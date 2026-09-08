@@ -25,7 +25,13 @@ import publicRoutes from '@/routes/public';
 // Public scoreboards do not have access to the authenticated scoring Echo
 // channel. Poll frequently enough that a clock pause is reflected on the
 // display on the next visible second rather than continuing for 5 seconds.
+// The backend serves this from a ~1s cache, so N concurrent viewers cost
+// roughly one scoreboard build per second regardless of N.
 const POLL_INTERVAL_MS = 1000;
+
+// Give up after this many consecutive poll failures — a viewer refreshes
+// to try again. Stops a broken tab from generating traffic forever.
+const MAX_POLL_FAILURES = 10;
 
 type Props = {
     meet: PortalMeetSummary;
@@ -51,6 +57,10 @@ export default function PortalScoreboard({
     // the score just stopped updating, with nothing on screen to explain
     // why, until a manual reload.
     const [pollFailures, setPollFailures] = useState(0);
+    // Set true when a poll comes back `{ suspended: true }` — a System
+    // Administrator has suspended public scoreboards. Polling stops; the
+    // viewer refreshes to check whether it is back.
+    const [suspended, setSuspended] = useState(false);
     const visible = usePortalPageVisible();
 
     // Adjust local state during render when a fresh Inertia prop arrives
@@ -66,6 +76,8 @@ export default function PortalScoreboard({
     useEffect(() => {
         if (
             !visible ||
+            suspended ||
+            pollFailures >= MAX_POLL_FAILURES ||
             (session?.status === 'ended' && !match.scoreboard_mode)
         ) {
             return;
@@ -87,28 +99,60 @@ export default function PortalScoreboard({
 
                     return response.json() as Promise<{
                         session: PortalLiveSession | null;
+                        suspended?: boolean;
                     }>;
                 })
                 .then((data) => {
+                    if (data.suspended) {
+                        setSuspended(true);
+
+                        return;
+                    }
+
                     setSession(data.session);
                     setPollFailures(0);
                 })
                 .catch(() => {
                     // Retries on its own next tick — no user action
                     // needed, but the banner below flags it after a
-                    // couple of misses.
+                    // couple of misses, and polling stops entirely after
+                    // MAX_POLL_FAILURES.
                     setPollFailures((n) => n + 1);
                 });
         }, POLL_INTERVAL_MS);
 
         return () => clearInterval(interval);
-    }, [meet.id, match.id, session?.status, visible]);
+    }, [
+        meet.id,
+        match.id,
+        match.scoreboard_mode,
+        session?.status,
+        visible,
+        suspended,
+        pollFailures,
+    ]);
 
     const isBasketball =
         session !== null && session.board_type === 'basketball';
     const isSoftball =
         session !== null && session.board_type === 'softball_baseball';
     const isBoxing = session !== null && session.board_type === 'boxing';
+
+    if (suspended) {
+        return (
+            <>
+                <Head title="Live scoreboards suspended" />
+                <div className="flex flex-col gap-6">
+                    <PortalEmptyState
+                        icon={Radio}
+                        tone="ink"
+                        title="Live scoreboards are temporarily suspended. Please check again later."
+                        description="Refresh this page to check again."
+                    />
+                </div>
+            </>
+        );
+    }
 
     return (
         <>

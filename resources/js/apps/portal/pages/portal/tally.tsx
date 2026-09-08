@@ -1,5 +1,5 @@
 import { Head, router } from '@inertiajs/react';
-import { Trophy } from 'lucide-react';
+import { RefreshCw, Trophy } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PortalEmptyState } from '@/apps/portal/components/empty-state';
 import { PortalHero } from '@/apps/portal/components/hero';
@@ -10,7 +10,6 @@ import { PortalSelect } from '@/apps/portal/components/select';
 import { PortalStandingsTable } from '@/apps/portal/components/standings-table';
 import { PortalTabs } from '@/apps/portal/components/tabs';
 import { PortalTopMedalistTable } from '@/apps/portal/components/top-medalist-table';
-import { usePortalPageVisible } from '@/apps/portal/lib/use-page-visible';
 import { cn } from '@/apps/portal/lib/utils';
 import type {
     PortalMeetSummary,
@@ -20,11 +19,9 @@ import type {
 } from '@/apps/portal/types';
 import { tally as publicTally } from '@/routes/public';
 
-// The medal tally moves slowly — a 20s background refresh keeps it live
-// without hammering the endpoint. Paused entirely while the tab is
-// hidden (see `usePortalPageVisible`). One interval, torn down on
-// unmount — it can never stack.
-const TALLY_POLL_INTERVAL_MS = 20000;
+// Production load control: the public medal tally does NO automatic
+// polling — no interval, no heartbeat, no websocket fallback. Medal data
+// updates only on a manual browser refresh or the "Refresh Tally" button.
 
 const TABS: {
     value: PortalTallyCategory;
@@ -114,24 +111,28 @@ export default function PortalTally({
         }
     }, []);
 
-    const pageVisible = usePortalPageVisible();
-    useEffect(() => {
-        if (!pageVisible) {
+    // Manual "Refresh Tally": re-requests the current page (preserving the
+    // ?sport_id filter and, via `activeTab`, the selected category) for
+    // just the tally props. `reloading` disables the control and blocks a
+    // second request from a double-click. Animations still run only when
+    // the freshly loaded data actually differs (see the signature check
+    // below) — a refresh that changes nothing animates nothing.
+    const [reloading, setReloading] = useState(false);
+    const refreshTally = useCallback(() => {
+        if (reloading) {
             return;
         }
 
-        const interval = setInterval(() => {
-            router.reload({
-                only: ['categories', 'generatedAt'],
-                showProgress: false,
-            });
-        }, TALLY_POLL_INTERVAL_MS);
+        setReloading(true);
+        router.reload({
+            only: ['categories', 'generatedAt'],
+            showProgress: false,
+            onFinish: () => setReloading(false),
+        });
+    }, [reloading]);
 
-        return () => clearInterval(interval);
-    }, [pageVisible]);
-
-    // A brief "updated just now" state on the live pill whenever the
-    // polled data actually differs — not on every poll.
+    // A brief "updated just now" state on the pill whenever the freshly
+    // loaded data actually differs — not on every refresh.
     const [justUpdated, setJustUpdated] = useState(false);
     const signature = useMemo(
         () =>
@@ -203,18 +204,32 @@ export default function PortalTally({
                     }
                     meta={
                         <>
-                            <span
+                            <button
+                                type="button"
+                                onClick={refreshTally}
+                                disabled={reloading}
+                                aria-label="Refresh medal tally"
                                 className={cn(
-                                    'inline-flex items-center gap-1.5 rounded-full bg-[var(--portal-live)] px-2.5 py-1 text-xs font-bold tracking-wide text-[var(--portal-live-foreground)] uppercase',
-                                    justUpdated && 'portal-tally-live--updated',
+                                    'inline-flex items-center gap-1.5 rounded-full bg-[var(--portal-live)] px-2.5 py-1 text-xs font-bold tracking-wide text-[var(--portal-live-foreground)] uppercase transition-opacity',
+                                    reloading && 'opacity-60',
+                                    !reloading &&
+                                        justUpdated &&
+                                        'portal-tally-live--updated',
                                 )}
                             >
-                                <span
+                                <RefreshCw
                                     aria-hidden="true"
-                                    className="portal-live-dot size-2 rounded-full bg-current"
+                                    className={cn(
+                                        'size-3',
+                                        reloading && 'animate-spin',
+                                    )}
                                 />
-                                {justUpdated ? 'Updated' : 'Live'}
-                            </span>
+                                {reloading
+                                    ? 'Refreshing'
+                                    : justUpdated
+                                      ? 'Updated'
+                                      : 'Refresh Tally'}
+                            </button>
                             <span>Last updated {generatedAt}</span>
                         </>
                     }

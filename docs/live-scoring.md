@@ -603,6 +603,21 @@ short version: same `Meet::published()` scope, polling only (no Reverb for
 guests), and a shared `LiveScoreDisplay` presentational component so the
 public and internal read-only rendering can never drift apart.
 
+### Production load controls (public side)
+
+A System Administrator can **suspend all public live scoreboards**, and
+the public poll endpoints are served from a ~1s cache when active — both
+covered in `docs/production-load-controls.md`. The authenticated operator
+console and every `scoring-sessions/{s}/*` mutation are a separate route
+tree, never touched by suspension.
+
+The optional authenticated inactivity-expiry (off by default, see
+`docs/production-load-controls.md` §D) does not put the operator console's
+5s poll (`scoring.show`, `/matches/{match}/scoring-session`) on its
+passive-route list — an open console counts as an active session — so a
+scoring operator watching a game is never signed out mid-match. The public
+poll routes and the public medal tally *are* passive.
+
 ## Tests
 
 `tests/Feature/ScoringSessionTest.php` — authorization (Delegation Officer

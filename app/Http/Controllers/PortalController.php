@@ -35,6 +35,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -1237,19 +1238,33 @@ class PortalController extends Controller
      * go live) unlike the single-match public scoreboard, so this
      * re-resolves fresh each time rather than tracking one match id.
      */
+    /**
+     * The sport hub / dedicated live page's ~1/second "Live now" poll.
+     * Cached the same way as `scoreboardPoll()` — one build per second
+     * shared across every viewer of that sport.
+     */
     public function sportPortalPoll(string $sportSlug): JsonResponse
     {
-        $slug = SportPortalSlug::from($sportSlug);
-        $sport = Sport::query()->where('name', $slug->sportName())->first();
-        $meet = Meet::query()->published()->active()->first();
+        $payload = Cache::remember(
+            "portal:sport-portal-poll:{$sportSlug}",
+            now()->addSecond(),
+            function () use ($sportSlug): array {
+                $slug = SportPortalSlug::from($sportSlug);
+                $sport = Sport::query()->where('name', $slug->sportName())->first();
+                $meet = Meet::query()->published()->active()->first();
 
-        if ($sport === null || $meet === null) {
-            return response()->json(['liveNow' => null, 'otherLiveCount' => 0]);
-        }
+                if ($sport === null || $meet === null) {
+                    return ['liveNow' => null, 'otherLiveCount' => 0];
+                }
 
-        [$liveNow, $otherLiveCount] = $this->sportPortalLiveNow($meet, $sport);
+                [$liveNow, $otherLiveCount] = $this->sportPortalLiveNow($meet, $sport);
 
-        return response()->json(['liveNow' => $liveNow, 'otherLiveCount' => $otherLiveCount]);
+                return ['liveNow' => $liveNow, 'otherLiveCount' => $otherLiveCount];
+            },
+        );
+
+        return response()->json($payload)
+            ->header('Cache-Control', 'no-store, no-cache, must-revalidate');
     }
 
     /**
@@ -1591,20 +1606,35 @@ class PortalController extends Controller
      * mechanism, same baseline every internal live-scoring page already
      * guarantees works standalone.
      */
+    /**
+     * The public scoreboard's ~1/second poll. The payload is identical
+     * for every viewer of a match, so it is built at most once per second
+     * and served from cache to everyone else — N concurrent viewers cost
+     * one `toLivePayload()` build (≈a dozen queries) per second, not N.
+     * A validation failure (unpublished meet, wrong sport, …) still 404s
+     * and is never cached.
+     */
     public function scoreboardPoll(int $meet, int $match): JsonResponse
     {
-        $meet = Meet::query()->published()->findOrFail($meet);
+        $payload = Cache::remember(
+            "portal:scoreboard-poll:{$meet}:{$match}",
+            now()->addSecond(),
+            function () use ($meet, $match): array {
+                $meetModel = Meet::query()->published()->findOrFail($meet);
 
-        $match = EventMatch::query()->real()->where('meet_id', $meet->id)
-            ->with('event.sport:id,name')->findOrFail($match);
+                $matchModel = EventMatch::query()->real()->where('meet_id', $meetModel->id)
+                    ->with('event.sport:id,name')->findOrFail($match);
 
-        abort_unless(ScoreboardType::supportsMatch($match->event->sport->name, $match->live_scoring_enabled), 404);
+                abort_unless(ScoreboardType::supportsMatch($matchModel->event->sport->name, $matchModel->live_scoring_enabled), 404);
 
-        $session = $match->scoringSessions()->latest('id')->first();
+                $session = $matchModel->scoringSessions()->latest('id')->first();
 
-        return response()->json([
-            'session' => $session === null ? null : $session->toLivePayload(),
-        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate');
+                return ['session' => $session === null ? null : $session->toLivePayload()];
+            },
+        );
+
+        return response()->json($payload)
+            ->header('Cache-Control', 'no-store, no-cache, must-revalidate');
     }
 
     /**

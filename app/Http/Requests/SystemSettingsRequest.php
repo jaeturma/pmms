@@ -55,6 +55,16 @@ class SystemSettingsRequest extends FormRequest
             'coach_athlete_registration_enabled' => ['sometimes', 'boolean'],
             'medal_tally_official' => ['sometimes', 'boolean'],
             'team_photo_visibility' => ['sometimes', Rule::in(['authenticated', 'public'])],
+
+            // Production Load Controls. The suspend/resume toggle also has
+            // its own dedicated action endpoints (LoadControlController);
+            // it is accepted here too so the settings form can carry it.
+            // The inactivity window is validated to the app-wide minimum
+            // of 5 minutes — a shorter value would log operators out
+            // mid-task.
+            'live_scoreboards_suspended' => ['sometimes', 'boolean'],
+            'authenticated_inactivity_expiry_enabled' => ['sometimes', 'boolean'],
+            'authenticated_inactivity_timeout_minutes' => ['sometimes', 'integer', 'min:5', 'max:720'],
         ];
     }
 }
