@@ -16,9 +16,11 @@ initial request. Medal data changes when the browser is refreshed or the
 **"Refresh Tally"** button is clicked — a `router.reload({ only:
 ['categories','generatedAt'] })` of the current URL, so the selected
 category (`?category=`) and the sport filter (`?sport_id=`) are preserved.
-The button disables itself and blocks a double-click while a refresh is in
-flight (`reloading`). The existing signature-diff gate means a refresh
-that returns identical numbers animates nothing.
+A synchronous `useRef` latch drops every click until the in-flight
+request finishes, so repeated / double clicks fire exactly one request;
+the `reloading` state just disables the button and spins the icon. The
+existing signature-diff gate means a refresh that returns identical
+numbers animates nothing.
 
 `MedalTallyService` is unchanged — Overall = Elementary + Secondary only,
 Paragames separate, Kickboxing excluded everywhere, repeated medal rows
@@ -162,9 +164,10 @@ remains the baseline (see `docs/live-scoring.md`).
 
 ## Tests
 
-`tests/Feature/ProductionLoadControlsTest.php` (25 cases) covers all of
-J.1–J.17: no auto-poll, manual refresh + filter preservation, suspend/
-resume authorization and behaviour, lightweight suspended poll doing no
+`tests/Feature/ProductionLoadControlsTest.php` (27 cases) covers all of
+J.1–J.17: no auto-poll, manual refresh + filter preservation, the
+settings page exposing the load-control state, suspend/resume
+authorization and behaviour, lightweight suspended poll doing no
 scoreboard work, ICT scoring unaffected, no data deleted, disconnect
 inactive/non-admin with audit + self-protection + unrelated-store
 isolation, inactivity expiry **off by default**, then (once enabled)

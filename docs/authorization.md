@@ -111,8 +111,8 @@ live in code.
 ## System settings
 
 `App\Models\Setting` (`system_settings` table, one row via `Setting::current()`,
-same singleton pattern as `Division::current()`) holds reCAPTCHA and outgoing-mail
-configuration. Admin-only page at `/system-settings`
+same singleton pattern as `Division::current()`) holds reCAPTCHA, outgoing-mail
+and Production Load Control configuration. Admin-only page at `/system-settings`
 (`SystemSettingsController`, `can:administer`). `recaptcha_secret_key` and
 `smtp_password` are `encrypted` casts and are never sent back to the browser —
 the edit page only receives `has_recaptcha_secret_key`/`has_smtp_password`
@@ -141,6 +141,19 @@ rather than half-enforced:
   existing unverified account (`SystemSettingsController::update()` bulk-sets
   `email_verified_at` the moment the transition to active happens, audited
   as `system_settings.email_verification_grandfathered`).
+
+### Production Load Controls
+
+Also on the same `system_settings` row and the same `/system-settings`
+page: `live_scoreboards_suspended`, `authenticated_inactivity_expiry_enabled`
+(default off) and `authenticated_inactivity_timeout_minutes` (min 5). The
+suspend/resume and disconnect-sessions **actions** have their own
+`POST /system/load-controls/*` routes, all under `can:administer`
+(`LoadControlController`). Full behaviour in `docs/production-load-controls.md`.
+The two middlewares that read these — `EnsurePublicScoreboardsActive`
+(4 public routes) and `ExpireInactiveSessions` (`web` group) — read a
+60-second cached projection (`Setting::loadControls()`), busted by every
+writer.
 
 ## Model helpers
 

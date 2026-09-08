@@ -45,6 +45,8 @@ The current authenticated user, IP, and user agent are captured automatically; p
 | `scoring.foul_recorded` / `fouls_reset` (basketball board only) | `ScoringSessionController` (WP-07-04) |
 | `scoring.round_scored` (round + both sides' scores in context, boxing board only) | `ScoringSessionController` (WP-07-05) |
 | `scoring.count_updated` (out/ball/strike/reset_count, softball/baseball board only) / `scoring.run_scored` (inning + side + runs in context) | `ScoringSessionController` (WP-07-06) |
+| `system_settings.updated` (feature-flag state in context) / `system_settings.email_verification_grandfathered` (`account_count`) | `SystemSettingsController` |
+| `load_control.scoreboards_suspended` / `scoreboards_resumed` (`administrator_id`) · `load_control.sessions_disconnected` (`administrator_id`, `mode`, `sessions_invalidated`) | `LoadControlController` (Production Load Controls) |
 
 Deliberately not audited (accepted deviations, reviewed WP-02-11 and WP-03-10):
 
