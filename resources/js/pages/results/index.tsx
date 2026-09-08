@@ -30,6 +30,7 @@ import {
     Select,
     SelectContent,
     SelectItem,
+    SelectSeparator,
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
@@ -194,7 +195,13 @@ type Props = {
         event_id: number | null;
         sport_id: number | null;
         status: string | null;
+        include_demo: boolean;
     };
+    /** System Admin / Central Event Secretariat — unrestricted register:
+     * a Meet filter (all meets by default), an "include demo results"
+     * toggle, and per-status filtering on top of the coarse groups. */
+    canViewAllResults: boolean;
+    statusOptions: Array<{ value: string; label: string }>;
     sportOptions: Option[];
     meetOptions: Option[];
     eventOptionsByMeet: EventOption[];
@@ -1648,6 +1655,9 @@ function CorrectDialog({
 export default function Results({
     results,
     filters,
+    canViewAllResults,
+    statusOptions,
+    meetOptions,
     sportOptions,
     eventOptionsByMeet,
     scheduleOptions,
@@ -1690,6 +1700,7 @@ export default function Results({
         event_id?: string;
         sport_id?: string;
         status?: string;
+        include_demo?: boolean;
     }) => {
         const params: Record<string, string> = {};
 
@@ -1710,6 +1721,10 @@ export default function Results({
             if (value && value !== 'all') {
                 params[key] = value;
             }
+        }
+
+        if ((overrides.include_demo ?? filters.include_demo) === true) {
+            params.include_demo = '1';
         }
 
         router.get(index().url, params, {
@@ -1921,13 +1936,39 @@ export default function Results({
                     }
                 />
 
-                <div className="flex items-center gap-3 overflow-x-auto rounded-xl border bg-muted/20 p-4">
+                <div className="flex flex-wrap items-center gap-3 overflow-x-auto rounded-xl border bg-muted/20 p-4">
+                    {canViewAllResults && (
+                        <Select
+                            value={String(filters.meet_id ?? 'all')}
+                            onValueChange={(meet_id) =>
+                                applyFilters({ meet_id, event_id: 'all' })
+                            }
+                        >
+                            <SelectTrigger
+                                className="w-52 shrink-0"
+                                aria-label="Filter by meet"
+                            >
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All meets</SelectItem>
+                                {meetOptions.map((meet) => (
+                                    <SelectItem
+                                        key={meet.id}
+                                        value={String(meet.id)}
+                                    >
+                                        {meet.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
                     <Select
                         value={filters.status ?? 'all'}
                         onValueChange={(status) => applyFilters({ status })}
                     >
                         <SelectTrigger
-                            className="w-44 shrink-0"
+                            className="w-52 shrink-0"
                             aria-label="Filter by status"
                         >
                             <SelectValue />
@@ -1940,6 +1981,19 @@ export default function Results({
                             <SelectItem value="returned">Returned</SelectItem>
                             <SelectItem value="accepted">Accepted</SelectItem>
                             <SelectItem value="cancelled">Cancelled</SelectItem>
+                            {canViewAllResults && (
+                                <>
+                                    <SelectSeparator />
+                                    {statusOptions.map((option) => (
+                                        <SelectItem
+                                            key={option.value}
+                                            value={option.value}
+                                        >
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
+                                </>
+                            )}
                         </SelectContent>
                     </Select>
                     <Select
@@ -1990,14 +2044,29 @@ export default function Results({
                             ))}
                         </SelectContent>
                     </Select>
+                    {canViewAllResults && (
+                        <label className="flex shrink-0 items-center gap-2 text-sm">
+                            <Checkbox
+                                checked={filters.include_demo}
+                                onCheckedChange={(checked) =>
+                                    applyFilters({
+                                        include_demo: checked === true,
+                                    })
+                                }
+                            />
+                            Include demo / showcase results
+                        </label>
+                    )}
                     <Button
                         variant="outline"
                         className="shrink-0 border-sky-200 bg-sky-100 text-sky-900 hover:bg-sky-200 hover:text-sky-950 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-100 dark:hover:bg-sky-900"
                         onClick={() =>
                             applyFilters({
+                                meet_id: 'all',
                                 status: 'all',
                                 sport_id: 'all',
                                 event_id: 'all',
+                                include_demo: false,
                             })
                         }
                     >

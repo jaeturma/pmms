@@ -163,6 +163,17 @@ Validated results are meet outcomes — readable by **all roles**. Encoded resul
 are working data — visible to managers only (the index filters them out for
 everyone else, per product scope).
 
+**System Admin and the Central Event Secretariat get the full register**
+(`ResultController::index()` — `$canViewAllResults = $user->isAdmin() || $isCentralSecretariat`):
+the per-role visibility `where()` is skipped, the `Meet::current()` scope is
+lifted (a `meet_id=` param scopes to one meet, none = every meet), and an
+`include_demo=1` param drops the `->real()` scope so demo/showcase results
+(`event_results.demo_scenario_id`) show too. The filter bar adds a **Meet**
+select, an **Include demo / showcase** toggle, and per-status options
+(`ResultStatus` cases) beside the four coarse groups
+(`for_validation` / `returned` / `accepted` / `cancelled`). Every other role
+keeps its scoped view unchanged.
+
 **Non-medal / standing / versus results are kept off the public results page**
 (`/meets/{meet}/results` — `PortalController::results()` uses
 `PublicEventResults::withMedals()`). They appear only per Sports Event, reached

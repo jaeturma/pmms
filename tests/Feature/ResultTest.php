@@ -8,46 +8,49 @@ use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\AuditLog;
 use App\Models\Delegation;
+use App\Models\DemoScenario;
 use App\Models\District;
 use App\Models\Entry;
 use App\Models\Event;
 use App\Models\EventMatch;
 use App\Models\EventResult;
 use App\Models\EventSchedule;
+use App\Models\MedalAward;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
-use App\Models\MedalAward;
 use App\Models\ResultPlacement;
 use App\Models\School;
 use App\Models\ScoringSession;
 use App\Models\Sport;
 use App\Models\TeamEntry;
+use App\Models\User;
+use App\Services\AuditLogger;
+use Illuminate\Support\Str;
+use Inertia\Testing\AssertableInertia;
 
 test('results filter by status and sport and show current registered coaches and audit trail', function () {
     $meet = Meet::current();
     $event = Event::factory()->create();
     $meet->events()->attach($event);
     $entry = placeableEntry($meet, $event);
-    $coach = \App\Models\User::factory()->coach()->create();
+    $coach = User::factory()->coach()->create();
     $entry->athlete->coaches()->sync([$coach->id]);
     $result = EventResult::factory()->create(['meet_id' => $meet->id, 'event_id' => $event->id, 'status' => ResultStatus::Official]);
     ResultPlacement::factory()->create(['event_result_id' => $result->id, 'entry_id' => $entry->id]);
-    app(\App\Services\AuditLogger::class)->record('result.accepted', $result);
+    app(AuditLogger::class)->record('result.accepted', $result);
     EventResult::factory()->create(['meet_id' => $meet->id, 'event_id' => $event->id, 'status' => ResultStatus::Returned]);
-    $this->actingAs(\App\Models\User::factory()->admin()->create())->get('/results?status=accepted&sport_id='.$event->sport_id)
-        ->assertOk()->assertInertia(fn (\Inertia\Testing\AssertableInertia $page) => $page
-            ->has('results.data', 1)->where('results.data.0.status_label', 'Accepted')
-            ->where('results.data.0.placements.0.coaches.0', $coach->name)
-            ->where('results.data.0.audit_trail.0.action', 'result.accepted'));
+    $this->actingAs(User::factory()->admin()->create())->get('/results?status=accepted&sport_id='.$event->sport_id)
+        ->assertOk()->assertInertia(fn (AssertableInertia $page) => $page
+        ->has('results.data', 1)->where('results.data.0.status_label', 'Accepted')
+        ->where('results.data.0.placements.0.coaches.0', $coach->name)
+        ->where('results.data.0.audit_trail.0.action', 'result.accepted'));
     $this->get('/results?status=returned&sport_id='.$event->sport_id)
-        ->assertInertia(fn (\Inertia\Testing\AssertableInertia $page) => $page->has('results.data', 1)->where('results.data.0.status_label', 'Returned'));
+        ->assertInertia(fn (AssertableInertia $page) => $page->has('results.data', 1)->where('results.data.0.status_label', 'Returned'));
     $otherSport = Sport::factory()->create();
     $this->get('/results?status=accepted&sport_id='.$otherSport->id)
-        ->assertInertia(fn (\Inertia\Testing\AssertableInertia $page) => $page->has('results.data', 0));
+        ->assertInertia(fn (AssertableInertia $page) => $page->has('results.data', 0));
 });
-use App\Models\User;
-use Inertia\Testing\AssertableInertia;
 
 /**
  * A confirmed entry for the given meet+event pair.
@@ -325,6 +328,56 @@ test('unvalidated results are visible to managers only', function () {
                 ->where('results.data.0.id', $validated->id)
                 ->where('canManage', false));
     }
+});
+
+test('system admin sees results across every meet, with meet, status and demo filters', function () {
+    $current = Meet::factory()->active()->create(['name' => 'Meet A']); // lowest id → Meet::current()
+    $other = Meet::factory()->create(['name' => 'Meet B']);
+
+    $encodedHere = EventResult::factory()->create(['meet_id' => $current->id]);
+    $cancelledElsewhere = EventResult::factory()->create(['meet_id' => $other->id, 'status' => ResultStatus::Cancelled]);
+
+    $demoScenario = DemoScenario::create([
+        'meet_id' => $current->id,
+        'sport_id' => Sport::factory()->create()->id,
+        'request_token' => (string) Str::uuid(),
+        'name' => 'Demo',
+    ]);
+    $demoResult = EventResult::factory()->create(['meet_id' => $current->id, 'demo_scenario_id' => $demoScenario->id]);
+
+    $admin = User::factory()->admin()->create();
+
+    // Default: every real result, every meet, demo excluded.
+    $this->actingAs($admin)->get('/results')->assertInertia(fn (AssertableInertia $page) => $page
+        ->where('canViewAllResults', true)
+        ->where('filters.meet_id', null)
+        ->where('filters.include_demo', false)
+        ->has('results.data', 2));
+
+    // Scoped to one meet.
+    $this->actingAs($admin)->get('/results?meet_id='.$other->id)->assertInertia(fn (AssertableInertia $page) => $page
+        ->has('results.data', 1)
+        ->where('results.data.0.id', $cancelledElsewhere->id));
+
+    // Individual status (not just the coarse groups).
+    $this->actingAs($admin)->get('/results?status=cancelled')->assertInertia(fn (AssertableInertia $page) => $page
+        ->has('results.data', 1)
+        ->where('results.data.0.id', $cancelledElsewhere->id));
+
+    // Opt in to demo/showcase results.
+    $this->actingAs($admin)->get('/results?include_demo=1')->assertInertia(fn (AssertableInertia $page) => $page
+        ->where('filters.include_demo', true)
+        ->has('results.data', 3)
+        ->where('results.data', fn ($rows) => collect($rows)->pluck('id')->contains($demoResult->id)));
+});
+
+test('a scoped Technical Official does not get the all-results view', function () {
+    Meet::factory()->active()->create();
+    $official = User::factory()->technicalOfficial()->create();
+    $official->sports()->attach(Sport::factory()->create()->id);
+
+    $this->actingAs($official)->get('/results')->assertInertia(fn (AssertableInertia $page) => $page
+        ->where('canViewAllResults', false));
 });
 
 test('a technical official only sees results for their assigned sport', function () {

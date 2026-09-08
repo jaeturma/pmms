@@ -81,9 +81,16 @@ class ResultController extends Controller
             $assignedEventIds = $user->approvedCoachEventIds();
             $coachDelegationIds = $user->approvedCoachDelegationIds();
         }
-        $isTournamentScoped = $user->role === UserRole::Coach
-            || (! $user->hasRole(UserRole::Admin, UserRole::Organizer)
-                && $assignedEventIds->isNotEmpty());
+        // System Admin and the Central Event Secretariat get the whole
+        // Results register — every meet, every status, and (opt-in) the
+        // demo/showcase results the list normally hides — with the filter
+        // controls to narrow it. Every other role keeps its scoped view.
+        $canViewAllResults = $user->isAdmin() || $isCentralSecretariat;
+
+        $isTournamentScoped = ! $canViewAllResults
+            && ($user->role === UserRole::Coach
+                || (! $user->hasRole(UserRole::Admin, UserRole::Organizer)
+                    && $assignedEventIds->isNotEmpty()));
         $managedSportIds = $this->userManagedSportIds($user);
         $managedSportId = $managedSportIds->first();
         $canOfficialize = $user->hasPermission(Permission::ResultsOfficialize, Meet::current());
@@ -115,8 +122,17 @@ class ResultController extends Controller
             'for_validation' => ['encoded', 'submitted', 'validated', 'reopened'],
             'returned' => ['returned'], 'accepted' => ['official'], 'cancelled' => ['cancelled'],
         ];
+        $statusValues = array_map(fn (ResultStatus $case): string => $case->value, ResultStatus::cases());
 
-        $query = EventResult::query()->real()
+        // Full-view roles may point the register at any meet (or all
+        // meets, when no `meet_id` is given) and opt into demo results.
+        $scopeMeetId = $canViewAllResults
+            ? ($request->integer('meet_id') ?: null)
+            : Meet::current()->id;
+        $includeDemo = $canViewAllResults && $request->boolean('include_demo');
+
+        $query = EventResult::query()
+            ->when(! $includeDemo, fn ($results) => $results->real())
             ->with([
                 'meet:id,name',
                 'event.sport:id,code,name',
@@ -159,7 +175,7 @@ class ResultController extends Controller
                         ->whereIn('delegation_id', $coachDelegationIds)));
         }
 
-        if (! $canManage) {
+        if (! $canManage && ! $canViewAllResults) {
             $query->where(function ($visible) use ($user, $isScopedResultEncoder, $isScopedTechnicalOfficial, $assignedEventIds, $managedSportId, $canOfficialize) {
                 $visible->where('status', ResultStatus::Official->value)
                     ->orWhere(function ($secretariatResults) use ($user) {
@@ -225,8 +241,8 @@ class ResultController extends Controller
             });
         }
 
-        if ($meetId > 0) {
-            $query->where('meet_id', $meetId);
+        if ($scopeMeetId !== null) {
+            $query->where('meet_id', $scopeMeetId);
         }
 
         if ($isTournamentScoped) {
@@ -242,6 +258,8 @@ class ResultController extends Controller
         }
         if (isset($statusGroups[$status])) {
             $query->whereIn('status', $statusGroups[$status]);
+        } elseif (in_array($status, $statusValues, true)) {
+            $query->where('status', $status);
         }
 
         return Inertia::render('results/index', [
@@ -453,11 +471,18 @@ class ResultController extends Controller
                     ];
                 }),
             'filters' => [
-                'meet_id' => $meetId > 0 ? $meetId : null,
+                'meet_id' => $scopeMeetId,
                 'event_id' => $eventId > 0 ? $eventId : null,
                 'sport_id' => $sportId ?: null,
-                'status' => isset($statusGroups[$status]) ? $status : null,
+                'status' => (isset($statusGroups[$status]) || in_array($status, $statusValues, true)) ? $status : null,
+                'include_demo' => $includeDemo,
             ],
+            'canViewAllResults' => $canViewAllResults,
+            // The individual statuses a full-view register can filter by,
+            // alongside the four coarse groups the scoped view uses.
+            'statusOptions' => collect(ResultStatus::cases())
+                ->map(fn (ResultStatus $case): array => ['value' => $case->value, 'label' => $case->label()])
+                ->all(),
             'sportOptions' => Sport::query()
                 ->whereHas('events', fn ($events) => $events->when($isTournamentScoped, fn ($q) => $q->whereKey($assignedEventIds)))
                 ->orderBy('name')->get(['id', 'name'])->map(fn ($sport) => ['id' => $sport->id, 'label' => $sport->name]),
