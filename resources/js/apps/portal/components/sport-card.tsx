@@ -6,10 +6,11 @@ import { sportPortal } from '@/routes/public';
 
 /**
  * One large, colorful sport card on the `/sports-directory` browse page —
- * icon, name, short description, category count, and a "View Sport →"
- * link out to the sport's own permanent mini portal. Deliberately not
- * dashboard-looking: no tables, no numeric-only stat grid, one clear
- * action per card.
+ * icon, name, short description, a medal-awarding progress badge
+ * ("Awarded X/Y event categories" for the active meet, hidden when there
+ * is none), the sports-event count, and a "View Sport →" link out to the
+ * sport's own permanent mini portal. Deliberately not dashboard-looking:
+ * no tables, no numeric-only stat grid, one clear action per card.
  */
 export function PortalSportCard({ sport }: { sport: PortalSportCardData }) {
     const awarded = sport.awarded_event_count;

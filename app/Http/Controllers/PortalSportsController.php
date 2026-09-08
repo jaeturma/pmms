@@ -28,7 +28,8 @@ use Inertia\Response;
  * Resolves to whichever meet is currently "active" the same way
  * `PortalTeamsController`/`PortalController::sportPortal()` do, purely to
  * decorate each card with real current-meet context (category count, live
- * status) when available — every sport still appears even with no active
+ * status, medal-awarding progress) when available — every sport still
+ * appears even with no active
  * meet or no current-meet inclusion, since its own mini portal already
  * renders honest empty states in that case.
  */
