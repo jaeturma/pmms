@@ -185,11 +185,17 @@ export default function PortalTally({
 
     return (
         <>
-            <Head title={`Official Medal Tally — ${meet.name}`} />
+            <Head
+                title={`${medalTallyOfficial ? 'MEDAL TALLY' : 'MEDAL TALLY (Unofficial)'} — ${meet.name}`}
+            />
             <div className="flex flex-col gap-6">
                 <PortalHero
                     eyebrow={meet.name}
-                    title="Official Medal Tally"
+                    title={
+                        medalTallyOfficial
+                            ? 'MEDAL TALLY'
+                            : 'MEDAL TALLY (Unofficial)'
+                    }
                     description={
                         medalTallyOfficial
                             ? 'Official standings, derived from validated results only.'

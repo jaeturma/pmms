@@ -24,19 +24,11 @@ function publicScoreboardMatch(?Meet $meet = null): EventMatch
     ]);
 }
 
-beforeEach(function () {
-    $this->actingAs(User::factory()->create());
-});
-
-test('only logged-in users can view a published scoreboard and unpublished meets stay hidden', function () {
+test('guests can view a published scoreboard and unpublished meets stay hidden', function () {
     $meet = Meet::factory()->active()->published()->create();
     $match = publicScoreboardMatch($meet);
 
-    auth()->logout();
-    $this->get("/meets/{$meet->id}/matches/{$match->id}/scoreboard")->assertRedirect('/login');
-
-    $this->actingAs(User::factory()->create())
-        ->get("/meets/{$meet->id}/matches/{$match->id}/scoreboard")
+    $this->get("/meets/{$meet->id}/matches/{$match->id}/scoreboard")
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('portal/scoreboard')

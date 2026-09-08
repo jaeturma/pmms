@@ -169,11 +169,9 @@ Route::middleware(['throttle:60,1', PreventStalePublicResults::class])->group(fu
         ->whereNumber('meet')
         ->name('public.search');
     Route::get('meets/{meet}/matches/{match}/scoreboard', [PortalController::class, 'scoreboard'])
-        ->middleware('auth')
         ->whereNumber(['meet', 'match'])
         ->name('public.scoreboard');
     Route::get('meets/{meet}/matches/{match}/scoreboard/poll', [PortalController::class, 'scoreboardPoll'])
-        ->middleware('auth')
         ->withoutMiddleware('throttle:60,1')
         ->middleware('throttle:90,1')
         ->whereNumber(['meet', 'match'])
@@ -208,7 +206,6 @@ Route::middleware(['throttle:60,1', PreventStalePublicResults::class])->group(fu
     // own poll endpoint below (`public.sport-portal.poll`) since the
     // payload shape (`liveNow`/`otherLiveCount`) is identical.
     Route::get('live/{sportSlug}', [PortalController::class, 'liveSportPortal'])
-        ->middleware('auth')
         ->whereIn('sportSlug', SportPortalSlug::liveScoreValues())
         ->name('public.live-sport-portal');
 
@@ -217,7 +214,6 @@ Route::middleware(['throttle:60,1', PreventStalePublicResults::class])->group(fu
     // (`SportPortalSlug::values()`) so this can never intercept any other
     // top-level route.
     Route::get('{sportSlug}/poll', [PortalController::class, 'sportPortalPoll'])
-        ->middleware('auth')
         ->whereIn('sportSlug', SportPortalSlug::values())
         ->name('public.sport-portal.poll');
     Route::get('{sportSlug}', [PortalController::class, 'sportPortal'])
