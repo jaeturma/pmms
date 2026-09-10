@@ -27,7 +27,7 @@ test('the district registry renders with the manage flag per role', function () 
             ->where('canManage', true));
 });
 
-test('organizers can create districts', function () {
+test('administrators can create districts', function () {
     $this->actingAs(User::factory()->admin()->create())
         ->post('/districts', ['name' => 'District I'])
         ->assertRedirect();
@@ -37,7 +37,7 @@ test('organizers can create districts', function () {
     expect(AuditLog::query()->where('action', 'district.created')->exists())->toBeTrue();
 });
 
-test('viewers and delegation officers cannot create districts', function (User $user) {
+test('non-administrators cannot create districts', function (User $user) {
     $this->actingAs($user)
         ->post('/districts', ['name' => 'District X'])
         ->assertForbidden();
@@ -46,6 +46,7 @@ test('viewers and delegation officers cannot create districts', function (User $
 })->with([
     'viewer' => fn () => User::factory()->create(),
     'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+    'organizer' => fn () => User::factory()->organizer()->create(),
 ]);
 
 test('district names must be unique', function () {

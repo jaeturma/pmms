@@ -365,7 +365,7 @@ test('officers cannot submit entries for foreign delegations', function () {
         ->assertForbidden();
 });
 
-test('organizers can confirm submitted entries and officers cannot', function () {
+test('administrators can confirm submitted entries and officers cannot', function () {
     [, $delegation, $athlete, $event] = entrySetup();
     $officer = entryOfficerFor($delegation);
     $entry = Entry::factory()->create([

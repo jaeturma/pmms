@@ -93,7 +93,7 @@ test('admins, organizers, and active food team members can view the food page', 
         ->assertInertia(fn (AssertableInertia $page) => $page->has('schedules', 1));
 });
 
-test('organizers can add a meal schedule entry', function () {
+test('administrators can add a meal schedule entry', function () {
     $meet = Meet::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())
@@ -152,7 +152,7 @@ test('duplicate schedule entries fail with a field error', function () {
         ->assertSessionHasErrors('meal_type');
 });
 
-test('organizers can update and remove a schedule entry', function () {
+test('administrators can update and remove a schedule entry', function () {
     $schedule = MealSchedule::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())
@@ -192,7 +192,7 @@ test('active food personnel can update and remove their meets meal schedules', f
 
 // --- MealAnnouncementController ---
 
-test('organizers can post an announcement, distinct from the public Announcement model', function () {
+test('administrators can post an announcement, distinct from the public Announcement model', function () {
     $meet = Meet::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())

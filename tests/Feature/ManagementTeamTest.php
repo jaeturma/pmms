@@ -103,7 +103,7 @@ test('the management teams page can be filtered by meet', function () {
         ->assertInertia(fn (AssertableInertia $page) => $page->has('teams', 13));
 });
 
-test('organizers can create a team', function () {
+test('administrators can create a team', function () {
     $meet = Meet::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())
@@ -153,7 +153,7 @@ test('non-managers cannot create a team', function (User $user) {
     'coach' => fn () => User::factory()->coach()->create(),
 ]);
 
-test('organizers can update a team\'s name, description, and status', function () {
+test('administrators can update a team\'s name, description, and status', function () {
     $team = ManagementTeam::factory()->create(['status' => ManagementTeamStatus::Forming]);
 
     $this->actingAs(User::factory()->admin()->create())
@@ -182,7 +182,7 @@ test('non-managers cannot update a team', function (User $user) {
     'technical official' => fn () => User::factory()->technicalOfficial()->create(),
 ]);
 
-test('organizers can remove a team', function () {
+test('administrators can remove a team', function () {
     $team = ManagementTeam::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())
@@ -208,7 +208,7 @@ test('non-managers cannot remove a team', function (User $user) {
 
 // --- ManagementTeamMemberController ---
 
-test('organizers can add any role of user as a team member — not restricted like Technical Official assignments', function () {
+test('administrators can add any role of user as a team member — not restricted like Technical Official assignments', function () {
     $team = ManagementTeam::factory()->create();
     $delegationOfficer = User::factory()->delegationOfficer()->create();
 
@@ -259,7 +259,7 @@ test('non-managers cannot add a team member', function (User $user) {
     'coach' => fn () => User::factory()->coach()->create(),
 ]);
 
-test('organizers can update a member\'s status', function () {
+test('administrators can update a member\'s status', function () {
     $member = ManagementTeamMember::factory()->create(['status' => ManagementTeamMemberStatus::Pending]);
 
     $this->actingAs(User::factory()->admin()->create())
@@ -281,7 +281,7 @@ test('non-managers cannot update a member\'s status', function (User $user) {
     'technical official' => fn () => User::factory()->technicalOfficial()->create(),
 ]);
 
-test('organizers can remove a member', function () {
+test('administrators can remove a member', function () {
     $member = ManagementTeamMember::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())

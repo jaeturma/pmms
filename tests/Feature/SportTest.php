@@ -53,7 +53,7 @@ test('sports show the tournament manager from the active meet assignment', funct
             ->where('sports.data.0.tournament_manager.source', 'meet_assignment'));
 });
 
-test('organizers can create sports', function () {
+test('administrators can create sports', function () {
     $this->actingAs(User::factory()->admin()->create())
         ->post('/sports', ['name' => 'Athletics'])
         ->assertRedirect();
@@ -63,13 +63,14 @@ test('organizers can create sports', function () {
     expect(AuditLog::query()->where('action', 'sport.created')->exists())->toBeTrue();
 });
 
-test('viewers and delegation officers cannot create sports', function (User $user) {
+test('non-administrators cannot create sports', function (User $user) {
     $this->actingAs($user)
         ->post('/sports', ['name' => 'Athletics'])
         ->assertForbidden();
 })->with([
     'viewer' => fn () => User::factory()->create(),
     'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+    'organizer' => fn () => User::factory()->organizer()->create(),
 ]);
 
 test('sport names must be unique', function () {
@@ -165,7 +166,7 @@ test('the sports catalog lists technical official options and current assignment
             ->has('technicalOfficialOptions', 1));
 });
 
-test('organizers can assign technical officials to a sport', function () {
+test('administrators can assign technical officials to a sport', function () {
     $sport = Sport::factory()->create();
     $official = User::factory()->technicalOfficial()->create();
 
@@ -188,7 +189,7 @@ test('assigning technical officials rejects a user id that is not a technical of
     expect($sport->technicalOfficials()->count())->toBe(0);
 });
 
-test('viewers and delegation officers cannot assign technical officials', function (User $user) {
+test('non-administrators cannot assign technical officials', function (User $user) {
     $sport = Sport::factory()->create();
 
     $this->actingAs($user)
@@ -197,6 +198,7 @@ test('viewers and delegation officers cannot assign technical officials', functi
 })->with([
     'viewer' => fn () => User::factory()->create(),
     'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+    'organizer' => fn () => User::factory()->organizer()->create(),
 ]);
 
 test('the sports catalog lists tournament manager options and the current assignment', function () {
@@ -211,7 +213,7 @@ test('the sports catalog lists tournament manager options and the current assign
             ->has('tournamentManagerOptions', 1));
 });
 
-test('organizers can assign a tournament manager to a sport', function () {
+test('administrators can assign a tournament manager to a sport', function () {
     $sport = Sport::factory()->create();
     $manager = User::factory()->tournamentManager()->create();
 
@@ -223,7 +225,7 @@ test('organizers can assign a tournament manager to a sport', function () {
         ->and(AuditLog::query()->where('action', 'sport.tournament_manager_assigned')->exists())->toBeTrue();
 });
 
-test('organizers can clear a sport\'s tournament manager', function () {
+test('administrators can clear a sport\'s tournament manager', function () {
     $manager = User::factory()->tournamentManager()->create();
     $sport = Sport::factory()->create();
     $sport->forceFill(['tournament_manager_id' => $manager->id])->save();
@@ -246,7 +248,7 @@ test('assigning a tournament manager rejects a user id that is not a tournament 
     expect($sport->refresh()->tournament_manager_id)->toBeNull();
 });
 
-test('viewers and delegation officers cannot assign a tournament manager', function (User $user) {
+test('non-administrators cannot assign a tournament manager', function (User $user) {
     $sport = Sport::factory()->create();
 
     $this->actingAs($user)
@@ -255,4 +257,5 @@ test('viewers and delegation officers cannot assign a tournament manager', funct
 })->with([
     'viewer' => fn () => User::factory()->create(),
     'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+    'organizer' => fn () => User::factory()->organizer()->create(),
 ]);

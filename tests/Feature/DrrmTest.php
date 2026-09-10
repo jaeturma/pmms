@@ -89,7 +89,7 @@ test('admins, organizers, and active drrm team members can view the plans page',
 
 // --- CRUD across the 8 tables (representative coverage) ---
 
-test('organizers can create a drrm plan', function () {
+test('administrators can create a drrm plan', function () {
     $meet = Meet::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())
@@ -118,7 +118,7 @@ test('a delegation officer cannot create a drrm plan', function () {
         ->assertForbidden();
 });
 
-test('organizers can add a venue emergency plan and an evacuation route', function () {
+test('administrators can add a venue emergency plan and an evacuation route', function () {
     $meet = Meet::factory()->create();
     $venue = Venue::factory()->create();
 
@@ -144,7 +144,7 @@ test('organizers can add a venue emergency plan and an evacuation route', functi
     $this->assertDatabaseHas('evacuation_routes', ['venue_id' => $venue->id, 'name' => 'Route A']);
 });
 
-test('organizers can add an emergency contact and drrm equipment', function () {
+test('administrators can add an emergency contact and drrm equipment', function () {
     $meet = Meet::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())
@@ -169,7 +169,7 @@ test('organizers can add an emergency contact and drrm equipment', function () {
     $this->assertDatabaseHas('drrm_equipment', ['meet_id' => $meet->id, 'name' => 'First Aid Kit', 'quantity' => 5]);
 });
 
-test('organizers can add a readiness checklist item and toggle it complete', function () {
+test('administrators can add a readiness checklist item and toggle it complete', function () {
     $meet = Meet::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())
@@ -194,7 +194,7 @@ test('organizers can add a readiness checklist item and toggle it complete', fun
 
 // --- Emergency incidents + communication log ---
 
-test('organizers can report an incident and it defaults to reported status', function () {
+test('administrators can report an incident and it defaults to reported status', function () {
     $meet = Meet::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())

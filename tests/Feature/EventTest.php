@@ -59,7 +59,7 @@ test('sports events can be filtered by sport while preserving the selected filte
             ->where('events.data.0.sport_id', $basketball->id));
 });
 
-test('organizers can create events', function () {
+test('administrators can create events', function () {
     $sport = Sport::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())
@@ -74,7 +74,7 @@ test('organizers can create events', function () {
     expect(AuditLog::query()->where('action', 'event.created')->exists())->toBeTrue();
 });
 
-test('viewers and delegation officers cannot create events', function (User $user) {
+test('users without an event-management assignment cannot create events', function (User $user) {
     $sport = Sport::factory()->create();
 
     $this->actingAs($user)
@@ -83,6 +83,7 @@ test('viewers and delegation officers cannot create events', function (User $use
 })->with([
     'viewer' => fn () => User::factory()->create(),
     'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+    'organizer (unassigned)' => fn () => User::factory()->organizer()->create(),
 ]);
 
 test('event validation rejects bad payloads', function (array $overrides, string $errorField) {

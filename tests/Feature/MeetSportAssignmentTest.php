@@ -5,15 +5,14 @@ use App\Enums\MeetSportAssignmentStatus;
 use App\Enums\UserRole;
 use App\Models\AuditLog;
 use App\Models\Event;
-use App\Models\FileUpload;
 use App\Models\Meet;
 use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
 use App\Models\Sport;
 use App\Models\SportCategory;
 use App\Models\User;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia;
 
@@ -201,7 +200,7 @@ test('tournament assignments can be searched by person, sport, role, and status'
             ->where('assignments.data.0.id', $target->id));
 });
 
-test('organizers can create an assignment', function () {
+test('administrators can create an assignment', function () {
     $meetSport = MeetSport::factory()->create();
     $official = User::factory()->technicalOfficial()->create();
 
@@ -406,7 +405,7 @@ test('the same person cannot be assigned the same role twice for the same meet s
         ->assertSessionHasErrors('user_id');
 });
 
-test('organizers can update an assignment\'s status', function () {
+test('administrators can update an assignment\'s status', function () {
     $assignment = MeetSportAssignment::factory()->create(['status' => MeetSportAssignmentStatus::Pending]);
 
     $this->actingAs(User::factory()->admin()->create())
@@ -428,7 +427,7 @@ test('non-managers cannot update an assignment\'s status', function (User $user)
     'technical official' => fn () => User::factory()->technicalOfficial()->create(),
 ]);
 
-test('organizers can remove an assignment', function () {
+test('administrators can remove an assignment', function () {
     $assignment = MeetSportAssignment::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())

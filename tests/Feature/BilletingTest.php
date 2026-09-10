@@ -142,7 +142,7 @@ test('a technical official cannot view the billeting page', function () {
 
 // --- BilletingVenueController mutations ---
 
-test('organizers can create, update, and remove a venue', function () {
+test('administrators can create, update, and remove a venue', function () {
     $meet = Meet::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())
@@ -184,7 +184,7 @@ test('a delegation officer cannot create a venue or assignment', function () {
 
 // --- BilletingAssignmentController ---
 
-test('organizers can assign a delegation and update its status', function () {
+test('administrators can assign a delegation and update its status', function () {
     $meet = Meet::factory()->create();
     $venue = BilletingVenue::factory()->create(['meet_id' => $meet->id]);
     $delegation = Delegation::factory()->create(['meet_id' => $meet->id]);

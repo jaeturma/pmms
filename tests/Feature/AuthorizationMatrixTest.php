@@ -32,6 +32,12 @@ function forbiddenActor(string $role): User
         'technical official' => User::factory()->technicalOfficial()->create(),
         'tournament manager' => User::factory()->tournamentManager()->create(),
         'coach' => User::factory()->coach()->create(),
+        // A plain Organizer with no MeetSportAssignment and no
+        // ManagementTeam membership. Since the 2026-08 role realignment
+        // (`f0b3b4fc`) the `organizer` role carries no unconditional
+        // meet-data write on its own — authority comes from assignments
+        // and committee memberships. This actor holds neither.
+        'organizer' => User::factory()->organizer()->create(),
         default => User::factory()->create(),
     };
 }
@@ -159,6 +165,34 @@ test('meet-data management is denied to a tournament manager with no managed spo
         'schedule update',
         'match create',
         'match update',
+    ])),
+);
+
+/**
+ * Since the 2026-08 role realignment (`f0b3b4fc`) `manage-meet-data` is
+ * Admin-only and registry/catalog writes moved to `role:admin` — a plain
+ * Organizer with no `MeetSportAssignment` and no `ManagementTeam`
+ * membership can no longer create/update any of the records below.
+ * (Its retained access — viewing every registry, the management
+ * dashboard, granting athlete accreditation via a DSAC-leader role,
+ * running a scoreboard with a Tournament Secretary/ICT assignment — is
+ * covered by the per-module tests.) Excludes the handful of cases a plain
+ * Organizer legitimately still passes: the read-only accreditation views
+ * (`DelegationPolicy::viewRoster`) and the announcements list
+ * (`User::canViewAnnouncements()`).
+ */
+test('meet-data management is denied to a plain organizer with no assignment', function (array $case) {
+    [$method, $uri] = $case;
+
+    $this->actingAs(User::factory()->organizer()->create())
+        ->{$method}($uri)
+        ->assertForbidden();
+})->with(
+    array_diff_key(forbiddenActionCases(), array_flip([
+        'accreditation view (unassigned)',
+        'accreditation batch cards (unassigned)',
+        'accreditation card (unassigned)',
+        'announcement list',
     ])),
 );
 

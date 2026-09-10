@@ -136,7 +136,7 @@ test('a supply team member from a different meet cannot manage this meet\'s equi
     expect($category)->not->toBeNull();
 });
 
-test('organizers can create a category', function () {
+test('administrators can create a category', function () {
     $meet = Meet::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())
@@ -181,7 +181,7 @@ test('creating a second category with the same name for the same meet fails with
         ->assertSessionHasErrors('name');
 });
 
-test('organizers can update and remove a category', function () {
+test('administrators can update and remove a category', function () {
     $category = EquipmentCategory::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())
@@ -202,7 +202,7 @@ test('organizers can update and remove a category', function () {
 
 // --- EquipmentItemController ---
 
-test('organizers can add an item to a category', function () {
+test('administrators can add an item to a category', function () {
     $category = EquipmentCategory::factory()->create();
     $venue = Venue::factory()->create();
 

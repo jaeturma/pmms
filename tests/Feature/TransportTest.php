@@ -102,7 +102,7 @@ test('a delegation officer sees only trips/requests tied to their own delegation
 
 // --- VehicleController mutations ---
 
-test('organizers can create, update, and remove a vehicle', function () {
+test('administrators can create, update, and remove a vehicle', function () {
     $meet = Meet::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())
@@ -246,7 +246,7 @@ test('dispatching against an already-fulfilled request fails with a field error'
         ->assertSessionHasErrors('transport_request_id');
 });
 
-test('organizers can update a trip\'s status', function () {
+test('administrators can update a trip\'s status', function () {
     $trip = TransportTrip::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())

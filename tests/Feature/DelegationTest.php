@@ -67,7 +67,7 @@ test('the delegation list can be searched by head and school name', function () 
             ->where('delegations.data.0.id', $target->id));
 });
 
-test('organizers can register a delegation for an open meet (City: by school)', function () {
+test('administrators can register a delegation for an open meet (City: by school)', function () {
     Division::factory()->city()->create();
     $meet = Meet::factory()->registrationOpen()->create();
     $school = School::factory()->create();
@@ -92,7 +92,7 @@ test('organizers can register a delegation for an open meet (City: by school)', 
     expect(AuditLog::query()->where('action', 'delegation.created')->exists())->toBeTrue();
 });
 
-test('organizers can register a delegation for an open meet (Province: by municipality)', function () {
+test('administrators can register a delegation for an open meet (Province: by municipality)', function () {
     // Division::current() defaults to Province, so this is the deployment default.
     $meet = Meet::factory()->registrationOpen()->create();
     $district = District::factory()->create();
@@ -301,7 +301,7 @@ test('viewers cannot submit delegations', function () {
         ->assertForbidden();
 });
 
-test('organizers can approve submitted delegations', function () {
+test('administrators can approve submitted delegations', function () {
     $delegation = Delegation::factory()->submitted()->create();
 
     $this->actingAs(User::factory()->admin()->create())
@@ -331,7 +331,7 @@ test('officers cannot approve their own delegation', function () {
         ->assertForbidden();
 });
 
-test('organizers can return submitted delegations to draft', function () {
+test('administrators can return submitted delegations to draft', function () {
     $delegation = Delegation::factory()->submitted()->create();
 
     $this->actingAs(User::factory()->admin()->create())

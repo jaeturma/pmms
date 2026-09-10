@@ -71,7 +71,7 @@ test('venue details include coordinator contact and map coordinates', function (
             ->where('venues.data.0.game_coordinators.0.is_lead', true));
 });
 
-test('organizers can create venues', function () {
+test('administrators can create venues', function () {
     $this->actingAs(User::factory()->admin()->create())
         ->post('/venues', [
             'name' => 'Provincial Sports Complex',
@@ -158,7 +158,7 @@ test('invalid google maps locations are rejected', function () {
         ->assertSessionHasErrors('gps_location');
 });
 
-test('viewers and delegation officers cannot create venues', function (User $user) {
+test('users without a venue-management assignment cannot create venues', function (User $user) {
     $this->actingAs($user)
         ->post('/venues', ['name' => 'Forbidden Gym'])
         ->assertForbidden();
@@ -167,6 +167,7 @@ test('viewers and delegation officers cannot create venues', function (User $use
 })->with([
     'viewer' => fn () => User::factory()->create(),
     'delegation officer' => fn () => User::factory()->delegationOfficer()->create(),
+    'organizer (unassigned)' => fn () => User::factory()->organizer()->create(),
 ]);
 
 test('venue names must be unique', function () {
