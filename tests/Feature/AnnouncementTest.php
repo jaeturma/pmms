@@ -1,7 +1,11 @@
 <?php
 
+use App\Enums\ManagementTeamMemberStatus;
+use App\Enums\ManagementTeamType;
 use App\Models\Announcement;
 use App\Models\AuditLog;
+use App\Models\ManagementTeam;
+use App\Models\ManagementTeamMember;
 use App\Models\Meet;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
@@ -21,6 +25,53 @@ test('the announcement registry is manager-only', function () {
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('announcements/index')
             ->has('announcements.data', 1));
+});
+
+test('an organizer may browse announcements but not manage them', function () {
+    $organizer = User::factory()->organizer()->create();
+    $announcement = Announcement::factory()->create();
+
+    $this->actingAs($organizer)->get('/announcements')->assertOk();
+
+    $this->actingAs($organizer)
+        ->post('/announcements', ['title' => 'Nope', 'body' => 'Not allowed.'])
+        ->assertForbidden();
+    $this->actingAs($organizer)
+        ->patch("/announcements/{$announcement->id}/publish")
+        ->assertForbidden();
+    $this->actingAs($organizer)
+        ->delete("/announcements/{$announcement->id}")
+        ->assertForbidden();
+
+    expect($organizer->can('viewAny', Announcement::class))->toBeTrue()
+        ->and($organizer->can('create', Announcement::class))->toBeFalse();
+});
+
+test('an active ICT team member may manage announcements', function () {
+    $ict = User::factory()->create();
+    $team = ManagementTeam::factory()->create(['team_type' => ManagementTeamType::ICT]);
+    ManagementTeamMember::factory()->create([
+        'management_team_id' => $team->id,
+        'user_id' => $ict->id,
+        'status' => ManagementTeamMemberStatus::Active,
+    ]);
+
+    $this->actingAs($ict)
+        ->post('/announcements', [
+            'title' => 'Venue change',
+            'body' => 'Basketball moves to the covered court.',
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $announcement = Announcement::query()->firstOrFail();
+
+    $this->actingAs($ict)
+        ->patch("/announcements/{$announcement->id}/publish")
+        ->assertRedirect();
+
+    expect($announcement->refresh()->is_published)->toBeTrue()
+        ->and($ict->can('create', Announcement::class))->toBeTrue();
 });
 
 test('managers can create, update, and delete announcements with audits', function () {

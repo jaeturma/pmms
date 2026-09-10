@@ -151,11 +151,16 @@ The `verified` alias is overridden in `bootstrap/app.php` to point at
 
 ## Policies
 
-`app/Policies/` — 15 classes. The per-model, auto-discovered ones
+`app/Policies/` — 17 classes. The per-model, auto-discovered ones
 (`AthletePolicy`, `DelegationPolicy`, `EligibilityReviewPolicy`,
 `EligibilityDocumentPolicy`, `EntryPolicy`, `FileUploadPolicy`,
 `PersonnelPolicy`, `ProtestPolicy`) carry the delegation/minor/coach
-scoping. The committee ones (`SupplyPolicy`, `FoodPolicy`,
+scoping. `SchoolPolicy` and `AnnouncementPolicy` (WP-REALIGN-13) are the
+authorization surface for the `canManageSchoolMasterData()` /
+`canViewAnnouncements()` / `canManageAnnouncements()` capability
+predicates — no per-record scoping, they just delegate to the predicate
+so `$user->can(...)` and `Gate::authorize(...)` work consistently. The
+committee ones (`SupplyPolicy`, `FoodPolicy`,
 `BilletingPolicy`, `TransportPolicy`, `MedicalPolicy`, `DrrmPolicy`) are
 plain classes injected into their controllers and called via
 `abort_unless`, sharing `Concerns\ChecksManagementTeamMembership`
@@ -166,14 +171,24 @@ Organizer gets aggregate status only, raw detail is Medical-Team-or-Admin,
 and any non-Viewer may break-glass with a logged, reviewable
 `MedicalAccessLog`).
 
-Modules with **no policy class** (Districts, SchoolDistricts, Schools,
-Sports, Events, Venues, Meets, Announcements, Incidents, Division, System
-Settings, Audit Log) are gated by the `role:` group above and/or an
-in-controller `abort_unless(...)` on a capability method
-(`canManageSchoolMasterData()`, `canManageAnnouncements()`), or a private
-`authorizeSport()` helper (Events/Venues, scoped to
-`meetSportAssignments`). Promoting these to real policy classes is
-deferred — see `docs/architecture/wp-realign-13-authorization-reconciliation.md`.
+Modules with **deliberately no policy class**:
+
+- **Flat admin-only** (Districts, SchoolDistricts, Sports, Meets,
+  Incidents, Division, System Settings) — gated by the `role:admin` /
+  `can:administer` route group. No capability or per-record concept
+  applies, so a policy would only forward to `isAdmin()`. Kept as
+  route-gated by design.
+- **Request-payload-scoped** (Events, Venues) — the controller's private
+  `authorizeSport()` / `authorizeVenue()` helpers check a `sport_id` read
+  from the request body against the user's `MeetSportAssignment` rows,
+  which a standard `Policy::create(User)` signature cannot see. The
+  `EventRequest` / `VenueRequest` `authorize()` methods are the coarse
+  gate; the helpers narrow per sport. Kept in the controller by design.
+- **Audit Log** — the `view-system-logs` Gate (Admin or ICT) is the
+  right tool; the "own uploads only" view is a query filter, not an
+  authorization decision.
+
+See `docs/architecture/wp-realign-13-authorization-reconciliation.md`.
 
 ## Permission-denied UI
 

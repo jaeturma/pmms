@@ -10,6 +10,7 @@ use App\Models\SchoolDistrict;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -64,7 +65,7 @@ class SchoolController extends Controller
                 ->where('active', true)
                 ->orderBy('name')
                 ->get(['id', 'district_id', 'name']),
-            'canManage' => $request->user()->canManageSchoolMasterData(),
+            'canManage' => $request->user()->can('create', School::class),
         ]);
     }
 
@@ -99,9 +100,9 @@ class SchoolController extends Controller
     /**
      * Archive a school instead of deleting it.
      */
-    public function archive(Request $request, School $school): RedirectResponse
+    public function archive(School $school): RedirectResponse
     {
-        abort_unless($request->user()->canManageSchoolMasterData(), 403);
+        Gate::authorize('update', $school);
         $school->forceFill(['active' => false])->save();
 
         $this->audit->record('school.archived', $school, ['name' => $school->name]);
@@ -114,9 +115,9 @@ class SchoolController extends Controller
     /**
      * Restore an archived school.
      */
-    public function restore(Request $request, School $school): RedirectResponse
+    public function restore(School $school): RedirectResponse
     {
-        abort_unless($request->user()->canManageSchoolMasterData(), 403);
+        Gate::authorize('update', $school);
         $school->forceFill(['active' => true])->save();
 
         $this->audit->record('school.restored', $school, ['name' => $school->name]);
@@ -129,9 +130,9 @@ class SchoolController extends Controller
     /**
      * Delete a school that no delegation references.
      */
-    public function destroy(Request $request, School $school): RedirectResponse
+    public function destroy(School $school): RedirectResponse
     {
-        abort_unless($request->user()->canManageSchoolMasterData(), 403);
+        Gate::authorize('delete', $school);
         if ($school->delegations()->exists()) {
             Inertia::flash('toast', [
                 'type' => 'error',

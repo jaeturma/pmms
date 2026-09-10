@@ -55,16 +55,36 @@ Documentation and comments only — no behaviour change:
 3. **Updated the `AppServiceProvider::configureAuthorization()` docblock**
    to note the Admin-only narrowing of `manage-meet-data`.
 
+## Code portion — `SchoolPolicy` + `AnnouncementPolicy` (2026-09-11)
+
+Owner decision: lift only the two modules that had **real capability
+scoping** scattered across in-controller `abort_unless()` calls.
+
+- `app/Policies/SchoolPolicy.php` — `create`/`update`/`delete` →
+  `User::canManageSchoolMasterData()`; `viewAny`/`view` → any login.
+  `SchoolController::archive`/`restore`/`destroy` now
+  `Gate::authorize('update'|'delete', $school)`; `SchoolRequest::authorize()`
+  routes through `can('create'|'update', …)`; the `canManage` index prop
+  is `can('create', School::class)`.
+- `app/Policies/AnnouncementPolicy.php` — `viewAny`/`view` →
+  `canViewAnnouncements()`; `create`/`update`/`publish`/`delete` →
+  `canManageAnnouncements()`. All 7 `AnnouncementController`
+  `abort_unless()` calls replaced with `Gate::authorize(...)`; unused
+  `Request` params dropped from the now-bodyless actions.
+- Behaviour is identical — the policies delegate to the same predicates.
+  `HandleInertiaRequests`'s shared `can_manage_*` props keep calling the
+  predicate directly (same convention as the ~15 sibling props).
+- Tests: `AnnouncementTest` gains an "organizer may browse but not
+  manage" case and an "active ICT team member may manage" case;
+  `SchoolTest`'s existing ICT / unauthorized-roles coverage already
+  exercises `SchoolPolicy`.
+
+The other 10 modules stay **deliberately** policy-free — see
+docs/authorization.md § Policies for the per-module rationale (flat
+admin-only; request-payload-scoped Event/Venue; the Audit-Log Gate).
+
 ## What remains (not done here)
 
-- **Policy classes for the still-policy-less modules** — Districts,
-  SchoolDistricts, Schools, Sports, Events, Venues, Meets, Announcements,
-  Incidents, Division, System Settings, Audit Log. These are gated by
-  `role:` groups and/or in-controller `abort_unless(...)` on capability
-  methods / private `authorizeSport()` helpers, which works but is not
-  per-model-testable. Promoting them is the residual code portion of
-  WP-REALIGN-13 and needs its own scoped pass (owner decision: keep the
-  in-controller checks, or lift each to a Policy).
 - **WP-REALIGN-14** (Reports & Dashboard alignment for the new domains),
   **WP-REALIGN-15** (seeder / reference-data alignment), **WP-REALIGN-16**
   (integration / migration testing & acceptance) — still unbuilt.

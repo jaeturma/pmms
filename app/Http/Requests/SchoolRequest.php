@@ -11,7 +11,11 @@ class SchoolRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->canManageSchoolMasterData() ?? false;
+        $school = $this->route('school');
+
+        return $school instanceof School
+            ? $this->user()?->can('update', $school) ?? false
+            : $this->user()?->can('create', School::class) ?? false;
     }
 
     /**

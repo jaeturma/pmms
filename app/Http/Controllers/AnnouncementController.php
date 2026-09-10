@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -27,7 +28,7 @@ class AnnouncementController extends Controller
      */
     public function index(Request $request): Response
     {
-        abort_unless($request->user()->canViewAnnouncements(), 403);
+        Gate::authorize('viewAny', Announcement::class);
         $search = $this->searchTerm($request);
 
         $query = Announcement::query()
@@ -49,7 +50,7 @@ class AnnouncementController extends Controller
                     'author' => $announcement->author?->name,
                 ]),
             'filters' => ['search' => $search],
-            'canManage' => $request->user()->canManageAnnouncements(),
+            'canManage' => $request->user()->can('create', Announcement::class),
         ]);
     }
 
@@ -58,7 +59,7 @@ class AnnouncementController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
-        abort_unless($request->user()->canManageAnnouncements(), 403);
+        Gate::authorize('create', Announcement::class);
         $announcement = new Announcement($this->validated($request));
 
         /** @var User $user */
@@ -78,7 +79,7 @@ class AnnouncementController extends Controller
      */
     public function update(Request $request, Announcement $announcement): RedirectResponse
     {
-        abort_unless($request->user()->canManageAnnouncements(), 403);
+        Gate::authorize('update', $announcement);
         $announcement->update($this->validated($request));
 
         $this->audit->record('announcement.updated', $announcement, $this->context($announcement));
@@ -91,9 +92,9 @@ class AnnouncementController extends Controller
     /**
      * Publish to the public portal.
      */
-    public function publish(Request $request, Announcement $announcement): RedirectResponse
+    public function publish(Announcement $announcement): RedirectResponse
     {
-        abort_unless($request->user()->canManageAnnouncements(), 403);
+        Gate::authorize('publish', $announcement);
         if ($announcement->is_published) {
             Inertia::flash('toast', [
                 'type' => 'error',
@@ -119,9 +120,9 @@ class AnnouncementController extends Controller
     /**
      * Remove from the public portal, effective immediately.
      */
-    public function unpublish(Request $request, Announcement $announcement): RedirectResponse
+    public function unpublish(Announcement $announcement): RedirectResponse
     {
-        abort_unless($request->user()->canManageAnnouncements(), 403);
+        Gate::authorize('publish', $announcement);
         if (! $announcement->is_published) {
             Inertia::flash('toast', [
                 'type' => 'error',
@@ -147,9 +148,9 @@ class AnnouncementController extends Controller
     /**
      * Delete an announcement.
      */
-    public function destroy(Request $request, Announcement $announcement): RedirectResponse
+    public function destroy(Announcement $announcement): RedirectResponse
     {
-        abort_unless($request->user()->canManageAnnouncements(), 403);
+        Gate::authorize('delete', $announcement);
         $context = $this->context($announcement);
 
         $announcement->delete();
