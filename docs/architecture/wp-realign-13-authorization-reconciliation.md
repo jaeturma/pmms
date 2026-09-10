@@ -71,3 +71,21 @@ Documentation and comments only — no behaviour change:
 - A single `AuthorizationMatrixTest` covering the *allowed* paths for the
   committee/assignment roles (today those live scattered across the
   per-domain feature tests).
+
+## Follow-up (2026-09-11, `2e61b55`)
+
+Investigated whether the Organizer‑role reduction in `f0b3b4fc` was
+intentional. **It was** — the same commit added compensating
+`view-management-reports` / `view-system-logs` gates, it implements
+`pmms-role-and-scope-map.md`'s stated recommendation, and the real DdOPAA
+production account set (`docs/reports/testing/production-account-login-matrix.md`)
+is built entirely around it: every one of the ~182 "Meet Organizer"
+accounts carries an explicit `MeetSportAssignment` or `ManagementTeam`
+membership, and no later commit re‑widened Organizer access.
+
+The gap was test hygiene: `f0b3b4fc` swapped ~25 `"organizers can X"`
+tests from `->organizer()` to `->admin()` actors without renaming them and
+never added `organizer` to the `AuthorizationMatrixTest` forbidden sweep.
+Fixed in `2e61b55` — a dedicated plain‑organizer sweep now guards the
+reduction, and the mislabeled tests are renamed to `"administrators can
+X"`.
