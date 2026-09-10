@@ -40,8 +40,12 @@ class AppServiceProvider extends ServiceProvider
     /**
      * Define the application's coarse authorization gates.
      *
-     * Module-specific rules belong in policies; these gates cover the two
-     * cross-cutting levels: full administration and meet-data management.
+     * Module-specific rules belong in policies and the capability methods
+     * on `User`; these gates are only the cross-cutting shorthands. Since
+     * the 2026-08 role realignment `manage-meet-data` is Admin-only (it
+     * was Admin + Organizer) — a non-Admin's access to a given action now
+     * comes from that action's own `role:` group or capability method, not
+     * this gate. See docs/authorization.md.
      */
     protected function configureAuthorization(): void
     {

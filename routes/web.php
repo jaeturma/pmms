@@ -415,9 +415,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('protests', [ProtestController::class, 'index'])->name('protests.index');
     Route::post('protests', [ProtestController::class, 'store'])->name('protests.store');
 
-    // Supply/Equipment (WP-REALIGN-10) — access is Admin/Organizer or a
-    // meet's Supply Team, not the flat role:admin,organizer group below,
-    // so these stay outside it and authorize per-meet via SupplyPolicy
+    // Supply/Equipment (WP-REALIGN-10) — access is Admin or a meet's
+    // Supply Team, not the `role:admin` catalog-write group below, so
+    // these stay outside it and authorize per-meet via SupplyPolicy
     // inside each controller, same shape as protests/eligibility above.
     Route::post('equipment-categories', [EquipmentCategoryController::class, 'store'])->name('equipment-categories.store');
     Route::put('equipment-categories/{equipmentCategory}', [EquipmentCategoryController::class, 'update'])->name('equipment-categories.update');
@@ -433,12 +433,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('inventory-adjustments', [InventoryAdjustmentController::class, 'store'])->name('inventory-adjustments.store');
 
     // Food/Billeting/Transport (WP-REALIGN-11) — same shape as Supply
-    // above: access varies by domain (Food is Admin/Organizer/Food Team;
-    // Billeting/Transport also allow a DelegationOfficer read-only access
-    // to their own delegation's records, plus filing their own transport
-    // request), so these stay outside the flat role:admin,organizer group
-    // and authorize inside each controller via FoodPolicy/
-    // BilletingPolicy/TransportPolicy.
+    // above: manage access is Admin or the meet's Food/Billeting/Transport
+    // Team; Billeting/Transport additionally give an Organizer and a
+    // DelegationOfficer read-only access to their own delegation's records
+    // (plus filing their own transport request), so these stay outside the
+    // `role:admin` group and authorize inside each controller via
+    // FoodPolicy/BilletingPolicy/TransportPolicy.
     Route::post('meal-schedules', [MealScheduleController::class, 'store'])->name('meal-schedules.store');
     Route::put('meal-schedules/{mealSchedule}', [MealScheduleController::class, 'update'])->name('meal-schedules.update');
     Route::delete('meal-schedules/{mealSchedule}', [MealScheduleController::class, 'destroy'])->name('meal-schedules.destroy');
@@ -470,9 +470,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Medical/DRRM (WP-REALIGN-12) — same shape as Supply/Food/Billeting/
     // Transport above: access varies by domain (Medical is the one
     // three-tier exception in this whole series — see MedicalPolicy's
-    // own docblock), so these stay outside the flat role:admin,organizer
-    // group and authorize inside each controller via MedicalPolicy/
-    // DrrmPolicy.
+    // own docblock), so these stay outside the `role:admin` group and
+    // authorize inside each controller via MedicalPolicy/DrrmPolicy.
     Route::post('medical-clearances', [MedicalClearanceController::class, 'store'])->name('medical-clearances.store');
     Route::put('medical-clearances/{medicalClearance}', [MedicalClearanceController::class, 'update'])->name('medical-clearances.update');
     Route::patch('medical-clearances/{medicalClearance}/clear', [MedicalClearanceController::class, 'clear'])->name('medical-clearances.clear');
@@ -673,13 +672,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('venues/{venue}', [VenueController::class, 'update'])->name('venues.update');
     });
 
-    // Schedule/Match management and result validate/correct/delete admit a
-    // Tournament Manager, not just Admin/Organizer, unlike the flat
-    // `role:admin,organizer` group above — each controller's own per-record
-    // check (`ScopesToAssignedSport::userOperatesSport()`) then narrows a
-    // Tournament Manager to their own managed sport only, the same
-    // "coarse role gate here, precise scope in the controller" shape as the
-    // live-scoring and result-encoding carve-outs already use.
+    // Schedule/Match management and result validate/correct/delete also
+    // admit a Tournament Manager, unlike the events/venues group above —
+    // each controller's own per-record check
+    // (`ScopesToAssignedSport::userOperatesSport()`, `canManageSlot()`,
+    // `authorizeManage()`) then narrows a Tournament Manager to their own
+    // managed sport only, the same "coarse role gate here, precise scope
+    // in the controller" shape as the live-scoring and result-encoding
+    // carve-outs already use. A plain Organizer with no competition-manager
+    // assignment passes this middleware but is still denied by the
+    // controller.
     Route::middleware('role:admin,organizer,technical_official,tournament_manager,tournament_ict,tournament_secretary')->group(function () {
         Route::post('schedule', [ScheduleController::class, 'store'])->name('schedule.store');
         Route::put('schedule/{schedule}', [ScheduleController::class, 'update'])->name('schedule.update');
