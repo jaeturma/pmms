@@ -2,20 +2,27 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\BilletingAssignmentStatus;
 use App\Enums\DelegationStatus;
 use App\Enums\EligibilityStatus;
+use App\Enums\EmergencyIncidentStatus;
+use App\Enums\EquipmentIssueStatus;
 use App\Enums\IncidentStatus;
+use App\Enums\MedicalClearanceStatus;
 use App\Enums\MeetStatus;
 use App\Enums\PersonnelRole;
 use App\Enums\ProtestStatus;
 use App\Enums\ResultStatus;
+use App\Enums\TransportRequestStatus;
 use App\Models\Athlete;
 use App\Models\BilletingAssignment;
 use App\Models\Delegation;
 use App\Models\Division;
+use App\Models\DrrmPlan;
 use App\Models\EligibilityReview;
 use App\Models\EmergencyIncident;
 use App\Models\Entry;
+use App\Models\EquipmentIssue;
 use App\Models\EquipmentItem;
 use App\Models\Event;
 use App\Models\EventResult;
@@ -28,6 +35,7 @@ use App\Models\MeetSport;
 use App\Models\MeetSportAssignment;
 use App\Models\Personnel;
 use App\Models\Protest;
+use App\Models\ReadinessChecklist;
 use App\Models\TransportRequest;
 use App\Models\Venue;
 use App\Services\AuditLogger;
@@ -151,6 +159,27 @@ class ManagementDashboardController extends Controller
         }
         $rows[] = [];
 
+        $rows[] = ['Logistics & Safety Progress'];
+        $rows[] = [
+            'Meet', 'Delegations Billeted', 'Delegations Total', 'Checked In',
+            'Transport Pending', 'Transport Fulfilled', 'Meals Scheduled', 'Meals Upcoming',
+            'Equipment Outstanding', 'Medical Cleared', 'Medical Pending', 'Medical Flagged',
+            'DRRM Plans', 'Readiness Done', 'Readiness Total', 'Emergencies Open', 'Emergencies Resolved',
+        ];
+        foreach ($data['logistics'] as $row) {
+            $rows[] = [
+                $row['meet'],
+                $row['billeting']['delegations_billeted'], $row['billeting']['delegations_total'], $row['billeting']['checked_in'],
+                $row['transport']['pending'], $row['transport']['fulfilled'],
+                $row['meals']['scheduled'], $row['meals']['upcoming'],
+                $row['equipment']['outstanding_issues'],
+                $row['medical']['cleared'], $row['medical']['pending'], $row['medical']['flagged'],
+                $row['drrm']['plans'], $row['drrm']['readiness_done'], $row['drrm']['readiness_total'],
+                $row['emergencies']['open'], $row['emergencies']['resolved'],
+            ];
+        }
+        $rows[] = [];
+
         $areaLabel = Division::current()->areaLabel();
 
         $rows[] = ["{$areaLabel} Performance History"];
@@ -200,12 +229,16 @@ class ManagementDashboardController extends Controller
             'participation' => $this->participation($meets),
             'overview' => $this->operationalOverview($meets),
             'operations' => $this->operationsProgress($meets),
+            'logistics' => $this->logisticsProgress($meets),
             'performance' => $this->performanceHistory($meets, $tally),
             'venues' => $this->venueUtilization($meets),
         ];
     }
 
-    /** @return array<int, array{key: string, label: string, count: int}> */
+    /**
+     * @param  Collection<int, Meet>  $meets
+     * @return array<int, array{key: string, label: string, count: int}>
+     */
     private function operationalOverview(Collection $meets): array
     {
         $meetIds = $meets->pluck('id');
@@ -369,6 +402,94 @@ class ManagementDashboardController extends Controller
                         'resolved' => (int) ($incidentCounts[IncidentStatus::Resolved->value] ?? 0),
                     ],
                     'is_stalled' => $isStalled,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * WP-REALIGN-14 — per-meet status/readiness for the logistics and
+     * safety domains built in WP-REALIGN-09 through -12 (Supply, Food,
+     * Billeting, Transport, Medical, DRRM). The `operationalOverview()`
+     * widget already carries the raw counts; this one carries the "how far
+     * along" breakdown, the same shape as `operationsProgress()` above.
+     *
+     * @param  Collection<int, Meet>  $meets
+     * @return array<int, array<string, mixed>>
+     */
+    private function logisticsProgress(Collection $meets): array
+    {
+        return $meets
+            ->map(function (Meet $meet): array {
+                $delegations = Delegation::query()->where('meet_id', $meet->id)->count();
+
+                $billeting = BilletingAssignment::query()->where('meet_id', $meet->id)
+                    ->selectRaw('status, count(distinct delegation_id) as count')
+                    ->groupBy('status')->pluck('count', 'status');
+
+                $transport = TransportRequest::query()->where('meet_id', $meet->id)
+                    ->selectRaw('status, count(*) as count')
+                    ->groupBy('status')->pluck('count', 'status');
+
+                $medical = MedicalClearance::query()->where('meet_id', $meet->id)
+                    ->selectRaw('status, count(*) as count')
+                    ->groupBy('status')->pluck('count', 'status');
+
+                $emergencies = EmergencyIncident::query()->where('meet_id', $meet->id)
+                    ->selectRaw('status, count(*) as count')
+                    ->groupBy('status')->pluck('count', 'status');
+
+                $readinessDone = ReadinessChecklist::query()->where('meet_id', $meet->id)->where('is_complete', true)->count();
+                $readinessTotal = ReadinessChecklist::query()->where('meet_id', $meet->id)->count();
+
+                $billetedDelegations = (int) $billeting->sum();
+
+                return [
+                    'meet_id' => $meet->id,
+                    'meet' => $meet->name,
+                    'billeting' => [
+                        'delegations_billeted' => $billetedDelegations,
+                        'delegations_total' => $delegations,
+                        'checked_in' => (int) ($billeting[BilletingAssignmentStatus::CheckedIn->value] ?? 0),
+                        'checked_out' => (int) ($billeting[BilletingAssignmentStatus::CheckedOut->value] ?? 0),
+                    ],
+                    'transport' => [
+                        'pending' => (int) ($transport[TransportRequestStatus::Pending->value] ?? 0),
+                        'fulfilled' => (int) ($transport[TransportRequestStatus::Fulfilled->value] ?? 0),
+                    ],
+                    'meals' => [
+                        'scheduled' => MealSchedule::query()->where('meet_id', $meet->id)->count(),
+                        'upcoming' => MealSchedule::query()->where('meet_id', $meet->id)
+                            ->whereDate('date', '>=', now())->count(),
+                    ],
+                    'equipment' => [
+                        'outstanding_issues' => EquipmentIssue::query()
+                            ->whereIn('status', [
+                                EquipmentIssueStatus::Issued->value,
+                                EquipmentIssueStatus::PartiallyReturned->value,
+                            ])
+                            ->whereHas('item.category', fn ($category) => $category->where('meet_id', $meet->id))
+                            ->count(),
+                    ],
+                    'medical' => [
+                        'cleared' => (int) ($medical[MedicalClearanceStatus::Cleared->value] ?? 0),
+                        'pending' => (int) ($medical[MedicalClearanceStatus::Pending->value] ?? 0)
+                            + (int) ($medical[MedicalClearanceStatus::ForEvaluation->value] ?? 0),
+                        'flagged' => (int) ($medical[MedicalClearanceStatus::Restricted->value] ?? 0)
+                            + (int) ($medical[MedicalClearanceStatus::Referred->value] ?? 0)
+                            + (int) ($medical[MedicalClearanceStatus::NotCleared->value] ?? 0),
+                    ],
+                    'drrm' => [
+                        'plans' => DrrmPlan::query()->where('meet_id', $meet->id)->count(),
+                        'readiness_done' => $readinessDone,
+                        'readiness_total' => $readinessTotal,
+                    ],
+                    'emergencies' => [
+                        'open' => (int) ($emergencies[EmergencyIncidentStatus::Reported->value] ?? 0)
+                            + (int) ($emergencies[EmergencyIncidentStatus::Responding->value] ?? 0),
+                        'resolved' => (int) ($emergencies[EmergencyIncidentStatus::Resolved->value] ?? 0),
+                    ],
                 ];
             })
             ->values()

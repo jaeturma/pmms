@@ -74,6 +74,40 @@ Protests → `/protests` link to their plain index pages, since neither
 controller supports a `meet_id` filter and adding one is out of this WP's
 scope. A destructive "Stalled" badge renders when `is_stalled` is true.
 
+## Logistics & Safety Progress (WP-REALIGN-14)
+
+`logisticsProgress(Collection $meets)` (private) adds a `logistics` prop —
+one row per meet, the "how far along" counterpart to `operationsProgress`
+for the operational domains built in WP-REALIGN-09…12. All read from the
+domains' own status enums, nothing recomputed:
+
+- `billeting` — `delegations_billeted` (distinct `delegation_id` with any
+  `BilletingAssignment`) vs. `delegations_total` (all delegations for the
+  meet), plus `checked_in` / `checked_out` (`App\Enums\
+  BilletingAssignmentStatus`).
+- `transport` — pending vs. fulfilled `TransportRequest` counts
+  (`App\Enums\TransportRequestStatus`).
+- `meals` — `scheduled` (all `MealSchedule`) and `upcoming` (`date` today
+  or later).
+- `equipment` — `outstanding_issues`: `EquipmentIssue` still `Issued` or
+  `PartiallyReturned`, scoped to the meet via `item.category.meet_id`
+  (`EquipmentIssue` has no direct `meet_id`; the per-meet catalog anchor
+  is `EquipmentCategory`).
+- `medical` — `cleared` / `pending` (Pending + ForEvaluation) / `flagged`
+  (Restricted + Referred + NotCleared) `MedicalClearance` counts
+  (`App\Enums\MedicalClearanceStatus`). Aggregate counts only — no
+  clearance detail reaches this dashboard.
+- `drrm` — `plans` count, and `readiness_done` / `readiness_total` from
+  `ReadinessChecklist.is_complete`.
+- `emergencies` — `open` (Reported + Responding) vs. `resolved`
+  `EmergencyIncident` counts (`App\Enums\EmergencyIncidentStatus`).
+
+The interactive page and the printable report both render a "Logistics &
+safety progress" table; the CSV export gains a matching block. No links to
+the domain pages (unlike Operations Progress) — a dashboard section, not a
+drill-down, per the WP's "low risk, extend the pattern" scope. The raw
+per-domain counts stay in the Operational Overview widget above.
+
 ## Delegation & School Performance History (WP-05-04)
 
 `performanceHistory(Collection $meets, MedalTallyService $tally)` (private)

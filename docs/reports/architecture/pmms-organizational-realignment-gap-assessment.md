@@ -222,6 +222,13 @@ WP-REALIGN-01 through -12 have since shipped (commits `55502ce` through `6a2ecb6
 
 A fresh comparison against the same approved spec (re-supplied verbatim in this session) surfaced one genuine structural mismatch not previously called out: **§8's `SportCategory` layer, now built, does not scope `Venue`/`EventSchedule`** — scheduling still runs `Event`-level only (`EventSchedule belongsTo Meet/Event/Venue`), with no path from a `SportCategory` to its own venue/session. The approved spec states "Sport Category has many Venues and Schedules." Put to the product owner in this session: **confirmed** — `SportCategory` should scope both. Recorded as **WP-REALIGN-17** (§24 table above) and in [pmms-approved-organizational-model.md](../../architecture/pmms-approved-organizational-model.md) §2. No migration has been written; this addendum documents the decision only, per this session's explicit no-code-changes instruction.
 
+## Addendum (2026-09-11) — WP-REALIGN-13 and -14 closed
+
+- **WP-REALIGN-13** — most of its substance shipped incrementally between 2026-08 and -09 (commits `f48f4d7`, `f0b3b4fc`, Phase 13/16, WP-REALIGN-04…12). Reconciliation pass: `b16337f` (rewrote `docs/authorization.md` to the current model), `2e61b55`/`5c8e534` (added the missing plain-Organizer regression sweep to `AuthorizationMatrixTest`; renamed ~25 mislabeled `"organizers can X"` tests that had been silently swapped to `admin()` actors), `ee473f3` (added `SchoolPolicy` + `AnnouncementPolicy`; the other 10 policy-less modules stay deliberately route-gated — rationale in `docs/authorization.md` § Policies). See [wp-realign-13-authorization-reconciliation.md](../../architecture/wp-realign-13-authorization-reconciliation.md). The Organizer-role reduction from `f0b3b4fc` was confirmed intentional (the DdOPAA production account matrix has no bare unassigned Organizer).
+- **WP-REALIGN-14** — the `operationalOverview()` widget already carried raw per-domain counts. Added `logisticsProgress()` to `ManagementDashboardController`: a "Logistics & safety progress" section on the dashboard, printable report, and CSV covering billeting / transport / meals / equipment / medical / DRRM / emergency status breakdowns. Dashboard section only, no per-domain report modules (owner decision). See `docs/management-dashboard.md`.
+
+**WP-REALIGN-15 and -16 remain.**
+
 ## Companion documents produced
 
 1. [`docs/architecture/pmms-approved-organizational-model.md`](../../architecture/pmms-approved-organizational-model.md)

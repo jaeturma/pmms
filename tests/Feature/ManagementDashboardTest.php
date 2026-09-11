@@ -1,19 +1,33 @@
 <?php
 
+use App\Enums\EmergencyIncidentStatus;
+use App\Enums\EquipmentIssueStatus;
+use App\Enums\MedicalClearanceStatus;
 use App\Enums\MeetStatus;
+use App\Enums\TransportRequestStatus;
 use App\Models\Athlete;
 use App\Models\AuditLog;
+use App\Models\BilletingAssignment;
 use App\Models\Delegation;
+use App\Models\DrrmPlan;
 use App\Models\EligibilityReview;
+use App\Models\EmergencyIncident;
 use App\Models\Entry;
+use App\Models\EquipmentCategory;
+use App\Models\EquipmentIssue;
+use App\Models\EquipmentItem;
 use App\Models\EventResult;
 use App\Models\EventSchedule;
 use App\Models\Incident;
+use App\Models\MealSchedule;
+use App\Models\MedicalClearance;
 use App\Models\Meet;
 use App\Models\Personnel;
 use App\Models\Protest;
+use App\Models\ReadinessChecklist;
 use App\Models\ResultPlacement;
 use App\Models\School;
+use App\Models\TransportRequest;
 use App\Models\User;
 use App\Models\Venue;
 use Inertia\Testing\AssertableInertia;
@@ -155,6 +169,70 @@ test('operations progress counts results, eligibility, protests, and incidents f
             ->where('operations.0.protests.upheld', 1)
             ->where('operations.0.incidents.open', 1)
             ->where('operations.0.incidents.resolved', 1));
+});
+
+test('logistics progress breaks down billeting, transport, meals, equipment, medical, and drrm for the current meet', function () {
+    $meet = Meet::current();
+    $d1 = Delegation::factory()->approved()->create(['meet_id' => $meet->id]);
+    $d2 = Delegation::factory()->approved()->create(['meet_id' => $meet->id]);
+
+    BilletingAssignment::factory()->create(['meet_id' => $meet->id, 'delegation_id' => $d1->id]);
+    // d2 has no billeting assignment — it should count as "not billeted".
+
+    TransportRequest::factory()->create(['meet_id' => $meet->id, 'delegation_id' => $d1->id, 'status' => TransportRequestStatus::Pending]);
+    TransportRequest::factory()->create(['meet_id' => $meet->id, 'delegation_id' => $d1->id, 'status' => TransportRequestStatus::Fulfilled]);
+
+    MealSchedule::factory()->create(['meet_id' => $meet->id]);
+
+    $category = EquipmentCategory::factory()->create(['meet_id' => $meet->id]);
+    $item = EquipmentItem::factory()->create(['equipment_category_id' => $category->id]);
+    EquipmentIssue::factory()->create(['equipment_item_id' => $item->id, 'status' => EquipmentIssueStatus::Issued]);
+    EquipmentIssue::factory()->create(['equipment_item_id' => $item->id, 'status' => EquipmentIssueStatus::Returned]);
+
+    MedicalClearance::factory()->create(['meet_id' => $meet->id, 'status' => MedicalClearanceStatus::Cleared]);
+    MedicalClearance::factory()->create(['meet_id' => $meet->id, 'status' => MedicalClearanceStatus::Referred]);
+
+    DrrmPlan::factory()->create(['meet_id' => $meet->id]);
+    ReadinessChecklist::factory()->create(['meet_id' => $meet->id, 'is_complete' => true]);
+    ReadinessChecklist::factory()->create(['meet_id' => $meet->id, 'is_complete' => false]);
+
+    EmergencyIncident::factory()->create(['meet_id' => $meet->id, 'status' => EmergencyIncidentStatus::Reported]);
+    EmergencyIncident::factory()->create(['meet_id' => $meet->id, 'status' => EmergencyIncidentStatus::Resolved]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get('/management')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('logistics', 1)
+            ->where('logistics.0.billeting.delegations_billeted', 1)
+            ->where('logistics.0.billeting.delegations_total', 2)
+            ->where('logistics.0.transport.pending', 1)
+            ->where('logistics.0.transport.fulfilled', 1)
+            ->where('logistics.0.meals.scheduled', 1)
+            ->where('logistics.0.equipment.outstanding_issues', 1)
+            ->where('logistics.0.medical.cleared', 1)
+            ->where('logistics.0.medical.flagged', 1)
+            ->where('logistics.0.drrm.plans', 1)
+            ->where('logistics.0.drrm.readiness_done', 1)
+            ->where('logistics.0.drrm.readiness_total', 2)
+            ->where('logistics.0.emergencies.open', 1)
+            ->where('logistics.0.emergencies.resolved', 1));
+});
+
+test('another meet\'s logistics never leak into the current meet\'s row', function () {
+    $meet = Meet::current();
+    $other = Meet::factory()->create();
+
+    MealSchedule::factory()->create(['meet_id' => $other->id]);
+    TransportRequest::factory()->create(['meet_id' => $other->id, 'status' => TransportRequestStatus::Pending]);
+    DrrmPlan::factory()->create(['meet_id' => $other->id]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get('/management')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('logistics', 1)
+            ->where('logistics.0.meals.scheduled', 0)
+            ->where('logistics.0.transport.pending', 0)
+            ->where('logistics.0.drrm.plans', 0));
 });
 
 test('the current meet is flagged stalled when Active with an old encoded result', function () {
@@ -304,6 +382,7 @@ test('admins and organizers can view the management report with the same widgets
             ->where('overview.12.label', 'Emergencies')
             ->has('participation.rows', 1)
             ->has('operations', 1)
+            ->has('logistics', 1)
             ->has('performance.districts', 0)
             ->has('venues', 0));
 })->with([
@@ -327,6 +406,7 @@ test('the management dashboard CSV download is audited and carries every section
         ->toContain('Participation - Delegations by status')
         ->toContain('Participation - Individuals & Entries')
         ->toContain('Operations Progress & Risk')
+        ->toContain('Logistics & Safety Progress')
         ->toContain('Performance History')
         ->toContain('Venue Utilization')
         ->toContain('Sports Complex')

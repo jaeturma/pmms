@@ -53,6 +53,23 @@ type OperationsRow = {
     is_stalled: boolean;
 };
 
+type LogisticsRow = {
+    meet_id: number;
+    meet: string;
+    billeting: {
+        delegations_billeted: number;
+        delegations_total: number;
+        checked_in: number;
+        checked_out: number;
+    };
+    transport: { pending: number; fulfilled: number };
+    meals: { scheduled: number; upcoming: number };
+    equipment: { outstanding_issues: number };
+    medical: { cleared: number; pending: number; flagged: number };
+    drrm: { plans: number; readiness_done: number; readiness_total: number };
+    emergencies: { open: number; resolved: number };
+};
+
 type DistrictStandingRow = {
     position: number;
     district: string;
@@ -86,6 +103,7 @@ type Props = {
     participation: { rows: ParticipationRow[] };
     overview: Array<{ key: string; label: string; count: number }>;
     operations: OperationsRow[];
+    logistics: LogisticsRow[];
     performance: {
         districts: DistrictStandingRow[];
         schools: SchoolStandingRow[];
@@ -132,6 +150,7 @@ export default function ManagementReport({
     participation,
     overview,
     operations,
+    logistics,
     performance,
     venues,
     meetProgress,
@@ -159,7 +178,10 @@ export default function ManagementReport({
                     </h2>
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         {overview.map((item) => (
-                            <div key={item.key} className="rounded-xl border p-4">
+                            <div
+                                key={item.key}
+                                className="rounded-xl border p-4"
+                            >
                                 <p className="text-sm text-muted-foreground">
                                     {item.label}
                                 </p>
@@ -414,6 +436,88 @@ export default function ManagementReport({
                                                     {row.is_stalled
                                                         ? 'Yes'
                                                         : 'No'}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </section>
+
+                        <section className="space-y-3">
+                            <h2 className="text-base font-medium">
+                                Logistics &amp; safety progress
+                            </h2>
+                            <div className="overflow-x-auto rounded-xl border">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Meet</TableHead>
+                                            <TableHead className="text-center">
+                                                Billeted / total
+                                            </TableHead>
+                                            <TableHead className="text-center">
+                                                Transport pending
+                                            </TableHead>
+                                            <TableHead className="text-center">
+                                                Meals scheduled
+                                            </TableHead>
+                                            <TableHead className="text-center">
+                                                Equipment out
+                                            </TableHead>
+                                            <TableHead className="text-center">
+                                                Medical cleared / open
+                                            </TableHead>
+                                            <TableHead className="text-center">
+                                                DRRM readiness
+                                            </TableHead>
+                                            <TableHead className="text-center">
+                                                Emergencies open
+                                            </TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {logistics.map((row) => (
+                                            <TableRow key={row.meet_id}>
+                                                <TableCell className="font-medium">
+                                                    {row.meet}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    {
+                                                        row.billeting
+                                                            .delegations_billeted
+                                                    }{' '}
+                                                    /{' '}
+                                                    {
+                                                        row.billeting
+                                                            .delegations_total
+                                                    }
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    {row.transport.pending}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    {row.meals.scheduled}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    {
+                                                        row.equipment
+                                                            .outstanding_issues
+                                                    }
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    {row.medical.cleared} /{' '}
+                                                    {row.medical.pending +
+                                                        row.medical.flagged}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    {row.drrm
+                                                        .readiness_total === 0
+                                                        ? '—'
+                                                        : `${row.drrm.readiness_done} / ${row.drrm.readiness_total}`}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    {row.emergencies.open}
                                                 </TableCell>
                                             </TableRow>
                                         ))}

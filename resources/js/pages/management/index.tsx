@@ -83,6 +83,23 @@ type OperationsRow = {
     is_stalled: boolean;
 };
 
+type LogisticsRow = {
+    meet_id: number;
+    meet: string;
+    billeting: {
+        delegations_billeted: number;
+        delegations_total: number;
+        checked_in: number;
+        checked_out: number;
+    };
+    transport: { pending: number; fulfilled: number };
+    meals: { scheduled: number; upcoming: number };
+    equipment: { outstanding_issues: number };
+    medical: { cleared: number; pending: number; flagged: number };
+    drrm: { plans: number; readiness_done: number; readiness_total: number };
+    emergencies: { open: number; resolved: number };
+};
+
 type DistrictStandingRow = {
     position: number;
     district: string;
@@ -120,6 +137,7 @@ type Props = {
     meets: MeetRow[];
     participation: Participation;
     operations: OperationsRow[];
+    logistics: LogisticsRow[];
     performance: Performance;
     venues: VenueRow[];
     meetProgress: MeetProgress;
@@ -173,6 +191,7 @@ export default function ManagementDashboard({
     meets,
     participation,
     operations,
+    logistics,
     performance,
     venues,
     meetProgress,
@@ -271,6 +290,7 @@ export default function ManagementDashboard({
                                               ) / 10,
                                           )
                                         : 0;
+
                                 return (
                                     <div
                                         key={medal}
@@ -674,6 +694,129 @@ export default function ManagementDashboard({
                                                     ) : (
                                                         <Badge variant="outline">
                                                             OK
+                                                        </Badge>
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </section>
+
+                        <section className="space-y-3">
+                            <Heading
+                                variant="small"
+                                title="Logistics & safety progress"
+                                description="Billeting, transport, meals, equipment, medical clearance, and DRRM readiness for the meets in scope."
+                            />
+                            <div className="overflow-x-auto rounded-xl border">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Meet</TableHead>
+                                            <TableHead className="text-center">
+                                                Billeting
+                                            </TableHead>
+                                            <TableHead className="text-center">
+                                                Transport
+                                            </TableHead>
+                                            <TableHead className="text-center">
+                                                Meals
+                                            </TableHead>
+                                            <TableHead className="text-center">
+                                                Equipment out
+                                            </TableHead>
+                                            <TableHead className="text-center">
+                                                Medical
+                                            </TableHead>
+                                            <TableHead className="text-center">
+                                                DRRM readiness
+                                            </TableHead>
+                                            <TableHead className="text-center">
+                                                Emergencies open
+                                            </TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {logistics.map((row) => (
+                                            <TableRow key={row.meet_id}>
+                                                <TableCell className="font-medium">
+                                                    {row.meet}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    {
+                                                        row.billeting
+                                                            .delegations_billeted
+                                                    }
+                                                    {' / '}
+                                                    {
+                                                        row.billeting
+                                                            .delegations_total
+                                                    }
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    {row.transport.fulfilled}{' '}
+                                                    fulfilled
+                                                    {row.transport.pending >
+                                                    0 ? (
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="ml-1"
+                                                        >
+                                                            {
+                                                                row.transport
+                                                                    .pending
+                                                            }{' '}
+                                                            pending
+                                                        </Badge>
+                                                    ) : null}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    {row.meals.scheduled}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    {
+                                                        row.equipment
+                                                            .outstanding_issues
+                                                    }
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    {row.medical.cleared}{' '}
+                                                    cleared
+                                                    {row.medical.pending +
+                                                        row.medical.flagged >
+                                                    0 ? (
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="ml-1"
+                                                        >
+                                                            {row.medical
+                                                                .pending +
+                                                                row.medical
+                                                                    .flagged}{' '}
+                                                            open
+                                                        </Badge>
+                                                    ) : null}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    {row.drrm
+                                                        .readiness_total === 0
+                                                        ? '—'
+                                                        : `${row.drrm.readiness_done} / ${row.drrm.readiness_total}`}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    {row.emergencies.open >
+                                                    0 ? (
+                                                        <Badge variant="destructive">
+                                                            {
+                                                                row.emergencies
+                                                                    .open
+                                                            }
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge variant="outline">
+                                                            0
                                                         </Badge>
                                                     )}
                                                 </TableCell>
